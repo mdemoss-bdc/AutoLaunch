@@ -4,7 +4,7 @@ on:
   schedule:
     # Runs automatically every 2 hours
     - cron: '0 */2 * * *'
-  workflow_dispatch: # Allows manual trigger button in Actions tab
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,7 +22,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: Install Python packages
         run: |
