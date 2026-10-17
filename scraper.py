@@ -32,9 +32,10 @@ def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
     return f"{base_url}{mod}"
 
 async def extract_cards_from_page(page, default_condition: str = "Used") -> List[dict]:
+    # Progressive scroll to trigger all dynamic lazy loaders across any dealer platform
     for fraction in [0.25, 0.5, 0.75, 1.0]:
         await page.evaluate(f"window.scrollTo(0, document.body.scrollHeight * {fraction})")
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(0.8)
 
     vehicles = await page.evaluate("""(defaultCond) => {
         const results = [];
@@ -46,23 +47,24 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             if (!vinMatch) return;
             const vin = vinMatch[1];
 
-            // 1. Direct Webpage Listing Link (Save to detail_url)
+            // 1. Universal Detail Link: Grab the first valid navigable link from the card
             let detailUrl = null;
-            const links = Array.from(card.querySelectorAll('a[href]'));
-            for (const a of links) {
-                const href = a.href || '';
-                if (href.includes('/vehicle-details/') || href.includes('/used/') || href.includes('/new/') || href.includes('/certified/') || href.includes('.htm') || href.includes(vin)) {
-                    if (!href.includes('javascript') && !href.includes('#')) {
-                        detailUrl = href;
-                        break;
-                    }
-                }
-            }
-            if (!detailUrl) {
-                detailUrl = `https://www.mosescars.com/vehicle-details/${vin}.html`;
+            const allLinks = Array.from(card.querySelectorAll('a[href]'));
+            for (const a of allLinks) {
+                const href = a.getAttribute('href') || '';
+                if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
+                
+                // Exclude generic action buttons (e.g., share, call, directions)
+                if (/tel:|mailto:|map|direction|contact|schedule/i.test(href)) continue;
+
+                try {
+                    const resolved = new URL(href, window.location.origin).href;
+                    detailUrl = resolved;
+                    break;
+                } catch(e) {}
             }
 
-            // 2. Exact Rooftop Location
+            // 2. Rooftop Location
             let exactLocation = "";
             const locEl = card.querySelector('[class*="location"], [class*="dealership"], i[class*="marker"] ~ span, svg ~ span');
             if (locEl && locEl.innerText.trim().length > 3) exactLocation = locEl.innerText.trim();
@@ -75,30 +77,34 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                     }
                 }
             }
-            if (!exactLocation) exactLocation = "Moses Auto Group";
+            if (!exactLocation) exactLocation = "Dealership Lot";
 
-            // 3. Real Vehicle Photo (Filter out static icons and DealerOn placeholders)
+            // 3. Universal Image Extraction
             let photoUrl = null;
-            const imgs = Array.from(card.querySelectorAll('img, picture source'));
+            const imgs = Array.from(card.querySelectorAll('img, [style*="background-image"]'));
             for (const img of imgs) {
-                let candidate = img.getAttribute('data-original') || 
+                let candidate = null;
+                if (img.tagName === 'IMG') {
+                    candidate = img.currentSrc || 
+                                img.getAttribute('data-original') || 
                                 img.getAttribute('data-src') || 
                                 img.getAttribute('data-lazy-src') || 
-                                img.getAttribute('srcset') || 
-                                img.getAttribute('src');
+                                img.src;
+                } else {
+                    const style = img.getAttribute('style') || '';
+                    const match = style.match(/url\\(['"]?(http[^'"]+)['"]?\\)/i);
+                    if (match) candidate = match[1];
+                }
 
                 if (candidate) {
-                    if (candidate.includes(',')) candidate = candidate.split(',')[0].trim().split(' ')[0];
-                    if (candidate.startsWith('//')) candidate = 'https:' + candidate;
-
+                    if (candidate.startsWith('//')) candidate = window.location.protocol + candidate;
                     const lower = candidate.toLowerCase();
-                    const isPlaceholder = lower.includes('/static/') || lower.includes('dealeron.com/static') ||
-                                          lower.includes('placeholder') || lower.includes('logo') || 
-                                          lower.includes('banner') || lower.includes('badge') || 
-                                          lower.includes('1x1') || lower.includes('pixel') || 
-                                          lower.includes('spinner') || lower.endsWith('.svg');
+                    const isGarbage = lower.includes('/static/') || lower.includes('placeholder') || 
+                                      lower.includes('logo') || lower.includes('banner') || 
+                                      lower.includes('1x1') || lower.includes('pixel') || 
+                                      lower.endsWith('.svg');
 
-                    if (candidate.startsWith('http') && !isPlaceholder) {
+                    if (candidate.startsWith('http') && !isGarbage) {
                         photoUrl = candidate;
                         break;
                     }
@@ -196,14 +202,15 @@ async def run_scraper():
             args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
         )
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080}
         )
         page = await context.new_page()
 
         for feed in FEEDS_TO_CRAWL:
             base_url = feed["url"]
             condition = feed["condition"]
-            print(f"\n[*] Feed: {condition} ({base_url})")
+            print(f"\n[*] Starting Feed: {condition} ({base_url})")
             seen_vins = set()
 
             for pt in range(1, MAX_PAGES_PER_FEED + 1):
@@ -223,15 +230,4 @@ async def run_scraper():
                     break
                 seen_vins.update(vins)
 
-                saved = push_batch_to_supabase(cars)
-                total_synced += saved
-                valid_links = sum(1 for c in cars if c.get("detail_url"))
-                valid_photos = sum(1 for c in cars if c.get("image_url"))
-                print(f"[+] Page {pt}: Saved {saved} (Photos: {valid_photos}/{len(cars)}, URLs: {valid_links}/{len(cars)})")
-                await asyncio.sleep(1)
-
-        await browser.close()
-    print(f"\n[✓] Scraper finished. Total synced: {total_synced}")
-
-if __name__ == "__main__":
-    asyncio.run(run_scraper())
+                saved = push_batch_to_
