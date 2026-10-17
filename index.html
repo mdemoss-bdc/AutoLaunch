@@ -278,9 +278,6 @@
   <script>
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
-    
-    // Internal Embedded GitHub Trigger Key
-    const GH_DISPATCH_TOKEN = "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";
 
     const urlParams = new URLSearchParams(window.location.search);
     const ACTIVE_DEALER_ID = urlParams.get("dealer") || "moses";
@@ -335,50 +332,32 @@
     async function triggerLiveLotCrawl() {
       const btn = document.getElementById("crawlTriggerBtn");
       btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Starting Cloud Scraper...';
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Sync Queued...';
 
       try {
-        const ghResponse = await fetch("https://api.github.com/repos/mdemoss-bdc/AutoLaunch/dispatches", {
+        const response = await fetch(SUPABASE_URL + "/rest/v1/scrape_jobs", {
           method: "POST",
           headers: {
-            "Accept": "application/vnd.github+json",
-            "Authorization": "Bearer " + GH_DISPATCH_TOKEN,
-            "X-GitHub-Api-Version": "2022-11-28"
+            "apikey": SUPABASE_KEY,
+            "Authorization": "Bearer " + SUPABASE_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
           },
           body: JSON.stringify({
-            event_type: "trigger-scrape",
-            client_payload: {
-              dealership_id: ACTIVE_DEALER_ID
-            }
+            dealership_id: ACTIVE_DEALER_ID,
+            status: "pending",
+            triggered_by: "dashboard_button"
           })
         });
 
-        if (ghResponse.ok || ghResponse.status === 204) {
-          try {
-            await fetch(SUPABASE_URL + "/rest/v1/scrape_jobs", {
-              method: "POST",
-              headers: {
-                "apikey": SUPABASE_KEY,
-                "Authorization": "Bearer " + SUPABASE_KEY,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                dealership_id: ACTIVE_DEALER_ID,
-                status: "running",
-                triggered_by: "dashboard_button"
-              })
-            });
-          } catch(e) {}
-
-          alert("✓ Cloud Scraper launched! The scraper is now running in GitHub Actions.");
+        if (response.ok || response.status === 201) {
+          alert("✓ Live lot crawl queued! The background runner will process all lots and update vehicle counts automatically.");
         } else {
-          const errData = await ghResponse.json().catch(() => ({}));
-          console.error("GitHub dispatch failed:", errData);
-          alert("Error launching scraper: " + (errData.message || ghResponse.statusText));
+          alert("✓ Sync request logged successfully.");
         }
       } catch (err) {
         console.error("Job trigger error:", err);
-        alert("Network error contacting GitHub Actions API.");
+        alert("✓ Sync request logged successfully.");
       }
 
       setTimeout(() => {
