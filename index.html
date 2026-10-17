@@ -29,7 +29,13 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Trigger Live Crawl Button -->
+        <button onclick="triggerLiveLotCrawl()" id="crawlTriggerBtn" class="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-600/40 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+          <i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i>
+          <span class="hidden sm:inline">Sync Dealer Site</span>
+        </button>
+
         <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm cursor-pointer">
           <i class="fa-solid fa-building text-indigo-400"></i>
           <span id="headerStoreName">Moses Automotive Group</span>
@@ -59,7 +65,7 @@
           <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
           <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Rooftops...</span>
         </div>
-        <p class="text-sm text-gray-400">Click any vehicle photo or title to view its live website listing.</p>
+        <p class="text-sm text-gray-400">Filter by Make, Model, Trim, Location, and Specs. Click any vehicle to view its live website listing.</p>
       </div>
 
       <div class="flex items-center gap-4">
@@ -206,7 +212,7 @@
     <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
         <div>
-          <h3 class="text-lg font-bold text-white">Dealership Profile & Source URL</h3>
+          <h3 class="text-lg font-bold text-white">Dealership Profile & Multi-Tenant Setup</h3>
           <p class="text-xs text-gray-400">Configure your store name and live inventory crawler target.</p>
         </div>
         <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -214,7 +220,12 @@
 
       <div class="space-y-4">
         <div>
-          <label class="text-xs font-bold text-gray-400 uppercase">Dealership / Auto Group Name</label>
+          <label class="text-xs font-bold text-gray-400 uppercase">Dealership ID (Slug)</label>
+          <input type="text" id="dealershipSlugInput" readonly class="w-full mt-1 bg-gray-900 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-gray-400 font-mono">
+        </div>
+
+        <div>
+          <label class="text-xs font-bold text-gray-400 uppercase">Dealership Name</label>
           <input type="text" id="dealershipNameInput" placeholder="Moses Automotive Group" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
@@ -253,18 +264,23 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
+    // Detect Dealership ID from URL query string ?dealer=xyz, defaulting to moses
+    const urlParams = new URLSearchParams(window.location.search);
+    const ACTIVE_DEALER_ID = urlParams.get("dealer") || "moses";
+
     const DEFAULT_STORE = {
       name: "Moses Automotive Group",
       usedUrl: "https://www.mosescars.com/search-all-used-inventory.html"
     };
 
-    let currentStore = JSON.parse(localStorage.getItem("autolaunch_store")) || DEFAULT_STORE;
+    let currentStore = JSON.parse(localStorage.getItem("autolaunch_store_" + ACTIVE_DEALER_ID)) || DEFAULT_STORE;
     let rawInventory = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
 
     function updateStoreUI() {
       document.getElementById("headerStoreName").innerText = currentStore.name;
       document.getElementById("bannerStoreTitle").innerText = currentStore.name;
+      document.getElementById("dealershipSlugInput").value = ACTIVE_DEALER_ID;
       document.getElementById("dealershipNameInput").value = currentStore.name;
       document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl;
     }
@@ -284,12 +300,45 @@
       const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim() || DEFAULT_STORE.usedUrl;
 
       currentStore = { name, usedUrl };
-      localStorage.setItem("autolaunch_store", JSON.stringify(currentStore));
+      localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
       updateStoreUI();
       closeModal("dealershipModal");
       alert("Dealership profile updated: " + currentStore.name);
     }
 
+    // Trigger Live Scrape via Cloud Job Queue
+    async function triggerLiveLotCrawl() {
+      const btn = document.getElementById("crawlTriggerBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Sync Queued...';
+
+      try {
+        await fetch(SUPABASE_URL + "/rest/v1/scrape_jobs", {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": "Bearer " + SUPABASE_KEY,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            dealership_id: ACTIVE_DEALER_ID,
+            status: "pending",
+            triggered_by: "dashboard_button"
+          })
+        });
+
+        alert("✓ Live lot scrape requested! The automated crawler runs in the background. Fresh units will populate automatically.");
+      } catch (err) {
+        console.error("Job trigger error:", err);
+      }
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i> <span class="hidden sm:inline">Sync Dealer Site</span>';
+      }, 30000);
+    }
+
+    // Auto-paginating Supabase fetcher filtered by dealership_id
     async function fetchLiveInventory(isManual) {
       if (typeof isManual === "undefined") isManual = false;
       const lotBadge = document.getElementById("lotCount");
@@ -327,7 +376,12 @@
           }
         }
 
-        rawInventory = allCars.filter(function(c) { return c.is_active !== false; });
+        // Filter cars belonging to this dealership tenant
+        rawInventory = allCars.filter(function(c) {
+          const matchesDealer = !c.dealership_id || c.dealership_id === ACTIVE_DEALER_ID;
+          return matchesDealer && c.is_active !== false;
+        });
+
         lotBadge.innerText = rawInventory.length + " Units";
 
         const validPrices = rawInventory.map(function(c) { return c.price; }).filter(function(p) { return p && p > 500; });
