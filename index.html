@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoLaunch Pro | Dealership Sales & Marketing Engine</title>
+  <title>AutoLaunch | Dealership Sales Enablement</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
@@ -16,71 +16,69 @@
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-  <!-- SaaS Navigation Bar -->
+  <!-- Header -->
   <header class="glass-panel sticky top-0 z-40 border-b border-gray-800 px-4 lg:px-8 py-3">
-    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
           <i class="fa-solid fa-bolt-lightning text-white text-lg"></i>
         </div>
         <div>
-          <div class="flex items-center gap-2">
-            <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-gray-200 to-indigo-300 bg-clip-text text-transparent">AutoLaunch<span class="text-indigo-400">Pro</span></span>
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 uppercase tracking-wider">Multi-Tenant B2B</span>
-          </div>
+          <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-gray-200 to-indigo-300 bg-clip-text text-transparent">AutoLaunch</span>
+          <span class="text-xs text-gray-400 block font-medium">Inventory & Marketing Suite</span>
         </div>
       </div>
 
-      <!-- Controls & Polling Indicator -->
+      <!-- Sync Status & Manual Refresh -->
       <div class="flex items-center gap-3">
         <div id="liveStatusBadge" class="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="syncText">Supabase Live</span>
+          <span id="syncText">Connected</span>
         </div>
-        <button onclick="fetchLiveInventoryFromSupabase(true)" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
+        <button onclick="fetchLiveInventory(true)" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
           <i class="fa-solid fa-arrows-rotate"></i>
-          <span>Sync Now</span>
+          <span>Refresh</span>
         </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Content Dashboard -->
+  <!-- Main View -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
     
-    <!-- Top Lot Metrics Banner -->
+    <!-- Metrics Bar -->
     <div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div>
         <div class="flex items-center gap-3 mb-1">
           <h1 class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
-          <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Scanning Rooftops...</span>
+          <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Rooftops...</span>
         </div>
-        <p class="text-sm text-gray-400">Universal lot inventory auto-refreshing in real time from Supabase.</p>
+        <p class="text-sm text-gray-400">Search all vehicles across your group, filter by location, and generate ready-to-post listings.</p>
       </div>
 
       <div class="flex items-center gap-4">
-        <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center">
-          <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Live Inventory</div>
+        <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
+          <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">In-Stock</div>
           <div id="lotCount" class="text-2xl font-black text-indigo-400">Loading...</div>
         </div>
-        <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center">
-          <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Average Price</div>
+        <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
+          <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Avg Price</div>
           <div id="avgPrice" class="text-2xl font-black text-emerald-400">--</div>
         </div>
       </div>
     </div>
 
-    <!-- Filter & Search Toolbar -->
+    <!-- Filters & Search -->
     <div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-4">
       <div class="flex flex-col md:flex-row gap-3">
         <div class="flex-1 relative">
           <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-          <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search by Year, Make, Model, VIN, or Location..." class="w-full bg-gray-950/70 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search Year, Make, Model, VIN, or Stock #..." class="w-full bg-gray-950/70 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500">
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <!-- Dynamic Location Dropdown -->
-          <select id="locationFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
-            <option value="ALL">All Rooftops / Locations</option>
+          <select id="locationFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 max-w-xs">
+            <option value="ALL">All Dealership Locations</option>
           </select>
           <select id="conditionFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
             <option value="ALL">All Conditions</option>
@@ -97,26 +95,23 @@
       </div>
     </div>
 
-    <!-- Vehicle Card Grid -->
+    <!-- Vehicle Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      <!-- Injected via JavaScript -->
+      <!-- Cards Injected Dynamically -->
     </div>
   </main>
 
-  <!-- Sales Modal: Quick Share / FB / TikTok -->
+  <!-- Sales Action Modal -->
   <div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-5">
       <div class="flex items-center justify-between border-b border-gray-800 pb-4">
         <div>
-          <h3 id="modalTitle" class="text-lg font-bold text-white">Share Vehicle</h3>
+          <h3 id="modalTitle" class="text-lg font-bold text-white">Action</h3>
           <p id="modalSubtitle" class="text-xs text-gray-400"></p>
         </div>
         <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
-
-      <div id="modalBody" class="space-y-4">
-        <!-- Content dynamic -->
-      </div>
+      <div id="modalBody" class="space-y-4"></div>
     </div>
   </div>
 
@@ -127,7 +122,7 @@
     let rawInventory = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
 
-    async function fetchLiveInventoryFromSupabase(isManual = false) {
+    async function fetchLiveInventory(isManual = false) {
       const lotBadge = document.getElementById("lotCount");
       const statusBadge = document.getElementById("syncText");
       if (isManual) statusBadge.innerText = "Syncing...";
@@ -147,15 +142,15 @@
         const data = await response.json();
         if (Array.isArray(data)) {
           rawInventory = data;
-          lotBadge.innerText = `${data.length} In-Stock`;
+          lotBadge.innerText = `${data.length} Units`;
           
-          const prices = data.map(c => c.price).filter(p => p && p > 0);
-          if (prices.length > 0) {
-            const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+          const validPrices = data.map(c => c.price).filter(p => p && p > 500);
+          if (validPrices.length > 0) {
+            const avg = Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length);
             document.getElementById("avgPrice").innerText = `$${avg.toLocaleString()}`;
           }
 
-          statusBadge.innerText = `Live (${data.length} Cars)`;
+          statusBadge.innerText = `Live (${data.length} Units)`;
           populateLocations(data);
           applyFilters();
         }
@@ -165,15 +160,14 @@
       }
     }
 
-    // Dynamically builds the location filter from all distinct rooftop locations in the DB
     function populateLocations(cars) {
       const locationSelect = document.getElementById("locationFilter");
       const currentSelected = locationSelect.value;
       const uniqueLocations = Array.from(new Set(cars.map(c => c.location_name).filter(Boolean))).sort();
       
-      document.getElementById("activeLotsCountBadge").innerText = `${uniqueLocations.length} Active Rooftops`;
+      document.getElementById("activeLotsCountBadge").innerText = `${uniqueLocations.length} Dealership Locations`;
 
-      let options = `<option value="ALL">All Rooftops (${uniqueLocations.length} Locations)</option>`;
+      let options = `<option value="ALL">All Dealership Locations (${uniqueLocations.length})</option>`;
       uniqueLocations.forEach(loc => {
         const count = cars.filter(c => c.location_name === loc).length;
         options += `<option value="${loc}" ${currentSelected === loc ? 'selected' : ''}>${loc} (${count})</option>`;
@@ -190,14 +184,16 @@
       let filtered = rawInventory.filter(car => {
         const title = `${car.year} ${car.make} ${car.model} ${car.trim || ''} ${car.vin || ''} ${car.location_name || ''}`.toLowerCase();
         const matchesQuery = title.includes(query);
-        const matchesLocation = locationFilter === "ALL" || (car.location_name || "Moses Auto Mall") === locationFilter;
+        const matchesLocation = locationFilter === "ALL" || (car.location_name || '') === locationFilter;
         const matchesCond = cond === "ALL" || (car.condition || "Used") === cond;
         return matchesQuery && matchesLocation && matchesCond;
       });
 
       filtered.sort((a, b) => {
-        if (sort === "price_asc") return (a.price || 0) - (b.price || 0);
-        if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
+        const priceA = a.price || 0;
+        const priceB = b.price || 0;
+        if (sort === "price_asc") return priceA - priceB;
+        if (sort === "price_desc") return priceB - priceA;
         if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
         if (sort === "year_desc") return (b.year || 0) - (a.year || 0);
         return 0;
@@ -209,33 +205,36 @@
     function renderGrid(cars) {
       const grid = document.getElementById("inventoryGrid");
       if (!cars.length) {
-        grid.innerHTML = `<div class="col-span-full text-center py-12 text-gray-500">No vehicles match your active search filters.</div>`;
+        grid.innerHTML = `<div class="col-span-full text-center py-12 text-gray-500">No vehicles match your search filters.</div>`;
         return;
       }
 
       grid.innerHTML = cars.map(car => {
         const photoUrl = car.image_url || FALLBACK_IMAGE;
+        const displayPrice = car.price ? `$${car.price.toLocaleString()}` : "Call for Price";
+        const displayPayment = car.price ? `~$${Math.round(car.price / 72)}/mo` : "Finance Avail";
+
         return `
         <div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">
           <div>
             <div class="h-44 w-full bg-gray-900 relative overflow-hidden flex items-center justify-center">
-              <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" alt="Car" class="object-cover w-full h-full opacity-90 hover:opacity-100 transition duration-300">
+              <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" alt="Vehicle Photo" class="object-cover w-full h-full opacity-90 hover:opacity-100 transition duration-300">
               <div class="absolute top-3 left-3 flex gap-1.5">
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">${car.condition || 'Used'}</span>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">${car.status || 'Available'}</span>
               </div>
-              <div class="absolute bottom-2 right-2 text-xs font-semibold px-2 py-1 rounded-md bg-black/70 text-white">
-                ~$${Math.round((car.price || 15000) / 72)}/mo
+              <div class="absolute bottom-2 right-2 text-xs font-semibold px-2 py-1 rounded-md bg-black/75 text-white">
+                ${displayPayment}
               </div>
             </div>
 
             <div class="p-4 space-y-2">
               <div class="flex items-baseline justify-between">
-                <span class="text-xl font-black text-white">$${(car.price || 0).toLocaleString()}</span>
+                <span class="text-xl font-black text-white">${displayPrice}</span>
                 <span class="text-xs font-medium text-gray-400">${(car.mileage || 0).toLocaleString()} mi</span>
               </div>
-              <h4 class="font-bold text-gray-100 text-sm truncate">${car.year} ${car.make} ${car.model} ${car.trim || ''}</h4>
-              <p class="text-xs text-gray-400 truncate"><i class="fa-solid fa-location-dot text-indigo-400 mr-1"></i>${car.location_name || 'Moses Auto Mall'}</p>
+              <h4 class="font-bold text-gray-100 text-sm truncate">${car.year} ${car.make} ${car.model}</h4>
+              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || 'Moses Auto Group'}</p>
               <p class="text-[11px] font-mono text-gray-500">VIN: ${car.vin || 'N/A'}</p>
             </div>
           </div>
@@ -262,11 +261,10 @@
     function openShareModal(car) {
       document.getElementById("modalTitle").innerText = "Customer Quick-Share";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model} | $${(car.price || 0).toLocaleString()}`;
-      const msg = `Hey! Check out this ${car.year} ${car.make} ${car.model} at ${car.location_name || 'our lot'}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to take it for a spin!`;
+      const msg = `Hey! Take a look at this ${car.year} ${car.make} ${car.model} at ${car.location_name}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to come take it for a drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
-          <label class="text-xs font-bold text-gray-400 uppercase">Pre-Formatted Message</label>
           <textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${msg}</textarea>
           <div class="flex gap-2">
             <button onclick="navigator.clipboard.writeText(document.getElementById('shareText').value); alert('Copied to clipboard!')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold">Copy Text</button>
@@ -278,9 +276,9 @@
     }
 
     function openFBModal(car) {
-      document.getElementById("modalTitle").innerText = "Facebook Marketplace Listing Copy";
+      document.getElementById("modalTitle").innerText = "Marketplace Listing Copy";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
-      const fbCopy = `🔥 ${car.year} ${car.make} ${car.model} ${car.trim || ''} 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nLocation: ${car.location_name || 'Moses Auto Mall'}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Financing available for all credit types\n✅ Trade-ins welcome!\n\nMessage me directly for details or to schedule a test drive!`;
+      const fbCopy = `🔥 ${car.year} ${car.make} ${car.model} 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nLocation: ${car.location_name}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -292,14 +290,14 @@
     }
 
     function openTikTokModal(car) {
-      document.getElementById("modalTitle").innerText = "TikTok / Reel 15-Second Script";
+      document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
-      const script = `(Hook - 0-3s): Stop scrolling if you're looking for a reliable ride under $${Math.round(((car.price || 15000) * 1.1) / 1000)}k.\n(Body - 3-10s): This ${car.year} ${car.make} ${car.model} just landed at ${car.location_name || 'our lot'} with ${(car.mileage || 0).toLocaleString()} miles.\n(CTA - 10-15s): Clean title, inspected, ready to roll. Send me a message or comment below before it's gone!`;
+      const script = `(Hook - 0-3s): Stop scrolling if you need a reliable vehicle right now.\n(Body - 3-10s): Fresh arrival: ${car.year} ${car.make} ${car.model} at ${car.location_name} with ${(car.mileage || 0).toLocaleString()} miles.\n(CTA - 10-15s): Fully inspected and front-line ready. Comment or message me before it's gone!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
           <textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${script}</textarea>
-          <p class="text-xs text-gray-400">💡 Record vertical 9:16 footage walking around the vehicle while speaking this script.</p>
+          <p class="text-xs text-gray-400">💡 Record vertical 9:16 video while walking around the exterior and interior.</p>
         </div>
       `;
       document.getElementById("actionModal").classList.remove("hidden");
@@ -309,10 +307,9 @@
       document.getElementById("actionModal").classList.add("hidden");
     }
 
-    // Auto-fetch on boot + Poll every 30 seconds
     document.addEventListener("DOMContentLoaded", () => {
-      fetchLiveInventoryFromSupabase();
-      setInterval(() => fetchLiveInventoryFromSupabase(false), 30000);
+      fetchLiveInventory();
+      setInterval(() => fetchLiveInventory(false), 30000);
     });
   </script>
 </body>
