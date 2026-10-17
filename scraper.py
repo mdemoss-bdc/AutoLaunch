@@ -13,13 +13,19 @@ DEALERSHIP_ID = os.environ.get("DEALERSHIP_ID", "moses")
 db = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 MAX_PAGES_PER_FEED = 500
-PAGE_MODIFIER = "?pt={page}"
 
-FEEDS_TO_CRAWL = [
-    {"url": "https://www.mosescars.com/search-all-used-inventory.html", "condition": "Used"},
-    {"url": "https://www.mosescars.com/search-all-certified-inventory.html", "condition": "Certified Pre-Owned"},
-    {"url": "https://www.mosescars.com/search-all-new-inventory.html", "condition": "New"}
-]
+def get_dealership_configuration(dealer_id: str):
+    """
+    Fetches the live user-configured URLs from Supabase.
+    Zero hardcoded URLs.
+    """
+    try:
+        res = db.table("dealer_profiles").select("*").eq("id", dealer_id).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0]
+    except Exception as e:
+        print(f"[!] Warning reading dealer_profiles: {e}")
+    return {}
 
 def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
     if page_num == 1:
@@ -50,12 +56,9 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             let detailUrl = null;
             const allLinks = Array.from(card.querySelectorAll('a[href]'));
             
-            // First priority: link containing the VIN or clear detail page slug
             for (const a of allLinks) {
                 const href = a.getAttribute('href') || '';
                 if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
-                
-                // Exclude marketing, trade-in, finance tools
                 if (/trade|kbb|value|finance|credit|contact|schedule|service|parts|direction|map|calc|review/i.test(href)) continue;
 
                 if (href.includes(vin) || /\\/(used|new|certified|vehicle-details|inventory)\\//i.test(href) || /\\.htm/i.test(href)) {
@@ -66,7 +69,6 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // Second priority: title/heading link if not caught above
             if (!detailUrl) {
                 const headingLink = card.querySelector('h2 a, h3 a, h4 a, .vehicle-title a, .title a');
                 if (headingLink && headingLink.getAttribute('href')) {
@@ -91,7 +93,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             }
             if (!exactLocation) exactLocation = "Dealership Lot";
 
-            // 3. Real Vehicle Photo (Filter out static icons and DealerOn placeholders)
+            // 3. Real Vehicle Photo
             let photoUrl = null;
             const imgs = Array.from(card.querySelectorAll('img, [style*="background-image"]'));
             for (const img of imgs) {
@@ -144,7 +146,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // 5. Price & Mileage: Filter out sub-$4,000 numbers which are lease down-payments
+            // 5. Price & Mileage: ignore sub-3500 lease down payments
             const priceMatches = Array.from(text.matchAll(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/g));
             let price = null;
             if (priceMatches.length > 0) {
@@ -207,6 +209,24 @@ def push_batch_to_supabase(records: List[dict]) -> int:
         return 0
 
 async def run_scraper():
+    # 1. Fetch user-defined feeds strictly from Supabase settings
+    config = get_dealership_configuration(DEALERSHIP_ID)
+    page_modifier = config.get("page_modifier") or "?pt={page}"
+
+    feeds_to_crawl = []
+    if config.get("used_url") and config.get("used_url").strip():
+        feeds_to_crawl.append({"url": config["used_url"].strip(), "condition": "Used"})
+    if config.get("certified_url") and config.get("certified_url").strip():
+        feeds_to_crawl.append({"url": config["certified_url"].strip(), "condition": "Certified Pre-Owned"})
+    if config.get("new_url") and config.get("new_url").strip():
+        feeds_to_crawl.append({"url": config["new_url"].strip(), "condition": "New"})
+
+    if not feeds_to_crawl:
+        print(f"[-] No target URLs found in settings for dealership '{DEALERSHIP_ID}'. Nothing to crawl.")
+        return
+
+    print(f"[*] Found {len(feeds_to_crawl)} active feed(s) configured in user settings.")
+
     total_synced = 0
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -219,14 +239,14 @@ async def run_scraper():
         )
         page = await context.new_page()
 
-        for feed in FEEDS_TO_CRAWL:
+        for feed in feeds_to_crawl:
             base_url = feed["url"]
             condition = feed["condition"]
             print(f"\n[*] Starting Feed: {condition} ({base_url})")
             seen_vins = set()
 
             for pt in range(1, MAX_PAGES_PER_FEED + 1):
-                url = build_page_url(base_url, PAGE_MODIFIER, pt)
+                url = build_page_url(base_url, page_modifier, pt)
                 try:
                     await page.goto(url, wait_until="commit", timeout=30000)
                 except Exception as e:
@@ -235,10 +255,12 @@ async def run_scraper():
                 await asyncio.sleep(2)
                 cars = await extract_cards_from_page(page, default_condition=condition)
                 if not cars:
+                    print(f"[-] Reached end of listings for {condition} at page {pt}.")
                     break
 
                 vins = {c["vin"] for c in cars if c.get("vin")}
                 if vins.issubset(seen_vins):
+                    print(f"[-] Duplicate page reached. Finished {condition}.")
                     break
                 seen_vins.update(vins)
 
