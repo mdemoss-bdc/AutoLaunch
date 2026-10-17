@@ -182,35 +182,50 @@ def push_batch_to_supabase(records: List[dict]) -> int:
   if not records:
     return 0
   unique_by_vin = {r["vin"]: r for r in records if r.get("vin")}
-  res = (
-      db.table("scraped_inventory")
-      .upsert(list(unique_by_vin.values()), on_conflict="vin")
-      .execute()
-  )
-  return len(res.data)
+  try:
+    res = (
+        db.table("scraped_inventory")
+        .upsert(list(unique_by_vin.values()), on_conflict="vin")
+        .execute()
+    )
+    return len(res.data) if res.data else 0
+  except Exception as e:
+    print(f"[!] Supabase batch upsert warning: {e}")
+    return 0
 
 
 async def run_scraper():
-  job = (
-      db.table("scrape_jobs")
-      .insert({
-          "dealership_id": DEALERSHIP_ID,
-          "status": "running",
-          "triggered_by": "cloud_worker",
-      })
-      .execute()
-  )
-  job_id = job.data[0]["id"] if job.data else None
+  job_id = None
+  try:
+    job = (
+        db.table("scrape_jobs")
+        .insert({
+            "dealership_id": DEALERSHIP_ID,
+            "status": "running",
+            "triggered_by": "cloud_worker",
+        })
+        .execute()
+    )
+    if job.data:
+      job_id = job.data[0]["id"]
+  except Exception as e:
+    print(f"[!] Scrape job log init bypassed: {e}")
 
   total_synced = 0
   try:
     async with async_playwright() as p:
       browser = await p.chromium.launch(
-          headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"]
+          headless=True,
+          args=[
+              "--no-sandbox",
+              "--disable-setuid-sandbox",
+              "--disable-dev-shm-usage",
+          ],
       )
       context = await browser.new_context(
           user_agent=(
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+              " (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
           )
       )
       page = await context.new_page()
@@ -218,44 +233,57 @@ async def run_scraper():
       for feed in FEEDS_TO_CRAWL:
         base_url = feed["url"]
         condition = feed["condition"]
+        print(f"\n[*] Starting Feed: {condition} ({base_url})")
         seen_vins = set()
 
         for pt in range(1, MAX_PAGES_PER_FEED + 1):
           url = build_page_url(base_url, PAGE_MODIFIER, pt)
+          print(f"[*] Crawling {condition} page {pt}...")
           try:
-            await page.goto(url, wait_until="commit", timeout=25000)
-          except Exception:
-            pass
-          await asyncio.sleep(2)
+            await page.goto(url, wait_until="commit", timeout=30000)
+          except Exception as e:
+            print(f"[!] Page navigation warning: {e}")
 
+          await asyncio.sleep(2)
           cars = await extract_cards_from_page(page, default_condition=condition)
           if not cars:
+            print(f"[-] No more cars found for {condition} at page {pt}.")
             break
 
           vins = {c["vin"] for c in cars if c.get("vin")}
           if vins.issubset(seen_vins):
+            print(f"[-] Seen duplicate cars. Finished {condition}.")
             break
           seen_vins.update(vins)
 
           saved = push_batch_to_supabase(cars)
           total_synced += saved
+          print(f"[+] Page {pt}: Saved {saved} units. Running total: {total_synced}")
           await asyncio.sleep(1)
 
       await browser.close()
 
     if job_id:
-      db.table("scrape_jobs").update({
-          "status": "completed",
-          "cars_synced": total_synced,
-          "completed_at": "now()",
-      }).eq("id", job_id).execute()
-    print(f"Scraper finished cleanly. Total synced: {total_synced}")
+      try:
+        db.table("scrape_jobs").update({
+            "status": "completed",
+            "cars_synced": total_synced,
+            "completed_at": "now()",
+        }).eq("id", job_id).execute()
+      except Exception:
+        pass
+
+    print(f"\n[✓] Scraper finished cleanly. Total synced: {total_synced}")
 
   except Exception as e:
+    print(f"[!] Scraper fatal exception: {e}")
     if job_id:
-      db.table("scrape_jobs").update(
-          {"status": "failed", "completed_at": "now()"}
-      ).eq("id", job_id).execute()
+      try:
+        db.table("scrape_jobs").update(
+            {"status": "failed", "completed_at": "now()"}
+        ).eq("id", job_id).execute()
+      except Exception:
+        pass
     raise e
 
 
