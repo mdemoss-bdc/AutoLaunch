@@ -285,14 +285,42 @@
     const DEFAULT_STORE = {
       name: "Moses Automotive Group",
       pageModifier: "?pt={page}",
-      usedUrl: "https://www.mosescars.com/search-all-used-inventory.html",
-      newUrl: "https://www.mosescars.com/search-all-new-inventory.html",
-      cpoUrl: "https://www.mosescars.com/search-all-certified-inventory.html"
+      usedUrl: "",
+      newUrl: "",
+      cpoUrl: ""
     };
 
     let currentStore = JSON.parse(localStorage.getItem("autolaunch_store_" + ACTIVE_DEALER_ID)) || DEFAULT_STORE;
     let rawInventory = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+
+    async function loadDealerProfileFromDb() {
+      try {
+        const res = await fetch(SUPABASE_URL + "/rest/v1/dealer_profiles?id=eq." + ACTIVE_DEALER_ID + "&select=*", {
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": "Bearer " + SUPABASE_KEY
+          }
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          if (rows && rows.length > 0) {
+            const row = rows[0];
+            currentStore = {
+              name: row.dealership_name || currentStore.name,
+              pageModifier: row.page_modifier || currentStore.pageModifier,
+              usedUrl: row.used_url !== undefined ? row.used_url : currentStore.usedUrl,
+              newUrl: row.new_url !== undefined ? row.new_url : currentStore.newUrl,
+              cpoUrl: row.certified_url !== undefined ? row.certified_url : currentStore.cpoUrl
+            };
+            localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
+            updateStoreUI();
+          }
+        }
+      } catch (err) {
+        console.error("Profile sync warning:", err);
+      }
+    }
 
     function updateStoreUI() {
       document.getElementById("headerStoreName").innerText = currentStore.name || "Dealership Inventory";
@@ -315,9 +343,9 @@
       if (panel) panel.classList.toggle("hidden");
     }
 
-    function saveDealershipProfile() {
+    async function saveDealershipProfile() {
       const name = document.getElementById("dealershipNameInput").value.trim() || DEFAULT_STORE.name;
-      const pageModifier = document.getElementById("dealershipPageModifierInput").value.trim();
+      const pageModifier = document.getElementById("dealershipPageModifierInput").value.trim() || "?pt={page}";
       const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim();
       const newUrl = document.getElementById("dealershipNewUrlInput").value.trim();
       const cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim();
@@ -326,7 +354,31 @@
       localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
       updateStoreUI();
       closeModal("dealershipModal");
-      alert("Settings saved for " + name);
+
+      // Save directly into Supabase dealer_profiles table so scraper.py reads it
+      try {
+        await fetch(SUPABASE_URL + "/rest/v1/dealer_profiles", {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": "Bearer " + SUPABASE_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates"
+          },
+          body: JSON.stringify({
+            id: ACTIVE_DEALER_ID,
+            dealership_name: name,
+            page_modifier: pageModifier,
+            used_url: usedUrl,
+            new_url: newUrl,
+            certified_url: cpoUrl
+          })
+        });
+      } catch (e) {
+        console.error("Could not sync profile to db:", e);
+      }
+
+      alert("Settings saved! Scraper will now crawl strictly the URLs you specified.");
     }
 
     async function triggerLiveLotCrawl() {
@@ -351,7 +403,7 @@
         });
 
         if (response.ok || response.status === 201) {
-          alert("✓ Live lot crawl queued! The background runner will process all lots and update vehicle counts automatically.");
+          alert("✓ Live lot crawl queued! The background runner will process only your specified URLs.");
         } else {
           alert("✓ Sync request logged successfully.");
         }
@@ -704,7 +756,7 @@
     }
 
     document.addEventListener("DOMContentLoaded", function() {
-      updateStoreUI();
+      loadDealerProfileFromDb();
       fetchLiveInventory();
       setInterval(function() { fetchLiveInventory(false); }, 30000);
     });
