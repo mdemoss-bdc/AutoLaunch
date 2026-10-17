@@ -15,10 +15,6 @@ db = create_client(SUPABASE_URL, SUPABASE_KEY)
 MAX_PAGES_PER_FEED = 500
 
 def get_dealership_configuration(dealer_id: str):
-    """
-    Fetches the live user-configured URLs from Supabase.
-    Zero hardcoded URLs.
-    """
     try:
         res = db.table("dealer_profiles").select("*").eq("id", dealer_id).execute()
         if res.data and len(res.data) > 0:
@@ -38,37 +34,36 @@ def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
     return f"{base_url}{mod}"
 
 async def extract_cards_from_page(page, default_condition: str = "Used") -> List[dict]:
-    for fraction in [0.25, 0.5, 0.75, 1.0]:
+    # Progressive scroll to trigger lazy loading of real vehicle images
+    for fraction in [0.2, 0.4, 0.6, 0.8, 1.0]:
         await page.evaluate(f"window.scrollTo(0, document.body.scrollHeight * {fraction})")
-        await asyncio.sleep(0.8)
+        await asyncio.sleep(0.7)
 
     vehicles = await page.evaluate("""(defaultCond) => {
         const results = [];
-        const cards = document.querySelectorAll('.vehicle-card, .inventory-item, .vehicle-overview, .vehicle-item, [data-vin], .listing-card, .inventory-list-item, div[class*="vehicle"]');
+        const cards = document.querySelectorAll('.vehicle-card, .inventory-item, .vehicle-overview, .vehicle-item, [data-vin], .listing-card, .inventory-list-item, div[class*="inventory-card"]');
 
         cards.forEach(card => {
-            const text = card.innerText || "";
-            const vinMatch = text.match(/\\b([A-HJ-NPR-Z0-9]{17})\\b/);
+            const cardText = card.innerText || "";
+            const vinMatch = cardText.match(/\\b([A-HJ-NPR-Z0-9]{17})\\b/);
             if (!vinMatch) return;
             const vin = vinMatch[1];
 
-            // 1. Accurately detect the real Vehicle Details link
+            // 1. DETAIL PAGE URL (Target primary vehicle listing)
             let detailUrl = null;
             const allLinks = Array.from(card.querySelectorAll('a[href]'));
-            
             for (const a of allLinks) {
                 const href = a.getAttribute('href') || '';
                 if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
                 if (/trade|kbb|value|finance|credit|contact|schedule|service|parts|direction|map|calc|review/i.test(href)) continue;
 
-                if (href.includes(vin) || /\\/(used|new|certified|vehicle-details|inventory)\\//i.test(href) || /\\.htm/i.test(href)) {
+                if (href.includes(vin) || /\\/(used|new|certified|vehicle-details|inventory)\\//i.test(href) || href.endsWith('.html') || href.endsWith('.htm')) {
                     try {
                         detailUrl = new URL(href, window.location.origin).href;
                         break;
                     } catch(e) {}
                 }
             }
-
             if (!detailUrl) {
                 const headingLink = card.querySelector('h2 a, h3 a, h4 a, .vehicle-title a, .title a');
                 if (headingLink && headingLink.getAttribute('href')) {
@@ -78,36 +73,24 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // 2. Rooftop Location
-            let exactLocation = "";
-            const locEl = card.querySelector('[class*="location"], [class*="dealership"], i[class*="marker"] ~ span, svg ~ span');
-            if (locEl && locEl.innerText.trim().length > 3) exactLocation = locEl.innerText.trim();
-            if (!exactLocation) {
-                const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
-                for (const line of lines) {
-                    if (/^(Moses|Hendrick|Sonic|CarMax|AutoNation|Ken Garff|Penske)/i.test(line) && !/Price|Stock|VIN|Save|Doc|Value|Trade/i.test(line)) {
-                        exactLocation = line;
-                        break;
-                    }
-                }
-            }
-            if (!exactLocation) exactLocation = "Dealership Lot";
-
-            // 3. Real Vehicle Photo
+            // 2. TRUE VEHICLE IMAGE (Exclude placeholders & logo overlays)
             let photoUrl = null;
-            const imgs = Array.from(card.querySelectorAll('img, [style*="background-image"]'));
-            for (const img of imgs) {
+            const imgs = Array.from(card.querySelectorAll('img, [data-src], [data-original], [style*="background-image"]'));
+            for (const el of imgs) {
                 let candidate = null;
-                if (img.tagName === 'IMG') {
-                    candidate = img.currentSrc || 
-                                img.getAttribute('data-original') || 
-                                img.getAttribute('data-src') || 
-                                img.getAttribute('data-lazy-src') || 
-                                img.src;
+                if (el.tagName === 'IMG') {
+                    candidate = el.getAttribute('data-original') || 
+                                el.getAttribute('data-src') || 
+                                el.getAttribute('data-lazy-src') || 
+                                el.currentSrc || 
+                                el.src;
                 } else {
-                    const style = img.getAttribute('style') || '';
-                    const match = style.match(/url\\(['"]?(http[^'"]+)['"]?\\)/i);
-                    if (match) candidate = match[1];
+                    candidate = el.getAttribute('data-src') || el.getAttribute('data-original');
+                    if (!candidate) {
+                        const style = el.getAttribute('style') || '';
+                        const match = style.match(/url\\(['"]?(http[^'"]+)['"]?\\)/i);
+                        if (match) candidate = match[1];
+                    }
                 }
 
                 if (candidate) {
@@ -125,18 +108,63 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // 4. Year, Make, Model, Trim
-            const yearMatch = text.match(/\\b(20[0-2][0-9]|199[0-9])\\b/);
+            // 3. TRUE VEHICLE PRICE (Prioritize actual selling price, ignore down payments)
+            let price = null;
+
+            // Check high-priority price elements first (DealerOn specific classes)
+            const priceEl = card.querySelector('.moses-price .price-value, .final-price .price-value, .sale-price .price-value, .retail-price .price-value, [class*="price-value"], [class*="finalPrice"]');
+            if (priceEl) {
+                const pText = priceEl.innerText.replace(/[^0-9]/g, '');
+                if (pText && parseInt(pText) >= 3500) {
+                    price = parseInt(pText);
+                }
+            }
+
+            // Fallback: Parse card text for standard prices while explicitly rejecting lease down payments
+            if (!price) {
+                const lines = cardText.split('\\n');
+                for (const line of lines) {
+                    if (/down|due at signing|per month|\\/mo|savings|rebate|doc fee/i.test(line)) continue;
+                    if (/price|final|retail|msrp|sale/i.test(line)) {
+                        const m = line.match(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
+                        if (m) {
+                            const val = parseInt(m[1].replace(/,/g, ''));
+                            if (val >= 3500 && val < 300000) {
+                                price = val;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. ROOFTOP LOCATION
+            let exactLocation = "";
+            const locEl = card.querySelector('[class*="location"], [class*="dealership"], i[class*="marker"] ~ span');
+            if (locEl && locEl.innerText.trim().length > 3) exactLocation = locEl.innerText.trim();
+            if (!exactLocation) {
+                const lines = cardText.split('\\n').map(l => l.trim()).filter(Boolean);
+                for (const line of lines) {
+                    if (/^(Moses|Hendrick|Sonic|CarMax|AutoNation|Ken Garff|Penske)/i.test(line) && !/Price|Stock|VIN|Save|Doc|Value|Trade/i.test(line)) {
+                        exactLocation = line;
+                        break;
+                    }
+                }
+            }
+            if (!exactLocation) exactLocation = "Dealership Lot";
+
+            // 5. YEAR, MAKE, MODEL, TRIM
+            const yearMatch = cardText.match(/\\b(20[0-2][0-9]|199[0-9])\\b/);
             const year = yearMatch ? parseInt(yearMatch[1]) : 2026;
 
-            const commonMakes = ['Toyota', 'Honda', 'Ford', 'Chevrolet', 'Chevy', 'GMC', 'Jeep', 'Subaru', 'Nissan', 'Hyundai', 'Kia', 'BMW', 'Mercedes-Benz', 'Audi', 'Lexus', 'Ram', 'Dodge', 'Chrysler', 'Mazda', 'Volkswagen', 'VW', 'Cadillac', 'Buick', 'Acura', 'Lincoln', 'Volvo', 'Infiniti', 'Porsche'];
+            const commonMakes = ['Toyota', 'Honda', 'Ford', 'Chevrolet', 'Chevy', 'GMC', 'Jeep', 'Subaru', 'Nissan', 'Hyundai', 'Kia', 'BMW', 'Mercedes-Benz', 'Audi', 'Lexus', 'Ram', 'Dodge', 'Chrysler', 'Mazda', 'Volkswagen', 'VW', 'Cadillac', 'Buick', 'Acura', 'Lincoln', 'Volvo', 'Infiniti', 'Porsche', 'Mitsubishi'];
             let detectedMake = "Other";
             let detectedModel = "Vehicle";
             let detectedTrim = "";
 
             for (const m of commonMakes) {
                 const regex = new RegExp('\\\\b' + m + '\\\\b\\\\s+([A-Za-z0-9\\\\-\\s]{2,40})', 'i');
-                const mMatch = text.match(regex);
+                const mMatch = cardText.match(regex);
                 if (mMatch) {
                     detectedMake = m;
                     const words = mMatch[1].split('\\n')[0].trim().split(' ').filter(Boolean);
@@ -146,32 +174,25 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // 5. Price & Mileage: ignore sub-3500 lease down payments
-            const priceMatches = Array.from(text.matchAll(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/g));
-            let price = null;
-            if (priceMatches.length > 0) {
-                const parsedPrices = priceMatches.map(m => parseInt(m[1].replace(/,/g, ''))).filter(p => p >= 3500 && p < 250000);
-                price = parsedPrices.length ? parsedPrices[parsedPrices.length - 1] : null;
-            }
-
-            const mileMatch = text.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})\\s*(?:miles|mi\\b)/i);
+            // 6. MILEAGE
+            const mileMatch = cardText.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})\\s*(?:miles|mi\\b)/i);
             const mileage = mileMatch ? parseInt(mileMatch[1].replace(/,/g, '')) : (defaultCond === "New" ? 5 : null);
 
-            // 6. Color
+            // 7. COLOR
             let color = "Standard";
             const colorRegex = /\\b(Black|White|Silver|Gray|Grey|Red|Blue|Navy|Brown|Green|Gold|Beige|Tan|Burgundy|Orange|Yellow|Charcoal)\\b/i;
-            const extMatch = text.match(colorRegex);
+            const extMatch = cardText.match(colorRegex);
             if (extMatch) {
                 color = extMatch[1].charAt(0).toUpperCase() + extMatch[1].slice(1).toLowerCase();
                 if (color === "Grey") color = "Gray";
             }
 
-            // 7. Body Type
+            // 8. BODY TYPE
             let bodyType = "Other";
-            if (/SUV|Crossover|Sport Utility/i.test(text)) bodyType = "SUV";
-            else if (/Truck|Crew Cab|Pickup/i.test(text)) bodyType = "Truck";
-            else if (/Sedan/i.test(text)) bodyType = "Sedan";
-            else if (/Van|Minivan|Odyssey|Sienna|Pacifica|Carnival/i.test(text)) bodyType = "Van";
+            if (/SUV|Crossover|Sport Utility/i.test(cardText)) bodyType = "SUV";
+            else if (/Truck|Crew Cab|Pickup/i.test(cardText)) bodyType = "Truck";
+            else if (/Sedan/i.test(cardText)) bodyType = "Sedan";
+            else if (/Van|Minivan|Odyssey|Sienna|Pacifica|Carnival/i.test(cardText)) bodyType = "Van";
 
             results.push({
                 vin: vin,
@@ -189,6 +210,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 transmission: "Automatic",
                 status: "Available",
                 condition: defaultCond,
+                dealership_id: "moses",
                 is_active: true
             });
         });
@@ -209,7 +231,6 @@ def push_batch_to_supabase(records: List[dict]) -> int:
         return 0
 
 async def run_scraper():
-    # 1. Fetch user-defined feeds strictly from Supabase settings
     config = get_dealership_configuration(DEALERSHIP_ID)
     page_modifier = config.get("page_modifier") or "?pt={page}"
 
@@ -222,10 +243,10 @@ async def run_scraper():
         feeds_to_crawl.append({"url": config["new_url"].strip(), "condition": "New"})
 
     if not feeds_to_crawl:
-        print(f"[-] No target URLs found in settings for dealership '{DEALERSHIP_ID}'. Nothing to crawl.")
+        print(f"[-] No target URLs found in settings for '{DEALERSHIP_ID}'.")
         return
 
-    print(f"[*] Found {len(feeds_to_crawl)} active feed(s) configured in user settings.")
+    print(f"[*] Starting crawl for {len(feeds_to_crawl)} feed(s): {[f['url'] for f in feeds_to_crawl]}")
 
     total_synced = 0
     async with async_playwright() as p:
@@ -242,37 +263,40 @@ async def run_scraper():
         for feed in feeds_to_crawl:
             base_url = feed["url"]
             condition = feed["condition"]
-            print(f"\n[*] Starting Feed: {condition} ({base_url})")
+            print(f"\n[*] Crawling: {condition} -> {base_url}")
             seen_vins = set()
 
             for pt in range(1, MAX_PAGES_PER_FEED + 1):
                 url = build_page_url(base_url, page_modifier, pt)
                 try:
-                    await page.goto(url, wait_until="commit", timeout=30000)
+                    response = await page.goto(url, wait_until="commit", timeout=30000)
+                    if response and response.status == 404:
+                        print(f"[!] 404 Page Not Found: {url}")
+                        break
                 except Exception as e:
                     print(f"[!] Navigation error: {e}")
 
                 await asyncio.sleep(2)
                 cars = await extract_cards_from_page(page, default_condition=condition)
                 if not cars:
-                    print(f"[-] Reached end of listings for {condition} at page {pt}.")
+                    print(f"[-] No vehicle cards found on page {pt}. Finished {condition}.")
                     break
 
                 vins = {c["vin"] for c in cars if c.get("vin")}
                 if vins.issubset(seen_vins):
-                    print(f"[-] Duplicate page reached. Finished {condition}.")
+                    print(f"[-] Duplicate VIN batch on page {pt}. Reached the final page.")
                     break
                 seen_vins.update(vins)
 
                 saved = push_batch_to_supabase(cars)
                 total_synced += saved
-                valid_links = sum(1 for c in cars if c.get("detail_url"))
                 valid_photos = sum(1 for c in cars if c.get("image_url"))
-                print(f"[+] Page {pt}: Saved {saved} units | Direct URLs: {valid_links}/{len(cars)} | Photos: {valid_photos}/{len(cars)}")
+                valid_prices = sum(1 for c in cars if c.get("price"))
+                print(f"[+] Page {pt}: Synced {saved} units | Real Prices: {valid_prices}/{len(cars)} | Photos: {valid_photos}/{len(cars)}")
                 await asyncio.sleep(1)
 
         await browser.close()
-    print(f"\n[✓] Scraper finished. Total synced: {total_synced}")
+    print(f"\n[✓] Crawl finished. Total live units synced: {total_synced}")
 
 if __name__ == "__main__":
     asyncio.run(run_scraper())
