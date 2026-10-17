@@ -32,7 +32,6 @@ def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
     return f"{base_url}{mod}"
 
 async def extract_cards_from_page(page, default_condition: str = "Used") -> List[dict]:
-    # Progressive scroll to trigger all dynamic lazy loaders across any dealer platform
     for fraction in [0.25, 0.5, 0.75, 1.0]:
         await page.evaluate(f"window.scrollTo(0, document.body.scrollHeight * {fraction})")
         await asyncio.sleep(0.8)
@@ -47,21 +46,34 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             if (!vinMatch) return;
             const vin = vinMatch[1];
 
-            // 1. Universal Detail Link: Grab the first valid navigable link from the card
+            // 1. Accurately detect the real Vehicle Details link
             let detailUrl = null;
             const allLinks = Array.from(card.querySelectorAll('a[href]'));
+            
+            // First priority: link containing the VIN or clear detail page slug
             for (const a of allLinks) {
                 const href = a.getAttribute('href') || '';
                 if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
                 
-                // Exclude generic action buttons (e.g., share, call, directions)
-                if (/tel:|mailto:|map|direction|contact|schedule/i.test(href)) continue;
+                // Exclude marketing, trade-in, finance tools
+                if (/trade|kbb|value|finance|credit|contact|schedule|service|parts|direction|map|calc|review/i.test(href)) continue;
 
-                try {
-                    const resolved = new URL(href, window.location.origin).href;
-                    detailUrl = resolved;
-                    break;
-                } catch(e) {}
+                if (href.includes(vin) || /\\/(used|new|certified|vehicle-details|inventory)\\//i.test(href) || /\\.htm/i.test(href)) {
+                    try {
+                        detailUrl = new URL(href, window.location.origin).href;
+                        break;
+                    } catch(e) {}
+                }
+            }
+
+            // Second priority: title/heading link if not caught above
+            if (!detailUrl) {
+                const headingLink = card.querySelector('h2 a, h3 a, h4 a, .vehicle-title a, .title a');
+                if (headingLink && headingLink.getAttribute('href')) {
+                    try {
+                        detailUrl = new URL(headingLink.getAttribute('href'), window.location.origin).href;
+                    } catch(e) {}
+                }
             }
 
             // 2. Rooftop Location
@@ -71,7 +83,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             if (!exactLocation) {
                 const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
                 for (const line of lines) {
-                    if (/^(Moses|Hendrick|Sonic|CarMax|AutoNation|Ken Garff|Penske)/i.test(line) && !/Price|Stock|VIN|Save|Doc/i.test(line)) {
+                    if (/^(Moses|Hendrick|Sonic|CarMax|AutoNation|Ken Garff|Penske)/i.test(line) && !/Price|Stock|VIN|Save|Doc|Value|Trade/i.test(line)) {
                         exactLocation = line;
                         break;
                     }
@@ -79,7 +91,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             }
             if (!exactLocation) exactLocation = "Dealership Lot";
 
-            // 3. Universal Image Extraction
+            // 3. Real Vehicle Photo (Filter out static icons and DealerOn placeholders)
             let photoUrl = null;
             const imgs = Array.from(card.querySelectorAll('img, [style*="background-image"]'));
             for (const img of imgs) {
@@ -102,7 +114,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                     const isGarbage = lower.includes('/static/') || lower.includes('placeholder') || 
                                       lower.includes('logo') || lower.includes('banner') || 
                                       lower.includes('1x1') || lower.includes('pixel') || 
-                                      lower.endsWith('.svg');
+                                      lower.includes('icon') || lower.endsWith('.svg');
 
                     if (candidate.startsWith('http') && !isGarbage) {
                         photoUrl = candidate;
@@ -132,11 +144,11 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // 5. Price & Mileage
+            // 5. Price & Mileage: Filter out sub-$4,000 numbers which are lease down-payments
             const priceMatches = Array.from(text.matchAll(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/g));
             let price = null;
             if (priceMatches.length > 0) {
-                const parsedPrices = priceMatches.map(m => parseInt(m[1].replace(/,/g, ''))).filter(p => p > 1000 && p < 250000);
+                const parsedPrices = priceMatches.map(m => parseInt(m[1].replace(/,/g, ''))).filter(p => p >= 3500 && p < 250000);
                 price = parsedPrices.length ? parsedPrices[parsedPrices.length - 1] : null;
             }
 
@@ -157,7 +169,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             if (/SUV|Crossover|Sport Utility/i.test(text)) bodyType = "SUV";
             else if (/Truck|Crew Cab|Pickup/i.test(text)) bodyType = "Truck";
             else if (/Sedan/i.test(text)) bodyType = "Sedan";
-            else if (/Van|Minivan/i.test(text)) bodyType = "Van";
+            else if (/Van|Minivan|Odyssey|Sienna|Pacifica|Carnival/i.test(text)) bodyType = "Van";
 
             results.push({
                 vin: vin,
@@ -230,4 +242,15 @@ async def run_scraper():
                     break
                 seen_vins.update(vins)
 
-                saved = push_batch_to_
+                saved = push_batch_to_supabase(cars)
+                total_synced += saved
+                valid_links = sum(1 for c in cars if c.get("detail_url"))
+                valid_photos = sum(1 for c in cars if c.get("image_url"))
+                print(f"[+] Page {pt}: Saved {saved} units | Direct URLs: {valid_links}/{len(cars)} | Photos: {valid_photos}/{len(cars)}")
+                await asyncio.sleep(1)
+
+        await browser.close()
+    print(f"\n[✓] Scraper finished. Total synced: {total_synced}")
+
+if __name__ == "__main__":
+    asyncio.run(run_scraper())
