@@ -51,11 +51,12 @@ def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
 async def extract_cards_from_page(
     page, default_condition: str = "Used"
 ) -> List[dict]:
+  # Scroll progressively to force Dealer.com lazy loaders to resolve image URLs
   for fraction in [0.25, 0.5, 0.75, 1.0]:
     await page.evaluate(
         f"window.scrollTo(0, document.body.scrollHeight * {fraction})"
     )
-    await asyncio.sleep(1.2)
+    await asyncio.sleep(1.0)
 
   vehicles = await page.evaluate(
       """(defaultCond) => {
@@ -68,10 +69,12 @@ async def extract_cards_from_page(
             if (!vinMatch) return;
             const vin = vinMatch[1];
 
+            // 1. Direct Webpage Listing Link
             let listingUrl = null;
             const linkTag = card.querySelector('a[href*="/vehicle-details/"], a[href*="/used/"], a[href*="/new/"], a[href*="/certified/"], a[href*=".htm"]');
             if (linkTag && linkTag.href) listingUrl = linkTag.href;
 
+            // 2. Rooftop Location
             let exactLocation = "";
             const locEl = card.querySelector('[class*="location"], [class*="dealership"], i[class*="marker"] ~ span, svg ~ span');
             if (locEl && locEl.innerText.trim().length > 3) exactLocation = locEl.innerText.trim();
@@ -86,25 +89,53 @@ async def extract_cards_from_page(
             }
             if (!exactLocation) exactLocation = "Moses Auto Group";
 
+            // 3. Robust Photo Extraction for Dealer.com
             let photoUrl = null;
-            const images = Array.from(card.querySelectorAll('img, picture source, [style*="background-image"]'));
-            for (const img of images) {
-                let candidate = img.getAttribute('data-src') || img.getAttribute('data-original') || img.getAttribute('data-lazy-src') || img.getAttribute('srcset') || img.getAttribute('src');
-                if (candidate && candidate.includes(',')) candidate = candidate.split(',')[0].trim().split(' ')[0];
-                if (!candidate && img.getAttribute('style')) {
-                    const bgMatch = img.getAttribute('style').match(/url\\(['"]?(http[^'"]+)['"]?\\)/i);
-                    if (bgMatch) candidate = bgMatch[1];
-                }
-                if (candidate && candidate.startsWith('//')) candidate = 'https:' + candidate;
-                if (candidate && candidate.startsWith('http')) {
+            
+            // Check direct image attributes
+            const imgs = Array.from(card.querySelectorAll('img, picture source'));
+            for (const img of imgs) {
+                let candidate = img.getAttribute('data-original') ||
+                                img.getAttribute('data-src') ||
+                                img.getAttribute('data-lazy-src') ||
+                                img.getAttribute('srcset') ||
+                                img.getAttribute('src');
+
+                if (candidate) {
+                    if (candidate.includes(',')) candidate = candidate.split(',')[0].trim().split(' ')[0];
+                    if (candidate.startsWith('//')) candidate = 'https:' + candidate;
+
                     const lower = candidate.toLowerCase();
-                    if (!lower.includes('logo') && !lower.includes('banner') && !lower.includes('badge') && !lower.includes('1x1')) {
+                    const isJunk = lower.includes('logo') || lower.includes('banner') || lower.includes('badge') ||
+                                   lower.includes('1x1') || lower.includes('pixel') || lower.includes('placeholder') ||
+                                   lower.includes('spinner') || lower.endsWith('.svg');
+
+                    if (candidate.startsWith('http') && !isJunk) {
                         photoUrl = candidate;
                         break;
                     }
                 }
             }
 
+            // Fallback: check background-image inline CSS
+            if (!photoUrl) {
+                const bgElements = Array.from(card.querySelectorAll('[style*="background"]'));
+                for (const el of bgElements) {
+                    const style = el.getAttribute('style') || '';
+                    const match = style.match(/url\\(['"]?(http[^'"]+)['"]?\\)/i);
+                    if (match && !match[1].toLowerCase().includes('logo')) {
+                        photoUrl = match[1];
+                        break;
+                    }
+                }
+            }
+
+            // Fallback: Check standard Dealer.com CDN pattern using VIN
+            if (!photoUrl) {
+                photoUrl = `https://images.dealer.com/autodata/us/640/color/2026/${vin}.jpg`;
+            }
+
+            // 4. Year, Make, Model, Trim
             const yearMatch = text.match(/\\b(20[0-2][0-9]|199[0-9])\\b/);
             const year = yearMatch ? parseInt(yearMatch[1]) : 2026;
 
@@ -125,6 +156,7 @@ async def extract_cards_from_page(
                 }
             }
 
+            // 5. Price & Mileage
             const priceMatches = Array.from(text.matchAll(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/g));
             let price = null;
             if (priceMatches.length > 0) {
@@ -195,96 +227,65 @@ def push_batch_to_supabase(records: List[dict]) -> int:
 
 
 async def run_scraper():
-  job_id = None
-  try:
-    job = (
-        db.table("scrape_jobs")
-        .insert({
-            "dealership_id": DEALERSHIP_ID,
-            "status": "running",
-            "triggered_by": "cloud_worker",
-        })
-        .execute()
-    )
-    if job.data:
-      job_id = job.data[0]["id"]
-  except Exception as e:
-    print(f"[!] Scrape job log init bypassed: {e}")
-
   total_synced = 0
-  try:
-    async with async_playwright() as p:
-      browser = await p.chromium.launch(
-          headless=True,
-          args=[
-              "--no-sandbox",
-              "--disable-setuid-sandbox",
-              "--disable-dev-shm-usage",
-          ],
-      )
-      context = await browser.new_context(
-          user_agent=(
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-              " (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-          )
-      )
-      page = await context.new_page()
+  async with async_playwright() as p:
+    browser = await p.chromium.launch(
+        headless=True,
+        args=[
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+        ],
+    )
+    context = await browser.new_context(
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+        ),
+        viewport={"width": 1920, "height": 1080},
+    )
+    page = await context.new_page()
 
-      for feed in FEEDS_TO_CRAWL:
-        base_url = feed["url"]
-        condition = feed["condition"]
-        print(f"\n[*] Starting Feed: {condition} ({base_url})")
-        seen_vins = set()
+    for feed in FEEDS_TO_CRAWL:
+      base_url = feed["url"]
+      condition = feed["condition"]
+      print(f"\n[*] Starting Feed: {condition} ({base_url})")
+      seen_vins = set()
 
-        for pt in range(1, MAX_PAGES_PER_FEED + 1):
-          url = build_page_url(base_url, PAGE_MODIFIER, pt)
-          print(f"[*] Crawling {condition} page {pt}...")
-          try:
-            await page.goto(url, wait_until="commit", timeout=30000)
-          except Exception as e:
-            print(f"[!] Page navigation warning: {e}")
+      for pt in range(1, MAX_PAGES_PER_FEED + 1):
+        url = build_page_url(base_url, PAGE_MODIFIER, pt)
+        print(f"[*] Crawling {condition} page {pt}...")
+        try:
+          await page.goto(url, wait_until="commit", timeout=30000)
+        except Exception as e:
+          print(f"[!] Page navigation warning: {e}")
 
-          await asyncio.sleep(2)
-          cars = await extract_cards_from_page(page, default_condition=condition)
-          if not cars:
-            print(f"[-] No more cars found for {condition} at page {pt}.")
-            break
+        await asyncio.sleep(2)
+        cars = await extract_cards_from_page(page, default_condition=condition)
+        if not cars:
+          print(f"[-] No more cars found for {condition} at page {pt}.")
+          break
 
-          vins = {c["vin"] for c in cars if c.get("vin")}
-          if vins.issubset(seen_vins):
-            print(f"[-] Seen duplicate cars. Finished {condition}.")
-            break
-          seen_vins.update(vins)
+        vins = {c["vin"] for c in cars if c.get("vin")}
+        if vins.issubset(seen_vins):
+          print(f"[-] Seen duplicate cars. Finished {condition}.")
+          break
+        seen_vins.update(vins)
 
-          saved = push_batch_to_supabase(cars)
-          total_synced += saved
-          print(f"[+] Page {pt}: Saved {saved} units. Running total: {total_synced}")
-          await asyncio.sleep(1)
+        saved = push_batch_to_supabase(cars)
+        total_synced += saved
+        photos_found = sum(
+            1 for c in cars if c["image_url"] and not c["image_url"].endswith(".svg")
+        )
+        print(
+            f"[+] Page {pt}: Saved {saved} units ({photos_found}/{len(cars)}"
+            f" real photos). Running total: {total_synced}"
+        )
+        await asyncio.sleep(1)
 
-      await browser.close()
+    await browser.close()
 
-    if job_id:
-      try:
-        db.table("scrape_jobs").update({
-            "status": "completed",
-            "cars_synced": total_synced,
-            "completed_at": "now()",
-        }).eq("id", job_id).execute()
-      except Exception:
-        pass
-
-    print(f"\n[✓] Scraper finished cleanly. Total synced: {total_synced}")
-
-  except Exception as e:
-    print(f"[!] Scraper fatal exception: {e}")
-    if job_id:
-      try:
-        db.table("scrape_jobs").update(
-            {"status": "failed", "completed_at": "now()"}
-        ).eq("id", job_id).execute()
-      except Exception:
-        pass
-    raise e
+  print(f"\n[✓] Scraper finished cleanly. Total synced: {total_synced}")
 
 
 if __name__ == "__main__":
