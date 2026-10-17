@@ -37,7 +37,7 @@
 
         <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm cursor-pointer">
           <i class="fa-solid fa-building text-indigo-400"></i>
-          <span id="headerStoreName">Dealership Inventory</span>
+          <span id="headerStoreName">Moses Automotive Group</span>
           <i class="fa-solid fa-gear text-[11px] text-gray-400"></i>
         </button>
 
@@ -61,7 +61,7 @@
     <div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div>
         <div class="flex items-center gap-3 mb-1">
-          <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Dealership Inventory</h1>
+          <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
           <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Locations...</span>
         </div>
         <p class="text-sm text-gray-400">Filter by Make, Model, Trim, Location, and Specs. Click any vehicle to view its live website listing.</p>
@@ -206,13 +206,13 @@
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
   </main>
 
-  <!-- Dealership Settings Modal -->
+  <!-- Complete Dealership Settings Modal with Web Addresses -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
         <div>
-          <h3 class="text-lg font-bold text-white">Dealership Profile & Multi-Tenant Setup</h3>
-          <p class="text-xs text-gray-400">Configure your store name and live inventory crawler target.</p>
+          <h3 class="text-lg font-bold text-white">Dealership Setup & Target URLs</h3>
+          <p class="text-xs text-gray-400">Configure your store name and live web addresses to crawl.</p>
         </div>
         <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
@@ -225,12 +225,27 @@
 
         <div>
           <label class="text-xs font-bold text-gray-400 uppercase">Dealership Name</label>
-          <input type="text" id="dealershipNameInput" placeholder="Dealership Name" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <input type="text" id="dealershipNameInput" placeholder="Moses Automotive Group" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="border-t border-gray-800 pt-3">
+          <label class="text-xs font-bold text-indigo-400 uppercase block mb-1">Used Inventory URL</label>
+          <input type="text" id="dealershipUsedUrlInput" placeholder="https://www.mosescars.com/search-all-used-inventory.html" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="text-xs font-bold text-emerald-400 uppercase block mb-1">New Inventory URL</label>
+          <input type="text" id="dealershipNewUrlInput" placeholder="https://www.mosescars.com/search-all-new-inventory.html" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="text-xs font-bold text-cyan-400 uppercase block mb-1">Certified Pre-Owned URL</label>
+          <input type="text" id="dealershipCpoUrlInput" placeholder="https://www.mosescars.com/search-all-certified-inventory.html" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
         <div class="pt-2 flex gap-2">
           <button onclick="saveDealershipProfile()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30 cursor-pointer">
-            Save Profile
+            Save Web Addresses
           </button>
           <button onclick="closeModal('dealershipModal')" class="px-4 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition cursor-pointer">
             Cancel
@@ -262,7 +277,10 @@
     const ACTIVE_DEALER_ID = urlParams.get("dealer") || "moses";
 
     const DEFAULT_STORE = {
-      name: "Moses Automotive Group"
+      name: "Moses Automotive Group",
+      usedUrl: "https://www.mosescars.com/search-all-used-inventory.html",
+      newUrl: "https://www.mosescars.com/search-all-new-inventory.html",
+      cpoUrl: "https://www.mosescars.com/search-all-certified-inventory.html"
     };
 
     let currentStore = JSON.parse(localStorage.getItem("autolaunch_store_" + ACTIVE_DEALER_ID)) || DEFAULT_STORE;
@@ -270,10 +288,13 @@
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
 
     function updateStoreUI() {
-      document.getElementById("headerStoreName").innerText = currentStore.name;
-      document.getElementById("bannerStoreTitle").innerText = currentStore.name;
+      document.getElementById("headerStoreName").innerText = currentStore.name || DEFAULT_STORE.name;
+      document.getElementById("bannerStoreTitle").innerText = currentStore.name || DEFAULT_STORE.name;
       document.getElementById("dealershipSlugInput").value = ACTIVE_DEALER_ID;
-      document.getElementById("dealershipNameInput").value = currentStore.name;
+      document.getElementById("dealershipNameInput").value = currentStore.name || DEFAULT_STORE.name;
+      document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl || DEFAULT_STORE.usedUrl;
+      document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || DEFAULT_STORE.newUrl;
+      document.getElementById("dealershipCpoUrlInput").value = currentStore.cpoUrl || DEFAULT_STORE.cpoUrl;
     }
 
     function openDealershipModal() {
@@ -288,10 +309,15 @@
 
     function saveDealershipProfile() {
       const name = document.getElementById("dealershipNameInput").value.trim() || DEFAULT_STORE.name;
-      currentStore = { name };
+      const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim() || DEFAULT_STORE.usedUrl;
+      const newUrl = document.getElementById("dealershipNewUrlInput").value.trim() || DEFAULT_STORE.newUrl;
+      const cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim() || DEFAULT_STORE.cpoUrl;
+
+      currentStore = { name, usedUrl, newUrl, cpoUrl };
       localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
       updateStoreUI();
       closeModal("dealershipModal");
+      alert("Saved! Target URLs updated for " + name);
     }
 
     async function triggerLiveLotCrawl() {
@@ -337,7 +363,6 @@
         let hasMore = true;
 
         while (hasMore) {
-          // Query sorted by vin.asc which is guaranteed to exist on every row
           const response = await fetch(SUPABASE_URL + "/rest/v1/scraped_inventory?select=*&order=vin.asc", {
             method: "GET",
             headers: {
@@ -563,8 +588,6 @@
         else if (car.condition === "New") badgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
 
         const bodyBadge = (car.body_type && car.body_type !== 'Other') ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">' + car.body_type + '</span>' : '';
-        
-        // Direct link uses detail_url, with listing_url or fallback
         const linkUrl = car.detail_url || car.listing_url || "#";
 
         html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
