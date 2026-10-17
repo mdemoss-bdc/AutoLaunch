@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoLaunch | Dealership Sales Enablement</title>
+  <title>AutoLaunch | Dealership Sales Enablement & Wishlist Matcher</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
@@ -25,18 +25,19 @@
         </div>
         <div>
           <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-gray-200 to-indigo-300 bg-clip-text text-transparent">AutoLaunch</span>
-          <span class="text-xs text-gray-400 block font-medium">Inventory & Marketing Suite</span>
+          <span class="text-xs text-gray-400 block font-medium">Inventory & Wishlist Suite</span>
         </div>
       </div>
 
+      <!-- Action Buttons -->
       <div class="flex items-center gap-2.5">
-        <button onclick="openWishlistModal()" class="relative px-3.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 text-xs font-semibold flex items-center gap-2 transition">
+        <button id="wishlistTriggerBtn" onclick="openWishlistModal()" class="relative px-3.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer">
           <i class="fa-solid fa-bell text-amber-400"></i>
           <span>Wishlist</span>
           <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-600 text-white animate-bounce">0</span>
         </button>
 
-        <button onclick="openDealershipModal()" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700">
+        <button onclick="openDealershipModal()" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 cursor-pointer">
           <i class="fa-solid fa-building text-indigo-400"></i>
           <span id="headerStoreName">Moses Automotive Group</span>
           <i class="fa-solid fa-gear text-[10px] text-gray-400"></i>
@@ -47,7 +48,7 @@
           <span id="syncText">Connected</span>
         </div>
 
-        <button onclick="fetchLiveInventory(true)" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
+        <button onclick="fetchLiveInventory(true)" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm cursor-pointer">
           <i class="fa-solid fa-arrows-rotate"></i>
           <span>Refresh</span>
         </button>
@@ -91,7 +92,7 @@
           <p class="text-xs text-gray-400">Vehicles on the lot match buyers on your waiting list.</p>
         </div>
       </div>
-      <button onclick="openWishlistModal('matches')" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition">
+      <button onclick="openWishlistModal('matches')" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition cursor-pointer">
         View Matched Customers
       </button>
     </div>
@@ -119,14 +120,14 @@
             <option value="miles_asc">Mileage: Lowest First</option>
             <option value="year_desc">Year: Newest First</option>
           </select>
-          <button onclick="toggleAdvancedFilters()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition">
+          <button onclick="toggleAdvancedFilters()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition cursor-pointer">
             <i class="fa-solid fa-sliders"></i>
             <span>Specs</span>
           </button>
         </div>
       </div>
 
-      <!-- Expandable Specs Toolbar -->
+      <!-- Specs Toolbar -->
       <div id="advancedFilterPanel" class="pt-3 border-t border-gray-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         <div>
           <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Body Type</label>
@@ -190,7 +191,7 @@
         </div>
 
         <div class="flex items-end">
-          <button onclick="resetFilters()" class="w-full py-1.5 rounded-md bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white border border-gray-800 text-xs font-semibold transition">
+          <button onclick="resetFilters()" class="w-full py-1.5 rounded-md bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white border border-gray-800 text-xs font-semibold transition cursor-pointer">
             Reset Filters
           </button>
         </div>
@@ -199,7 +200,7 @@
 
     <!-- Vehicle Cards Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      <div class="col-span-full text-center py-12 text-gray-500">Connecting to live inventory...</div>
+      <div class="col-span-full text-center py-12 text-gray-500">Connecting to inventory database...</div>
     </div>
   </main>
 
@@ -214,18 +215,19 @@
           </h3>
           <p class="text-xs text-gray-400">Save waiting buyers. The system alerts you immediately when matching vehicles are in stock.</p>
         </div>
-        <button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
 
       <div class="flex border-b border-gray-800 text-xs font-semibold">
-        <button id="tabAddWishlistBtn" onclick="switchWishlistTab('add')" class="py-2 px-4 border-b-2 border-indigo-500 text-white">Add New Request</button>
-        <button id="tabMatchesBtn" onclick="switchWishlistTab('matches')" class="py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white flex items-center gap-1.5">
+        <button id="tabAddWishlistBtn" onclick="switchWishlistTab('add')" class="py-2 px-4 border-b-2 border-indigo-500 text-white cursor-pointer">Add New Request</button>
+        <button id="tabMatchesBtn" onclick="switchWishlistTab('matches')" class="py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white flex items-center gap-1.5 cursor-pointer">
           <span>Active Matches</span>
           <span id="tabMatchBadgeCount" class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">0</span>
         </button>
-        <button id="tabAllWishlistBtn" onclick="switchWishlistTab('list')" class="py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white">All Waiting Buyers</button>
+        <button id="tabAllWishlistBtn" onclick="switchWishlistTab('list')" class="py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white cursor-pointer">All Waiting Buyers</button>
       </div>
 
+      <!-- Tab 1: Add Request -->
       <div id="tabAddWishlist" class="space-y-3">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -254,19 +256,21 @@
           <textarea id="wishlistCustNotes" placeholder="Prefers AWD, under 80k miles, ready to buy this week." class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 h-20"></textarea>
         </div>
 
-        <div class="pt-2 flex gap-2">
-          <button onclick="saveWishlistEntry()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30">
+        <div class="pt-2">
+          <button onclick="saveWishlistEntry()" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30 cursor-pointer">
             Save Customer Request & Enable Live Monitoring
           </button>
         </div>
       </div>
 
+      <!-- Tab 2: Live Matches -->
       <div id="tabMatches" class="hidden space-y-3">
         <div id="matchedCustomersContainer" class="space-y-3">
           <div class="text-center py-6 text-gray-500 text-xs">No active matches found.</div>
         </div>
       </div>
 
+      <!-- Tab 3: All Customer Requests -->
       <div id="tabAllWishlist" class="hidden space-y-3">
         <div id="allWishlistContainer" class="space-y-2">
           <div class="text-center py-6 text-gray-500 text-xs">No customer wishlist requests saved yet.</div>
@@ -275,7 +279,7 @@
     </div>
   </div>
 
-  <!-- Dealership & Multi-Feed Configuration Modal -->
+  <!-- Dealership Config Modal -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
@@ -283,7 +287,7 @@
           <h3 class="text-lg font-bold text-white">Dealership & Multi-Feed Configuration</h3>
           <p class="text-xs text-gray-400">Configure your store feeds. These sync directly to your database.</p>
         </div>
-        <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
 
       <div class="space-y-4">
@@ -313,10 +317,10 @@
         </div>
 
         <div class="pt-2 flex gap-2">
-          <button onclick="saveDealershipProfile()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30">
+          <button onclick="saveDealershipProfile()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30 cursor-pointer">
             Save Configuration to Cloud
           </button>
-          <button onclick="closeModal('dealershipModal')" class="px-4 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition">
+          <button onclick="closeModal('dealershipModal')" class="px-4 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition cursor-pointer">
             Close
           </button>
         </div>
@@ -324,7 +328,7 @@
     </div>
   </div>
 
-  <!-- Action Modal -->
+  <!-- Share/Outreach Modal -->
   <div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-5">
       <div class="flex items-center justify-between border-b border-gray-800 pb-4">
@@ -332,7 +336,7 @@
           <h3 id="modalTitle" class="text-lg font-bold text-white">Action</h3>
           <p id="modalSubtitle" class="text-xs text-gray-400"></p>
         </div>
-        <button onclick="closeModal('actionModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeModal('actionModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
       <div id="modalBody" class="space-y-4"></div>
     </div>
@@ -342,25 +346,61 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
-    let currentStore = {
-      name: "Moses Automotive Group",
-      usedUrl: "https://www.mosescars.com/search-all-used-inventory.html",
-      certifiedUrl: "https://www.mosescars.com/search-all-certified-inventory.html",
-      newUrl: "https://www.mosescars.com/search-all-new-inventory.html",
-      pageModifier: "?pt={page}"
-    };
-
-    let rawInventory = [];
-    let wishlistItems = [];
+    window.rawInventory = [];
+    window.wishlistItems = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
 
-    async function fetchLiveInventory(isManual = false) {
-      const lotBadge = document.getElementById("lotCount");
+    window.openWishlistModal = function(tab = 'add') {
+      window.switchWishlistTab(tab);
+      document.getElementById("wishlistModal").classList.remove("hidden");
+    };
+
+    window.openDealershipModal = function() {
+      document.getElementById("dealershipModal").classList.remove("hidden");
+    };
+
+    window.closeModal = function(id) {
+      const modal = document.getElementById(id);
+      if (modal) modal.classList.add("hidden");
+    };
+
+    window.toggleAdvancedFilters = function() {
+      const panel = document.getElementById("advancedFilterPanel");
+      if (panel) panel.classList.toggle("hidden");
+    };
+
+    window.switchWishlistTab = function(tab) {
+      const addSec = document.getElementById("tabAddWishlist");
+      const matchSec = document.getElementById("tabMatches");
+      const listSec = document.getElementById("tabAllWishlist");
+
+      if (addSec) addSec.classList.add("hidden");
+      if (matchSec) matchSec.classList.add("hidden");
+      if (listSec) listSec.classList.add("hidden");
+
+      document.getElementById("tabAddWishlistBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white cursor-pointer";
+      document.getElementById("tabMatchesBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white flex items-center gap-1.5 cursor-pointer";
+      document.getElementById("tabAllWishlistBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white cursor-pointer";
+
+      if (tab === 'add' && addSec) {
+        addSec.classList.remove("hidden");
+        document.getElementById("tabAddWishlistBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white cursor-pointer";
+      } else if (tab === 'matches' && matchSec) {
+        matchSec.classList.remove("hidden");
+        document.getElementById("tabMatchesBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white flex items-center gap-1.5 cursor-pointer";
+      } else if (listSec) {
+        listSec.classList.remove("hidden");
+        document.getElementById("tabAllWishlistBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white cursor-pointer";
+      }
+    };
+
+    window.fetchLiveInventory = async function(isManual = false) {
       const statusBadge = document.getElementById("syncText");
-      if (isManual) statusBadge.innerText = "Syncing...";
+      if (isManual && statusBadge) statusBadge.innerText = "Syncing...";
 
       try {
         const response = await fetch(`${SUPABASE_URL}/rest/v1/scraped_inventory?select=*&is_active=eq.true&order=price.asc`, {
+          method: "GET",
           headers: {
             "apikey": SUPABASE_KEY,
             "Authorization": `Bearer ${SUPABASE_KEY}`,
@@ -372,38 +412,38 @@
 
         const data = await response.json();
         if (Array.isArray(data)) {
-          rawInventory = data;
-          lotBadge.innerText = `${data.length} Units`;
+          window.rawInventory = data;
           
+          const lotBadge = document.getElementById("lotCount");
+          if (lotBadge) lotBadge.innerText = `${data.length} Units`;
+
           const validPrices = data.map(c => c.price).filter(p => p && p > 500);
           if (validPrices.length > 0) {
             const avg = Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length);
-            document.getElementById("avgPrice").innerText = `$${avg.toLocaleString()}`;
+            const avgBadge = document.getElementById("avgPrice");
+            if (avgBadge) avgBadge.innerText = `$${avg.toLocaleString()}`;
           }
 
-          statusBadge.innerText = `Live (${data.length} Units)`;
+          if (statusBadge) statusBadge.innerText = `Live (${data.length} Units)`;
           populateLocations(data);
           applyFilters();
         }
       } catch (err) {
-        console.error("Fetch error:", err);
-        statusBadge.innerText = "Sync Failed";
+        console.error("Inventory fetch error:", err);
+        if (statusBadge) statusBadge.innerText = "Sync Failed";
       }
 
-      // Safe Wishlist Evaluation
-      try {
-        await fetchWishlist();
-      } catch (e) {
-        console.warn("Wishlist fetch bypassed:", e);
-      }
-    }
+      window.fetchWishlist();
+    };
 
     function populateLocations(cars) {
       const locationSelect = document.getElementById("locationFilter");
+      if (!locationSelect) return;
       const currentSelected = locationSelect.value;
       const uniqueLocations = Array.from(new Set(cars.map(c => c.location_name).filter(Boolean))).sort();
       
-      document.getElementById("activeLotsCountBadge").innerText = `${uniqueLocations.length} Dealership Locations`;
+      const lotBadge = document.getElementById("activeLotsCountBadge");
+      if (lotBadge) lotBadge.innerText = `${uniqueLocations.length} Dealership Locations`;
 
       let options = `<option value="ALL">All Dealership Locations (${uniqueLocations.length})</option>`;
       uniqueLocations.forEach(loc => {
@@ -413,18 +453,20 @@
       locationSelect.innerHTML = options;
     }
 
-    function applyFilters() {
-      const query = (document.getElementById("searchInput").value || "").toLowerCase();
-      const locationFilter = document.getElementById("locationFilter").value;
-      const cond = document.getElementById("conditionFilter").value;
-      const sort = document.getElementById("sortSelect").value;
-      const bodyFilter = document.getElementById("bodyFilter").value;
-      const colorFilter = document.getElementById("colorFilter").value;
-      const transFilter = document.getElementById("transFilter").value;
-      const minYear = document.getElementById("minYearFilter").value;
-      const maxMiles = document.getElementById("maxMilesFilter").value;
+    window.applyFilters = function() {
+      const searchEl = document.getElementById("searchInput");
+      const query = searchEl ? (searchEl.value || "").toLowerCase() : "";
+      
+      const locationFilter = document.getElementById("locationFilter")?.value || "ALL";
+      const cond = document.getElementById("conditionFilter")?.value || "ALL";
+      const sort = document.getElementById("sortSelect")?.value || "price_asc";
+      const bodyFilter = document.getElementById("bodyFilter")?.value || "ALL";
+      const colorFilter = document.getElementById("colorFilter")?.value || "ALL";
+      const transFilter = document.getElementById("transFilter")?.value || "ALL";
+      const minYear = document.getElementById("minYearFilter")?.value || "ALL";
+      const maxMiles = document.getElementById("maxMilesFilter")?.value || "ALL";
 
-      let filtered = rawInventory.filter(car => {
+      let filtered = (window.rawInventory || []).filter(car => {
         const title = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.vin || ''} ${car.location_name || ''} ${car.color || ''} ${car.body_type || ''} ${car.transmission || ''}`.toLowerCase();
         const matchesQuery = !query || title.includes(query);
         const matchesLocation = locationFilter === "ALL" || (car.location_name || '') === locationFilter;
@@ -455,10 +497,21 @@
       });
 
       renderGrid(filtered);
-    }
+    };
+
+    window.resetFilters = function() {
+      if (document.getElementById("bodyFilter")) document.getElementById("bodyFilter").value = "ALL";
+      if (document.getElementById("colorFilter")) document.getElementById("colorFilter").value = "ALL";
+      if (document.getElementById("transFilter")) document.getElementById("transFilter").value = "ALL";
+      if (document.getElementById("minYearFilter")) document.getElementById("minYearFilter").value = "ALL";
+      if (document.getElementById("maxMilesFilter")) document.getElementById("maxMilesFilter").value = "ALL";
+      window.applyFilters();
+    };
 
     function renderGrid(cars) {
       const grid = document.getElementById("inventoryGrid");
+      if (!grid) return;
+
       if (!cars.length) {
         grid.innerHTML = `<div class="col-span-full text-center py-12 text-gray-500">No vehicles match your active search filters.</div>`;
         return;
@@ -493,7 +546,7 @@
                 <span class="text-xs font-medium text-gray-400">${(car.mileage || 0).toLocaleString()} mi</span>
               </div>
               <h4 class="font-bold text-gray-100 text-sm truncate">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}</h4>
-              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || currentStore.name}</p>
+              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || 'Lot'}</p>
               
               <div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">
                 <span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>${car.color || 'Standard'}</span>
@@ -505,15 +558,15 @@
           </div>
 
           <div class="p-4 pt-0 grid grid-cols-3 gap-2">
-            <button onclick='openShareModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition">
+            <button onclick='openShareModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
               <i class="fa-solid fa-share-nodes text-indigo-400"></i>
               <span>Share</span>
             </button>
-            <button onclick='openFBModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/40 text-indigo-200 text-xs font-semibold flex items-center justify-center gap-1 transition">
+            <button onclick='openFBModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/40 text-indigo-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
               <i class="fa-brands fa-facebook text-blue-400"></i>
               <span>FB Ad</span>
             </button>
-            <button onclick='openTikTokModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition">
+            <button onclick='openTikTokModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
               <i class="fa-brands fa-tiktok text-rose-400"></i>
               <span>Video</span>
             </button>
@@ -523,22 +576,8 @@
       }).join('');
     }
 
-    function resetFilters() {
-      document.getElementById("bodyFilter").value = "ALL";
-      document.getElementById("colorFilter").value = "ALL";
-      document.getElementById("transFilter").value = "ALL";
-      document.getElementById("minYearFilter").value = "ALL";
-      document.getElementById("maxMilesFilter").value = "ALL";
-      applyFilters();
-    }
-
-    function toggleAdvancedFilters() {
-      const panel = document.getElementById("advancedFilterPanel");
-      panel.classList.toggle("hidden");
-    }
-
     // Wishlist Engine
-    async function fetchWishlist() {
+    window.fetchWishlist = async function() {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist?select=*&is_active=eq.true&order=created_at.desc`, {
           headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
@@ -546,23 +585,23 @@
         if (!res.ok) return;
         const data = await res.json();
         if (Array.isArray(data)) {
-          wishlistItems = data;
+          window.wishlistItems = data;
           evaluateWishlistMatches();
         }
       } catch (err) {
         console.warn("Wishlist fetch bypassed:", err);
       }
-    }
+    };
 
-    async function saveWishlistEntry() {
-      const name = document.getElementById("wishlistCustName").value.trim();
-      const phone = document.getElementById("wishlistCustPhone").value.trim();
-      const vehicle = document.getElementById("wishlistCustVehicle").value.trim();
-      const budget = parseFloat(document.getElementById("wishlistCustBudget").value) || null;
-      const notes = document.getElementById("wishlistCustNotes").value.trim();
+    window.saveWishlistEntry = async function() {
+      const name = document.getElementById("wishlistCustName")?.value.trim();
+      const phone = document.getElementById("wishlistCustPhone")?.value.trim();
+      const vehicle = document.getElementById("wishlistCustVehicle")?.value.trim();
+      const budget = parseFloat(document.getElementById("wishlistCustBudget")?.value) || null;
+      const notes = document.getElementById("wishlistCustNotes")?.value.trim();
 
       if (!name || !phone || !vehicle) {
-        alert("Please enter at least customer name, phone number, and requested vehicle.");
+        alert("Please enter customer name, phone number, and desired vehicle.");
         return;
       }
 
@@ -584,47 +623,48 @@
           })
         });
 
-        document.getElementById("wishlistCustName").value = "";
-        document.getElementById("wishlistCustPhone").value = "";
-        document.getElementById("wishlistCustVehicle").value = "";
-        document.getElementById("wishlistCustBudget").value = "";
-        document.getElementById("wishlistCustNotes").value = "";
+        if (document.getElementById("wishlistCustName")) document.getElementById("wishlistCustName").value = "";
+        if (document.getElementById("wishlistCustPhone")) document.getElementById("wishlistCustPhone").value = "";
+        if (document.getElementById("wishlistCustVehicle")) document.getElementById("wishlistCustVehicle").value = "";
+        if (document.getElementById("wishlistCustBudget")) document.getElementById("wishlistCustBudget").value = "";
+        if (document.getElementById("wishlistCustNotes")) document.getElementById("wishlistCustNotes").value = "";
 
-        await fetchWishlist();
-        switchWishlistTab('matches');
-        alert(`✓ Wishlist request saved for ${name}! Live matching active.`);
+        await window.fetchWishlist();
+        window.switchWishlistTab('matches');
+        alert(`✓ Wishlist request saved for ${name}!`);
       } catch (e) {
         alert("Error saving wishlist request: " + e.message);
       }
-    }
+    };
 
-    async function deleteWishlistItem(id) {
+    window.deleteWishlistItem = async function(id) {
       if (!confirm("Remove this customer request?")) return;
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist?id=eq.${id}`, {
           method: "DELETE",
           headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
         });
-        await fetchWishlist();
+        await window.fetchWishlist();
       } catch (err) {
         console.error("Delete failed:", err);
       }
-    }
+    };
 
     function evaluateWishlistMatches() {
-      if (!wishlistItems.length || !rawInventory.length) {
-        document.getElementById("wishlistMatchBadge").classList.add("hidden");
-        document.getElementById("activeMatchAlertBox").classList.add("hidden");
+      if (!window.wishlistItems.length || !window.rawInventory.length) {
+        document.getElementById("wishlistMatchBadge")?.classList.add("hidden");
+        document.getElementById("activeMatchAlertBox")?.classList.add("hidden");
+        renderAllWishlistTab();
         return;
       }
 
       let totalMatchedPairs = 0;
       let matchCardsHtml = "";
 
-      wishlistItems.forEach(req => {
+      window.wishlistItems.forEach(req => {
         const queryTerms = (req.desired_vehicle || "").toLowerCase().split(/\s+/).filter(Boolean);
         
-        const matchingCars = rawInventory.filter(car => {
+        const matchingCars = window.rawInventory.filter(car => {
           const carString = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.trim || ''} ${car.color || ''} ${car.body_type || ''}`.toLowerCase();
           const matchesQuery = queryTerms.every(term => carString.includes(term));
           const matchesBudget = !req.max_price || !car.price || car.price <= req.max_price;
@@ -647,7 +687,7 @@
                   </div>
                   ${req.notes ? `<p class="text-xs text-gray-400 italic mt-1">"${req.notes}"</p>` : ''}
                 </div>
-                <button onclick="deleteWishlistItem('${req.id}')" class="text-gray-500 hover:text-rose-400 text-xs p-1"><i class="fa-solid fa-trash"></i></button>
+                <button onclick="deleteWishlistItem('${req.id}')" class="text-gray-500 hover:text-rose-400 text-xs p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
               </div>
 
               <div class="space-y-2 pt-2 border-t border-gray-800">
@@ -661,8 +701,8 @@
                       </div>
                     </div>
                     <div class="flex gap-1.5">
-                      <a href="sms:${req.phone_number}?&body=${encodeURIComponent(`Hi ${req.customer_name}! A ${car.year} ${car.make} ${car.model} just arrived at ${car.location_name || currentStore.name} priced at $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. Let me know if you want to take a look!`)}" class="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1">
-                        <i class="fa-solid fa-message"></i> Text Car
+                      <a href="sms:${req.phone_number}?&body=${encodeURIComponent(`Hi ${req.customer_name}! A ${car.year} ${car.make} ${car.model} just arrived priced at $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. Let me know if you want to take a look!`)}" class="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1">
+                        <i class="fa-solid fa-message"></i> Text
                       </a>
                       <a href="tel:${req.phone_number}" class="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold text-[11px] flex items-center gap-1">
                         <i class="fa-solid fa-phone"></i> Call
@@ -684,17 +724,16 @@
       if (tabMatchCount) tabMatchCount.innerText = totalMatchedPairs;
 
       if (totalMatchedPairs > 0) {
-        badge.innerText = totalMatchedPairs;
-        badge.classList.remove("hidden");
-        alertCount.innerText = totalMatchedPairs;
-        alertBox.classList.remove("hidden");
-        document.getElementById("matchedCustomersContainer").innerHTML = matchCardsHtml;
+        if (badge) { badge.innerText = totalMatchedPairs; badge.classList.remove("hidden"); }
+        if (alertCount) alertCount.innerText = totalMatchedPairs;
+        if (alertBox) alertBox.classList.remove("hidden");
+        const container = document.getElementById("matchedCustomersContainer");
+        if (container) container.innerHTML = matchCardsHtml;
       } else {
-        badge.classList.add("hidden");
-        alertBox.classList.add("hidden");
-        document.getElementById("matchedCustomersContainer").innerHTML = `
-          <div class="text-center py-8 text-gray-500 text-xs">No active wishlist requests match any vehicles currently in stock.</div>
-        `;
+        if (badge) badge.classList.add("hidden");
+        if (alertBox) alertBox.classList.add("hidden");
+        const container = document.getElementById("matchedCustomersContainer");
+        if (container) container.innerHTML = `<div class="text-center py-8 text-gray-500 text-xs">No active wishlist requests match any vehicles currently in stock.</div>`;
       }
 
       renderAllWishlistTab();
@@ -703,92 +742,28 @@
     function renderAllWishlistTab() {
       const container = document.getElementById("allWishlistContainer");
       if (!container) return;
-      if (!wishlistItems.length) {
+      if (!window.wishlistItems.length) {
         container.innerHTML = `<div class="text-center py-6 text-gray-500 text-xs">No customer wishlist requests saved yet.</div>`;
         return;
       }
 
-      container.innerHTML = wishlistItems.map(item => `
+      container.innerHTML = window.wishlistItems.map(item => `
         <div class="p-3 rounded-lg bg-gray-950 border border-gray-800 flex items-center justify-between text-xs">
           <div>
             <div class="font-bold text-white">${item.customer_name} <span class="text-gray-400 font-normal">(${item.phone_number})</span></div>
             <div class="text-indigo-300">Target: ${item.desired_vehicle} ${item.max_price ? `• Max: $${item.max_price.toLocaleString()}` : ''}</div>
           </div>
-          <button onclick="deleteWishlistItem('${item.id}')" class="text-gray-500 hover:text-rose-400 text-xs px-2 py-1"><i class="fa-solid fa-trash"></i></button>
+          <button onclick="deleteWishlistItem('${item.id}')" class="text-gray-500 hover:text-rose-400 text-xs px-2 py-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
         </div>
       `).join('');
     }
 
-    function openWishlistModal(tab = 'add') {
-      switchWishlistTab(tab);
-      document.getElementById("wishlistModal").classList.remove("hidden");
-    }
-
-    function switchWishlistTab(tab) {
-      document.getElementById("tabAddWishlist").classList.add("hidden");
-      document.getElementById("tabMatches").classList.add("hidden");
-      document.getElementById("tabAllWishlist").classList.add("hidden");
-
-      document.getElementById("tabAddWishlistBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white";
-      document.getElementById("tabMatchesBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white flex items-center gap-1.5";
-      document.getElementById("tabAllWishlistBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white";
-
-      if (tab === 'add') {
-        document.getElementById("tabAddWishlist").classList.remove("hidden");
-        document.getElementById("tabAddWishlistBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white";
-      } else if (tab === 'matches') {
-        document.getElementById("tabMatches").classList.remove("hidden");
-        document.getElementById("tabMatchesBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white flex items-center gap-1.5";
-      } else {
-        document.getElementById("tabAllWishlist").classList.remove("hidden");
-        document.getElementById("tabAllWishlistBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white";
-      }
-    }
-
-    async function loadStoreConfig() {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/dealer_profiles?id=eq.active_store&select=*`, {
-          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-        });
-        const data = await res.json();
-        if (data && data[0]) {
-          currentStore = {
-            name: data[0].name || currentStore.name,
-            usedUrl: data[0].used_url || currentStore.usedUrl,
-            certifiedUrl: data[0].certified_url || currentStore.certifiedUrl,
-            newUrl: data[0].new_url || currentStore.newUrl,
-            pageModifier: data[0].page_modifier || currentStore.pageModifier
-          };
-        }
-      } catch (e) {
-        console.warn("Using local configuration fallback:", e);
-      }
-      updateStoreUI();
-    }
-
-    function updateStoreUI() {
-      document.getElementById("headerStoreName").innerText = currentStore.name;
-      document.getElementById("bannerStoreTitle").innerText = currentStore.name;
-      document.getElementById("dealershipNameInput").value = currentStore.name;
-      document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl || "";
-      document.getElementById("dealershipCertifiedUrlInput").value = currentStore.certifiedUrl || "";
-      document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || "";
-      document.getElementById("dealershipModifierInput").value = currentStore.pageModifier || "?pt={page}";
-    }
-
-    function openDealershipModal() {
-      updateStoreUI();
-      document.getElementById("dealershipModal").classList.remove("hidden");
-    }
-
-    async function saveDealershipProfile() {
-      const name = document.getElementById("dealershipNameInput").value.trim() || currentStore.name;
-      const used_url = document.getElementById("dealershipUsedUrlInput").value.trim();
-      const certified_url = document.getElementById("dealershipCertifiedUrlInput").value.trim();
-      const new_url = document.getElementById("dealershipNewUrlInput").value.trim();
-      const page_modifier = document.getElementById("dealershipModifierInput").value.trim() || "?pt={page}";
-
-      currentStore = { name, usedUrl: used_url, certifiedUrl: certified_url, newUrl: new_url, pageModifier: page_modifier };
+    window.saveDealershipProfile = async function() {
+      const name = document.getElementById("dealershipNameInput")?.value.trim() || "Moses Automotive Group";
+      const used_url = document.getElementById("dealershipUsedUrlInput")?.value.trim();
+      const certified_url = document.getElementById("dealershipCertifiedUrlInput")?.value.trim();
+      const new_url = document.getElementById("dealershipNewUrlInput")?.value.trim();
+      const page_modifier = document.getElementById("dealershipModifierInput")?.value.trim() || "?pt={page}";
 
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/dealer_profiles`, {
@@ -805,46 +780,45 @@
         console.error("Failed saving to Supabase:", err);
       }
 
-      updateStoreUI();
-      closeModal("dealershipModal");
-      alert(`Feeds saved! Run the Colab crawler to update inventory.`);
-    }
+      window.closeModal("dealershipModal");
+      alert(`Feeds saved to Supabase!`);
+    };
 
-    function openShareModal(car) {
+    window.openShareModal = function(car) {
       document.getElementById("modalTitle").innerText = "Customer Quick-Share";
       document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''} | $${(car.price || 0).toLocaleString()}`;
-      const msg = `Hey! Take a look at this ${car.color ? car.color + ' ' : ''}${car.year || ''} ${car.make || ''} ${car.model || ''} (${car.transmission || 'Automatic'}) at ${car.location_name || currentStore.name}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to come take it for a drive!`;
+      const msg = `Hey! Take a look at this ${car.color ? car.color + ' ' : ''}${car.year || ''} ${car.make || ''} ${car.model || ''} (${car.transmission || 'Automatic'}) at ${car.location_name || 'Moses Auto Group'}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to take it for a drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
           <textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${msg}</textarea>
           <div class="flex gap-2">
-            <button onclick="navigator.clipboard.writeText(document.getElementById('shareText').value); alert('Copied!')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold">Copy Text</button>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('shareText').value); alert('Copied!')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>
             <a href="sms:?&body=${encodeURIComponent(msg)}" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>
           </div>
         </div>
       `;
       document.getElementById("actionModal").classList.remove("hidden");
-    }
+    };
 
-    function openFBModal(car) {
+    window.openFBModal = function(car) {
       document.getElementById("modalTitle").innerText = "Marketplace Listing Copy";
       document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''}`;
-      const fbCopy = `🔥 ${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} (${car.body_type || 'Vehicle'}) 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nColor: ${car.color || 'Standard'}\nTransmission: ${car.transmission || 'Automatic'}\nLocation: ${car.location_name || currentStore.name}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
+      const fbCopy = `🔥 ${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} (${car.body_type || 'Vehicle'}) 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nColor: ${car.color || 'Standard'}\nTransmission: ${car.transmission || 'Automatic'}\nLocation: ${car.location_name || 'Moses Auto Group'}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
           <textarea id="fbText" class="w-full h-40 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${fbCopy}</textarea>
-          <button onclick="navigator.clipboard.writeText(document.getElementById('fbText').value); alert('Marketplace copy copied!')" class="w-full py-2 rounded-lg bg-blue-600 text-white text-xs font-bold">Copy Marketplace Text</button>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('fbText').value); alert('Marketplace copy copied!')" class="w-full py-2 rounded-lg bg-blue-600 text-white text-xs font-bold cursor-pointer">Copy Marketplace Text</button>
         </div>
       `;
       document.getElementById("actionModal").classList.remove("hidden");
-    }
+    };
 
-    function openTikTokModal(car) {
+    window.openTikTokModal = function(car) {
       document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
       document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''}`;
-      const script = `(Hook - 0-3s): Stop scrolling if you're looking for a clean ${car.body_type || 'ride'}.\n(Body - 3-10s): Just landed: ${car.color || ''} ${car.year || ''} ${car.make || ''} ${car.model || ''} with ${(car.mileage || 0).toLocaleString()} miles at ${car.location_name || currentStore.name}.\n(CTA - 10-15s): Front-line ready. Drop a comment or message me before it's gone!`;
+      const script = `(Hook - 0-3s): Stop scrolling if you're looking for a clean ${car.body_type || 'ride'}.\n(Body - 3-10s): Just landed: ${car.color || ''} ${car.year || ''} ${car.make || ''} ${car.model || ''} with ${(car.mileage || 0).toLocaleString()} miles at ${car.location_name || 'Moses Auto Group'}.\n(CTA - 10-15s): Front-line ready. Drop a comment or message me before it's gone!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -852,17 +826,12 @@
         </div>
       `;
       document.getElementById("actionModal").classList.remove("hidden");
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.add("hidden");
-    }
+    };
 
     document.addEventListener("DOMContentLoaded", () => {
-      loadStoreConfig();
-      fetchLiveInventory();
+      window.fetchLiveInventory();
       setInterval(() => {
-        fetchLiveInventory(false);
+        window.fetchLiveInventory(false);
       }, 30000);
     });
   </script>
