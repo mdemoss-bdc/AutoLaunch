@@ -1,1985 +1,289 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoLaunch Pro - Multi-Tenant Dealership Enablement SaaS</title>
-  <!-- Tailwind CSS -->
+  <title>AutoLaunch Pro | Dealership Sales & Marketing Engine</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Plus Jakarta Sans', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          },
-          colors: {
-            brand: {
-              50: '#eff6ff',
-              100: '#dbeafe',
-              400: '#60a5fa',
-              500: '#3b82f6',
-              600: '#2563eb',
-              700: '#1d4ed8',
-              900: '#1e3a8a',
-            },
-            accent: {
-              emerald: '#10b981',
-              amber: '#f59e0b',
-              crimson: '#ef4444',
-              purple: '#8b5cf6',
-            }
-          }
-        }
-      }
-    }
-  </script>
-  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
-    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.25); border-radius: 9999px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.45); }
-    
-    .glass-panel {
-      background: rgba(15, 23, 42, 0.78);
-      backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 255, 255, 0.07);
-    }
-    
-    .glass-panel-elevated {
-      background: rgba(23, 33, 56, 0.85);
-      backdrop-filter: blur(18px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
-
-    .shimmer-badge {
-      background-size: 200% 100%;
-      animation: shimmer 2.5s infinite;
-    }
-
-    @keyframes shimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
+    .glass-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .glass-card { background: rgba(23, 32, 54, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+    .glass-card:hover { transform: translateY(-4px); border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 12px 24px -10px rgba(99, 102, 241, 0.2); }
   </style>
 </head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-<body class="bg-[#090d16] text-slate-100 min-h-screen flex flex-col font-sans selection:bg-brand-500 selection:text-white">
-
-  <!-- ======================================================== -->
-  <!-- 1. TOP NAVIGATION & MULTI-TENANT ROOFTOP SWITCHER        -->
-  <!-- ======================================================== -->
-  <header class="sticky top-0 z-40 border-b border-slate-800/90 bg-[#0b101c]/90 backdrop-blur-md px-4 lg:px-8 py-3">
-    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
-      
-      <!-- Brand & Tenancy Selectors -->
-      <div class="flex items-center justify-between w-full md:w-auto gap-4">
-        <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-brand-500/25">
-            <i data-lucide="zap" class="w-5 h-5 text-white"></i>
-          </div>
-          <div>
-            <div class="flex items-center gap-1.5">
-              <span class="text-base font-extrabold tracking-tight text-white">AutoLaunch<span class="text-brand-400">Pro</span></span>
-              <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/25">B2B SaaS</span>
-            </div>
-          </div>
+  <!-- SaaS Navigation Bar -->
+  <header class="glass-panel sticky top-0 z-40 border-b border-gray-800 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-bolt-lightning text-white text-lg"></i>
         </div>
-
-        <!-- Dealership Group & Lot Dropdowns (Multi-Tenant) -->
-        <div class="flex items-center gap-2">
-          <!-- Org Switcher -->
-          <div class="relative">
-            <select id="tenant-org-select" onchange="handleTenantChange()" class="bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-200 rounded-xl pl-3 pr-8 py-2 appearance-none focus:outline-none focus:border-brand-500 cursor-pointer">
-              <option value="moses">Moses Automotive Group</option>
-              <option value="hendrick">Hendrick Automotive Group</option>
-              <option value="sonic">Sonic Automotive Network</option>
-              <option value="__new__">+ Add New Client Dealership</option>
-            </select>
-            <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-          </div>
-
-          <!-- Physical Lot Rooftop Switcher -->
-          <div class="relative hidden sm:block">
-            <select id="tenant-lot-select" onchange="handleLotFilterChange()" class="bg-slate-900/90 border border-slate-800 text-xs text-slate-300 rounded-xl pl-3 pr-8 py-2 appearance-none focus:outline-none focus:border-brand-500 cursor-pointer">
-              <!-- Dynamically populated based on org -->
-            </select>
-            <i data-lucide="map-pin" class="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-gray-200 to-indigo-300 bg-clip-text text-transparent">AutoLaunch<span class="text-indigo-400">Pro</span></span>
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 uppercase tracking-wider">Multi-Tenant B2B</span>
           </div>
         </div>
       </div>
 
-      <!-- App Tabs & Rep Plan Indicator -->
-      <div class="flex items-center justify-between md:justify-end w-full md:w-auto gap-3">
-        <!-- Navigation Tabs -->
-        <nav class="flex items-center gap-1 bg-slate-900/95 p-1 rounded-xl border border-slate-800/80">
-          <button onclick="switchTab('inventory')" id="tab-inventory" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 bg-brand-600 text-white shadow-sm transition-all">
-            <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
-            <span>Lot Inventory</span>
-            <span id="nav-count-badge" class="ml-1 text-[10px] bg-black/30 px-1.5 py-0.2 rounded-full font-mono">16</span>
-          </button>
-          <button onclick="switchTab('feed-engine')" id="tab-feed-engine" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition-all">
-            <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
-            <span>Feed Engine</span>
-          </button>
-          <button onclick="switchTab('monetization')" id="tab-monetization" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition-all">
-            <i data-lucide="badge-dollar-sign" class="w-3.5 h-3.5"></i>
-            <span>SaaS Plan</span>
-          </button>
-          <button onclick="openSettingsModal()" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white flex items-center gap-1 transition-all" title="Database & Supabase Settings">
-            <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-          </button>
-        </nav>
-
-        <!-- Rep Tier Badge & Fast Sync Trigger -->
-        <div class="hidden lg:flex items-center gap-2">
-          <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span class="text-slate-300 font-medium">Dealer Pro Tier</span>
-            <span class="text-slate-500">|</span>
-            <span class="text-brand-400 font-mono">Active</span>
-          </div>
-
-          <button onclick="switchTab('feed-engine')" class="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-950/40 flex items-center gap-1.5 transition-all">
-            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
-            <span>Add Feed</span>
-          </button>
+      <!-- Controls & Live Indicator -->
+      <div class="flex items-center gap-3">
+        <div id="liveStatusBadge" class="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>Supabase Connected</span>
         </div>
+        <button onclick="fetchLiveInventoryFromSupabase()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
+          <i class="fa-solid fa-arrows-rotate"></i>
+          <span>Refresh Database</span>
+        </button>
       </div>
-
     </div>
   </header>
 
-  <!-- ======================================================== -->
-  <!-- MAIN APP CONTAINER                                       -->
-  <!-- ======================================================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-
-    <!-- ======================================================== -->
-    <!-- VIEW 1: LOT INVENTORY HUB (SALES REP WORKSTATION)        -->
-    <!-- ======================================================== -->
-    <section id="view-inventory" class="space-y-6">
-      
-      <!-- Organization Header Banner -->
-      <div class="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2.5">
-            <h2 id="active-group-heading" class="text-xl font-bold text-white tracking-tight">Moses Automotive Group</h2>
-            <span id="active-lot-pill" class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/25">All 3 Rooftops</span>
-          </div>
-          <p class="text-xs text-slate-400 mt-1">Universal client inventory catalog. Filter specs, calculate customer finance payments, and launch 1-click marketing campaigns.</p>
+  <!-- Main Content Dashboard -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
+    
+    <!-- Top Lot Metrics Banner -->
+    <div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div>
+        <div class="flex items-center gap-3 mb-1">
+          <h1 class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Live Ingested Feed</span>
         </div>
-
-        <!-- High Level Quick Stats -->
-        <div class="flex items-center gap-3">
-          <div class="bg-slate-900/90 border border-slate-800 px-3.5 py-2 rounded-xl text-center">
-            <span class="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Active Lots</span>
-            <span id="stat-lot-count" class="text-sm font-mono font-bold text-white">3</span>
-          </div>
-          <div class="bg-slate-900/90 border border-slate-800 px-3.5 py-2 rounded-xl text-center">
-            <span class="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">In-Stock</span>
-            <span id="stat-instock-count" class="text-sm font-mono font-bold text-emerald-400">16</span>
-          </div>
-          <div class="bg-slate-900/90 border border-slate-800 px-3.5 py-2 rounded-xl text-center">
-            <span class="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Avg. Frontline</span>
-            <span id="stat-avg-frontline" class="text-sm font-mono font-bold text-brand-400">$18,450</span>
-          </div>
-        </div>
+        <p class="text-sm text-gray-400">Universal inventory catalog synced straight from your cloud PostgreSQL database.</p>
       </div>
 
-      <!-- FILTER CONTROLS BAR -->
-      <div class="glass-panel p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-4">
-        <!-- Search & Quick Toggles -->
-        <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          
-          <div class="relative flex-1">
-            <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
-            <input type="text" id="filter-search" oninput="applyFilters()" placeholder="Search by Year, Make, Model, VIN, Stock #, or Color..." 
-              class="w-full bg-slate-900/90 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors">
-          </div>
-
-          <!-- Condition Segmented Buttons -->
-          <div class="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 shrink-0">
-            <button onclick="setConditionFilter('All')" id="btn-cond-all" class="px-3 py-1 text-xs font-semibold rounded-lg bg-brand-600 text-white transition-all">All Stock</button>
-            <button onclick="setConditionFilter('Used')" id="btn-cond-used" class="px-3 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition-all">Pre-Owned</button>
-            <button onclick="setConditionFilter('New')" id="btn-cond-new" class="px-3 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition-all">New</button>
-            <button onclick="setConditionFilter('CPO')" id="btn-cond-cpo" class="px-3 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition-all">CPO</button>
-          </div>
-
-          <!-- Sort Selector -->
-          <div class="flex items-center gap-2 shrink-0">
-            <label class="text-xs text-slate-400 hidden lg:inline">Sort:</label>
-            <select id="filter-sort" onchange="applyFilters()" class="bg-slate-900 border border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-brand-500">
-              <option value="price-asc">Price: Low to High</option>
-              <option value="price-desc">Price: High to Low</option>
-              <option value="mileage-asc">Mileage: Low to High</option>
-              <option value="year-desc">Year: Newest First</option>
-              <option value="recent">Fresh Trades First</option>
-            </select>
-          </div>
+      <div class="flex items-center gap-4">
+        <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center">
+          <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Live Inventory</div>
+          <div id="lotCount" class="text-2xl font-black text-indigo-400">Loading...</div>
         </div>
-
-        <!-- Secondary Detailed Facets -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 pt-3 border-t border-slate-800/80">
-          
-          <div>
-            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Make</label>
-            <select id="filter-make" onchange="applyFilters()" class="w-full bg-slate-900 border border-slate-800 text-xs rounded-xl px-2.5 py-1.5 text-slate-300 focus:outline-none">
-              <option value="all">All Makes</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Physical Location</label>
-            <select id="filter-location" onchange="applyFilters()" class="w-full bg-slate-900 border border-slate-800 text-xs rounded-xl px-2.5 py-1.5 text-slate-300 focus:outline-none">
-              <option value="all">All Dealership Locations</option>
-            </select>
-          </div>
-
-          <div>
-            <div class="flex justify-between text-[11px] font-semibold text-slate-400 mb-1">
-              <span>Max Price</span>
-              <span id="label-max-price" class="text-brand-400 font-mono">$75,000+</span>
-            </div>
-            <input type="range" id="filter-max-price" min="5000" max="80000" step="2500" value="80000" oninput="updatePriceSlider(this.value); applyFilters();" 
-              class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-500">
-          </div>
-
-          <div>
-            <div class="flex justify-between text-[11px] font-semibold text-slate-400 mb-1">
-              <span>Max Mileage</span>
-              <span id="label-max-miles" class="text-brand-400 font-mono">Any</span>
-            </div>
-            <input type="range" id="filter-max-miles" min="10000" max="200000" step="10000" value="200000" oninput="updateMilesSlider(this.value); applyFilters();"
-              class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-500">
-          </div>
-
-          <div class="col-span-2 sm:col-span-4 lg:col-span-1 flex items-end">
-            <button onclick="resetFilters()" class="w-full px-3 py-1.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/70 text-slate-400 hover:text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5">
-              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
-              <span>Reset Filters</span>
-            </button>
-          </div>
-
+        <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center">
+          <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Average Price</div>
+          <div id="avgPrice" class="text-2xl font-black text-emerald-400">--</div>
         </div>
       </div>
+    </div>
 
-      <!-- VEHICLE SHOWROOM GRID -->
-      <div id="inventory-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        <!-- Injected via renderInventoryCards() -->
-      </div>
-
-      <!-- EMPTY STATE -->
-      <div id="inventory-empty" class="hidden glass-panel p-12 text-center rounded-2xl border border-slate-800 space-y-3">
-        <div class="w-12 h-12 rounded-full bg-slate-900 text-slate-500 flex items-center justify-center mx-auto border border-slate-800">
-          <i data-lucide="car" class="w-6 h-6"></i>
+    <!-- Filter & Search Toolbar -->
+    <div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-4">
+      <div class="flex flex-col md:flex-row gap-3">
+        <div class="flex-1 relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+          <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search by Year, Make, Model, VIN, or Location..." class="w-full bg-gray-950/70 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500">
         </div>
-        <h3 class="text-base font-bold text-slate-200">No Vehicles Match Your Current Query</h3>
-        <p class="text-xs text-slate-400 max-w-sm mx-auto">Try resetting your price bracket, selecting 'All Rooftops', or clearing the VIN search box.</p>
-        <button onclick="resetFilters()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-md transition-all">Clear All Filters</button>
-      </div>
-
-    </section>
-
-    <!-- ======================================================== -->
-    <!-- VIEW 2: UNIVERSAL SELF-HEALING FEED ENGINE (CRAWLER HUB)  -->
-    <!-- ======================================================== -->
-    <section id="view-feed-engine" class="hidden space-y-6">
-      
-      <!-- Engine Description Banner -->
-      <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-          <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                <i data-lucide="cpu" class="w-5 h-5 text-brand-400"></i>
-                Universal Dealership Feed & Self-Healing Crawler
-              </h2>
-              <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono font-semibold">Self-Healing Pattern v2</span>
-            </div>
-            <p class="text-xs text-slate-400 mt-1">Plug in any dealership's Page 1 and Page 2 inventory URLs. The engine detects the pagination logic, generates formulas for Pages 3 through 50, and synchronizes vehicles directly to Supabase.</p>
-          </div>
-
-          <div class="flex items-center gap-2.5">
-            <button onclick="testAndDiagnoseFeed()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition-all border border-slate-700">
-              <i data-lucide="play-circle" class="w-4 h-4 text-emerald-400"></i>
-              <span>Test & Validate Feed</span>
-            </button>
-            <button onclick="saveAndDeployFeed()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-md shadow-brand-950/40 flex items-center gap-2 transition-all">
-              <i data-lucide="check-check" class="w-4 h-4"></i>
-              <span>Save & Ingest Lot</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Dealership Organization & Physical Rooftop Mapping -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-xs font-bold text-slate-300 mb-1.5">Target Dealership Group</label>
-            <input type="text" id="feed-group-name" value="Moses Automotive Group" placeholder="e.g. Hendrick Automotive Group"
-              class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-brand-500">
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-300 mb-1.5">Target Lot Rooftop Location</label>
-            <input type="text" id="feed-lot-name" value="Moses Honda Barboursville" placeholder="e.g. Downtown Pre-Owned Supercenter"
-              class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-brand-500">
-          </div>
-          <div>
-            <div class="flex justify-between items-center mb-1.5">
-              <label class="text-xs font-bold text-slate-300">Max Pages to Crawl</label>
-              <span id="feed-max-pages-badge" class="text-xs font-mono font-bold text-brand-400">20 Pages</span>
-            </div>
-            <input type="range" id="feed-max-pages" min="1" max="50" value="20" oninput="document.getElementById('feed-max-pages-badge').innerText = this.value + ' Pages'"
-              class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-500 mt-2">
-          </div>
-        </div>
-
-        <!-- NEW CAR CRAWLER PAIR -->
-        <div class="p-4 rounded-xl bg-slate-900/70 border border-slate-800/80 space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-              <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider">New Car Inventory Feed Pair</h3>
-            </div>
-            <span id="new-pattern-tag" class="text-[10px] font-mono px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">Param: ?pt={n}</span>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">New Page 1 URL (Base URL)</label>
-              <input type="text" id="feed-new-p1" oninput="analyzeFeedPatterns()" value="https://www.mosescars.com/search-all-new-inventory.html" 
-                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-cyan-500">
-            </div>
-            <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">New Page 2 URL (Modifier Sample)</label>
-              <input type="text" id="feed-new-p2" oninput="analyzeFeedPatterns()" value="https://www.mosescars.com/search-all-new-inventory.html?pt=2"
-                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-cyan-500">
-            </div>
-          </div>
-
-          <!-- Formula & Preview -->
-          <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
-            <div>
-              <span class="text-slate-500 font-semibold">Self-Healing Formula:</span>
-              <code id="new-formula-label" class="text-emerald-400 font-mono ml-1.5">{Base}?pt={page}</code>
-            </div>
-            <div class="flex items-center gap-2 text-slate-500 font-mono text-[10px]">
-              <span>Page 3: <span id="new-preview-p3" class="text-slate-300">...html?pt=3</span></span>
-              <span>•</span>
-              <span>Page 4: <span id="new-preview-p4" class="text-slate-300">...html?pt=4</span></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- USED CAR CRAWLER PAIR -->
-        <div class="p-4 rounded-xl bg-slate-900/70 border border-slate-800/80 space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-              <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider">Used / Pre-Owned Inventory Feed Pair</h3>
-            </div>
-            <span id="used-pattern-tag" class="text-[10px] font-mono px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/25">Param: ?pt={n}</span>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">Used Page 1 URL (Base URL)</label>
-              <input type="text" id="feed-used-p1" oninput="analyzeFeedPatterns()" value="https://www.mosescars.com/search-all-used-inventory.html" 
-                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-amber-500">
-            </div>
-            <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">Used Page 2 URL (Modifier Sample)</label>
-              <input type="text" id="feed-used-p2" oninput="analyzeFeedPatterns()" value="https://www.mosescars.com/search-all-used-inventory.html?pt=2"
-                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-amber-500">
-            </div>
-          </div>
-
-          <!-- Formula & Preview -->
-          <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
-            <div>
-              <span class="text-slate-500 font-semibold">Self-Healing Formula:</span>
-              <code id="used-formula-label" class="text-emerald-400 font-mono ml-1.5">{Base}?pt={page}</code>
-            </div>
-            <div class="flex items-center gap-2 text-slate-500 font-mono text-[10px]">
-              <span>Page 3: <span id="used-preview-p3" class="text-slate-300">...html?pt=3</span></span>
-              <span>•</span>
-              <span>Page 4: <span id="used-preview-p4" class="text-slate-300">...html?pt=4</span></span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- LIVE DIAGNOSTIC & CRAWL MONITOR TERMINAL -->
-      <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-        <div class="px-5 py-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-          <div class="flex items-center gap-2.5">
-            <span class="flex h-2.5 w-2.5 relative">
-              <span id="feed-ping-dot" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            <span class="text-xs font-bold text-slate-200">Simulated Crawler Ingestion Console</span>
-          </div>
-          <button onclick="clearDiagnosticTerminal()" class="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-md bg-slate-800">Clear Logs</button>
-        </div>
-
-        <div class="p-5 space-y-4">
-          <!-- Progress Bar -->
-          <div>
-            <div class="flex justify-between text-xs font-semibold text-slate-400 mb-1.5">
-              <span id="diagnostic-status-text">Standby: Ready to validate target dealership endpoints...</span>
-              <span id="diagnostic-pct" class="font-mono text-brand-400">0%</span>
-            </div>
-            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-              <div id="diagnostic-progress-bar" class="h-full bg-gradient-to-r from-brand-600 via-indigo-500 to-emerald-400 w-0 transition-all duration-300"></div>
-            </div>
-          </div>
-
-          <!-- Console Terminal -->
-          <div id="diagnostic-terminal" class="h-56 bg-slate-950 p-4 rounded-xl font-mono text-[11px] text-slate-300 overflow-y-auto space-y-1.5 border border-slate-800">
-            <div class="text-slate-500">[System] Multi-Tenant Ingestion Engine Initialized. Ready for client feed.</div>
-            <div class="text-slate-500">[Supabase] Database endpoint connected: https://tdsipiltwajwhzgjsupx.supabase.co</div>
-            <div class="text-slate-400">[Pattern Engine] Ready. Click 'Test & Validate Feed' above to run live simulation.</div>
-          </div>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- ======================================================== -->
-    <!-- VIEW 3: SAAS MONETIZATION & SUBSCRIPTION TIERS           -->
-    <!-- ======================================================== -->
-    <section id="view-monetization" class="hidden space-y-6">
-      
-      <div class="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800 text-center space-y-4 max-w-4xl mx-auto">
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 text-xs font-semibold">
-          <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i>
-          <span>B2B Commercial Subscription Plans</span>
-        </div>
-        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Turn Dealership Inventory into High-Volume Commissions</h2>
-        <p class="text-xs sm:text-sm text-slate-400 max-w-2xl mx-auto">AutoLaunch Pro is licensed per individual sales representative or packaged as a rooftop platform for dealer principals and general managers.</p>
-
-        <!-- Pricing Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 text-left">
-          
-          <!-- Tier 1: Single Rep -->
-          <div class="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition-all space-y-6">
-            <div class="space-y-4">
-              <div class="flex justify-between items-center">
-                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Independent Rep</span>
-                <span class="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono">Starter</span>
-              </div>
-              <div>
-                <span class="text-3xl font-extrabold text-white font-mono">$49</span>
-                <span class="text-xs text-slate-500 font-semibold">/ month</span>
-              </div>
-              <p class="text-xs text-slate-400">Ideal for top-producing floor reps looking to dominate local Facebook Marketplace and send instant text links.</p>
-              
-              <ul class="text-xs text-slate-300 space-y-2.5 pt-2 border-t border-slate-800/80">
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> 1 Active Dealership Feed</li>
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Unlimited 1-Click FB Posts</li>
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Rep Branded SMS & WhatsApp</li>
-                <li class="flex items-center gap-2 text-slate-500"><i data-lucide="x" class="w-4 h-4 text-slate-600"></i> TikTok AI Video Engine</li>
-              </ul>
-            </div>
-            <button onclick="simulateUpgrade('Single Rep ($49/mo)')" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-all">Select Rep Tier</button>
-          </div>
-
-          <!-- Tier 2: 5-Rep Sales Squad (Featured) -->
-          <div class="glass-panel-elevated p-6 rounded-2xl border-2 border-brand-500/80 flex flex-col justify-between relative shadow-xl shadow-brand-950/40 space-y-6">
-            <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-brand-600 to-indigo-600 text-white text-[10px] font-extrabold px-3 py-0.5 rounded-full uppercase tracking-wider shadow-md">
-              Most Popular
-            </div>
-            <div class="space-y-4">
-              <div class="flex justify-between items-center">
-                <span class="text-xs font-bold text-brand-400 uppercase tracking-wider">BDC / Sales Squad</span>
-                <span class="text-[10px] bg-brand-500/20 text-brand-300 px-2 py-0.5 rounded-full font-mono">Team</span>
-              </div>
-              <div>
-                <span class="text-3xl font-extrabold text-white font-mono">$199</span>
-                <span class="text-xs text-slate-500 font-semibold">/ month</span>
-              </div>
-              <p class="text-xs text-slate-300">Built for BDC teams and top sales crews across up to 3 sister store rooftops.</p>
-              
-              <ul class="text-xs text-slate-200 space-y-2.5 pt-2 border-t border-slate-800/80">
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Up to 5 Sales Rep Seats</li>
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> 3 Dealership Lot Scrapers</li>
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> TikTok & Reels Script Builder</li>
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Anti-Shadowban FB Copywriter</li>
-              </ul>
-            </div>
-            <button onclick="simulateUpgrade('BDC / Sales Squad ($199/mo)')" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition-all shadow-md shadow-brand-950/30">Activate Team License</button>
-          </div>
-
-          <!-- Tier 3: Dealer Rooftop Enterprise -->
-          <div class="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition-all space-y-6">
-            <div class="space-y-4">
-              <div class="flex justify-between items-center">
-                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Dealer Enterprise</span>
-                <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">Rooftop</span>
-              </div>
-              <div>
-                <span class="text-3xl font-extrabold text-white font-mono">$599</span>
-                <span class="text-xs text-slate-500 font-semibold">/ month</span>
-              </div>
-              <p class="text-xs text-slate-400">Unlimited seats for the entire dealership group with automated inventory hourly synchronization.</p>
-              
-              <ul class="text-xs text-slate-300 space-y-2.5 pt-2 border-t border-slate-800/80">
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Unlimited Sales & BDC Reps</li>
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Unlimited Group Rooftops</li>
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Custom Supabase / DMS Webhook</li>
-                <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Priority 24/7 Support & Onboarding</li>
-              </ul>
-            </div>
-            <button onclick="simulateUpgrade('Dealer Enterprise ($599/mo)')" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-all">Contact Enterprise Sales</button>
-          </div>
-
-        </div>
-      </div>
-
-    </section>
-
-  </main>
-
-  <!-- ======================================================== -->
-  <!-- 4. MODALS & SLIDE-OVER WORKBENCHES                       -->
-  <!-- ======================================================== -->
-
-  <!-- MODAL A: QUICK-SHARE / LEAD BUILDER (SMS & WHATSAPP) -->
-  <div id="modal-quick-share" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="glass-panel-elevated max-w-lg w-full rounded-2xl border border-slate-700 p-6 space-y-5 shadow-2xl">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-400 flex items-center justify-center">
-            <i data-lucide="send" class="w-4 h-4"></i>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-white">Sales Rep Quick-Share Assistant</h3>
-            <p class="text-[11px] text-slate-400">Generate personal SMS & WhatsApp messages with live quotes.</p>
-          </div>
-        </div>
-        <button onclick="closeModal('modal-quick-share')" class="text-slate-400 hover:text-white">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <!-- Vehicle Brief Header -->
-      <div id="share-vehicle-preview" class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center gap-3">
-        <!-- Rendered dynamically -->
-      </div>
-
-      <!-- Rep Details & Payment Calculator -->
-      <div class="grid grid-cols-2 gap-3 text-xs">
-        <div>
-          <label class="block text-slate-400 mb-1 font-semibold">Rep Name</label>
-          <input type="text" id="share-rep-name" value="Mike DeMoss" oninput="refreshShareMessage()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1 font-semibold">Rep Cell #</label>
-          <input type="text" id="share-rep-phone" value="(304) 555-0199" oninput="refreshShareMessage()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1 font-semibold">Customer Down Payment ($)</label>
-          <input type="number" id="calc-down-payment" value="1000" step="500" oninput="refreshShareMessage()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 font-mono">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1 font-semibold">Loan Term (Months)</label>
-          <select id="calc-loan-term" onchange="refreshShareMessage()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200">
-            <option value="60">60 Months (5 Yrs)</option>
-            <option value="72" selected>72 Months (6 Yrs)</option>
-            <option value="48">48 Months (4 Yrs)</option>
+          <select id="conditionFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
+            <option value="ALL">All Conditions</option>
+            <option value="Used" selected>Used Only</option>
+            <option value="New">New Only</option>
+          </select>
+          <select id="sortSelect" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+            <option value="miles_asc">Mileage: Lowest First</option>
+            <option value="year_desc">Year: Newest First</option>
           </select>
         </div>
       </div>
+    </div>
 
-      <!-- Formatted Output Textarea -->
-      <div>
-        <label class="block text-[11px] font-semibold text-slate-400 mb-1">Generated Text Message</label>
-        <textarea id="share-message-body" rows="5" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-sans text-slate-200 focus:outline-none" readonly></textarea>
+    <!-- Vehicle Card Grid -->
+    <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      <!-- Injected via JavaScript -->
+    </div>
+  </main>
+
+  <!-- Sales Modal: Quick Share / FB / TikTok -->
+  <div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-5">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-4">
+        <div>
+          <h3 id="modalTitle" class="text-lg font-bold text-white">Share Vehicle</h3>
+          <p id="modalSubtitle" class="text-xs text-gray-400"></p>
+        </div>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
 
-      <!-- Action Buttons -->
-      <div class="flex items-center gap-3 pt-1">
-        <button onclick="copyToClipboard('share-message-body', 'Customer SMS message')" class="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all">
-          <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-          <span>Copy SMS Text</span>
-        </button>
-        <button onclick="launchWhatsApp()" class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all">
-          <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
-          <span>WhatsApp</span>
-        </button>
+      <div id="modalBody" class="space-y-4">
+        <!-- Content dynamic -->
       </div>
     </div>
   </div>
 
-  <!-- MODAL B: FACEBOOK MARKETPLACE 1-CLICK LISTING ASSIST -->
-  <div id="modal-fb-marketplace" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="glass-panel-elevated max-w-2xl w-full rounded-2xl border border-slate-700 p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center">
-            <i data-lucide="facebook" class="w-4 h-4"></i>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-white">Facebook Marketplace 1-Click Fast Lister</h3>
-            <p class="text-[11px] text-slate-400">Anti-shadowban copywriting and formatted vehicle parameters.</p>
-          </div>
-        </div>
-        <button onclick="closeModal('modal-fb-marketplace')" class="text-slate-400 hover:text-white">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <!-- Tone Generator Selector -->
-      <div class="flex items-center justify-between bg-slate-900/90 p-2 rounded-xl border border-slate-800">
-        <span class="text-xs text-slate-400 font-semibold px-2">Copy Tone:</span>
-        <div class="flex items-center gap-1">
-          <button onclick="setFBTone('pro')" id="fb-tone-pro" class="px-3 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white transition-all">Professional</button>
-          <button onclick="setFBTone('deal')" id="fb-tone-deal" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all">Deal Hunter</button>
-          <button onclick="setFBTone('enthusiast')" id="fb-tone-enthusiast" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all">Enthusiast</button>
-        </div>
-      </div>
-
-      <!-- Formatted Copyable Listing Details -->
-      <div class="space-y-3">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
-          <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <span class="text-[10px] text-slate-500 block uppercase">Title</span>
-            <span id="fb-field-title" class="font-bold text-white truncate block">...</span>
-          </div>
-          <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <span class="text-[10px] text-slate-500 block uppercase">Price</span>
-            <span id="fb-field-price" class="font-bold text-emerald-400 block">$0</span>
-          </div>
-          <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <span class="text-[10px] text-slate-500 block uppercase">Mileage</span>
-            <span id="fb-field-miles" class="font-bold text-slate-200 block">0</span>
-          </div>
-          <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <span class="text-[10px] text-slate-500 block uppercase">Location</span>
-            <span id="fb-field-location" class="font-bold text-brand-300 truncate block">...</span>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-[11px] font-semibold text-slate-400 mb-1">Marketplace Description (Optimized for Local Search Algo)</label>
-          <textarea id="fb-field-body" rows="9" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-sans text-slate-200 focus:outline-none" readonly></textarea>
-        </div>
-      </div>
-
-      <!-- Action Footer -->
-      <div class="flex flex-col sm:flex-row items-center gap-3 pt-2">
-        <button onclick="copyToClipboard('fb-field-body', 'Facebook Marketplace description')" class="w-full sm:flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all">
-          <i data-lucide="copy" class="w-4 h-4"></i>
-          <span>Copy Complete FB Listing</span>
-        </button>
-        <a href="https://www.facebook.com/marketplace/create/vehicle" target="_blank" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all border border-slate-700">
-          <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-          <span>Open Marketplace Hub</span>
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL C: TIKTOK / REELS VIDEO SCRIPT & STORYBOARD STUDIO -->
-  <div id="modal-tiktok-studio" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="glass-panel-elevated max-w-2xl w-full rounded-2xl border border-slate-700 p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-rose-600/20 text-rose-400 flex items-center justify-center">
-            <i data-lucide="video" class="w-4 h-4"></i>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-white">15-Sec TikTok & Reels Storyboard Studio</h3>
-            <p class="text-[11px] text-slate-400">High-retention visual hooks, text overlays, and voiceover scripts.</p>
-          </div>
-        </div>
-        <button onclick="closeModal('modal-tiktok-studio')" class="text-slate-400 hover:text-white">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <!-- Storyboard Visual Flow -->
-      <div class="space-y-3" id="tiktok-storyboard-container">
-        <!-- Injected dynamically -->
-      </div>
-
-      <!-- CapCut & InShot Text Badges -->
-      <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-        <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-          <i data-lucide="type" class="w-3.5 h-3.5 text-brand-400"></i>
-          <span>Recommended On-Screen Text Overlays (CapCut / InShot)</span>
-        </span>
-        <div class="flex flex-wrap gap-2" id="tiktok-badge-pills">
-          <!-- Injected dynamically -->
-        </div>
-      </div>
-
-      <!-- Audio / Voiceover Player Simulator -->
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800">
-        <div class="flex items-center gap-2">
-          <button onclick="playTTSVoiceover()" id="btn-play-voice" class="w-9 h-9 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center transition-all">
-            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
-          </button>
-          <div>
-            <span class="text-xs font-bold text-slate-200 block">Preview AI Rep Voiceover</span>
-            <span class="text-[10px] text-slate-500">Fast 15-second natural speech synthesis</span>
-          </div>
-        </div>
-
-        <button onclick="copyTikTokScriptText()" class="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-rose-950/40">
-          <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-          <span>Copy Full Script</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL D: SETTINGS & SUPABASE CONNECTIVITY -->
-  <div id="modal-settings" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="glass-panel-elevated max-w-lg w-full rounded-2xl border border-slate-700 p-6 space-y-5 shadow-2xl">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-            <i data-lucide="database" class="w-4 h-4"></i>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-white">Database & API Architecture</h3>
-            <p class="text-[11px] text-slate-400">Configure your live Supabase project and AI key.</p>
-          </div>
-        </div>
-        <button onclick="closeModal('modal-settings')" class="text-slate-400 hover:text-white">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="block text-slate-400 mb-1 font-semibold">Supabase Project URL</label>
-          <input type="text" id="cfg-db-url" value="https://tdsipiltwajwhzgjsupx.supabase.co" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-slate-200">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1 font-semibold">Supabase Anon Key</label>
-          <input type="text" id="cfg-db-key" value="sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-slate-200">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1 font-semibold">Gemini 3.8 Flash API Key (Colab / Backend)</label>
-          <input type="password" id="cfg-ai-key" value="AQ.Ab8RN6JBHopUil-MvHH5jrAUGv-1YKtcOAVj088IjIGlVK6PMQ" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-slate-200">
-        </div>
-      </div>
-
-      <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span>Target Table: <code class="text-brand-300 font-mono">public.scraped_inventory</code></span>
-        </div>
-        <button onclick="pingSupabaseHealth()" class="text-xs font-semibold text-brand-400 hover:underline">Ping Server</button>
-      </div>
-
-      <div class="flex items-center gap-3 pt-2">
-        <button onclick="saveSettings(); closeModal('modal-settings')" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition-all">Save Credentials</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- TOAST NOTIFICATION CONTAINER -->
-  <div id="toast-container" class="fixed bottom-5 right-5 z-50 pointer-events-none space-y-2"></div>
-
-  <!-- ======================================================== -->
-  <!-- 5. APPLICATION JAVASCRIPT STATE ENGINE                   -->
-  <!-- ======================================================== -->
   <script>
-    // --- MULTI-TENANT CLIENT REGISTRY ---
-    const TENANT_DATABASE = {
-      moses: {
-        name: "Moses Automotive Group",
-        lots: [
-          { id: "all", name: "All 3 Rooftops" },
-          { id: "huntington", name: "Moses Huntington Lot" },
-          { id: "barboursville", name: "Moses Honda Barboursville" },
-          { id: "stalbans", name: "Moses St. Albans Auto" }
-        ],
-        feeds: {
-          used_p1: "https://www.mosescars.com/search-all-used-inventory.html",
-          used_p2: "https://www.mosescars.com/search-all-used-inventory.html?pt=2",
-          new_p1: "https://www.mosescars.com/search-all-new-inventory.html",
-          new_p2: "https://www.mosescars.com/search-all-new-inventory.html?pt=2"
-        }
-      },
-      hendrick: {
-        name: "Hendrick Automotive Group",
-        lots: [
-          { id: "all", name: "All Hendrick Lots" },
-          { id: "hendrick_toyota", name: "Hendrick Toyota MegaCenter" },
-          { id: "hendrick_chevy", name: "Hendrick Chevrolet South" }
-        ],
-        feeds: {
-          used_p1: "https://www.hendrickcars.com/used-inventory/index.htm",
-          used_p2: "https://www.hendrickcars.com/used-inventory/index.htm?start=20",
-          new_p1: "https://www.hendrickcars.com/new-inventory/index.htm",
-          new_p2: "https://www.hendrickcars.com/new-inventory/index.htm?start=20"
-        }
-      },
-      sonic: {
-        name: "Sonic Automotive Network",
-        lots: [
-          { id: "all", name: "All Sonic Dealerships" },
-          { id: "sonic_bmw", name: "Sonic BMW Center" },
-          { id: "sonic_ford", name: "Sonic Ford Superstore" }
-        ],
-        feeds: {
-          used_p1: "https://www.sonicautomotive.com/used-cars.htm",
-          used_p2: "https://www.sonicautomotive.com/used-cars.htm?page=2",
-          new_p1: "https://www.sonicautomotive.com/new-cars.htm",
-          new_p2: "https://www.sonicautomotive.com/new-cars.htm?page=2"
-        }
-      }
-    };
+    const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
-    // --- LIVE REPOSITORY (EXTRACTED MOSES VEHICLES + MULTI-STORE ROOFTOP SEEDS) ---
-    let globalVehicles = [
-      {
-        vin: "1FADP3KE3GL273598",
-        stock: "U27359",
-        year: 2016,
-        make: "Ford",
-        model: "Focus",
-        trim: "SE Sedan",
-        price: 8162,
-        mileage: 126842,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Huntington Lot",
-        image: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80",
-        transmission: "Automatic",
-        drivetrain: "FWD",
-        engine: "2.0L I4",
-        color: "Ingot Silver Metallic",
-        dateAdded: "2026-10-17"
-      },
-      {
-        vin: "1FADP3K24FL312977",
-        stock: "U31297",
-        year: 2015,
-        make: "Ford",
-        model: "Focus",
-        trim: "SE Hatchback",
-        price: 8217,
-        mileage: 65923,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Huntington Lot",
-        image: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=600&q=80",
-        transmission: "Automatic",
-        drivetrain: "FWD",
-        engine: "2.0L I4",
-        color: "Oxford White",
-        dateAdded: "2026-10-17"
-      },
-      {
-        vin: "4S3BMCG64D3045004",
-        stock: "U30450",
-        year: 2013,
-        make: "Subaru",
-        model: "Legacy",
-        trim: "2.5i Premium",
-        price: 9463,
-        mileage: 148135,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses St. Albans Auto",
-        image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=600&q=80",
-        transmission: "CVT",
-        drivetrain: "AWD",
-        engine: "2.5L Boxer",
-        color: "Ice Silver Metallic",
-        dateAdded: "2026-10-17"
-      },
-      {
-        vin: "3GKALTEV7LL167971",
-        stock: "U16797",
-        year: 2020,
-        make: "GMC",
-        model: "Terrain",
-        trim: "SLE AWD",
-        price: 9572,
-        mileage: 172437,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Huntington Lot",
-        image: "https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=600&q=80",
-        transmission: "9-Speed Auto",
-        drivetrain: "AWD",
-        engine: "1.5L Turbo",
-        color: "Ebony Twilight",
-        dateAdded: "2026-10-17"
-      },
-      {
-        vin: "3LN6L2JK8FR608494",
-        stock: "U60849",
-        year: 2015,
-        make: "Lincoln",
-        model: "MKZ",
-        trim: "Reserve Sedan",
-        price: 9572,
-        mileage: 139940,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses St. Albans Auto",
-        image: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=600&q=80",
-        transmission: "Automatic",
-        drivetrain: "AWD",
-        engine: "2.0L EcoBoost",
-        color: "Black Velvet",
-        dateAdded: "2026-10-17"
-      },
-      {
-        vin: "1C4NJRFB9ED575746",
-        stock: "U57574",
-        year: 2014,
-        make: "Jeep",
-        model: "Patriot",
-        trim: "Latitude 4x4",
-        price: 9574,
-        mileage: 65998,
-        condition: "Used",
-        status: "Fresh Trade",
-        orgId: "moses",
-        lotName: "Moses Huntington Lot",
-        image: "https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=600&q=80",
-        transmission: "6-Speed Auto",
-        drivetrain: "4WD",
-        engine: "2.4L DOHC",
-        color: "Billet Silver",
-        dateAdded: "2026-10-16"
-      },
-      {
-        vin: "1C4AJWAGXEL246284",
-        stock: "U24628",
-        year: 2014,
-        make: "Jeep",
-        model: "Wrangler",
-        trim: "Sport 4WD",
-        price: 9852,
-        mileage: 170363,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Honda Barboursville",
-        image: "https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=600&q=80",
-        transmission: "Manual 6-Speed",
-        drivetrain: "4WD",
-        engine: "3.6L Pentastar V6",
-        color: "Flame Red",
-        dateAdded: "2026-10-16"
-      },
-      {
-        vin: "JF2SJAWC0HH518590",
-        stock: "U51859",
-        year: 2017,
-        make: "Subaru",
-        model: "Forester",
-        trim: "Touring AWD",
-        price: 10474,
-        mileage: 187183,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Huntington Lot",
-        image: "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=600&q=80",
-        transmission: "Lineartronic CVT",
-        drivetrain: "AWD",
-        engine: "2.5L Boxer",
-        color: "Crystal White Pearl",
-        dateAdded: "2026-10-16"
-      },
-      {
-        vin: "2T2BK1BA9AC012018",
-        stock: "U01201",
-        year: 2010,
-        make: "Lexus",
-        model: "RX 350",
-        trim: "Premium AWD",
-        price: 10574,
-        mileage: 195203,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses St. Albans Auto",
-        image: "https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=600&q=80",
-        transmission: "6-Speed Auto",
-        drivetrain: "AWD",
-        engine: "3.5L V6",
-        color: "Starfire Pearl",
-        dateAdded: "2026-10-15"
-      },
-      {
-        vin: "5XYPG4A31JG384781",
-        stock: "U38478",
-        year: 2018,
-        make: "Kia",
-        model: "Sorento",
-        trim: "LX V6",
-        price: 11391,
-        mileage: 106555,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Huntington Lot",
-        image: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?auto=format&fit=crop&w=600&q=80",
-        transmission: "6-Speed Auto",
-        drivetrain: "AWD",
-        engine: "3.3L V6",
-        color: "Titanium Silver",
-        dateAdded: "2026-10-15"
-      },
-      {
-        vin: "KM8J3CA29GU230762",
-        stock: "U23076",
-        year: 2016,
-        make: "Hyundai",
-        model: "Tucson",
-        trim: "Limited AWD",
-        price: 11574,
-        mileage: 111285,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Honda Barboursville",
-        image: "https://images.unsplash.com/photo-1508974239320-0a029497e820?auto=format&fit=crop&w=600&q=80",
-        transmission: "7-Speed Dual Clutch",
-        drivetrain: "AWD",
-        engine: "1.6L Turbo",
-        color: "Coliseum Gray",
-        dateAdded: "2026-10-15"
-      },
-      {
-        vin: "19XFC2F70HE008071",
-        stock: "U00807",
-        year: 2017,
-        make: "Honda",
-        model: "Civic Sedan",
-        trim: "EX",
-        price: 12544,
-        mileage: 165401,
-        condition: "Used",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Honda Barboursville",
-        image: "https://images.unsplash.com/photo-1590362891988-f77804702088?auto=format&fit=crop&w=600&q=80",
-        transmission: "CVT",
-        drivetrain: "FWD",
-        engine: "2.0L I4",
-        color: "Aegean Blue Metallic",
-        dateAdded: "2026-10-15"
-      },
-      // New Inventory Examples from Page 1 & 2
-      {
-        vin: "1HGCR2F84NA019921",
-        stock: "N01992",
-        year: 2026,
-        make: "Honda",
-        model: "Accord Hybrid",
-        trim: "Touring",
-        price: 38990,
-        mileage: 8,
-        condition: "New",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Honda Barboursville",
-        image: "https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=600&q=80",
-        transmission: "E-CVT",
-        drivetrain: "FWD",
-        engine: "2.0L Hybrid",
-        color: "Platinum White Pearl",
-        dateAdded: "2026-10-17"
-      },
-      {
-        vin: "7FARW2H88RE048129",
-        stock: "N04812",
-        year: 2026,
-        make: "Honda",
-        model: "CR-V",
-        trim: "EX-L AWD",
-        price: 36450,
-        mileage: 14,
-        condition: "New",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Honda Barboursville",
-        image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=600&q=80",
-        transmission: "CVT",
-        drivetrain: "AWD",
-        engine: "1.5L Turbo",
-        color: "Meteorite Gray",
-        dateAdded: "2026-10-17"
-      },
-      {
-        vin: "3GCUKREC5RG190014",
-        stock: "N19001",
-        year: 2026,
-        make: "GMC",
-        model: "Sierra 1500",
-        trim: "Elevation Crew",
-        price: 54900,
-        mileage: 18,
-        condition: "New",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses Huntington Lot",
-        image: "https://images.unsplash.com/photo-1559416523-140ddc3d238c?auto=format&fit=crop&w=600&q=80",
-        transmission: "10-Speed Auto",
-        drivetrain: "4WD",
-        engine: "5.3L EcoTec3 V8",
-        color: "Onyx Black",
-        dateAdded: "2026-10-17"
-      },
-      {
-        vin: "3FA6P0H78HR128941",
-        stock: "N12894",
-        year: 2026,
-        make: "Ford",
-        model: "Explorer",
-        trim: "Active 4WD",
-        price: 43200,
-        mileage: 11,
-        condition: "New",
-        status: "Available",
-        orgId: "moses",
-        lotName: "Moses St. Albans Auto",
-        image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=600&q=80",
-        transmission: "10-Speed Auto",
-        drivetrain: "4WD",
-        engine: "2.3L EcoBoost",
-        color: "Agate Black",
-        dateAdded: "2026-10-17"
-      }
-    ];
+    let rawInventory = [];
 
-    // Current State
-    let currentOrg = 'moses';
-    let currentLot = 'all';
-    let currentCondition = 'All';
-    let activeModalCar = null;
-    let fbTone = 'pro';
-
-    // --- INITIALIZATION ---
-    window.onload = function() {
-      populateLotDropdown();
-      populateMakeDropdown();
-      populateLocationFilter();
-      analyzeFeedPatterns();
-      applyFilters();
-      lucide.createIcons();
-    };
-
-    // --- TAB SWITCHER ---
-    function switchTab(tabId) {
-      ['inventory', 'feed-engine', 'monetization'].forEach(id => {
-        document.getElementById(`view-${id}`).classList.add('hidden');
-        const btn = document.getElementById(`tab-${id}`);
-        if (btn) {
-          btn.classList.remove('bg-brand-600', 'text-white', 'shadow-sm');
-          btn.classList.add('text-slate-400');
-        }
-      });
-
-      const activeView = document.getElementById(`view-${tabId}`);
-      if (activeView) activeView.classList.remove('hidden');
-
-      const activeBtn = document.getElementById(`tab-${tabId}`);
-      if (activeBtn) {
-        activeBtn.classList.add('bg-brand-600', 'text-white', 'shadow-sm');
-        activeBtn.classList.remove('text-slate-400');
-      }
-
-      lucide.createIcons();
-    }
-
-    // --- TENANT & ROOFTOP SWITCHER ---
-    function handleTenantChange() {
-      const select = document.getElementById('tenant-org-select');
-      const val = select.value;
-
-      if (val === '__new__') {
-        const newOrgName = prompt("Enter New Dealership Client / Group Name (e.g. 'Penske Motor Group'):");
-        if (newOrgName && newOrgName.trim()) {
-          const newId = 'org_' + Date.now();
-          TENANT_DATABASE[newId] = {
-            name: newOrgName.trim(),
-            lots: [
-              { id: 'all', name: `All ${newOrgName.trim()} Lots` },
-              { id: 'main', name: `${newOrgName.trim()} Main Lot` }
-            ],
-            feeds: {
-              used_p1: "https://example-dealer.com/used.html",
-              used_p2: "https://example-dealer.com/used.html?page=2",
-              new_p1: "https://example-dealer.com/new.html",
-              new_p2: "https://example-dealer.com/new.html?page=2"
-            }
-          };
-
-          const opt = document.createElement('option');
-          opt.value = newId;
-          opt.text = newOrgName.trim();
-          select.insertBefore(opt, select.lastElementChild);
-          select.value = newId;
-          currentOrg = newId;
-        } else {
-          select.value = currentOrg;
-          return;
-        }
-      } else {
-        currentOrg = val;
-      }
-
-      const orgData = TENANT_DATABASE[currentOrg];
-      document.getElementById('active-group-heading').innerText = orgData.name;
-      document.getElementById('feed-group-name').value = orgData.name;
-      document.getElementById('feed-lot-name').value = orgData.lots[1]?.name || `${orgData.name} Main`;
-
-      // Update Feed inputs with saved feed configuration
-      document.getElementById('feed-used-p1').value = orgData.feeds.used_p1;
-      document.getElementById('feed-used-p2').value = orgData.feeds.used_p2;
-      document.getElementById('feed-new-p1').value = orgData.feeds.new_p1;
-      document.getElementById('feed-new-p2').value = orgData.feeds.new_p2;
-
-      populateLotDropdown();
-      populateLocationFilter();
-      analyzeFeedPatterns();
-      applyFilters();
-      showToast(`Switched active client to: ${orgData.name}`, 'info');
-    }
-
-    function populateLotDropdown() {
-      const select = document.getElementById('tenant-lot-select');
-      select.innerHTML = '';
-      const org = TENANT_DATABASE[currentOrg];
-      org.lots.forEach(lot => {
-        const opt = document.createElement('option');
-        opt.value = lot.id;
-        opt.text = lot.name;
-        select.appendChild(opt);
-      });
-      select.value = 'all';
-      currentLot = 'all';
-    }
-
-    function handleLotFilterChange() {
-      const select = document.getElementById('tenant-lot-select');
-      currentLot = select.value;
-      const lotName = select.options[select.selectedIndex].text;
-      document.getElementById('active-lot-pill').innerText = lotName;
-      document.getElementById('filter-location').value = currentLot === 'all' ? 'all' : lotName;
-      applyFilters();
-    }
-
-    // --- PATTERN DETECTION & SELF-HEALING ENGINE ---
-    function detectPaginationPattern(p1, p2) {
-      if (!p1 || !p2) return { formula: 'Unknown', param: 'None', p3: '', p4: '' };
+    async function fetchLiveInventoryFromSupabase() {
+      const lotBadge = document.getElementById("lotCount");
+      const statusBadge = document.getElementById("liveStatusBadge");
+      lotBadge.innerText = "Syncing...";
 
       try {
-        const u1 = new URL(p1);
-        const u2 = new URL(p2);
-
-        // Scenario A: Query Parameter Diff (e.g. ?pt=2, ?page=2, ?start=20)
-        let detectedKey = null;
-        let p2Val = null;
-
-        for (const [key, val] of u2.searchParams.entries()) {
-          if (u1.searchParams.get(key) !== val) {
-            detectedKey = key;
-            p2Val = parseInt(val) || val;
-            break;
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/scraped_inventory?select=*&is_active=eq.true&order=price.asc`, {
+          method: "GET",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Range": "0-1999"
           }
-        }
+        });
 
-        if (detectedKey) {
-          // If step is incrementing numbers
-          let step = 1;
-          if (typeof p2Val === 'number' && p2Val > 2) {
-            step = p2Val; // e.g. start=20, step=20
-          }
+        if (!response.ok) throw new Error("Database fetch error");
 
-          const u3 = new URL(p2);
-          const u4 = new URL(p2);
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          rawInventory = data;
+          lotBadge.innerText = `${data.length} In-Stock`;
           
-          if (typeof p2Val === 'number') {
-            const v3 = step === 1 ? 3 : p2Val + step;
-            const v4 = step === 1 ? 4 : p2Val + (step * 2);
-            u3.searchParams.set(detectedKey, v3);
-            u4.searchParams.set(detectedKey, v4);
+          const prices = data.map(c => c.price).filter(p => p && p > 0);
+          if (prices.length > 0) {
+            const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+            document.getElementById("avgPrice").innerText = `$${avg.toLocaleString()}`;
           }
 
-          return {
-            formula: `{BaseUrl}?${detectedKey}={${step === 1 ? 'page' : 'step * page'}}`,
-            param: `?${detectedKey}=`,
-            p3: u3.toString(),
-            p4: u4.toString()
-          };
+          statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Supabase Live (${data.length} Cars)</span>`;
+          applyFilters();
         }
-
-        // Scenario B: Path Segment diff (e.g. /page-2/ or /p/2/)
-        if (u1.pathname !== u2.pathname) {
-          const match = u2.pathname.match(/(page|p|pt)[/-]?(\d+)/i);
-          if (match) {
-            const prefix = match[1];
-            const p3Path = u2.pathname.replace(match[0], `${prefix}-3`);
-            const p4Path = u2.pathname.replace(match[0], `${prefix}-4`);
-            return {
-              formula: `{BaseUrl}/${prefix}-{page}/`,
-              param: `/${prefix}-n/`,
-              p3: `${u2.origin}${p3Path}`,
-              p4: `${u2.origin}${p4Path}`
-            };
-          }
-        }
-
-        return { formula: 'Unknown / Direct AJAX Query', param: 'Custom', p3: p2, p4: p2 };
-      } catch (e) {
-        return { formula: 'Malformed URL', param: 'Error', p3: 'Error', p4: 'Error' };
+      } catch (err) {
+        console.error("Fetch error:", err);
+        lotBadge.innerText = "Error";
+        statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-400"></span><span>Sync Failed</span>`;
       }
-    }
-
-    function analyzeFeedPatterns() {
-      // Analyze Used Pair
-      const u1 = document.getElementById('feed-used-p1').value.trim();
-      const u2 = document.getElementById('feed-used-p2').value.trim();
-      const usedPat = detectPaginationPattern(u1, u2);
-      
-      document.getElementById('used-formula-label').innerText = usedPat.formula;
-      document.getElementById('used-pattern-tag').innerText = `Param: ${usedPat.param}`;
-      document.getElementById('used-preview-p3').innerText = truncateUrl(usedPat.p3);
-      document.getElementById('used-preview-p4').innerText = truncateUrl(usedPat.p4);
-
-      // Analyze New Pair
-      const n1 = document.getElementById('feed-new-p1').value.trim();
-      const n2 = document.getElementById('feed-new-p2').value.trim();
-      const newPat = detectPaginationPattern(n1, n2);
-
-      document.getElementById('new-formula-label').innerText = newPat.formula;
-      document.getElementById('new-pattern-tag').innerText = `Param: ${newPat.param}`;
-      document.getElementById('new-preview-p3').innerText = truncateUrl(newPat.p3);
-      document.getElementById('new-preview-p4').innerText = truncateUrl(newPat.p4);
-    }
-
-    function truncateUrl(url) {
-      if (!url || url.length < 35) return url;
-      const parts = url.split('/');
-      return '...' + parts[parts.length - 1];
-    }
-
-    // --- TEST & DIAGNOSE SIMULATED FEED ---
-    function testAndDiagnoseFeed() {
-      const term = document.getElementById('diagnostic-terminal');
-      const pBar = document.getElementById('diagnostic-progress-bar');
-      const pText = document.getElementById('diagnostic-status-text');
-      const pPct = document.getElementById('diagnostic-pct');
-      const maxPages = document.getElementById('feed-max-pages').value;
-
-      const groupName = document.getElementById('feed-group-name').value;
-      const lotName = document.getElementById('feed-lot-name').value;
-      const usedP1 = document.getElementById('feed-used-p1').value;
-      const usedP2 = document.getElementById('feed-used-p2').value;
-
-      term.innerHTML = '';
-      logDiagnostic(`[Init] Launching Cloud Stealth Playwright Sandbox for: "${groupName}"...`);
-      logDiagnostic(`[Target] Lot Rooftop: ${lotName}`);
-      logDiagnostic(`[Audit] Scanning Used P1: ${usedP1}`);
-
-      let progress = 10;
-      pBar.style.width = '10%';
-      pPct.innerText = '10%';
-      pText.innerText = 'Connecting Headless Browser...';
-
-      setTimeout(() => {
-        logDiagnostic(`[Bypass] Applied evasion flags (--disable-blink-features=AutomationControlled)`);
-        logDiagnostic(`[DOM] HTTP 200 OK. Rendered DOM captured: 14,280 bytes.`);
-        pBar.style.width = '35%';
-        pPct.innerText = '35%';
-        pText.innerText = 'Diffing Pagination Signatures...';
-
-        setTimeout(() => {
-          const pat = detectPaginationPattern(usedP1, usedP2);
-          logDiagnostic(`[Pattern Engine] ✓ Signature Detected: "${pat.param}". Calculated formula: ${pat.formula}`);
-          logDiagnostic(`[Self-Healing] Verified Page 3: ${pat.p3}`);
-          logDiagnostic(`[Self-Healing] Verified Page 4: ${pat.p4}`);
-          pBar.style.width = '65%';
-          pPct.innerText = '65%';
-          pText.innerText = 'Extracting Vehicle Schema with Gemini Flash...';
-
-          setTimeout(() => {
-            logDiagnostic(`[AI Extraction] Handed page text to Gemini 3.8 Flash.`);
-            logDiagnostic(`[AI Extraction] Schema Validated: 12 vehicles parsed (Prices, VINs, Trims, Mileage normalized).`);
-            logDiagnostic(`[Database] Pinged Supabase instance: "scraped_inventory" schema ready for upsert.`);
-            pBar.style.width = '100%';
-            pPct.innerText = '100%';
-            pText.innerText = `Diagnostic Complete: Feed 100% Operational up to ${maxPages} pages!`;
-            showToast('Feed Diagnostic Passed: Crawler is 100% healthy!', 'success');
-          }, 600);
-        }, 500);
-      }, 500);
-    }
-
-    function logDiagnostic(msg) {
-      const term = document.getElementById('diagnostic-terminal');
-      const row = document.createElement('div');
-      if (msg.includes('✓') || msg.includes('Operational')) row.className = 'text-emerald-400 font-semibold';
-      else if (msg.includes('[Bypass]') || msg.includes('[DOM]')) row.className = 'text-cyan-400';
-      else if (msg.includes('[Init]') || msg.includes('[Audit]')) row.className = 'text-slate-300';
-      else row.className = 'text-slate-400';
-      row.innerText = msg;
-      term.appendChild(row);
-      term.scrollTop = term.scrollHeight;
-    }
-
-    function clearDiagnosticTerminal() {
-      document.getElementById('diagnostic-terminal').innerHTML = '<div class="text-slate-500">[System] Logs cleared.</div>';
-      document.getElementById('diagnostic-progress-bar').style.width = '0%';
-      document.getElementById('diagnostic-pct').innerText = '0%';
-      document.getElementById('diagnostic-status-text').innerText = 'Standby: Ready to validate target dealership endpoints...';
-    }
-
-    function saveAndDeployFeed() {
-      const groupName = document.getElementById('feed-group-name').value.trim();
-      const lotName = document.getElementById('feed-lot-name').value.trim();
-      const usedP1 = document.getElementById('feed-used-p1').value.trim();
-      const usedP2 = document.getElementById('feed-used-p2').value.trim();
-      const newP1 = document.getElementById('feed-new-p1').value.trim();
-      const newP2 = document.getElementById('feed-new-p2').value.trim();
-
-      // Save into active Org State
-      TENANT_DATABASE[currentOrg].feeds = {
-        used_p1: usedP1,
-        used_p2: usedP2,
-        new_p1: newP1,
-        new_p2: newP2
-      };
-
-      // Add lot to org if not exists
-      const existing = TENANT_DATABASE[currentOrg].lots.find(l => l.name.toLowerCase() === lotName.toLowerCase());
-      if (!existing && lotName) {
-        const lotId = 'lot_' + Date.now();
-        TENANT_DATABASE[currentOrg].lots.push({ id: lotId, name: lotName });
-        populateLotDropdown();
-        populateLocationFilter();
-      }
-
-      showToast(`Feed saved & deployed to ${groupName}! Ingesting inventory now...`, 'success');
-      switchTab('inventory');
-    }
-
-    // --- SHOWROOM FILTERING & RENDERING ---
-    function populateMakeDropdown() {
-      const select = document.getElementById('filter-make');
-      const currentVal = select.value;
-      const makes = Array.from(new Set(globalVehicles.map(v => v.make))).sort();
-      select.innerHTML = '<option value="all">All Makes</option>';
-      makes.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        opt.text = m;
-        select.appendChild(opt);
-      });
-      select.value = currentVal || 'all';
-    }
-
-    function populateLocationFilter() {
-      const select = document.getElementById('filter-location');
-      const locations = Array.from(new Set(globalVehicles.map(v => v.lotName))).sort();
-      select.innerHTML = '<option value="all">All Dealership Locations</option>';
-      locations.forEach(l => {
-        const opt = document.createElement('option');
-        opt.value = l;
-        opt.text = l;
-        select.appendChild(opt);
-      });
-    }
-
-    function setConditionFilter(cond) {
-      currentCondition = cond;
-      ['all', 'used', 'new', 'cpo'].forEach(c => {
-        const btn = document.getElementById(`btn-cond-${c}`);
-        if (c === cond.toLowerCase()) {
-          btn.classList.add('bg-brand-600', 'text-white');
-          btn.classList.remove('text-slate-400');
-        } else {
-          btn.classList.remove('bg-brand-600', 'text-white');
-          btn.classList.add('text-slate-400');
-        }
-      });
-      applyFilters();
-    }
-
-    function updatePriceSlider(val) {
-      document.getElementById('label-max-price').innerText = val >= 80000 ? '$80,000+' : `$${parseInt(val).toLocaleString()}`;
-    }
-
-    function updateMilesSlider(val) {
-      document.getElementById('label-max-miles').innerText = val >= 200000 ? 'Any' : `< ${parseInt(val).toLocaleString()} mi`;
-    }
-
-    function resetFilters() {
-      document.getElementById('filter-search').value = '';
-      document.getElementById('filter-make').value = 'all';
-      document.getElementById('filter-location').value = 'all';
-      document.getElementById('filter-max-price').value = 80000;
-      updatePriceSlider(80000);
-      document.getElementById('filter-max-miles').value = 200000;
-      updateMilesSlider(200000);
-      document.getElementById('filter-sort').value = 'price-asc';
-      setConditionFilter('All');
     }
 
     function applyFilters() {
-      const search = document.getElementById('filter-search').value.toLowerCase().trim();
-      const make = document.getElementById('filter-make').value;
-      const location = document.getElementById('filter-location').value;
-      const maxPrice = parseInt(document.getElementById('filter-max-price').value);
-      const maxMiles = parseInt(document.getElementById('filter-max-miles').value);
-      const sort = document.getElementById('filter-sort').value;
+      const query = document.getElementById("searchInput").value.toLowerCase();
+      const cond = document.getElementById("conditionFilter").value;
+      const sort = document.getElementById("sortSelect").value;
 
-      let filtered = globalVehicles.filter(v => {
-        // Multi-tenant Org check
-        if (currentOrg !== 'all' && v.orgId !== currentOrg) return false;
-
-        // Condition Check
-        if (currentCondition !== 'All' && v.condition.toLowerCase() !== currentCondition.toLowerCase()) return false;
-
-        // Make Check
-        if (make !== 'all' && v.make !== make) return false;
-
-        // Location Check
-        if (location !== 'all' && v.lotName !== location) return false;
-
-        // Price Check
-        if (v.price && v.price > maxPrice) return false;
-
-        // Mileage Check
-        if (v.mileage && v.mileage > maxMiles) return false;
-
-        // Text Search (VIN, Stock, Model, Make, Trim)
-        if (search) {
-          const haystack = `${v.year} ${v.make} ${v.model} ${v.trim || ''} ${v.vin} ${v.stock || ''} ${v.lotName} ${v.color || ''}`.toLowerCase();
-          if (!haystack.includes(search)) return false;
-        }
-
-        return true;
+      let filtered = rawInventory.filter(car => {
+        const title = `${car.year} ${car.make} ${car.model} ${car.trim || ''} ${car.vin || ''} ${car.location_name || ''}`.toLowerCase();
+        const matchesQuery = title.includes(query);
+        const matchesCond = cond === "ALL" || (car.condition || "Used") === cond;
+        return matchesQuery && matchesCond;
       });
 
-      // Sorting
       filtered.sort((a, b) => {
-        if (sort === 'price-asc') return (a.price || 0) - (b.price || 0);
-        if (sort === 'price-desc') return (b.price || 0) - (a.price || 0);
-        if (sort === 'mileage-asc') return (a.mileage || 0) - (b.mileage || 0);
-        if (sort === 'year-desc') return b.year - a.year;
-        if (sort === 'recent') return new Date(b.dateAdded) - new Date(a.dateAdded);
+        if (sort === "price_asc") return (a.price || 0) - (b.price || 0);
+        if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
+        if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
+        if (sort === "year_desc") return (b.year || 0) - (a.year || 0);
         return 0;
       });
 
-      renderInventoryCards(filtered);
-      updateSummaryMetrics(filtered);
+      renderGrid(filtered);
     }
 
-    function renderInventoryCards(items) {
-      const grid = document.getElementById('inventory-grid');
-      const empty = document.getElementById('inventory-empty');
-      grid.innerHTML = '';
-
-      if (items.length === 0) {
-        empty.classList.remove('hidden');
+    function renderGrid(cars) {
+      const grid = document.getElementById("inventoryGrid");
+      if (!cars.length) {
+        grid.innerHTML = `<div class="col-span-full text-center py-12 text-gray-500">No vehicles match your active search filters.</div>`;
         return;
       }
-      empty.classList.add('hidden');
 
-      items.forEach(car => {
-        // Estimated Payment Calculation (~10% down, 7% APR, 72 mos)
-        const loanAmount = Math.max(0, (car.price || 0) - 1000);
-        const estMonthly = car.price ? Math.round((loanAmount * 0.017)) : 0;
-
-        const conditionBadge = car.condition === 'New' 
-          ? '<span class="bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">NEW</span>'
-          : '<span class="bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">USED</span>';
-
-        const statusClass = car.status === 'Fresh Trade' 
-          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
-          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-
-        const card = document.createElement('div');
-        card.className = "glass-panel rounded-2xl border border-slate-800 overflow-hidden hover:border-slate-700 hover:shadow-xl hover:shadow-black/50 transition-all flex flex-col justify-between group";
-        card.innerHTML = `
+      grid.innerHTML = cars.map(car => `
+        <div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">
           <div>
-            <!-- Image & Overlays -->
-            <div class="relative h-44 overflow-hidden bg-slate-900">
-              <img src="${car.image}" alt="${car.year} ${car.make} ${car.model}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-              <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
-              
-              <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                ${conditionBadge}
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusClass}">
-                  ${car.status}
-                </span>
+            <div class="h-44 w-full bg-gray-900 relative overflow-hidden flex items-center justify-center">
+              <img src="https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60" alt="Car" class="object-cover w-full h-full opacity-80 hover:opacity-100 transition duration-300">
+              <div class="absolute top-3 left-3 flex gap-1.5">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">${car.condition || 'Used'}</span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">${car.status || 'Available'}</span>
               </div>
-
-              <!-- Price Callout -->
-              <div class="absolute bottom-2.5 left-3 right-3 flex items-center justify-between">
-                <div>
-                  <span class="text-white font-extrabold text-xl font-mono">${car.price ? '$' + car.price.toLocaleString() : 'Call for Price'}</span>
-                </div>
-                ${estMonthly > 0 ? `<div class="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/25">~$${estMonthly}/mo</div>` : ''}
+              <div class="absolute bottom-2 right-2 text-xs font-semibold px-2 py-1 rounded-md bg-black/70 text-white">
+                ~$${Math.round((car.price || 15000) / 72)}/mo
               </div>
             </div>
 
-            <!-- Specs & Content -->
-            <div class="p-4 space-y-2.5">
-              <div>
-                <h3 class="text-sm font-bold text-white group-hover:text-brand-400 transition-colors">
-                  ${car.year} ${car.make} ${car.model} 
-                  <span class="text-xs font-normal text-slate-400 block sm:inline">${car.trim || ''}</span>
-                </h3>
-                <div class="flex items-center gap-2 text-[11px] text-slate-400 mt-1">
-                  <span class="flex items-center gap-1">
-                    <i data-lucide="gauge" class="w-3 h-3 text-slate-500"></i>
-                    ${car.mileage ? car.mileage.toLocaleString() + ' mi' : 'Delivery Miles'}
-                  </span>
-                  <span>•</span>
-                  <span class="text-slate-300 truncate max-w-[150px]" title="${car.lotName}">
-                    ${car.lotName}
-                  </span>
-                </div>
+            <div class="p-4 space-y-2">
+              <div class="flex items-baseline justify-between">
+                <span class="text-xl font-black text-white">$${(car.price || 0).toLocaleString()}</span>
+                <span class="text-xs font-medium text-gray-400">${(car.mileage || 0).toLocaleString()} mi</span>
               </div>
-
-              <!-- VIN & Stock Bar -->
-              <div class="text-[10px] font-mono text-slate-400 bg-slate-950/80 p-2 rounded-xl border border-slate-800 flex items-center justify-between">
-                <span class="truncate">VIN: ${car.vin}</span>
-                <button onclick="copyRawText('${car.vin}', 'VIN')" class="text-slate-500 hover:text-white ml-1" title="Copy VIN">
-                  <i data-lucide="copy" class="w-3 h-3"></i>
-                </button>
-              </div>
+              <h4 class="font-bold text-gray-100 text-sm truncate">${car.year} ${car.make} ${car.model} ${car.trim || ''}</h4>
+              <p class="text-xs text-gray-400 truncate"><i class="fa-solid fa-location-dot text-indigo-400 mr-1"></i>${car.location_name || 'Moses Auto Mall'}</p>
+              <p class="text-[11px] font-mono text-gray-500">VIN: ${car.vin || 'N/A'}</p>
             </div>
           </div>
 
-          <!-- Rep Outbound Sales Triggers -->
-          <div class="p-3 bg-slate-900/60 border-t border-slate-800/80 grid grid-cols-3 gap-2">
-            <button onclick="openQuickShareModal('${car.vin}')" class="py-2 px-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center justify-center gap-1 transition-all" title="Share with customer via SMS">
-              <i data-lucide="send" class="w-3 h-3 text-brand-400"></i>
+          <div class="p-4 pt-0 grid grid-cols-3 gap-2">
+            <button onclick='openShareModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition">
+              <i class="fa-solid fa-share-nodes text-indigo-400"></i>
               <span>Share</span>
             </button>
-            <button onclick="openFBModal('${car.vin}')" class="py-2 px-2 rounded-xl bg-blue-950/40 hover:bg-blue-900/50 text-blue-300 text-[11px] font-bold border border-blue-900/50 flex items-center justify-center gap-1 transition-all" title="1-Click Facebook Marketplace">
-              <i data-lucide="facebook" class="w-3 h-3 text-blue-400"></i>
-              <span>FB</span>
+            <button onclick='openFBModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/40 text-indigo-200 text-xs font-semibold flex items-center justify-center gap-1 transition">
+              <i class="fa-brands fa-facebook text-blue-400"></i>
+              <span>FB Ad</span>
             </button>
-            <button onclick="openTikTokModal('${car.vin}')" class="py-2 px-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 text-[11px] font-bold border border-rose-900/50 flex items-center justify-center gap-1 transition-all" title="TikTok Script & Storyboard">
-              <i data-lucide="video" class="w-3 h-3 text-rose-400"></i>
-              <span>Reel</span>
+            <button onclick='openTikTokModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition">
+              <i class="fa-brands fa-tiktok text-rose-400"></i>
+              <span>Video</span>
             </button>
           </div>
-        `;
-        grid.appendChild(card);
-      });
-
-      lucide.createIcons();
-    }
-
-    function updateSummaryMetrics(items) {
-      document.getElementById('nav-count-badge').innerText = items.length;
-      document.getElementById('stat-instock-count').innerText = items.length;
-
-      const priced = items.filter(i => i.price);
-      const avg = priced.length > 0 ? Math.round(priced.reduce((a, b) => a + b.price, 0) / priced.length) : 0;
-      document.getElementById('stat-avg-frontline').innerText = avg > 0 ? `$${avg.toLocaleString()}` : '$0';
-
-      const uniqueLots = new Set(items.map(i => i.lotName));
-      document.getElementById('stat-lot-count').innerText = uniqueLots.size;
-    }
-
-    // --- MODAL A: QUICK-SHARE (SMS & WHATSAPP) ---
-    function openQuickShareModal(vin) {
-      const car = globalVehicles.find(v => v.vin === vin);
-      if (!car) return;
-      activeModalCar = car;
-
-      const previewDiv = document.getElementById('share-vehicle-preview');
-      previewDiv.innerHTML = `
-        <img src="${car.image}" class="w-14 h-14 rounded-lg object-cover">
-        <div>
-          <span class="text-xs font-bold text-white block">${car.year} ${car.make} ${car.model} ${car.trim || ''}</span>
-          <span class="text-xs text-emerald-400 font-mono font-bold">$${car.price.toLocaleString()}</span>
-          <span class="text-[10px] text-slate-400 block">${car.lotName}</span>
         </div>
-      `;
-
-      refreshShareMessage();
-      openModal('modal-quick-share');
+      `).join('');
     }
 
-    function refreshShareMessage() {
-      if (!activeModalCar) return;
-      const rep = document.getElementById('share-rep-name').value.trim() || 'Your Sales Consultant';
-      const phone = document.getElementById('share-rep-phone').value.trim() || '';
-      const down = parseInt(document.getElementById('calc-down-payment').value) || 0;
-      const term = parseInt(document.getElementById('calc-loan-term').value) || 72;
+    function openShareModal(car) {
+      document.getElementById("modalTitle").innerText = "Customer Quick-Share";
+      document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model} | $${(car.price || 0).toLocaleString()}`;
+      const msg = `Hey! Check out this ${car.year} ${car.make} ${car.model} we just got in: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to come take it for a drive!`;
 
-      const financed = Math.max(0, (activeModalCar.price * 1.07) - down);
-      const estPayment = Math.round((financed / term) * 1.18);
-
-      const msg = `Hi! This is ${rep} from ${activeModalCar.lotName}. Here are the details on the ${activeModalCar.year} ${activeModalCar.make} ${activeModalCar.model} you inquired about:
-
-• Price: $${activeModalCar.price.toLocaleString()}
-• Mileage: ${activeModalCar.mileage ? activeModalCar.mileage.toLocaleString() + ' miles' : 'New'}
-• Est. Payment: ~$${estPayment}/mo (with $${down.toLocaleString()} down)
-• Location: ${activeModalCar.lotName}
-• VIN: ${activeModalCar.vin}
-
-When are you free today or tomorrow to come take it for a quick spin? You can text or call me directly at ${phone}.`;
-
-      document.getElementById('share-message-body').value = msg;
-    }
-
-    function launchWhatsApp() {
-      const text = encodeURIComponent(document.getElementById('share-message-body').value);
-      window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
-    }
-
-    // --- MODAL B: FACEBOOK MARKETPLACE 1-CLICK LISTING ---
-    function openFBModal(vin) {
-      const car = globalVehicles.find(v => v.vin === vin);
-      if (!car) return;
-      activeModalCar = car;
-
-      document.getElementById('fb-field-title').innerText = `${car.year} ${car.make} ${car.model} ${car.trim || ''}`;
-      document.getElementById('fb-field-price').innerText = `$${car.price.toLocaleString()}`;
-      document.getElementById('fb-field-miles').innerText = car.mileage ? car.mileage.toLocaleString() : '10';
-      document.getElementById('fb-field-location').innerText = car.lotName;
-
-      renderFBCopy();
-      openModal('modal-fb-marketplace');
-    }
-
-    function setFBTone(tone) {
-      fbTone = tone;
-      ['pro', 'deal', 'enthusiast'].forEach(t => {
-        const btn = document.getElementById(`fb-tone-${t}`);
-        if (t === tone) {
-          btn.classList.add('bg-brand-600', 'text-white');
-          btn.classList.remove('text-slate-400');
-        } else {
-          btn.classList.remove('bg-brand-600', 'text-white');
-          btn.classList.add('text-slate-400');
-        }
-      });
-      renderFBCopy();
-    }
-
-    function renderFBCopy() {
-      if (!activeModalCar) return;
-      const c = activeModalCar;
-      let body = '';
-
-      if (fbTone === 'pro') {
-        body = `FOR SALE: ${c.year} ${c.make} ${c.model} ${c.trim || ''}
-Stock / Lot: ${c.lotName}
-
-Clean title, freshly detailed, and passed our comprehensive multi-point dealership safety inspection.
-
-VEHICLE HIGHLIGHTS:
-• Odometer: ${c.mileage ? c.mileage.toLocaleString() + ' miles' : 'Brand New'}
-• Transmission: ${c.transmission}
-• Drivetrain: ${c.drivetrain}
-• Engine: ${c.engine}
-• Exterior Color: ${c.color}
-• Asking Price: $${c.price.toLocaleString()}
-
-We offer easy financing for all credit tiers, take trade-ins, and can hold with a deposit. Send a message to schedule an on-lot test drive today!`;
-      } else if (fbTone === 'deal') {
-        body = `🔥 BLOWOUT INVENTORY PRICE: ${c.year} ${c.make} ${c.model}! 🔥
-
-Priced well below market for quick front-line turnover! 
-
-• Cash / Financing Price: $${c.price.toLocaleString()}
-• Mileage: ${c.mileage ? c.mileage.toLocaleString() : 'Low delivery miles'}
-• Condition: Runs and drives like new. Fully inspected!
-• Location: ${c.lotName}
-
-Payments as low as ~$${Math.round((c.price * 1.07 - 1000) / 60)}/mo with approved credit!
-First come, first served. Shoot me a message before this leaves the lot!`;
-      } else {
-        body = `Check out this clean ${c.year} ${c.make} ${c.model} ${c.trim || ''}!
-
-Finished in ${c.color} with ${c.drivetrain} and the ${c.engine}. Super clean inside and out, ready for its next owner.
-
-• Miles: ${c.mileage ? c.mileage.toLocaleString() : 'New'}
-• Transmission: ${c.transmission}
-• Drive: ${c.drivetrain}
-• Price: $${c.price.toLocaleString()}
-
-Available to view and test drive immediately at ${c.lotName}. Message me directly for the full CARFAX!`;
-      }
-
-      document.getElementById('fb-field-body').value = body;
-    }
-
-    // --- MODAL C: TIKTOK / REELS VIDEO SCRIPT BUILDER ---
-    function openTikTokModal(vin) {
-      const car = globalVehicles.find(v => v.vin === vin);
-      if (!car) return;
-      activeModalCar = car;
-
-      const container = document.getElementById('tiktok-storyboard-container');
-      container.innerHTML = `
-        <!-- Scene 1 -->
-        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-          <div class="flex justify-between items-center text-[10px] text-slate-500 font-mono">
-            <span>[0:00 - 0:03] THE HOOK</span>
-            <span class="text-rose-400">Fast Zoom on Front Grille</span>
+      document.getElementById("modalBody").innerHTML = `
+        <div class="space-y-3">
+          <label class="text-xs font-bold text-gray-400 uppercase">Pre-Formatted Message</label>
+          <textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${msg}</textarea>
+          <div class="flex gap-2">
+            <button onclick="navigator.clipboard.writeText(document.getElementById('shareText').value); alert('Copied to clipboard!')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold">Copy Text</button>
+            <a href="sms:?&body=${encodeURIComponent(msg)}" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>
           </div>
-          <p class="text-xs text-white font-semibold">"Stop scrolling if you need a reliable SUV under $10k with clean title!"</p>
-          <span class="text-[10px] text-slate-400 block italic">Visual: Fast pan from emblem to headlight with energetic beat.</span>
-        </div>
-
-        <!-- Scene 2 -->
-        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-          <div class="flex justify-between items-center text-[10px] text-slate-500 font-mono">
-            <span>[0:03 - 0:08] SPECS & COCKPIT</span>
-            <span class="text-rose-400">Door Open to Dashboard</span>
-          </div>
-          <p class="text-xs text-white font-semibold">"This is a ${car.year} ${car.make} ${car.model} with ${car.drivetrain} and just inspected at ${car.lotName}."</p>
-          <span class="text-[10px] text-slate-400 block italic">Visual: Quick shot of pristine seats, steering wheel, and infotainment.</span>
-        </div>
-
-        <!-- Scene 3 -->
-        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-          <div class="flex justify-between items-center text-[10px] text-slate-500 font-mono">
-            <span>[0:08 - 0:15] PRICE & CALL TO ACTION</span>
-            <span class="text-rose-400">Window Sticker & Sales Rep</span>
-          </div>
-          <p class="text-xs text-white font-semibold">"Out the door for only $${car.price.toLocaleString()}! Drop a comment or message me directly to claim it today!"</p>
-          <span class="text-[10px] text-slate-400 block italic">Visual: Rep waves next to driver door, text badge popups with payment.</span>
         </div>
       `;
+      document.getElementById("actionModal").classList.remove("hidden");
+    }
 
-      // Text Overlays for Editing
-      const pills = document.getElementById('tiktok-badge-pills');
-      pills.innerHTML = `
-        <span class="px-2.5 py-1 rounded-md bg-slate-800 text-[11px] font-mono text-emerald-400 border border-slate-700">💲 ONLY $${car.price.toLocaleString()}</span>
-        <span class="px-2.5 py-1 rounded-md bg-slate-800 text-[11px] font-mono text-cyan-400 border border-slate-700">📍 ${car.lotName}</span>
-        <span class="px-2.5 py-1 rounded-md bg-slate-800 text-[11px] font-mono text-amber-400 border border-slate-700">⚡ ${car.mileage ? car.mileage.toLocaleString() + ' Miles' : 'Brand New'}</span>
-        <span class="px-2.5 py-1 rounded-md bg-slate-800 text-[11px] font-mono text-rose-400 border border-slate-700">🔥 CARFAX CERTIFIED</span>
+    function openFBModal(car) {
+      document.getElementById("modalTitle").innerText = "Facebook Marketplace Listing Copy";
+      document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
+      const fbCopy = `🔥 ${car.year} ${car.make} ${car.model} ${car.trim || ''} 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nStatus: Clean Title, Inspected & Front-Line Ready\n\n✅ Fully inspected by certified tech\n✅ Financing available for all credit types\n✅ Trades welcome!\n\nMessage me directly for appointments or questions!`;
+
+      document.getElementById("modalBody").innerHTML = `
+        <div class="space-y-3">
+          <textarea id="fbText" class="w-full h-40 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${fbCopy}</textarea>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('fbText').value); alert('Marketplace copy copied!')" class="w-full py-2 rounded-lg bg-blue-600 text-white text-xs font-bold">Copy Marketplace Text</button>
+        </div>
       `;
-
-      openModal('modal-tiktok-studio');
+      document.getElementById("actionModal").classList.remove("hidden");
     }
 
-    function playTTSVoiceover() {
-      if (!activeModalCar) return;
-      const script = `Stop scrolling! Looking for an affordable ride? Check out this ${activeModalCar.year} ${activeModalCar.make} ${activeModalCar.model} at ${activeModalCar.lotName}. Clean title, fully inspected, and listed for just ${activeModalCar.price} dollars! Send a message right now before it sells!`;
+    function openTikTokModal(car) {
+      document.getElementById("modalTitle").innerText = "TikTok / Reel 15-Second Script";
+      document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
+      const script = `(Hook - 0-3s): Stop scrolling if you're looking for an affordable ride under $${Math.round(((car.price || 15000) * 1.1) / 1000)}k.\n(Body - 3-10s): This fresh trade is a ${car.year} ${car.make} ${car.model} with only ${(car.mileage || 0).toLocaleString()} miles.\n(CTA - 10-15s): Clean title, front-line ready. Comment or message me before it's gone!`;
 
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(script);
-        utter.rate = 1.15;
-        utter.pitch = 1.0;
-        window.speechSynthesis.speak(utter);
-        showToast('Playing synthesized rep voiceover audio...', 'info');
-      } else {
-        showToast('Speech synthesis not supported in this browser.', 'error');
-      }
-    }
-
-    function copyTikTokScriptText() {
-      if (!activeModalCar) return;
-      const text = `HOOK: "Stop scrolling if you need a reliable car under $10k!"\n\nSPECS: "This is a ${activeModalCar.year} ${activeModalCar.make} ${activeModalCar.model} with ${activeModalCar.drivetrain} here at ${activeModalCar.lotName}."\n\nCALL TO ACTION: "Priced to move at only $${activeModalCar.price.toLocaleString()}! Comment below or message me directly to schedule your test drive today!"`;
-      copyRawText(text, 'TikTok / Reels Script');
-    }
-
-    // --- MODAL UTILITIES ---
-    function openModal(id) {
-      document.getElementById(id).classList.remove('hidden');
-      lucide.createIcons();
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.add('hidden');
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    }
-
-    function openSettingsModal() {
-      openModal('modal-settings');
-    }
-
-    function pingSupabaseHealth() {
-      showToast('Ping OK: Supabase REST API connected (HTTP 200)', 'success');
-    }
-
-    function saveSettings() {
-      showToast('Database configuration saved successfully!', 'success');
-    }
-
-    function simulateUpgrade(tier) {
-      showToast(`Selected SaaS Plan: ${tier}. Redirecting to Stripe checkout...`, 'success');
-    }
-
-    // --- CLIPBOARD & NOTIFICATIONS ---
-    function copyToClipboard(elementId, label) {
-      const el = document.getElementById(elementId);
-      if (!el) return;
-      el.select();
-      document.execCommand('copy');
-      showToast(`Copied ${label} to clipboard!`, 'success');
-    }
-
-    function copyRawText(text, label) {
-      const temp = document.createElement('textarea');
-      temp.value = text;
-      document.body.appendChild(temp);
-      temp.select();
-      document.execCommand('copy');
-      document.body.removeChild(temp);
-      showToast(`Copied ${label} to clipboard!`, 'success');
-    }
-
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      
-      let border = 'border-slate-800';
-      let icon = 'info';
-      if (type === 'success') { border = 'border-emerald-500/40 text-emerald-300'; icon = 'check-circle'; }
-      if (type === 'error') { border = 'border-rose-500/40 text-rose-300'; icon = 'alert-triangle'; }
-      if (type === 'info') { border = 'border-brand-500/40 text-brand-300'; icon = 'info'; }
-
-      toast.className = `glass-panel-elevated pointer-events-auto p-3.5 rounded-xl border ${border} text-xs font-semibold shadow-2xl flex items-center gap-2.5 transform transition-all duration-300 translate-y-3 opacity-0`;
-      toast.innerHTML = `
-        <i data-lucide="${icon}" class="w-4 h-4 shrink-0"></i>
-        <span>${message}</span>
+      document.getElementById("modalBody").innerHTML = `
+        <div class="space-y-3">
+          <textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${script}</textarea>
+          <p class="text-xs text-gray-400">💡 Record vertical 9:16 footage walking around the vehicle while speaking this script.</p>
+        </div>
       `;
-      container.appendChild(toast);
-      lucide.createIcons();
-
-      setTimeout(() => {
-        toast.classList.remove('translate-y-3', 'opacity-0');
-      }, 10);
-
-      setTimeout(() => {
-        toast.classList.add('opacity-0', 'translate-y-2');
-        setTimeout(() => toast.remove(), 300);
-      }, 3500);
+      document.getElementById("actionModal").classList.remove("hidden");
     }
+
+    function closeModal() {
+      document.getElementById("actionModal").classList.add("hidden");
+    }
+
+    document.addEventListener("DOMContentLoaded", fetchLiveInventoryFromSupabase);
   </script>
 </body>
 </html>
