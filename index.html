@@ -42,7 +42,7 @@
           <span id="syncText">Connected</span>
         </div>
 
-        <button onclick="fetchLiveInventory(true)" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
+        <button onclick="fetchLiveInventory(true)" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
           <i class="fa-solid fa-arrows-rotate"></i>
           <span>Refresh</span>
         </button>
@@ -108,7 +108,7 @@
     </div>
   </main>
 
-  <!-- Change Dealership / Store URL / Page Modifier Modal -->
+  <!-- Dealership & Scraper Config Modal -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
@@ -126,19 +126,25 @@
         </div>
 
         <div>
-          <label class="text-xs font-bold text-gray-400 uppercase">Base Inventory Web Address (URL)</label>
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-gray-400 uppercase">Base Inventory Web Address (URL)</label>
+            <button type="button" onclick="openHelpModal()" class="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+              <i class="fa-regular fa-circle-question"></i>
+              <span>How does this work?</span>
+            </button>
+          </div>
           <input type="text" id="dealershipUsedUrlInput" placeholder="https://www.mosescars.com/search-all-used-inventory.html" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
-          <p class="text-[11px] text-gray-500 mt-1">The clean URL without any page numbers.</p>
+          <p class="text-[11px] text-gray-500 mt-1">The clean used inventory URL before clicking to page 2.</p>
         </div>
 
         <div>
           <div class="flex items-center justify-between">
             <label class="text-xs font-bold text-gray-400 uppercase">Page Modifier Pattern</label>
-            <span class="text-[11px] text-indigo-400 font-mono">Use {page} as placeholder</span>
+            <span class="text-[11px] text-indigo-400 font-mono">Use {page} as wildcard</span>
           </div>
           <input type="text" id="dealershipModifierInput" placeholder="?pt={page}" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm font-mono text-indigo-300 focus:outline-none focus:border-indigo-500">
           
-          <!-- Common Modifier Quick-Picks -->
+          <!-- Common Quick-Picks -->
           <div class="flex flex-wrap gap-1.5 mt-2">
             <button type="button" onclick="setModifier('?pt={page}')" class="text-[11px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-mono border border-gray-700">?pt={page}</button>
             <button type="button" onclick="setModifier('?page={page}')" class="text-[11px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-mono border border-gray-700">?page={page}</button>
@@ -148,7 +154,7 @@
           </div>
         </div>
 
-        <!-- Generated Ready-to-Run Colab Crawler Block -->
+        <!-- Generated Crawler Target Snippet -->
         <div class="p-3 bg-gray-950/80 rounded-xl border border-gray-800 space-y-1.5">
           <div class="flex items-center justify-between text-xs font-semibold text-gray-400">
             <span>Crawler Target Snippet</span>
@@ -165,6 +171,91 @@
             Close
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parameter Help / Tutorial Modal -->
+  <div id="helpModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-2xl rounded-2xl border border-gray-800 p-6 space-y-5 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-sm border border-indigo-500/30">?</div>
+          <h3 class="text-lg font-bold text-white">How to Find Dealership Parameters</h3>
+        </div>
+        <button onclick="closeModal('helpModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="space-y-4 text-xs text-gray-300 leading-relaxed">
+        
+        <!-- Step 1: Base URL -->
+        <div class="p-3.5 bg-gray-950/60 rounded-xl border border-gray-800/80 space-y-2">
+          <div class="flex items-center gap-2 text-white font-bold text-sm">
+            <span class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]">1</span>
+            <span>Finding the Base Inventory URL</span>
+          </div>
+          <p>Go to your dealership's website and click on <strong>Used Vehicles</strong> or <strong>All Inventory</strong>. Look at your browser's address bar. Copy the clean address before any question mark.</p>
+          <div class="p-2 bg-gray-900 rounded font-mono text-[11px] text-emerald-400 break-all">
+            https://www.yourdealer.com/search-all-used-inventory.html
+          </div>
+        </div>
+
+        <!-- Step 2: Page Modifier Pattern -->
+        <div class="p-3.5 bg-gray-950/60 rounded-xl border border-gray-800/80 space-y-2">
+          <div class="flex items-center gap-2 text-white font-bold text-sm">
+            <span class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]">2</span>
+            <span>Finding the Page Modifier Pattern</span>
+          </div>
+          <p>On that inventory page, scroll down and click <strong>Page 2</strong> (or Next). Notice how the address changes at the end:</p>
+          
+          <div class="space-y-1.5 pl-2 border-l-2 border-indigo-500">
+            <div>
+              <span class="text-gray-400">If address becomes: </span>
+              <span class="font-mono text-gray-200">...inventory.html<span class="text-indigo-400 font-bold">?pt=2</span></span>
+              <span class="text-emerald-400 block font-semibold mt-0.5">➔ Enter pattern: <code class="bg-gray-900 px-1.5 py-0.5 rounded text-indigo-300 font-bold">?pt={page}</code></span>
+            </div>
+            <div class="pt-1">
+              <span class="text-gray-400">If address becomes: </span>
+              <span class="font-mono text-gray-200">...used-cars.htm<span class="text-indigo-400 font-bold">?page=2</span></span>
+              <span class="text-emerald-400 block font-semibold mt-0.5">➔ Enter pattern: <code class="bg-gray-900 px-1.5 py-0.5 rounded text-indigo-300 font-bold">?page={page}</code></span>
+            </div>
+            <div class="pt-1">
+              <span class="text-gray-400">If address becomes: </span>
+              <span class="font-mono text-gray-200">...used-inventory<span class="text-indigo-400 font-bold">/page/2/</span></span>
+              <span class="text-emerald-400 block font-semibold mt-0.5">➔ Enter pattern: <code class="bg-gray-900 px-1.5 py-0.5 rounded text-indigo-300 font-bold">/page/{page}/</code></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Quick Platform Reference -->
+        <div class="p-3.5 bg-gray-950/60 rounded-xl border border-gray-800/80 space-y-2">
+          <div class="text-white font-bold text-sm">Common Dealership Website Platforms</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            <div class="p-2 bg-gray-900 rounded border border-gray-800">
+              <div class="font-bold text-indigo-300">CDK Global / Dealer.com</div>
+              <div class="text-gray-400 font-mono">?page={page} or ?pt={page}</div>
+            </div>
+            <div class="p-2 bg-gray-900 rounded border border-gray-800">
+              <div class="font-bold text-indigo-300">DealerInspire</div>
+              <div class="text-gray-400 font-mono">/page/{page}/</div>
+            </div>
+            <div class="p-2 bg-gray-900 rounded border border-gray-800">
+              <div class="font-bold text-indigo-300">DealerOn</div>
+              <div class="text-gray-400 font-mono">?pageNumber={page} or ?pg={page}</div>
+            </div>
+            <div class="p-2 bg-gray-900 rounded border border-gray-800">
+              <div class="font-bold text-indigo-300">AutoTrader / Cobalt</div>
+              <div class="text-gray-400 font-mono">?p={page}</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="pt-2">
+        <button onclick="closeModal('helpModal')" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition">
+          Got It, Back to Config
+        </button>
       </div>
     </div>
   </div>
@@ -187,7 +278,6 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
-    // Defaults with custom modifier template support
     const DEFAULT_STORE = {
       name: "Moses Automotive Group",
       usedUrl: "https://www.mosescars.com/search-all-used-inventory.html",
@@ -234,6 +324,10 @@
     function openDealershipModal() {
       updateStoreUI();
       document.getElementById("dealershipModal").classList.remove("hidden");
+    }
+
+    function openHelpModal() {
+      document.getElementById("helpModal").classList.remove("hidden");
     }
 
     function saveDealershipProfile() {
