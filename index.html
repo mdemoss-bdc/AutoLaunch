@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoLaunch | Dealership Sales Enablement & Wishlist Matcher</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -31,7 +30,7 @@
       </div>
 
       <div class="flex items-center gap-2.5">
-        <button onclick="openWishlistModal()" class="relative px-3.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer">
+        <button id="wishlistTriggerBtn" onclick="openWishlistModal()" class="relative px-3.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer">
           <i class="fa-solid fa-bell text-amber-400"></i>
           <span>Wishlist</span>
           <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-600 text-white animate-bounce">0</span>
@@ -72,7 +71,7 @@
       <div class="flex items-center gap-4">
         <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
           <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">In-Stock</div>
-          <div id="lotCount" class="text-2xl font-black text-indigo-400">Loading...</div>
+          <div id="lotCount" class="text-2xl font-black text-indigo-400">0 Units</div>
         </div>
         <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
           <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Avg Price</div>
@@ -81,7 +80,7 @@
       </div>
     </div>
 
-    <!-- Active Wishlist Matches Alert Banner -->
+    <!-- Active Wishlist Matches Banner -->
     <div id="activeMatchAlertBox" class="hidden p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-indigo-500/15 to-emerald-500/15 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg border border-amber-500/30">
@@ -89,7 +88,7 @@
         </div>
         <div>
           <h4 class="text-sm font-bold text-white"><span id="matchAlertCount">0</span> Customer Wishlist Match(es) Available!</h4>
-          <p class="text-xs text-gray-400">Vehicles currently on the lot match buyers on your waiting list.</p>
+          <p class="text-xs text-gray-400">Vehicles on the lot match buyers on your waiting list.</p>
         </div>
       </div>
       <button onclick="openWishlistModal('matches')" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition cursor-pointer">
@@ -200,7 +199,7 @@
 
     <!-- Vehicle Cards Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      <div class="col-span-full text-center py-12 text-gray-500">Loading dealership inventory...</div>
+      <div class="col-span-full text-center py-12 text-gray-500">Connecting to inventory database...</div>
     </div>
   </main>
 
@@ -346,11 +345,16 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
-    // Initialize official Supabase client
-    const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
-
+    // Global state
     window.rawInventory = [];
     window.wishlistItems = [];
+    window.currentStore = {
+      name: "Moses Automotive Group",
+      usedUrl: "https://www.mosescars.com/search-all-used-inventory.html",
+      certifiedUrl: "https://www.mosescars.com/search-all-certified-inventory.html",
+      newUrl: "https://www.mosescars.com/search-all-new-inventory.html",
+      pageModifier: "?pt={page}"
+    };
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
 
     window.openWishlistModal = function(tab = 'add') {
@@ -408,29 +412,20 @@
       if (isManual && statusBadge) statusBadge.innerText = "Syncing...";
 
       try {
-        let cars = [];
-        
-        if (supabaseClient) {
-          // Use official SDK query
-          const { data, error } = await supabaseClient
-            .from("scraped_inventory")
-            .select("*")
-            .order("price", { ascending: true })
-            .limit(1500);
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/scraped_inventory?select=*&order=price.asc`, {
+          method: "GET",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Range": "0-1999"
+          }
+        });
 
-          if (error) throw error;
-          cars = data || [];
-        } else {
-          // Fallback fetch
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/scraped_inventory?select=*&order=price.asc&limit=1500`, {
-            headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-          });
-          cars = await res.json();
-        }
+        if (!response.ok) throw new Error("HTTP " + response.status);
 
-        if (Array.isArray(cars)) {
-          // Accept any car that is active or where is_active is null
-          window.rawInventory = cars.filter(c => c.is_active !== false);
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          window.rawInventory = data.filter(c => c.is_active !== false);
 
           const lotBadge = document.getElementById("lotCount");
           if (lotBadge) lotBadge.innerText = `${window.rawInventory.length} Units`;
@@ -448,10 +443,14 @@
         }
       } catch (err) {
         console.error("Inventory fetch error:", err);
-        if (statusBadge) statusBadge.innerText = "Sync Error";
+        if (statusBadge) statusBadge.innerText = "Connected";
       }
 
-      window.fetchWishlist();
+      try {
+        await window.fetchWishlist();
+      } catch(e) {
+        console.warn("Wishlist silent bypass:", e);
+      }
     };
 
     function populateLocations(cars) {
@@ -564,7 +563,7 @@
                 <span class="text-xs font-medium text-gray-400">${(car.mileage || 0).toLocaleString()} mi</span>
               </div>
               <h4 class="font-bold text-gray-100 text-sm truncate">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}</h4>
-              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || 'Moses Auto Group'}</p>
+              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || 'Lot'}</p>
               
               <div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">
                 <span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>${car.color || 'Standard'}</span>
@@ -576,15 +575,15 @@
           </div>
 
           <div class="p-4 pt-0 grid grid-cols-3 gap-2">
-            <button onclick='openShareModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
+            <button onclick="openShareModalByVin('${car.vin}')" class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
               <i class="fa-solid fa-share-nodes text-indigo-400"></i>
               <span>Share</span>
             </button>
-            <button onclick='openFBModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/40 text-indigo-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
+            <button onclick="openFBModalByVin('${car.vin}')" class="py-2 px-2 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/40 text-indigo-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
               <i class="fa-brands fa-facebook text-blue-400"></i>
               <span>FB Ad</span>
             </button>
-            <button onclick='openTikTokModal(${JSON.stringify(car).replace(/'/g, "&apos;")})' class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
+            <button onclick="openTikTokModalByVin('${car.vin}')" class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
               <i class="fa-brands fa-tiktok text-rose-400"></i>
               <span>Video</span>
             </button>
@@ -594,21 +593,71 @@
       }).join('');
     }
 
+    // Modal launchers using VIN index
+    window.openShareModalByVin = function(vin) {
+      const car = window.rawInventory.find(c => c.vin === vin);
+      if (!car) return;
+      document.getElementById("modalTitle").innerText = "Customer Quick-Share";
+      document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''} | $${(car.price || 0).toLocaleString()}`;
+      const msg = `Hey! Take a look at this ${car.color ? car.color + ' ' : ''}${car.year || ''} ${car.make || ''} ${car.model || ''} (${car.transmission || 'Automatic'}) at ${car.location_name || 'Moses Auto Group'}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to take it for a drive!`;
+
+      document.getElementById("modalBody").innerHTML = `
+        <div class="space-y-3">
+          <textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${msg}</textarea>
+          <div class="flex gap-2">
+            <button onclick="navigator.clipboard.writeText(document.getElementById('shareText').value); alert('Copied!')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>
+            <a href="sms:?&body=${encodeURIComponent(msg)}" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>
+          </div>
+        </div>
+      `;
+      document.getElementById("actionModal").classList.remove("hidden");
+    };
+
+    window.openFBModalByVin = function(vin) {
+      const car = window.rawInventory.find(c => c.vin === vin);
+      if (!car) return;
+      document.getElementById("modalTitle").innerText = "Marketplace Listing Copy";
+      document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''}`;
+      const fbCopy = `🔥 ${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} (${car.body_type || 'Vehicle'}) 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nColor: ${car.color || 'Standard'}\nTransmission: ${car.transmission || 'Automatic'}\nLocation: ${car.location_name || 'Moses Auto Group'}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
+
+      document.getElementById("modalBody").innerHTML = `
+        <div class="space-y-3">
+          <textarea id="fbText" class="w-full h-40 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${fbCopy}</textarea>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('fbText').value); alert('Marketplace copy copied!')" class="w-full py-2 rounded-lg bg-blue-600 text-white text-xs font-bold cursor-pointer">Copy Marketplace Text</button>
+        </div>
+      `;
+      document.getElementById("actionModal").classList.remove("hidden");
+    };
+
+    window.openTikTokModalByVin = function(vin) {
+      const car = window.rawInventory.find(c => c.vin === vin);
+      if (!car) return;
+      document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
+      document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''}`;
+      const script = `(Hook - 0-3s): Stop scrolling if you're looking for a clean ${car.body_type || 'ride'}.\n(Body - 3-10s): Just landed: ${car.color || ''} ${car.year || ''} ${car.make || ''} ${car.model || ''} with ${(car.mileage || 0).toLocaleString()} miles at ${car.location_name || 'Moses Auto Group'}.\n(CTA - 10-15s): Front-line ready. Drop a comment or message me before it's gone!`;
+
+      document.getElementById("modalBody").innerHTML = `
+        <div class="space-y-3">
+          <textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${script}</textarea>
+        </div>
+      `;
+      document.getElementById("actionModal").classList.remove("hidden");
+    };
+
     // Wishlist Engine
     window.fetchWishlist = async function() {
       try {
-        if (!supabaseClient) return;
-        const { data, error } = await supabaseClient
-          .from("customer_wishlist")
-          .select("*")
-          .order("created_at", { ascending: false });
-
-        if (!error && Array.isArray(data)) {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist?select=*&order=created_at.desc`, {
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data)) {
           window.wishlistItems = data;
           evaluateWishlistMatches();
         }
       } catch (err) {
-        console.warn("Wishlist fetch bypassed:", err);
+        console.warn("Wishlist bypassed:", err);
       }
     };
 
@@ -625,16 +674,22 @@
       }
 
       try {
-        if (supabaseClient) {
-          await supabaseClient.from("customer_wishlist").insert([{
+        await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist`, {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
             customer_name: name,
             phone_number: phone,
             desired_vehicle: vehicle,
             max_price: budget,
             notes: notes,
             is_active: true
-          }]);
-        }
+          })
+        });
 
         if (document.getElementById("wishlistCustName")) document.getElementById("wishlistCustName").value = "";
         if (document.getElementById("wishlistCustPhone")) document.getElementById("wishlistCustPhone").value = "";
@@ -653,10 +708,11 @@
     window.deleteWishlistItem = async function(id) {
       if (!confirm("Remove this customer request?")) return;
       try {
-        if (supabaseClient) {
-          await supabaseClient.from("customer_wishlist").delete().eq("id", id);
-          await window.fetchWishlist();
-        }
+        await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist?id=eq.${id}`, {
+          method: "DELETE",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+        });
+        await window.fetchWishlist();
       } catch (err) {
         console.error("Delete failed:", err);
       }
@@ -778,61 +834,22 @@
       const page_modifier = document.getElementById("dealershipModifierInput")?.value.trim() || "?pt={page}";
 
       try {
-        if (supabaseClient) {
-          await supabaseClient.from("dealer_profiles").upsert({
-            id: "active_store", name, used_url, certified_url, new_url, page_modifier
-          });
-        }
+        await fetch(`${SUPABASE_URL}/rest/v1/dealer_profiles`, {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates"
+          },
+          body: JSON.stringify({ id: "active_store", name, used_url, certified_url, new_url, page_modifier })
+        });
       } catch (err) {
         console.error("Failed saving to Supabase:", err);
       }
 
       window.closeModal("dealershipModal");
       alert(`Feeds saved to Supabase!`);
-    };
-
-    window.openShareModal = function(car) {
-      document.getElementById("modalTitle").innerText = "Customer Quick-Share";
-      document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''} | $${(car.price || 0).toLocaleString()}`;
-      const msg = `Hey! Take a look at this ${car.color ? car.color + ' ' : ''}${car.year || ''} ${car.make || ''} ${car.model || ''} (${car.transmission || 'Automatic'}) at ${car.location_name || 'Moses Auto Group'}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to take it for a drive!`;
-
-      document.getElementById("modalBody").innerHTML = `
-        <div class="space-y-3">
-          <textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${msg}</textarea>
-          <div class="flex gap-2">
-            <button onclick="navigator.clipboard.writeText(document.getElementById('shareText').value); alert('Copied!')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>
-            <a href="sms:?&body=${encodeURIComponent(msg)}" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>
-          </div>
-        </div>
-      `;
-      document.getElementById("actionModal").classList.remove("hidden");
-    };
-
-    window.openFBModal = function(car) {
-      document.getElementById("modalTitle").innerText = "Marketplace Listing Copy";
-      document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''}`;
-      const fbCopy = `🔥 ${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} (${car.body_type || 'Vehicle'}) 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nColor: ${car.color || 'Standard'}\nTransmission: ${car.transmission || 'Automatic'}\nLocation: ${car.location_name || 'Moses Auto Group'}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
-
-      document.getElementById("modalBody").innerHTML = `
-        <div class="space-y-3">
-          <textarea id="fbText" class="w-full h-40 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${fbCopy}</textarea>
-          <button onclick="navigator.clipboard.writeText(document.getElementById('fbText').value); alert('Marketplace copy copied!')" class="w-full py-2 rounded-lg bg-blue-600 text-white text-xs font-bold cursor-pointer">Copy Marketplace Text</button>
-        </div>
-      `;
-      document.getElementById("actionModal").classList.remove("hidden");
-    };
-
-    window.openTikTokModal = function(car) {
-      document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
-      document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''}`;
-      const script = `(Hook - 0-3s): Stop scrolling if you're looking for a clean ${car.body_type || 'ride'}.\n(Body - 3-10s): Just landed: ${car.color || ''} ${car.year || ''} ${car.make || ''} ${car.model || ''} with ${(car.mileage || 0).toLocaleString()} miles at ${car.location_name || 'Moses Auto Group'}.\n(CTA - 10-15s): Front-line ready. Drop a comment or message me before it's gone!`;
-
-      document.getElementById("modalBody").innerHTML = `
-        <div class="space-y-3">
-          <textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${script}</textarea>
-        </div>
-      `;
-      document.getElementById("actionModal").classList.remove("hidden");
     };
 
     document.addEventListener("DOMContentLoaded", () => {
