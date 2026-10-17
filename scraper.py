@@ -6,12 +6,8 @@ from typing import List
 from playwright.async_api import async_playwright
 from supabase import create_client
 
-SUPABASE_URL = os.environ.get(
-    "SUPABASE_URL", "https://tdsipiltwajwhzgjsupx.supabase.co"
-)
-SUPABASE_KEY = os.environ.get(
-    "SUPABASE_KEY", "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w"
-)
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://tdsipiltwajwhzgjsupx.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w")
 DEALERSHIP_ID = os.environ.get("DEALERSHIP_ID", "moses")
 
 db = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -20,46 +16,27 @@ MAX_PAGES_PER_FEED = 500
 PAGE_MODIFIER = "?pt={page}"
 
 FEEDS_TO_CRAWL = [
-    {
-        "url": "https://www.mosescars.com/search-all-used-inventory.html",
-        "condition": "Used",
-    },
-    {
-        "url": (
-            "https://www.mosescars.com/search-all-certified-inventory.html"
-        ),
-        "condition": "Certified Pre-Owned",
-    },
-    {
-        "url": "https://www.mosescars.com/search-all-new-inventory.html",
-        "condition": "New",
-    },
+    {"url": "https://www.mosescars.com/search-all-used-inventory.html", "condition": "Used"},
+    {"url": "https://www.mosescars.com/search-all-certified-inventory.html", "condition": "Certified Pre-Owned"},
+    {"url": "https://www.mosescars.com/search-all-new-inventory.html", "condition": "New"}
 ]
 
-
 def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
-  if page_num == 1:
-    return base_url
-  mod = modifier_pattern.replace("{page}", str(page_num))
-  if mod.startswith("?") and "?" in base_url:
-    mod = "&" + mod[1:]
-  if base_url.endswith("/") and mod.startswith("/"):
-    return f"{base_url[:-1]}{mod}"
-  return f"{base_url}{mod}"
+    if page_num == 1:
+        return base_url
+    mod = modifier_pattern.replace("{page}", str(page_num))
+    if mod.startswith("?") and "?" in base_url:
+        mod = "&" + mod[1:]
+    if base_url.endswith("/") and mod.startswith("/"):
+        return f"{base_url[:-1]}{mod}"
+    return f"{base_url}{mod}"
 
+async def extract_cards_from_page(page, default_condition: str = "Used") -> List[dict]:
+    for fraction in [0.25, 0.5, 0.75, 1.0]:
+        await page.evaluate(f"window.scrollTo(0, document.body.scrollHeight * {fraction})")
+        await asyncio.sleep(1.0)
 
-async def extract_cards_from_page(
-    page, default_condition: str = "Used"
-) -> List[dict]:
-  # Scroll progressively to force Dealer.com lazy loaders to resolve image URLs
-  for fraction in [0.25, 0.5, 0.75, 1.0]:
-    await page.evaluate(
-        f"window.scrollTo(0, document.body.scrollHeight * {fraction})"
-    )
-    await asyncio.sleep(1.0)
-
-  vehicles = await page.evaluate(
-      """(defaultCond) => {
+    vehicles = await page.evaluate("""(defaultCond) => {
         const results = [];
         const cards = document.querySelectorAll('.vehicle-card, .inventory-item, .vehicle-overview, .vehicle-item, [data-vin], .listing-card, .inventory-list-item, div[class*="vehicle"]');
 
@@ -71,10 +48,23 @@ async def extract_cards_from_page(
 
             // 1. Direct Webpage Listing Link
             let listingUrl = null;
-            const linkTag = card.querySelector('a[href*="/vehicle-details/"], a[href*="/used/"], a[href*="/new/"], a[href*="/certified/"], a[href*=".htm"]');
-            if (linkTag && linkTag.href) listingUrl = linkTag.href;
+            const links = Array.from(card.querySelectorAll('a[href]'));
+            for (const a of links) {
+                const href = a.href || '';
+                if (href.includes('/vehicle-details/') || href.includes('/used/') || href.includes('/new/') || href.includes('/certified/') || href.includes('.htm') || href.includes(vin)) {
+                    if (!href.includes('javascript') && !href.includes('#')) {
+                        listingUrl = href;
+                        break;
+                    }
+                }
+            }
 
-            // 2. Rooftop Location
+            // Fallback direct Dealer.com vehicle URL by VIN
+            if (!listingUrl) {
+                listingUrl = `https://www.mosescars.com/vehicle-details/${vin}.html`;
+            }
+
+            // 2. Location
             let exactLocation = "";
             const locEl = card.querySelector('[class*="location"], [class*="dealership"], i[class*="marker"] ~ span, svg ~ span');
             if (locEl && locEl.innerText.trim().length > 3) exactLocation = locEl.innerText.trim();
@@ -89,50 +79,28 @@ async def extract_cards_from_page(
             }
             if (!exactLocation) exactLocation = "Moses Auto Group";
 
-            // 3. Robust Photo Extraction for Dealer.com
+            // 3. Photo Extraction
             let photoUrl = null;
-            
-            // Check direct image attributes
             const imgs = Array.from(card.querySelectorAll('img, picture source'));
             for (const img of imgs) {
-                let candidate = img.getAttribute('data-original') ||
-                                img.getAttribute('data-src') ||
-                                img.getAttribute('data-lazy-src') ||
-                                img.getAttribute('srcset') ||
+                let candidate = img.getAttribute('data-original') || 
+                                img.getAttribute('data-src') || 
+                                img.getAttribute('data-lazy-src') || 
+                                img.getAttribute('srcset') || 
                                 img.getAttribute('src');
 
                 if (candidate) {
                     if (candidate.includes(',')) candidate = candidate.split(',')[0].trim().split(' ')[0];
                     if (candidate.startsWith('//')) candidate = 'https:' + candidate;
-
                     const lower = candidate.toLowerCase();
-                    const isJunk = lower.includes('logo') || lower.includes('banner') || lower.includes('badge') ||
-                                   lower.includes('1x1') || lower.includes('pixel') || lower.includes('placeholder') ||
+                    const isJunk = lower.includes('logo') || lower.includes('banner') || lower.includes('badge') || 
+                                   lower.includes('1x1') || lower.includes('pixel') || lower.includes('placeholder') || 
                                    lower.includes('spinner') || lower.endsWith('.svg');
-
                     if (candidate.startsWith('http') && !isJunk) {
                         photoUrl = candidate;
                         break;
                     }
                 }
-            }
-
-            // Fallback: check background-image inline CSS
-            if (!photoUrl) {
-                const bgElements = Array.from(card.querySelectorAll('[style*="background"]'));
-                for (const el of bgElements) {
-                    const style = el.getAttribute('style') || '';
-                    const match = style.match(/url\\(['"]?(http[^'"]+)['"]?\\)/i);
-                    if (match && !match[1].toLowerCase().includes('logo')) {
-                        photoUrl = match[1];
-                        break;
-                    }
-                }
-            }
-
-            // Fallback: Check standard Dealer.com CDN pattern using VIN
-            if (!photoUrl) {
-                photoUrl = `https://images.dealer.com/autodata/us/640/color/2026/${vin}.jpg`;
             }
 
             // 4. Year, Make, Model, Trim
@@ -167,6 +135,7 @@ async def extract_cards_from_page(
             const mileMatch = text.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})\\s*(?:miles|mi\\b)/i);
             const mileage = mileMatch ? parseInt(mileMatch[1].replace(/,/g, '')) : (defaultCond === "New" ? 5 : null);
 
+            // 6. Color
             let color = "Standard";
             const colorRegex = /\\b(Black|White|Silver|Gray|Grey|Red|Blue|Navy|Brown|Green|Gold|Beige|Tan|Burgundy|Orange|Yellow|Charcoal)\\b/i;
             const extMatch = text.match(colorRegex);
@@ -175,6 +144,7 @@ async def extract_cards_from_page(
                 if (color === "Grey") color = "Gray";
             }
 
+            // 7. Body Type
             let bodyType = "Other";
             if (/SUV|Crossover|Sport Utility/i.test(text)) bodyType = "SUV";
             else if (/Truck|Crew Cab|Pickup/i.test(text)) bodyType = "Truck";
@@ -201,92 +171,69 @@ async def extract_cards_from_page(
             });
         });
         return results;
-    }""",
-      default_condition,
-  )
+    }""", default_condition)
 
-  for v in vehicles:
-    v["dealership_id"] = DEALERSHIP_ID
-  return vehicles
-
+    for v in vehicles:
+        v["dealership_id"] = DEALERSHIP_ID
+    return vehicles
 
 def push_batch_to_supabase(records: List[dict]) -> int:
-  if not records:
-    return 0
-  unique_by_vin = {r["vin"]: r for r in records if r.get("vin")}
-  try:
-    res = (
-        db.table("scraped_inventory")
-        .upsert(list(unique_by_vin.values()), on_conflict="vin")
-        .execute()
-    )
-    return len(res.data) if res.data else 0
-  except Exception as e:
-    print(f"[!] Supabase batch upsert warning: {e}")
-    return 0
-
+    if not records:
+        return 0
+    unique_by_vin = {r["vin"]: r for r in records if r.get("vin")}
+    try:
+        res = db.table("scraped_inventory").upsert(list(unique_by_vin.values()), on_conflict="vin").execute()
+        return len(res.data) if res.data else 0
+    except Exception as e:
+        print(f"[!] Supabase batch upsert warning: {e}")
+        return 0
 
 async def run_scraper():
-  total_synced = 0
-  async with async_playwright() as p:
-    browser = await p.chromium.launch(
-        headless=True,
-        args=[
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-        ],
-    )
-    context = await browser.new_context(
-        user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            " (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-        ),
-        viewport={"width": 1920, "height": 1080},
-    )
-    page = await context.new_page()
-
-    for feed in FEEDS_TO_CRAWL:
-      base_url = feed["url"]
-      condition = feed["condition"]
-      print(f"\n[*] Starting Feed: {condition} ({base_url})")
-      seen_vins = set()
-
-      for pt in range(1, MAX_PAGES_PER_FEED + 1):
-        url = build_page_url(base_url, PAGE_MODIFIER, pt)
-        print(f"[*] Crawling {condition} page {pt}...")
-        try:
-          await page.goto(url, wait_until="commit", timeout=30000)
-        except Exception as e:
-          print(f"[!] Page navigation warning: {e}")
-
-        await asyncio.sleep(2)
-        cars = await extract_cards_from_page(page, default_condition=condition)
-        if not cars:
-          print(f"[-] No more cars found for {condition} at page {pt}.")
-          break
-
-        vins = {c["vin"] for c in cars if c.get("vin")}
-        if vins.issubset(seen_vins):
-          print(f"[-] Seen duplicate cars. Finished {condition}.")
-          break
-        seen_vins.update(vins)
-
-        saved = push_batch_to_supabase(cars)
-        total_synced += saved
-        photos_found = sum(
-            1 for c in cars if c["image_url"] and not c["image_url"].endswith(".svg")
+    total_synced = 0
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
         )
-        print(
-            f"[+] Page {pt}: Saved {saved} units ({photos_found}/{len(cars)}"
-            f" real photos). Running total: {total_synced}"
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         )
-        await asyncio.sleep(1)
+        page = await context.new_page()
 
-    await browser.close()
+        for feed in FEEDS_TO_CRAWL:
+            base_url = feed["url"]
+            condition = feed["condition"]
+            print(f"\n[*] Starting Feed: {condition} ({base_url})")
+            seen_vins = set()
 
-  print(f"\n[✓] Scraper finished cleanly. Total synced: {total_synced}")
+            for pt in range(1, MAX_PAGES_PER_FEED + 1):
+                url = build_page_url(base_url, PAGE_MODIFIER, pt)
+                print(f"[*] Crawling {condition} page {pt}...")
+                try:
+                    await page.goto(url, wait_until="commit", timeout=30000)
+                except Exception as e:
+                    print(f"[!] Page navigation warning: {e}")
 
+                await asyncio.sleep(2)
+                cars = await extract_cards_from_page(page, default_condition=condition)
+                if not cars:
+                    print(f"[-] No more cars found for {condition} at page {pt}.")
+                    break
+
+                vins = {c["vin"] for c in cars if c.get("vin")}
+                if vins.issubset(seen_vins):
+                    print(f"[-] Duplicate page reached. Finished {condition}.")
+                    break
+                seen_vins.update(vins)
+
+                saved = push_batch_to_supabase(cars)
+                total_synced += saved
+                valid_links = sum(1 for c in cars if c.get("listing_url"))
+                print(f"[+] Page {pt}: Saved {saved} units ({valid_links}/{len(cars)} direct URLs). Running total: {total_synced}")
+                await asyncio.sleep(1)
+
+        await browser.close()
+    print(f"\n[✓] Scraper finished cleanly. Total synced: {total_synced}")
 
 if __name__ == "__main__":
-  asyncio.run(run_scraper())
+    asyncio.run(run_scraper())
