@@ -206,13 +206,13 @@
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
   </main>
 
-  <!-- Complete Dealership Settings Modal with Pagination Modifier -->
+  <!-- Complete Dealership Settings Modal -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
         <div>
           <h3 class="text-lg font-bold text-white">Dealership Setup & Target URLs</h3>
-          <p class="text-xs text-gray-400">Configure your store name, pagination pattern, and live target URLs.</p>
+          <p class="text-xs text-gray-400">Configure store name, pagination pattern, and live target URLs.</p>
         </div>
         <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
@@ -236,17 +236,17 @@
 
         <div class="border-t border-gray-800 pt-3">
           <label class="text-xs font-bold text-indigo-400 uppercase block mb-1">Used Inventory URL</label>
-          <input type="text" id="dealershipUsedUrlInput" placeholder="https://www.mosescars.com/search-all-used-inventory.html" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <input type="text" id="dealershipUsedUrlInput" placeholder="https://..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
         <div>
           <label class="text-xs font-bold text-emerald-400 uppercase block mb-1">New Inventory URL</label>
-          <input type="text" id="dealershipNewUrlInput" placeholder="https://www.mosescars.com/search-all-new-inventory.html" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <input type="text" id="dealershipNewUrlInput" placeholder="https://..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
         <div>
           <label class="text-xs font-bold text-cyan-400 uppercase block mb-1">Certified Pre-Owned URL</label>
-          <input type="text" id="dealershipCpoUrlInput" placeholder="https://www.mosescars.com/search-all-certified-inventory.html" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <input type="text" id="dealershipCpoUrlInput" placeholder="https://..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
         <div class="pt-2 flex gap-2">
@@ -295,14 +295,14 @@
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
 
     function updateStoreUI() {
-      document.getElementById("headerStoreName").innerText = currentStore.name || DEFAULT_STORE.name;
-      document.getElementById("bannerStoreTitle").innerText = currentStore.name || DEFAULT_STORE.name;
+      document.getElementById("headerStoreName").innerText = currentStore.name || "Dealership Inventory";
+      document.getElementById("bannerStoreTitle").innerText = currentStore.name || "Dealership Inventory";
       document.getElementById("dealershipSlugInput").value = ACTIVE_DEALER_ID;
-      document.getElementById("dealershipNameInput").value = currentStore.name || DEFAULT_STORE.name;
-      document.getElementById("dealershipPageModifierInput").value = currentStore.pageModifier || DEFAULT_STORE.pageModifier;
-      document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl || DEFAULT_STORE.usedUrl;
-      document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || DEFAULT_STORE.newUrl;
-      document.getElementById("dealershipCpoUrlInput").value = currentStore.cpoUrl || DEFAULT_STORE.cpoUrl;
+      document.getElementById("dealershipNameInput").value = currentStore.name || "";
+      document.getElementById("dealershipPageModifierInput").value = currentStore.pageModifier !== undefined ? currentStore.pageModifier : "";
+      document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl !== undefined ? currentStore.usedUrl : "";
+      document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl !== undefined ? currentStore.newUrl : "";
+      document.getElementById("dealershipCpoUrlInput").value = currentStore.cpoUrl !== undefined ? currentStore.cpoUrl : "";
     }
 
     function openDealershipModal() {
@@ -316,17 +316,18 @@
     }
 
     function saveDealershipProfile() {
+      // Retain the exact user inputs, allowing empty strings to stay empty
       const name = document.getElementById("dealershipNameInput").value.trim() || DEFAULT_STORE.name;
-      const pageModifier = document.getElementById("dealershipPageModifierInput").value.trim() || DEFAULT_STORE.pageModifier;
-      const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim() || DEFAULT_STORE.usedUrl;
-      const newUrl = document.getElementById("dealershipNewUrlInput").value.trim() || DEFAULT_STORE.newUrl;
-      const cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim() || DEFAULT_STORE.cpoUrl;
+      const pageModifier = document.getElementById("dealershipPageModifierInput").value.trim();
+      const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim();
+      const newUrl = document.getElementById("dealershipNewUrlInput").value.trim();
+      const cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim();
 
       currentStore = { name, pageModifier, usedUrl, newUrl, cpoUrl };
       localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
       updateStoreUI();
       closeModal("dealershipModal");
-      alert("Saved! Settings updated for " + name);
+      alert("Settings saved for " + name);
     }
 
     async function triggerLiveLotCrawl() {
