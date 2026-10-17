@@ -5,6 +5,8 @@ on:
     # Runs automatically every 2 hours
     - cron: '0 */2 * * *'
   workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-scrape]
 
 permissions:
   contents: read
