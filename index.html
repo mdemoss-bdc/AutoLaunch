@@ -52,6 +52,7 @@
   <!-- Main View -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
     
+    <!-- Dealership Metrics Banner -->
     <div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div>
         <div class="flex items-center gap-3 mb-1">
@@ -74,7 +75,8 @@
     </div>
 
     <!-- Filters & Search Toolbar -->
-    <div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-4">
+    <div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-3">
+      <!-- Top Row -->
       <div class="flex flex-col md:flex-row gap-3">
         <div class="flex-1 relative">
           <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
@@ -96,6 +98,80 @@
             <option value="miles_asc">Mileage: Lowest First</option>
             <option value="year_desc">Year: Newest First</option>
           </select>
+          <button onclick="toggleAdvancedFilters()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-sliders"></i>
+            <span>Specs</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Expandable Advanced Specs Toolbar -->
+      <div id="advancedFilterPanel" class="pt-3 border-t border-gray-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <div>
+          <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Body Type</label>
+          <select id="bodyFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+            <option value="ALL">All Bodies</option>
+            <option value="SUV">SUV / Crossover</option>
+            <option value="Truck">Truck</option>
+            <option value="Sedan">Sedan</option>
+            <option value="Coupe">Coupe</option>
+            <option value="Van">Van / Minivan</option>
+            <option value="Hatchback">Hatchback</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Exterior Color</label>
+          <select id="colorFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+            <option value="ALL">All Colors</option>
+            <option value="Black">Black</option>
+            <option value="White">White</option>
+            <option value="Silver">Silver</option>
+            <option value="Gray">Gray</option>
+            <option value="Red">Red</option>
+            <option value="Blue">Blue</option>
+            <option value="Green">Green</option>
+            <option value="Brown">Brown</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Transmission</label>
+          <select id="transFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+            <option value="ALL">All Transmissions</option>
+            <option value="Automatic">Automatic Only</option>
+            <option value="Manual">Manual / Standard</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Min Year</label>
+          <select id="minYearFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+            <option value="ALL">Any Year</option>
+            <option value="2025">2025+</option>
+            <option value="2023">2023+</option>
+            <option value="2021">2021+</option>
+            <option value="2018">2018+</option>
+            <option value="2015">2015+</option>
+            <option value="2010">2010+</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Max Mileage</label>
+          <select id="maxMilesFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+            <option value="ALL">Any Mileage</option>
+            <option value="30000">Under 30,000 mi</option>
+            <option value="60000">Under 60,000 mi</option>
+            <option value="100000">Under 100,000 mi</option>
+            <option value="150000">Under 150,000 mi</option>
+          </select>
+        </div>
+
+        <div class="flex items-end">
+          <button onclick="resetFilters()" class="w-full py-1.5 rounded-md bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white border border-gray-800 text-xs font-semibold transition">
+            Reset Filters
+          </button>
         </div>
       </div>
     </div>
@@ -244,7 +320,7 @@
 
       updateStoreUI();
       closeModal("dealershipModal");
-      alert(`Feeds saved to cloud! Colab will now pull Used, Certified, and New inventory for ${name}.`);
+      alert(`Feeds saved! Run the Colab crawler to update specifications.`);
     }
 
     async function fetchLiveInventory(isManual = false) {
@@ -297,9 +373,14 @@
       const locationFilter = document.getElementById("locationFilter").value;
       const cond = document.getElementById("conditionFilter").value;
       const sort = document.getElementById("sortSelect").value;
+      const bodyFilter = document.getElementById("bodyFilter").value;
+      const colorFilter = document.getElementById("colorFilter").value;
+      const transFilter = document.getElementById("transFilter").value;
+      const minYear = document.getElementById("minYearFilter").value;
+      const maxMiles = document.getElementById("maxMilesFilter").value;
 
       let filtered = rawInventory.filter(car => {
-        const title = `${car.year} ${car.make} ${car.model} ${car.trim || ''} ${car.vin || ''} ${car.location_name || ''}`.toLowerCase();
+        const title = `${car.year} ${car.make} ${car.model} ${car.vin || ''} ${car.location_name || ''} ${car.color || ''} ${car.body_type || ''} ${car.transmission || ''}`.toLowerCase();
         const matchesQuery = title.includes(query);
         const matchesLocation = locationFilter === "ALL" || (car.location_name || '') === locationFilter;
         
@@ -309,7 +390,13 @@
         else if (cond === "Certified Pre-Owned" && car.condition === "Certified Pre-Owned") matchesCond = true;
         else if (cond === "New" && car.condition === "New") matchesCond = true;
 
-        return matchesQuery && matchesLocation && matchesCond;
+        const matchesBody = bodyFilter === "ALL" || car.body_type === bodyFilter;
+        const matchesColor = colorFilter === "ALL" || (car.color || '').toLowerCase().includes(colorFilter.toLowerCase());
+        const matchesTrans = transFilter === "ALL" || (car.transmission || 'Automatic').includes(transFilter);
+        const matchesYear = minYear === "ALL" || (car.year >= parseInt(minYear));
+        const matchesMiles = maxMiles === "ALL" || ((car.mileage || 0) <= parseInt(maxMiles));
+
+        return matchesQuery && matchesLocation && matchesCond && matchesBody && matchesColor && matchesTrans && matchesYear && matchesMiles;
       });
 
       filtered.sort((a, b) => {
@@ -323,6 +410,20 @@
       });
 
       renderGrid(filtered);
+    }
+
+    function resetFilters() {
+      document.getElementById("bodyFilter").value = "ALL";
+      document.getElementById("colorFilter").value = "ALL";
+      document.getElementById("transFilter").value = "ALL";
+      document.getElementById("minYearFilter").value = "ALL";
+      document.getElementById("maxMilesFilter").value = "ALL";
+      applyFilters();
+    }
+
+    function toggleAdvancedFilters() {
+      const panel = document.getElementById("advancedFilterPanel");
+      panel.classList.toggle("hidden");
     }
 
     function renderGrid(cars) {
@@ -346,9 +447,9 @@
           <div>
             <div class="h-44 w-full bg-gray-900 relative overflow-hidden flex items-center justify-center">
               <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" alt="Vehicle Photo" class="object-cover w-full h-full opacity-90 hover:opacity-100 transition duration-300">
-              <div class="absolute top-3 left-3 flex gap-1.5">
+              <div class="absolute top-3 left-3 flex gap-1.5 flex-wrap">
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}">${car.condition || 'Used'}</span>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">${car.status || 'Available'}</span>
+                ${car.body_type && car.body_type !== 'Other' ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${car.body_type}</span>` : ''}
               </div>
               <div class="absolute bottom-2 right-2 text-xs font-semibold px-2 py-1 rounded-md bg-black/75 text-white">
                 ${displayPayment}
@@ -362,6 +463,13 @@
               </div>
               <h4 class="font-bold text-gray-100 text-sm truncate">${car.year} ${car.make} ${car.model}</h4>
               <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || currentStore.name}</p>
+              
+              <!-- Specs Row -->
+              <div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">
+                <span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>${car.color || 'Standard'}</span>
+                <span>•</span>
+                <span><i class="fa-solid fa-gears text-gray-500 mr-1"></i>${car.transmission || 'Automatic'}</span>
+              </div>
               <p class="text-[11px] font-mono text-gray-500">VIN: ${car.vin || 'N/A'}</p>
             </div>
           </div>
@@ -388,7 +496,7 @@
     function openShareModal(car) {
       document.getElementById("modalTitle").innerText = "Customer Quick-Share";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model} | $${(car.price || 0).toLocaleString()}`;
-      const msg = `Hey! Take a look at this ${car.condition || ''} ${car.year} ${car.make} ${car.model} at ${car.location_name || currentStore.name}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to come take it for a drive!`;
+      const msg = `Hey! Take a look at this ${car.color ? car.color + ' ' : ''}${car.year} ${car.make} ${car.model} (${car.transmission || 'Automatic'}) at ${car.location_name || currentStore.name}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to come take it for a drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -405,7 +513,7 @@
     function openFBModal(car) {
       document.getElementById("modalTitle").innerText = "Marketplace Listing Copy";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
-      const fbCopy = `🔥 ${car.condition || 'Available'} ${car.year} ${car.make} ${car.model} 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nLocation: ${car.location_name || currentStore.name}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
+      const fbCopy = `🔥 ${car.year} ${car.make} ${car.model} (${car.body_type || 'Vehicle'}) 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nColor: ${car.color || 'Standard'}\nTransmission: ${car.transmission || 'Automatic'}\nLocation: ${car.location_name || currentStore.name}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -419,12 +527,11 @@
     function openTikTokModal(car) {
       document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
-      const script = `(Hook - 0-3s): Stop scrolling if you need a reliable vehicle right now.\n(Body - 3-10s): Fresh arrival: ${car.year} ${car.make} ${car.model} at ${car.location_name || currentStore.name} with ${(car.mileage || 0).toLocaleString()} miles.\n(CTA - 10-15s): Fully inspected and front-line ready. Comment or message me before it's gone!`;
+      const script = `(Hook - 0-3s): Stop scrolling if you're looking for a clean ${car.body_type || 'ride'}.\n(Body - 3-10s): Just landed: ${car.color || ''} ${car.year} ${car.make} ${car.model} with ${(car.mileage || 0).toLocaleString()} miles at ${car.location_name || currentStore.name}.\n(CTA - 10-15s): Front-line ready. Drop a comment or message me before it's gone!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
           <textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${script}</textarea>
-          <p class="text-xs text-gray-400">💡 Record vertical 9:16 video while walking around the exterior and interior.</p>
         </div>
       `;
       document.getElementById("actionModal").classList.remove("hidden");
