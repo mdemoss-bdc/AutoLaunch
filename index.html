@@ -598,8 +598,8 @@
       const car = window.rawInventory.find(c => c.vin === vin);
       if (!car) return;
       document.getElementById("modalTitle").innerText = "Customer Quick-Share";
-      document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''} | $${(car.price || 0).toLocaleString()}`;
-      const msg = `Hey! Take a look at this ${car.color ? car.color + ' ' : ''}${car.year || ''} ${car.make || ''} ${car.model || ''} (${car.transmission || 'Automatic'}) at ${car.location_name || 'Moses Auto Group'}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to take it for a drive!`;
+      document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " | $" + (car.price ? car.price.toLocaleString() : 'Call');
+      const msg = "Hey! Take a look at this " + (car.color ? car.color + ' ' : '') + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " at " + (car.location_name || 'Moses Auto Group') + ": $" + (car.price ? car.price.toLocaleString() : 'Call') + " with " + ((car.mileage || 0).toLocaleString()) + " miles. VIN: " + car.vin + ". Let me know if you want to take it for a drive!";
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -759,25 +759,28 @@
               </div>
 
               <div class="space-y-2 pt-2 border-t border-gray-800">
-                ${matchingCars.slice(0, 3).map(car => `
-                  <div class="flex items-center justify-between p-2.5 rounded-lg bg-gray-950 border border-gray-800 text-xs">
-                    <div class="flex items-center gap-3">
-                      <img src="${car.image_url || FALLBACK_IMAGE}" class="w-12 h-10 object-cover rounded-md">
-                      <div>
-                        <div class="font-bold text-white">${car.year || ''} ${car.make \vert{}\vert{} ''}${car.model || 'Vehicle'}</div>
-                        <div class="text-[11px] text-gray-400">${car.price ? `$${car.price.toLocaleString()}` : 'Call for Price'} • ${(car.mileage \vert{}\vert{} 0).toLocaleString()} mi • ${car.location_name || 'Lot'}</div>
+                ${matchingCars.slice(0, 3).map(car => {
+                  const smsBody = "Hi " + req.customer_name + "! A " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " is available at " + (car.location_name || 'the lot') + " priced at $" + (car.price ? car.price.toLocaleString() : 'Call') + " with " + ((car.mileage || 0).toLocaleString()) + " miles. Let me know if you want to take a look!";
+                  return `
+                    <div class="flex items-center justify-between p-2.5 rounded-lg bg-gray-950 border border-gray-800 text-xs">
+                      <div class="flex items-center gap-3">
+                        <img src="${car.image_url || FALLBACK_IMAGE}" class="w-12 h-10 object-cover rounded-md">
+                        <div>
+                          <div class="font-bold text-white">${car.year || ''} ${car.make \vert{}\vert{} ''}${car.model || 'Vehicle'}</div>
+                          <div class="text-[11px] text-gray-400">${car.price ? `$${car.price.toLocaleString()}` : 'Call for Price'} • ${(car.mileage \vert{}\vert{} 0).toLocaleString()} mi • ${car.location_name || 'Lot'}</div>
+                        </div>
+                      </div>
+                      <div class="flex gap-1.5">
+                        <a href="sms:${req.phone_number}?&body=${encodeURIComponent(smsBody)}" class="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1">
+                          <i class="fa-solid fa-message"></i> Text
+                        </a>
+                        <a href="tel:${req.phone_number}" class="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold text-[11px] flex items-center gap-1">
+                          <i class="fa-solid fa-phone"></i> Call
+                        </a>
                       </div>
                     </div>
-                    <div class="flex gap-1.5">
-                      <a href="sms:${req.phone_number}?&body=${encodeURIComponent(`Hi ${req.customer_name}! A ${car.year} ${car.make} ${car.model} is available at ${car.location_name || 'the lot'} priced at $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. Let me know if you want to take a look!`)}" class="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1">
-                        <i class="fa-solid fa-message"></i> Text
-                      </a>
-                      <a href="tel:${req.phone_number}" class="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold text-[11px] flex items-center gap-1">
-                        <i class="fa-solid fa-phone"></i> Call
-                      </a>
-                    </div>
-                  </div>
-                `).join('')}
+                  `;
+                }).join('')}
               </div>
             </div>
           `;
