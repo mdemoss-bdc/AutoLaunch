@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoLaunch | Dealership Sales Enablement</title>
+  <title>AutoLaunch | Dealership Sales Enablement & Wishlist Matcher</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
@@ -25,15 +25,23 @@
         </div>
         <div>
           <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-gray-200 to-indigo-300 bg-clip-text text-transparent">AutoLaunch</span>
-          <span class="text-xs text-gray-400 block font-medium">Inventory & Marketing Suite</span>
+          <span class="text-xs text-gray-400 block font-medium">Inventory & Wishlist Engine</span>
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
-        <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm">
+      <!-- Action Nav Buttons -->
+      <div class="flex items-center gap-2.5">
+        <!-- Wishlist Button with Match Alert Badge -->
+        <button onclick="openWishlistModal()" class="relative px-3.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 text-xs font-semibold flex items-center gap-2 transition">
+          <i class="fa-solid fa-bell text-amber-400"></i>
+          <span>Wishlist</span>
+          <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-600 text-white animate-bounce">0</span>
+        </button>
+
+        <button onclick="openDealershipModal()" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700">
           <i class="fa-solid fa-building text-indigo-400"></i>
           <span id="headerStoreName">Moses Automotive Group</span>
-          <i class="fa-solid fa-gear text-[11px] text-gray-400"></i>
+          <i class="fa-solid fa-gear text-[10px] text-gray-400"></i>
         </button>
 
         <div id="liveStatusBadge" class="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
@@ -59,7 +67,7 @@
           <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
           <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Rooftops...</span>
         </div>
-        <p id="bannerStoreSubtitle" class="text-sm text-gray-400">Live multi-feed inventory sync across Used, Certified Pre-Owned, and New lots.</p>
+        <p id="bannerStoreSubtitle" class="text-sm text-gray-400">Live multi-feed inventory sync with automated customer wishlist matching.</p>
       </div>
 
       <div class="flex items-center gap-4">
@@ -74,9 +82,24 @@
       </div>
     </div>
 
+    <!-- Active Wishlist Matches Banner (Appears when matches occur) -->
+    <div id="activeMatchAlertBox" class="hidden p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-indigo-500/15 to-emerald-500/15 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg border border-amber-500/30">
+          <i class="fa-solid fa-fire"></i>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-white"><span id="matchAlertCount">0</span> Customer Wishlist Match(es) Available Right Now!</h4>
+          <p class="text-xs text-gray-400">Vehicles currently on the lot match what your waiting buyers requested.</p>
+        </div>
+      </div>
+      <button onclick="openWishlistModal('matches')" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition">
+        View Matched Customers
+      </button>
+    </div>
+
     <!-- Filters & Search Toolbar -->
     <div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-3">
-      <!-- Top Row -->
       <div class="flex flex-col md:flex-row gap-3">
         <div class="flex-1 relative">
           <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
@@ -105,7 +128,7 @@
         </div>
       </div>
 
-      <!-- Expandable Advanced Specs Toolbar -->
+      <!-- Expandable Specs Toolbar -->
       <div id="advancedFilterPanel" class="pt-3 border-t border-gray-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         <div>
           <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Body Type</label>
@@ -180,6 +203,86 @@
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
   </main>
 
+  <!-- Customer Wishlist & Notification Manager Modal -->
+  <div id="wishlistModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-2xl rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <div>
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-heart text-rose-500"></i>
+            <span>Customer Vehicle Wishlist & Matcher</span>
+          </h3>
+          <p class="text-xs text-gray-400">Save buyers waiting for cars. The system alerts you immediately when matching inventory arrives.</p>
+        </div>
+        <button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <!-- Tab Switcher -->
+      <div class="flex border-b border-gray-800 text-xs font-semibold">
+        <button id="tabAddWishlistBtn" onclick="switchWishlistTab('add')" class="py-2 px-4 border-b-2 border-indigo-500 text-white">Add New Request</button>
+        <button id="tabMatchesBtn" onclick="switchWishlistTab('matches')" class="py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white flex items-center gap-1.5">
+          <span>Active Matches</span>
+          <span id="tabMatchBadgeCount" class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">0</span>
+        </button>
+        <button id="tabAllWishlistBtn" onclick="switchWishlistTab('list')" class="py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white">All Waiting Buyers</button>
+      </div>
+
+      <!-- Tab 1: Add Request -->
+      <div id="tabAddWishlist" class="space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-bold text-gray-400 uppercase">Customer Full Name</label>
+            <input type="text" id="wishlistCustName" placeholder="e.g. John Smith" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-400 uppercase">Phone Number</label>
+            <input type="tel" id="wishlistCustPhone" placeholder="(304) 555-0199" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-bold text-gray-400 uppercase">Looking For (Make / Model / Keyword)</label>
+            <input type="text" id="wishlistCustVehicle" placeholder="e.g. Toyota RAV4, Ford F-150, Civic" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-400 uppercase">Max Budget ($)</label>
+            <input type="number" id="wishlistCustBudget" placeholder="e.g. 25000" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-bold text-gray-400 uppercase">Notes (Trim, Color, Timeline, etc.)</label>
+          <textarea id="wishlistCustNotes" placeholder="Prefers AWD, under 80k miles, ready to buy this week." class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 h-20"></textarea>
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button onclick="saveWishlistEntry()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30">
+            Save Customer Request & Enable Live Monitoring
+          </button>
+          <button onclick="requestBrowserNotificationPermission()" class="px-3.5 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs flex items-center gap-1.5 transition" title="Enable browser alerts for new lot arrivals">
+            <i class="fa-solid fa-bell"></i>
+            <span>Enable Push Alerts</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Live Matches -->
+      <div id="tabMatches" class="hidden space-y-3">
+        <div id="matchedCustomersContainer" class="space-y-3">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Tab 3: All Customer Requests -->
+      <div id="tabAllWishlist" class="hidden space-y-3">
+        <div id="allWishlistContainer" class="space-y-2">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Dealership & Multi-Feed Configuration Modal -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[92vh] overflow-y-auto">
@@ -229,7 +332,7 @@
     </div>
   </div>
 
-  <!-- Action Modal -->
+  <!-- Sales Action Modal -->
   <div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-5">
       <div class="flex items-center justify-between border-b border-gray-800 pb-4">
@@ -256,8 +359,248 @@
     };
 
     let rawInventory = [];
+    let wishlistItems = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
 
+    // 1. Browser Push Notifications
+    function requestBrowserNotificationPermission() {
+      if (!("Notification" in window)) {
+        alert("Desktop push notifications are not supported in this browser.");
+        return;
+      }
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          alert("✓ Browser alerts enabled! You will now receive desktop notifications whenever a customer wishlist car arrives in stock.");
+        }
+      });
+    }
+
+    function fireDesktopNotification(title, body) {
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, {
+          body: body,
+          icon: "https://cdn-icons-png.flaticon.com/512/3202/3202926.png"
+        });
+      }
+    }
+
+    // 2. Wishlist Management (Supabase)
+    async function fetchWishlist() {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist?select=*&is_active=eq.true&order=created_at.desc`, {
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          wishlistItems = data;
+          evaluateWishlistMatches();
+        }
+      } catch (err) {
+        console.error("Failed fetching wishlist:", err);
+      }
+    }
+
+    async function saveWishlistEntry() {
+      const name = document.getElementById("wishlistCustName").value.trim();
+      const phone = document.getElementById("wishlistCustPhone").value.trim();
+      const vehicle = document.getElementById("wishlistCustVehicle").value.trim();
+      const budget = parseFloat(document.getElementById("wishlistCustBudget").value) || null;
+      const notes = document.getElementById("wishlistCustNotes").value.trim();
+
+      if (!name || !phone || !vehicle) {
+        alert("Please enter at least the customer name, phone number, and requested vehicle.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist`, {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            customer_name: name,
+            phone_number: phone,
+            desired_vehicle: vehicle,
+            max_price: budget,
+            notes: notes,
+            is_active: true
+          })
+        });
+
+        document.getElementById("wishlistCustName").value = "";
+        document.getElementById("wishlistCustPhone").value = "";
+        document.getElementById("wishlistCustVehicle").value = "";
+        document.getElementById("wishlistCustBudget").value = "";
+        document.getElementById("wishlistCustNotes").value = "";
+
+        await fetchWishlist();
+        switchWishlistTab('matches');
+        alert(`✓ Wishlist request saved for ${name}! Live matching is active.`);
+      } catch (e) {
+        alert("Error saving wishlist request: " + e.message);
+      }
+    }
+
+    async function deleteWishlistItem(id) {
+      if (!confirm("Are you sure you want to remove this customer request?")) return;
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist?id=eq.${id}`, {
+          method: "DELETE",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+        });
+        await fetchWishlist();
+      } catch (err) {
+        console.error("Delete failed:", err);
+      }
+    }
+
+    // 3. Automated Match Evaluation Engine
+    function evaluateWishlistMatches() {
+      if (!wishlistItems.length || !rawInventory.length) {
+        document.getElementById("wishlistMatchBadge").classList.add("hidden");
+        document.getElementById("activeMatchAlertBox").classList.add("hidden");
+        return;
+      }
+
+      let totalMatchedPairs = 0;
+      let matchCardsHtml = "";
+
+      wishlistItems.forEach(req => {
+        const queryTerms = req.desired_vehicle.toLowerCase().split(/\s+/).filter(Boolean);
+        
+        // Find all cars matching the buyer's query and budget cap
+        const matchingCars = rawInventory.filter(car => {
+          const carString = `${car.year} ${car.make} ${car.model} ${car.trim || ''} ${car.color || ''} ${car.body_type || ''}`.toLowerCase();
+          const matchesQuery = queryTerms.every(term => carString.includes(term));
+          const matchesBudget = !req.max_price || !car.price || car.price <= req.max_price;
+          return matchesQuery && matchesBudget;
+        });
+
+        if (matchingCars.length > 0) {
+          totalMatchedPairs += matchingCars.length;
+
+          matchCardsHtml += `
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-3">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-white text-base">${req.customer_name}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">${matchingCars.length} Match(es)</span>
+                  </div>
+                  <div class="text-xs text-gray-400 mt-0.5">
+                    <i class="fa-solid fa-phone mr-1 text-gray-500"></i>${req.phone_number} • Looking for: <strong class="text-indigo-300">${req.desired_vehicle}</strong> ${req.max_price ? `(Under $${req.max_price.toLocaleString()})` : ''}
+                  </div>
+                  ${req.notes ? `<p class="text-xs text-gray-400 italic mt-1">"${req.notes}"</p>` : ''}
+                </div>
+                <button onclick="deleteWishlistItem('${req.id}')" class="text-gray-500 hover:text-rose-400 text-xs p-1"><i class="fa-solid fa-trash"></i></button>
+              </div>
+
+              <!-- Matched Vehicle Carousel/List -->
+              <div class="space-y-2 pt-2 border-t border-gray-800">
+                ${matchingCars.slice(0, 3).map(car => `
+                  <div class="flex items-center justify-between p-2.5 rounded-lg bg-gray-950 border border-gray-800 text-xs">
+                    <div class="flex items-center gap-3">
+                      <img src="${car.image_url || FALLBACK_IMAGE}" class="w-12 h-10 object-cover rounded-md">
+                      <div>
+                        <div class="font-bold text-white">${car.year} ${car.make}${car.model}</div>
+                        <div class="text-[11px] text-gray-400">${car.price ? `$${car.price.toLocaleString()}` : 'Call for Price'} • ${(car.mileage \vert{}\vert{} 0).toLocaleString()} mi • ${car.location_name || 'Lot'}</div>
+                      </div>
+                    </div>
+                    <div class="flex gap-1.5">
+                      <a href="sms:${req.phone_number}?&body=${encodeURIComponent(`Hi ${req.customer_name}! A ${car.year} ${car.make} ${car.model} just landed here at ${car.location_name || currentStore.name} priced at $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. Let me know if you want to come take a look!`)}" class="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1">
+                        <i class="fa-solid fa-message"></i> Text Car
+                      </a>
+                      <a href="tel:${req.phone_number}" class="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold text-[11px] flex items-center gap-1">
+                        <i class="fa-solid fa-phone"></i> Call
+                      </a>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+      });
+
+      // Update Top Nav Badges
+      const badge = document.getElementById("wishlistMatchBadge");
+      const alertBox = document.getElementById("activeMatchAlertBox");
+      const alertCount = document.getElementById("matchAlertCount");
+      const tabMatchCount = document.getElementById("tabMatchBadgeCount");
+
+      tabMatchCount.innerText = totalMatchedPairs;
+
+      if (totalMatchedPairs > 0) {
+        badge.innerText = totalMatchedPairs;
+        badge.classList.remove("hidden");
+        alertCount.innerText = totalMatchedPairs;
+        alertBox.classList.remove("hidden");
+        document.getElementById("matchedCustomersContainer").innerHTML = matchCardsHtml;
+        
+        // Notify if this is a fresh polling cycle
+        if (sessionStorage.getItem("last_match_count") !== String(totalMatchedPairs)) {
+          sessionStorage.setItem("last_match_count", String(totalMatchedPairs));
+          fireDesktopNotification("🚗 New Wishlist Inventory Match!", `You have ${totalMatchedPairs} customer request match(es) in stock right now.`);
+        }
+      } else {
+        badge.classList.add("hidden");
+        alertBox.classList.add("hidden");
+        document.getElementById("matchedCustomersContainer").innerHTML = `
+          <div class="text-center py-8 text-gray-500 text-xs">No active wishlist requests match any vehicles currently in stock.</div>
+        `;
+      }
+
+      renderAllWishlistTab();
+    }
+
+    function renderAllWishlistTab() {
+      const container = document.getElementById("allWishlistContainer");
+      if (!wishlistItems.length) {
+        container.innerHTML = `<div class="text-center py-6 text-gray-500 text-xs">No customer wishlist requests saved yet.</div>`;
+        return;
+      }
+
+      container.innerHTML = wishlistItems.map(item => `
+        <div class="p-3 rounded-lg bg-gray-950 border border-gray-800 flex items-center justify-between text-xs">
+          <div>
+            <div class="font-bold text-white">${item.customer_name} <span class="text-gray-400 font-normal">(${item.phone_number})</span></div>
+            <div class="text-indigo-300">Target: ${item.desired_vehicle} ${item.max_price ? `• Max: $${item.max_price.toLocaleString()}` : ''}</div>
+          </div>
+          <button onclick="deleteWishlistItem('${item.id}')" class="text-gray-500 hover:text-rose-400 text-xs px-2 py-1"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      `).join('');
+    }
+
+    function openWishlistModal(tab = 'add') {
+      switchWishlistTab(tab);
+      document.getElementById("wishlistModal").classList.remove("hidden");
+    }
+
+    function switchWishlistTab(tab) {
+      document.getElementById("tabAddWishlist").classList.add("hidden");
+      document.getElementById("tabMatches").classList.add("hidden");
+      document.getElementById("tabAllWishlist").classList.add("hidden");
+
+      document.getElementById("tabAddWishlistBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white";
+      document.getElementById("tabMatchesBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white flex items-center gap-1.5";
+      document.getElementById("tabAllWishlistBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white";
+
+      if (tab === 'add') {
+        document.getElementById("tabAddWishlist").classList.remove("hidden");
+        document.getElementById("tabAddWishlistBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white";
+      } else if (tab === 'matches') {
+        document.getElementById("tabMatches").classList.remove("hidden");
+        document.getElementById("tabMatchesBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white flex items-center gap-1.5";
+      } else {
+        document.getElementById("tabAllWishlist").classList.remove("hidden");
+        document.getElementById("tabAllWishlistBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white";
+      }
+    }
+
+    // 4. Store Configuration & Polling
     async function loadStoreConfig() {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/dealer_profiles?id=eq.active_store&select=*`, {
@@ -320,7 +663,7 @@
 
       updateStoreUI();
       closeModal("dealershipModal");
-      alert(`Feeds saved! Run the Colab crawler to update specifications.`);
+      alert(`Feeds saved! Run the Colab crawler to update inventory.`);
     }
 
     async function fetchLiveInventory(isManual = false) {
@@ -347,6 +690,7 @@
           statusBadge.innerText = `Live (${data.length} Units)`;
           populateLocations(data);
           applyFilters();
+          evaluateWishlistMatches();
         }
       } catch (err) {
         statusBadge.innerText = "Sync Failed";
@@ -464,7 +808,6 @@
               <h4 class="font-bold text-gray-100 text-sm truncate">${car.year} ${car.make} ${car.model}</h4>
               <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || currentStore.name}</p>
               
-              <!-- Specs Row -->
               <div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">
                 <span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>${car.color || 'Standard'}</span>
                 <span>•</span>
@@ -543,8 +886,12 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       loadStoreConfig();
+      fetchWishlist();
       fetchLiveInventory();
-      setInterval(() => fetchLiveInventory(false), 30000);
+      setInterval(() => {
+        fetchLiveInventory(false);
+        fetchWishlist();
+      }, 30000);
     });
   </script>
 </body>
