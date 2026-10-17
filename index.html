@@ -30,7 +30,6 @@
       </div>
 
       <div class="flex items-center gap-2 sm:gap-3">
-        <!-- Trigger Live Crawl Button -->
         <button onclick="triggerLiveLotCrawl()" id="crawlTriggerBtn" class="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-600/40 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
           <i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i>
           <span class="hidden sm:inline">Sync Dealer Site</span>
@@ -38,7 +37,7 @@
 
         <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm cursor-pointer">
           <i class="fa-solid fa-building text-indigo-400"></i>
-          <span id="headerStoreName">Moses Automotive Group</span>
+          <span id="headerStoreName">Dealership Inventory</span>
           <i class="fa-solid fa-gear text-[11px] text-gray-400"></i>
         </button>
 
@@ -62,8 +61,8 @@
     <div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div>
         <div class="flex items-center gap-3 mb-1">
-          <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
-          <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Rooftops...</span>
+          <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Dealership Inventory</h1>
+          <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Locations...</span>
         </div>
         <p class="text-sm text-gray-400">Filter by Make, Model, Trim, Location, and Specs. Click any vehicle to view its live website listing.</p>
       </div>
@@ -89,7 +88,7 @@
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <select id="locationFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 max-w-xs">
-            <option value="ALL">All Dealership Locations</option>
+            <option value="ALL">All Locations</option>
           </select>
           <select id="conditionFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
             <option value="ALL">All Conditions</option>
@@ -132,7 +131,7 @@
         </div>
       </div>
 
-      <!-- Expandable Specs Toolbar -->
+      <!-- Specs Filter Panel -->
       <div id="advancedFilterPanel" class="hidden pt-3 border-t border-gray-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         <div>
           <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Body Type</label>
@@ -203,11 +202,11 @@
       </div>
     </div>
 
-    <!-- Vehicle Cards Grid -->
+    <!-- Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
   </main>
 
-  <!-- Dealership Modal -->
+  <!-- Dealership Settings Modal -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
@@ -226,17 +225,12 @@
 
         <div>
           <label class="text-xs font-bold text-gray-400 uppercase">Dealership Name</label>
-          <input type="text" id="dealershipNameInput" placeholder="Moses Automotive Group" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
-        </div>
-
-        <div>
-          <label class="text-xs font-bold text-gray-400 uppercase">Used Inventory Web Address (URL)</label>
-          <input type="text" id="dealershipUsedUrlInput" placeholder="https://www.mosescars.com/search-all-used-inventory.html" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <input type="text" id="dealershipNameInput" placeholder="Dealership Name" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
         <div class="pt-2 flex gap-2">
           <button onclick="saveDealershipProfile()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30 cursor-pointer">
-            Save Dealership Profile
+            Save Profile
           </button>
           <button onclick="closeModal('dealershipModal')" class="px-4 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition cursor-pointer">
             Cancel
@@ -246,7 +240,7 @@
     </div>
   </div>
 
-  <!-- Sales Action Modal -->
+  <!-- Share / Action Modal -->
   <div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-5">
       <div class="flex items-center justify-between border-b border-gray-800 pb-4">
@@ -264,25 +258,22 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
-    // Detect Dealership ID from URL query string ?dealer=xyz, defaulting to moses
     const urlParams = new URLSearchParams(window.location.search);
     const ACTIVE_DEALER_ID = urlParams.get("dealer") || "moses";
 
     const DEFAULT_STORE = {
-      name: "Moses Automotive Group",
-      usedUrl: "https://www.mosescars.com/search-all-used-inventory.html"
+      name: "Moses Automotive Group"
     };
 
     let currentStore = JSON.parse(localStorage.getItem("autolaunch_store_" + ACTIVE_DEALER_ID)) || DEFAULT_STORE;
     let rawInventory = [];
-    const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
+    const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
 
     function updateStoreUI() {
       document.getElementById("headerStoreName").innerText = currentStore.name;
       document.getElementById("bannerStoreTitle").innerText = currentStore.name;
       document.getElementById("dealershipSlugInput").value = ACTIVE_DEALER_ID;
       document.getElementById("dealershipNameInput").value = currentStore.name;
-      document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl;
     }
 
     function openDealershipModal() {
@@ -297,16 +288,12 @@
 
     function saveDealershipProfile() {
       const name = document.getElementById("dealershipNameInput").value.trim() || DEFAULT_STORE.name;
-      const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim() || DEFAULT_STORE.usedUrl;
-
-      currentStore = { name, usedUrl };
+      currentStore = { name };
       localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
       updateStoreUI();
       closeModal("dealershipModal");
-      alert("Dealership profile updated: " + currentStore.name);
     }
 
-    // Trigger Live Scrape via Cloud Job Queue
     async function triggerLiveLotCrawl() {
       const btn = document.getElementById("crawlTriggerBtn");
       btn.disabled = true;
@@ -326,8 +313,7 @@
             triggered_by: "dashboard_button"
           })
         });
-
-        alert("✓ Live lot scrape requested! The automated crawler runs in the background. Fresh units will populate automatically.");
+        alert("✓ Live lot scrape requested! The automated cloud crawler will process the lot shortly.");
       } catch (err) {
         console.error("Job trigger error:", err);
       }
@@ -338,7 +324,6 @@
       }, 30000);
     }
 
-    // Auto-paginating Supabase fetcher filtered by dealership_id
     async function fetchLiveInventory(isManual) {
       if (typeof isManual === "undefined") isManual = false;
       const lotBadge = document.getElementById("lotCount");
@@ -352,7 +337,7 @@
         let hasMore = true;
 
         while (hasMore) {
-          const response = await fetch(SUPABASE_URL + "/rest/v1/scraped_inventory?select=*&order=price.asc", {
+          const response = await fetch(SUPABASE_URL + "/rest/v1/scraped_inventory?select=*&order=created_at.desc", {
             method: "GET",
             headers: {
               "apikey": SUPABASE_KEY,
@@ -376,7 +361,6 @@
           }
         }
 
-        // Filter cars belonging to this dealership tenant
         rawInventory = allCars.filter(function(c) {
           const matchesDealer = !c.dealership_id || c.dealership_id === ACTIVE_DEALER_ID;
           return matchesDealer && c.is_active !== false;
@@ -406,9 +390,9 @@
       const currentSelected = locationSelect.value;
       const uniqueLocations = Array.from(new Set(cars.map(function(c) { return c.location_name; }).filter(Boolean))).sort();
       
-      document.getElementById("activeLotsCountBadge").innerText = uniqueLocations.length + " Dealership Locations";
+      document.getElementById("activeLotsCountBadge").innerText = uniqueLocations.length + " Locations";
 
-      let options = '<option value="ALL">All Dealership Locations (' + uniqueLocations.length + ')</option>';
+      let options = '<option value="ALL">All Locations (' + uniqueLocations.length + ')</option>';
       uniqueLocations.forEach(function(loc) {
         const count = cars.filter(function(c) { return c.location_name === loc; }).length;
         options += '<option value="' + loc + '" ' + (currentSelected === loc ? 'selected' : '') + '>' + loc + ' (' + count + ')</option>';
@@ -526,10 +510,11 @@
       });
 
       filtered.sort(function(a, b) {
-        const priceA = a.price || 0;
-        const priceB = b.price || 0;
+        const priceA = a.price && a.price > 0 ? a.price : 9999999;
+        const priceB = b.price && b.price > 0 ? b.price : 9999999;
+
         if (sort === "price_asc") return priceA - priceB;
-        if (sort === "price_desc") return priceB - priceA;
+        if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
         if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
         if (sort === "year_desc") return (b.year || 0) - (a.year || 0);
         return 0;
@@ -561,26 +546,35 @@
 
       let html = "";
       cars.forEach(function(car) {
-        const photoUrl = car.image_url || FALLBACK_IMAGE;
-        const displayPrice = car.price ? "$" + car.price.toLocaleString() : "Call for Price";
-        const displayPayment = car.price ? "~$" + Math.round(car.price / 72) + "/mo" : "Finance Avail";
+        let photoUrl = car.image_url;
+        if (photoUrl && photoUrl.startsWith('//')) {
+          photoUrl = 'https:' + photoUrl;
+        }
+        if (!photoUrl || photoUrl.includes('/static/')) {
+          photoUrl = FALLBACK_IMAGE;
+        }
+
+        const displayPrice = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
+        const displayPayment = car.price && car.price > 0 ? "~$" + Math.round(car.price / 72) + "/mo" : "Finance Avail";
 
         let badgeColor = "bg-amber-500/20 text-amber-300 border-amber-500/30";
         if (car.condition === "Certified Pre-Owned") badgeColor = "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
         else if (car.condition === "New") badgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
 
         const bodyBadge = (car.body_type && car.body_type !== 'Other') ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">' + car.body_type + '</span>' : '';
-        const linkUrl = car.listing_url || ("https://www.google.com/search?q=" + encodeURIComponent((car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " " + (car.vin || '') + " Moses"));
+        
+        // Direct vehicle link without external search redirection
+        const linkUrl = car.detail_url || car.listing_url || "#";
 
         html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
           '<div>' +
-            '<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="block h-44 w-full bg-gray-900 relative overflow-hidden group cursor-pointer">' +
-              '<img src="' + photoUrl + '" onerror="this.src=\'' + FALLBACK_IMAGE + '\'" alt="Vehicle Photo" class="object-cover w-full h-full opacity-90 group-hover:opacity-100 group-hover:scale-105 transition duration-300">' +
-              '<div class="absolute top-3 left-3 flex gap-1.5 flex-wrap">' +
-                '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + badgeColor + '">' + (car.condition || 'Used') + '</span>' +
+            '<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="block h-48 w-full bg-gray-900 relative overflow-hidden group cursor-pointer border-b border-gray-800">' +
+              '<img src="' + photoUrl + '" onerror="this.onerror=null; this.src=\'' + FALLBACK_IMAGE + '\';" alt="Vehicle Photo" class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-300">' +
+              '<div class="absolute top-3 left-3 flex gap-1.5 flex-wrap z-10">' +
+                '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + badgeColor + ' backdrop-blur-md">' + (car.condition || 'Used') + '</span>' +
                 bodyBadge +
               '</div>' +
-              '<div class="absolute bottom-2 right-2 text-xs font-semibold px-2 py-1 rounded-md bg-black/75 text-white">' +
+              '<div class="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-white border border-white/10">' +
                 displayPayment +
               '</div>' +
             '</a>' +
@@ -624,7 +618,7 @@
       if (!car) return;
       document.getElementById("modalTitle").innerText = "Customer Quick-Share";
       document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " | " + (car.price ? "$" + car.price.toLocaleString() : "Call");
-      const urlText = car.listing_url ? "\nView details: " + car.listing_url : "";
+      const urlText = (car.detail_url || car.listing_url) ? "\nView details: " + (car.detail_url || car.listing_url) : "";
       const msg = "Hey! Take a look at this " + (car.color ? car.color + ' ' : '') + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + ": " + (car.price ? "$" + car.price.toLocaleString() : "Call") + " with " + ((car.mileage || 0).toLocaleString()) + " miles. VIN: " + car.vin + "." + urlText + " Let me know if you want to take it for a drive!";
 
       document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
