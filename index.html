@@ -31,15 +31,15 @@
         </div>
       </div>
 
-      <!-- Controls & Live Indicator -->
+      <!-- Controls & Polling Indicator -->
       <div class="flex items-center gap-3">
         <div id="liveStatusBadge" class="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>Supabase Connected</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="syncText">Supabase Live</span>
         </div>
-        <button onclick="fetchLiveInventoryFromSupabase()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
+        <button onclick="fetchLiveInventoryFromSupabase(true)" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
           <i class="fa-solid fa-arrows-rotate"></i>
-          <span>Refresh Database</span>
+          <span>Sync Now</span>
         </button>
       </div>
     </div>
@@ -53,9 +53,9 @@
       <div>
         <div class="flex items-center gap-3 mb-1">
           <h1 class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
-          <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Live Ingested Feed</span>
+          <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Scanning Rooftops...</span>
         </div>
-        <p class="text-sm text-gray-400">Universal inventory catalog synced straight from your cloud PostgreSQL database.</p>
+        <p class="text-sm text-gray-400">Universal lot inventory auto-refreshing in real time from Supabase.</p>
       </div>
 
       <div class="flex items-center gap-4">
@@ -77,7 +77,11 @@
           <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
           <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search by Year, Make, Model, VIN, or Location..." class="w-full bg-gray-950/70 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500">
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Dynamic Location Dropdown -->
+          <select id="locationFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
+            <option value="ALL">All Rooftops / Locations</option>
+          </select>
           <select id="conditionFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
             <option value="ALL">All Conditions</option>
             <option value="Used" selected>Used Only</option>
@@ -121,11 +125,12 @@
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
     let rawInventory = [];
+    const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
 
-    async function fetchLiveInventoryFromSupabase() {
+    async function fetchLiveInventoryFromSupabase(isManual = false) {
       const lotBadge = document.getElementById("lotCount");
-      const statusBadge = document.getElementById("liveStatusBadge");
-      lotBadge.innerText = "Syncing...";
+      const statusBadge = document.getElementById("syncText");
+      if (isManual) statusBadge.innerText = "Syncing...";
 
       try {
         const response = await fetch(`${SUPABASE_URL}/rest/v1/scraped_inventory?select=*&is_active=eq.true&order=price.asc`, {
@@ -150,26 +155,44 @@
             document.getElementById("avgPrice").innerText = `$${avg.toLocaleString()}`;
           }
 
-          statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Supabase Live (${data.length} Cars)</span>`;
+          statusBadge.innerText = `Live (${data.length} Cars)`;
+          populateLocations(data);
           applyFilters();
         }
       } catch (err) {
         console.error("Fetch error:", err);
-        lotBadge.innerText = "Error";
-        statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-400"></span><span>Sync Failed</span>`;
+        statusBadge.innerText = "Sync Failed";
       }
+    }
+
+    // Dynamically builds the location filter from all distinct rooftop locations in the DB
+    function populateLocations(cars) {
+      const locationSelect = document.getElementById("locationFilter");
+      const currentSelected = locationSelect.value;
+      const uniqueLocations = Array.from(new Set(cars.map(c => c.location_name).filter(Boolean))).sort();
+      
+      document.getElementById("activeLotsCountBadge").innerText = `${uniqueLocations.length} Active Rooftops`;
+
+      let options = `<option value="ALL">All Rooftops (${uniqueLocations.length} Locations)</option>`;
+      uniqueLocations.forEach(loc => {
+        const count = cars.filter(c => c.location_name === loc).length;
+        options += `<option value="${loc}" ${currentSelected === loc ? 'selected' : ''}>${loc} (${count})</option>`;
+      });
+      locationSelect.innerHTML = options;
     }
 
     function applyFilters() {
       const query = document.getElementById("searchInput").value.toLowerCase();
+      const locationFilter = document.getElementById("locationFilter").value;
       const cond = document.getElementById("conditionFilter").value;
       const sort = document.getElementById("sortSelect").value;
 
       let filtered = rawInventory.filter(car => {
         const title = `${car.year} ${car.make} ${car.model} ${car.trim || ''} ${car.vin || ''} ${car.location_name || ''}`.toLowerCase();
         const matchesQuery = title.includes(query);
+        const matchesLocation = locationFilter === "ALL" || (car.location_name || "Moses Auto Mall") === locationFilter;
         const matchesCond = cond === "ALL" || (car.condition || "Used") === cond;
-        return matchesQuery && matchesCond;
+        return matchesQuery && matchesLocation && matchesCond;
       });
 
       filtered.sort((a, b) => {
@@ -190,11 +213,13 @@
         return;
       }
 
-      grid.innerHTML = cars.map(car => `
+      grid.innerHTML = cars.map(car => {
+        const photoUrl = car.image_url || FALLBACK_IMAGE;
+        return `
         <div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">
           <div>
             <div class="h-44 w-full bg-gray-900 relative overflow-hidden flex items-center justify-center">
-              <img src="https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60" alt="Car" class="object-cover w-full h-full opacity-80 hover:opacity-100 transition duration-300">
+              <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" alt="Car" class="object-cover w-full h-full opacity-90 hover:opacity-100 transition duration-300">
               <div class="absolute top-3 left-3 flex gap-1.5">
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">${car.condition || 'Used'}</span>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">${car.status || 'Available'}</span>
@@ -230,13 +255,14 @@
             </button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
     function openShareModal(car) {
       document.getElementById("modalTitle").innerText = "Customer Quick-Share";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model} | $${(car.price || 0).toLocaleString()}`;
-      const msg = `Hey! Check out this ${car.year} ${car.make} ${car.model} we just got in: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to come take it for a drive!`;
+      const msg = `Hey! Check out this ${car.year} ${car.make} ${car.model} at ${car.location_name || 'our lot'}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to take it for a spin!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -254,7 +280,7 @@
     function openFBModal(car) {
       document.getElementById("modalTitle").innerText = "Facebook Marketplace Listing Copy";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
-      const fbCopy = `🔥 ${car.year} ${car.make} ${car.model} ${car.trim || ''} 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nStatus: Clean Title, Inspected & Front-Line Ready\n\n✅ Fully inspected by certified tech\n✅ Financing available for all credit types\n✅ Trades welcome!\n\nMessage me directly for appointments or questions!`;
+      const fbCopy = `🔥 ${car.year} ${car.make} ${car.model} ${car.trim || ''} 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nLocation: ${car.location_name || 'Moses Auto Mall'}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Financing available for all credit types\n✅ Trade-ins welcome!\n\nMessage me directly for details or to schedule a test drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -268,7 +294,7 @@
     function openTikTokModal(car) {
       document.getElementById("modalTitle").innerText = "TikTok / Reel 15-Second Script";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
-      const script = `(Hook - 0-3s): Stop scrolling if you're looking for an affordable ride under $${Math.round(((car.price || 15000) * 1.1) / 1000)}k.\n(Body - 3-10s): This fresh trade is a ${car.year} ${car.make} ${car.model} with only ${(car.mileage || 0).toLocaleString()} miles.\n(CTA - 10-15s): Clean title, front-line ready. Comment or message me before it's gone!`;
+      const script = `(Hook - 0-3s): Stop scrolling if you're looking for a reliable ride under $${Math.round(((car.price || 15000) * 1.1) / 1000)}k.\n(Body - 3-10s): This ${car.year} ${car.make} ${car.model} just landed at ${car.location_name || 'our lot'} with ${(car.mileage || 0).toLocaleString()} miles.\n(CTA - 10-15s): Clean title, inspected, ready to roll. Send me a message or comment below before it's gone!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -283,7 +309,11 @@
       document.getElementById("actionModal").classList.add("hidden");
     }
 
-    document.addEventListener("DOMContentLoaded", fetchLiveInventoryFromSupabase);
+    // Auto-fetch on boot + Poll every 30 seconds
+    document.addEventListener("DOMContentLoaded", () => {
+      fetchLiveInventoryFromSupabase();
+      setInterval(() => fetchLiveInventoryFromSupabase(false), 30000);
+    });
   </script>
 </body>
 </html>
