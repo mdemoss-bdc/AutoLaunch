@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoLaunch | Dealership Sales Enablement & Wishlist Matcher</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -29,9 +30,8 @@
         </div>
       </div>
 
-      <!-- Action Buttons -->
       <div class="flex items-center gap-2.5">
-        <button id="wishlistTriggerBtn" onclick="openWishlistModal()" class="relative px-3.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer">
+        <button onclick="openWishlistModal()" class="relative px-3.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer">
           <i class="fa-solid fa-bell text-amber-400"></i>
           <span>Wishlist</span>
           <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-600 text-white animate-bounce">0</span>
@@ -72,7 +72,7 @@
       <div class="flex items-center gap-4">
         <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
           <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">In-Stock</div>
-          <div id="lotCount" class="text-2xl font-black text-indigo-400">0 Units</div>
+          <div id="lotCount" class="text-2xl font-black text-indigo-400">Loading...</div>
         </div>
         <div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
           <div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Avg Price</div>
@@ -81,7 +81,7 @@
       </div>
     </div>
 
-    <!-- Active Wishlist Matches Banner -->
+    <!-- Active Wishlist Matches Alert Banner -->
     <div id="activeMatchAlertBox" class="hidden p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-indigo-500/15 to-emerald-500/15 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg border border-amber-500/30">
@@ -89,7 +89,7 @@
         </div>
         <div>
           <h4 class="text-sm font-bold text-white"><span id="matchAlertCount">0</span> Customer Wishlist Match(es) Available!</h4>
-          <p class="text-xs text-gray-400">Vehicles on the lot match buyers on your waiting list.</p>
+          <p class="text-xs text-gray-400">Vehicles currently on the lot match buyers on your waiting list.</p>
         </div>
       </div>
       <button onclick="openWishlistModal('matches')" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition cursor-pointer">
@@ -200,7 +200,7 @@
 
     <!-- Vehicle Cards Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      <div class="col-span-full text-center py-12 text-gray-500">Connecting to inventory database...</div>
+      <div class="col-span-full text-center py-12 text-gray-500">Loading dealership inventory...</div>
     </div>
   </main>
 
@@ -285,7 +285,7 @@
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
         <div>
           <h3 class="text-lg font-bold text-white">Dealership & Multi-Feed Configuration</h3>
-          <p class="text-xs text-gray-400">Configure your store feeds. These sync directly to your database.</p>
+          <p class="text-xs text-gray-400">Configure your store feeds.</p>
         </div>
         <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
@@ -346,17 +346,22 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
+    // Initialize official Supabase client
+    const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
     window.rawInventory = [];
     window.wishlistItems = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
 
     window.openWishlistModal = function(tab = 'add') {
       window.switchWishlistTab(tab);
-      document.getElementById("wishlistModal").classList.remove("hidden");
+      const m = document.getElementById("wishlistModal");
+      if (m) m.classList.remove("hidden");
     };
 
     window.openDealershipModal = function() {
-      document.getElementById("dealershipModal").classList.remove("hidden");
+      const m = document.getElementById("dealershipModal");
+      if (m) m.classList.remove("hidden");
     };
 
     window.closeModal = function(id) {
@@ -378,19 +383,23 @@
       if (matchSec) matchSec.classList.add("hidden");
       if (listSec) listSec.classList.add("hidden");
 
-      document.getElementById("tabAddWishlistBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white cursor-pointer";
-      document.getElementById("tabMatchesBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white flex items-center gap-1.5 cursor-pointer";
-      document.getElementById("tabAllWishlistBtn").className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white cursor-pointer";
+      const bAdd = document.getElementById("tabAddWishlistBtn");
+      const bMatch = document.getElementById("tabMatchesBtn");
+      const bList = document.getElementById("tabAllWishlistBtn");
+
+      if (bAdd) bAdd.className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white cursor-pointer";
+      if (bMatch) bMatch.className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white flex items-center gap-1.5 cursor-pointer";
+      if (bList) bList.className = "py-2 px-4 border-b-2 border-transparent text-gray-400 hover:text-white cursor-pointer";
 
       if (tab === 'add' && addSec) {
         addSec.classList.remove("hidden");
-        document.getElementById("tabAddWishlistBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white cursor-pointer";
+        if (bAdd) bAdd.className = "py-2 px-4 border-b-2 border-indigo-500 text-white cursor-pointer";
       } else if (tab === 'matches' && matchSec) {
         matchSec.classList.remove("hidden");
-        document.getElementById("tabMatchesBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white flex items-center gap-1.5 cursor-pointer";
+        if (bMatch) bMatch.className = "py-2 px-4 border-b-2 border-indigo-500 text-white flex items-center gap-1.5 cursor-pointer";
       } else if (listSec) {
         listSec.classList.remove("hidden");
-        document.getElementById("tabAllWishlistBtn").className = "py-2 px-4 border-b-2 border-indigo-500 text-white cursor-pointer";
+        if (bList) bList.className = "py-2 px-4 border-b-2 border-indigo-500 text-white cursor-pointer";
       }
     };
 
@@ -399,38 +408,47 @@
       if (isManual && statusBadge) statusBadge.innerText = "Syncing...";
 
       try {
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/scraped_inventory?select=*&is_active=eq.true&order=price.asc`, {
-          method: "GET",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-            "Range": "0-1999"
-          }
-        });
+        let cars = [];
+        
+        if (supabaseClient) {
+          // Use official SDK query
+          const { data, error } = await supabaseClient
+            .from("scraped_inventory")
+            .select("*")
+            .order("price", { ascending: true })
+            .limit(1500);
 
-        if (!response.ok) throw new Error("HTTP " + response.status);
+          if (error) throw error;
+          cars = data || [];
+        } else {
+          // Fallback fetch
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/scraped_inventory?select=*&order=price.asc&limit=1500`, {
+            headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+          });
+          cars = await res.json();
+        }
 
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          window.rawInventory = data;
-          
+        if (Array.isArray(cars)) {
+          // Accept any car that is active or where is_active is null
+          window.rawInventory = cars.filter(c => c.is_active !== false);
+
           const lotBadge = document.getElementById("lotCount");
-          if (lotBadge) lotBadge.innerText = `${data.length} Units`;
+          if (lotBadge) lotBadge.innerText = `${window.rawInventory.length} Units`;
 
-          const validPrices = data.map(c => c.price).filter(p => p && p > 500);
+          const validPrices = window.rawInventory.map(c => c.price).filter(p => p && p > 500);
           if (validPrices.length > 0) {
             const avg = Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length);
             const avgBadge = document.getElementById("avgPrice");
             if (avgBadge) avgBadge.innerText = `$${avg.toLocaleString()}`;
           }
 
-          if (statusBadge) statusBadge.innerText = `Live (${data.length} Units)`;
-          populateLocations(data);
+          if (statusBadge) statusBadge.innerText = `Live (${window.rawInventory.length} Units)`;
+          populateLocations(window.rawInventory);
           applyFilters();
         }
       } catch (err) {
         console.error("Inventory fetch error:", err);
-        if (statusBadge) statusBadge.innerText = "Sync Failed";
+        if (statusBadge) statusBadge.innerText = "Sync Error";
       }
 
       window.fetchWishlist();
@@ -546,7 +564,7 @@
                 <span class="text-xs font-medium text-gray-400">${(car.mileage || 0).toLocaleString()} mi</span>
               </div>
               <h4 class="font-bold text-gray-100 text-sm truncate">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}</h4>
-              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || 'Lot'}</p>
+              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || 'Moses Auto Group'}</p>
               
               <div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">
                 <span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>${car.color || 'Standard'}</span>
@@ -579,12 +597,13 @@
     // Wishlist Engine
     window.fetchWishlist = async function() {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist?select=*&is_active=eq.true&order=created_at.desc`, {
-          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (Array.isArray(data)) {
+        if (!supabaseClient) return;
+        const { data, error } = await supabaseClient
+          .from("customer_wishlist")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!error && Array.isArray(data)) {
           window.wishlistItems = data;
           evaluateWishlistMatches();
         }
@@ -606,22 +625,16 @@
       }
 
       try {
-        await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist`, {
-          method: "POST",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
+        if (supabaseClient) {
+          await supabaseClient.from("customer_wishlist").insert([{
             customer_name: name,
             phone_number: phone,
             desired_vehicle: vehicle,
             max_price: budget,
             notes: notes,
             is_active: true
-          })
-        });
+          }]);
+        }
 
         if (document.getElementById("wishlistCustName")) document.getElementById("wishlistCustName").value = "";
         if (document.getElementById("wishlistCustPhone")) document.getElementById("wishlistCustPhone").value = "";
@@ -640,11 +653,10 @@
     window.deleteWishlistItem = async function(id) {
       if (!confirm("Remove this customer request?")) return;
       try {
-        await fetch(`${SUPABASE_URL}/rest/v1/customer_wishlist?id=eq.${id}`, {
-          method: "DELETE",
-          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-        });
-        await window.fetchWishlist();
+        if (supabaseClient) {
+          await supabaseClient.from("customer_wishlist").delete().eq("id", id);
+          await window.fetchWishlist();
+        }
       } catch (err) {
         console.error("Delete failed:", err);
       }
@@ -701,7 +713,7 @@
                       </div>
                     </div>
                     <div class="flex gap-1.5">
-                      <a href="sms:${req.phone_number}?&body=${encodeURIComponent(`Hi ${req.customer_name}! A ${car.year} ${car.make} ${car.model} just arrived priced at $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. Let me know if you want to take a look!`)}" class="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1">
+                      <a href="sms:${req.phone_number}?&body=${encodeURIComponent(`Hi ${req.customer_name}! A ${car.year} ${car.make} ${car.model} is available at ${car.location_name || 'the lot'} priced at $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. Let me know if you want to take a look!`)}" class="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1">
                         <i class="fa-solid fa-message"></i> Text
                       </a>
                       <a href="tel:${req.phone_number}" class="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold text-[11px] flex items-center gap-1">
@@ -766,16 +778,11 @@
       const page_modifier = document.getElementById("dealershipModifierInput")?.value.trim() || "?pt={page}";
 
       try {
-        await fetch(`${SUPABASE_URL}/rest/v1/dealer_profiles`, {
-          method: "POST",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
-          },
-          body: JSON.stringify({ id: "active_store", name, used_url, certified_url, new_url, page_modifier })
-        });
+        if (supabaseClient) {
+          await supabaseClient.from("dealer_profiles").upsert({
+            id: "active_store", name, used_url, certified_url, new_url, page_modifier
+          });
+        }
       } catch (err) {
         console.error("Failed saving to Supabase:", err);
       }
