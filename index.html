@@ -337,7 +337,8 @@
         let hasMore = true;
 
         while (hasMore) {
-          const response = await fetch(SUPABASE_URL + "/rest/v1/scraped_inventory?select=*&order=created_at.desc", {
+          // Query sorted by vin.asc which is guaranteed to exist on every row
+          const response = await fetch(SUPABASE_URL + "/rest/v1/scraped_inventory?select=*&order=vin.asc", {
             method: "GET",
             headers: {
               "apikey": SUPABASE_KEY,
@@ -563,7 +564,7 @@
 
         const bodyBadge = (car.body_type && car.body_type !== 'Other') ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">' + car.body_type + '</span>' : '';
         
-        // Direct vehicle link without external search redirection
+        // Direct link uses detail_url, with listing_url or fallback
         const linkUrl = car.detail_url || car.listing_url || "#";
 
         html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
