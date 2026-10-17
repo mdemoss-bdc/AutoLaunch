@@ -278,6 +278,9 @@
   <script>
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
+    
+    // Internal Embedded GitHub Trigger Key
+    const GH_DISPATCH_TOKEN = "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";
 
     const urlParams = new URLSearchParams(window.location.search);
     const ACTIVE_DEALER_ID = urlParams.get("dealer") || "moses";
@@ -331,23 +334,15 @@
 
     async function triggerLiveLotCrawl() {
       const btn = document.getElementById("crawlTriggerBtn");
-      
-      let ghToken = localStorage.getItem("autolaunch_gh_token");
-      if (!ghToken) {
-        ghToken = prompt("Enter your GitHub Personal Access Token to trigger remote cloud scrapes on demand:");
-        if (!ghToken) return;
-        localStorage.setItem("autolaunch_gh_token", ghToken.trim());
-      }
-
       btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Dispatching...';
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Starting Cloud Scraper...';
 
       try {
         const ghResponse = await fetch("https://api.github.com/repos/mdemoss-bdc/AutoLaunch/dispatches", {
           method: "POST",
           headers: {
             "Accept": "application/vnd.github+json",
-            "Authorization": "Bearer " + ghToken.trim(),
+            "Authorization": "Bearer " + GH_DISPATCH_TOKEN,
             "X-GitHub-Api-Version": "2022-11-28"
           },
           body: JSON.stringify({
@@ -375,20 +370,15 @@
             });
           } catch(e) {}
 
-          alert("✓ Cloud Scraper launched successfully on GitHub Actions! You can watch it live under your repository Actions tab.");
+          alert("✓ Cloud Scraper launched! The scraper is now running in GitHub Actions.");
         } else {
           const errData = await ghResponse.json().catch(() => ({}));
           console.error("GitHub dispatch failed:", errData);
-          if (ghResponse.status === 401 || ghResponse.status === 403) {
-            localStorage.removeItem("autolaunch_gh_token");
-            alert("GitHub Token was rejected (Status " + ghResponse.status + "). Please click again to enter a valid token.");
-          } else {
-            alert("Error triggering workflow: " + (errData.message || ghResponse.statusText));
-          }
+          alert("Error launching scraper: " + (errData.message || ghResponse.statusText));
         }
       } catch (err) {
         console.error("Job trigger error:", err);
-        alert("Network error contacting GitHub API.");
+        alert("Network error contacting GitHub Actions API.");
       }
 
       setTimeout(() => {
