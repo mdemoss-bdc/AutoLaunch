@@ -29,13 +29,20 @@
         </div>
       </div>
 
-      <!-- Sync Status & Manual Refresh -->
+      <!-- Actions, Store Switcher, Status -->
       <div class="flex items-center gap-3">
+        <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm">
+          <i class="fa-solid fa-building text-indigo-400"></i>
+          <span id="headerStoreName">Moses Automotive Group</span>
+          <i class="fa-solid fa-pen text-[10px] text-gray-400"></i>
+        </button>
+
         <div id="liveStatusBadge" class="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span id="syncText">Connected</span>
         </div>
-        <button onclick="fetchLiveInventory(true)" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
+
+        <button onclick="fetchLiveInventory(true)" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
           <i class="fa-solid fa-arrows-rotate"></i>
           <span>Refresh</span>
         </button>
@@ -46,14 +53,14 @@
   <!-- Main View -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
     
-    <!-- Metrics Bar -->
+    <!-- Dealership Metrics Bar -->
     <div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div>
         <div class="flex items-center gap-3 mb-1">
-          <h1 class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
+          <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
           <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Rooftops...</span>
         </div>
-        <p class="text-sm text-gray-400">Search all vehicles across your group, filter by location, and generate ready-to-post listings.</p>
+        <p id="bannerStoreSubtitle" class="text-sm text-gray-400">Search all vehicles across your group, filter by location, and generate ready-to-post listings.</p>
       </div>
 
       <div class="flex items-center gap-4">
@@ -68,7 +75,7 @@
       </div>
     </div>
 
-    <!-- Filters & Search -->
+    <!-- Filters & Search Toolbar -->
     <div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-4">
       <div class="flex flex-col md:flex-row gap-3">
         <div class="flex-1 relative">
@@ -95,11 +102,51 @@
       </div>
     </div>
 
-    <!-- Vehicle Grid -->
+    <!-- Vehicle Cards Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
       <!-- Cards Injected Dynamically -->
     </div>
   </main>
+
+  <!-- Change Dealership / Store URL Modal -->
+  <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <div>
+          <h3 class="text-lg font-bold text-white">Dealership Profile & Source URL</h3>
+          <p class="text-xs text-gray-400">Configure your store name and live inventory crawler target.</p>
+        </div>
+        <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-bold text-gray-400 uppercase">Dealership / Auto Group Name</label>
+          <input type="text" id="dealershipNameInput" placeholder="e.g. Moses Automotive Group" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="text-xs font-bold text-gray-400 uppercase">Used Inventory Web Address (URL)</label>
+          <input type="text" id="dealershipUsedUrlInput" placeholder="https://www.yourdealer.com/search-all-used-inventory.html" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <p class="text-[11px] text-gray-500 mt-1">This is the target web address used by the background inventory scraper.</p>
+        </div>
+
+        <div>
+          <label class="text-xs font-bold text-gray-400 uppercase">New Inventory Web Address (Optional)</label>
+          <input type="text" id="dealershipNewUrlInput" placeholder="https://www.yourdealer.com/search-all-new-inventory.html" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button onclick="saveDealershipProfile()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30">
+            Save Dealership Profile
+          </button>
+          <button onclick="closeModal('dealershipModal')" class="px-4 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Sales Action Modal -->
   <div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
@@ -109,7 +156,7 @@
           <h3 id="modalTitle" class="text-lg font-bold text-white">Action</h3>
           <p id="modalSubtitle" class="text-xs text-gray-400"></p>
         </div>
-        <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeModal('actionModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
       <div id="modalBody" class="space-y-4"></div>
     </div>
@@ -119,8 +166,41 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
+    // Default configuration (saved per user in browser localStorage)
+    const DEFAULT_STORE = {
+      name: "Moses Automotive Group",
+      usedUrl: "https://www.mosescars.com/search-all-used-inventory.html",
+      newUrl: "https://www.mosescars.com/search-all-new-inventory.html"
+    };
+
+    let currentStore = JSON.parse(localStorage.getItem("autolaunch_store")) || DEFAULT_STORE;
     let rawInventory = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600&auto=format&fit=crop&q=60";
+
+    function updateStoreUI() {
+      document.getElementById("headerStoreName").innerText = currentStore.name;
+      document.getElementById("bannerStoreTitle").innerText = currentStore.name;
+      document.getElementById("dealershipNameInput").value = currentStore.name;
+      document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl;
+      document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || "";
+    }
+
+    function openDealershipModal() {
+      updateStoreUI();
+      document.getElementById("dealershipModal").classList.remove("hidden");
+    }
+
+    function saveDealershipProfile() {
+      const name = document.getElementById("dealershipNameInput").value.trim() || DEFAULT_STORE.name;
+      const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim() || DEFAULT_STORE.usedUrl;
+      const newUrl = document.getElementById("dealershipNewUrlInput").value.trim() || DEFAULT_STORE.newUrl;
+
+      currentStore = { name, usedUrl, newUrl };
+      localStorage.setItem("autolaunch_store", JSON.stringify(currentStore));
+      updateStoreUI();
+      closeModal("dealershipModal");
+      alert(`Dealership updated to "${currentStore.name}". Your crawler target URL is now configured for: ${currentStore.usedUrl}`);
+    }
 
     async function fetchLiveInventory(isManual = false) {
       const lotBadge = document.getElementById("lotCount");
@@ -234,7 +314,7 @@
                 <span class="text-xs font-medium text-gray-400">${(car.mileage || 0).toLocaleString()} mi</span>
               </div>
               <h4 class="font-bold text-gray-100 text-sm truncate">${car.year} ${car.make} ${car.model}</h4>
-              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || 'Moses Auto Group'}</p>
+              <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || currentStore.name}</p>
               <p class="text-[11px] font-mono text-gray-500">VIN: ${car.vin || 'N/A'}</p>
             </div>
           </div>
@@ -261,7 +341,7 @@
     function openShareModal(car) {
       document.getElementById("modalTitle").innerText = "Customer Quick-Share";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model} | $${(car.price || 0).toLocaleString()}`;
-      const msg = `Hey! Take a look at this ${car.year} ${car.make} ${car.model} at ${car.location_name}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to come take it for a drive!`;
+      const msg = `Hey! Take a look at this ${car.year} ${car.make} ${car.model} at ${car.location_name || currentStore.name}: $${(car.price || 0).toLocaleString()} with ${(car.mileage || 0).toLocaleString()} miles. VIN: ${car.vin}. Let me know if you want to come take it for a drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -278,7 +358,7 @@
     function openFBModal(car) {
       document.getElementById("modalTitle").innerText = "Marketplace Listing Copy";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
-      const fbCopy = `🔥 ${car.year} ${car.make} ${car.model} 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nLocation: ${car.location_name}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
+      const fbCopy = `🔥 ${car.year} ${car.make} ${car.model} 🔥\n\nPrice: $${(car.price || 0).toLocaleString()}\nMileage: ${(car.mileage || 0).toLocaleString()}\nLocation: ${car.location_name || currentStore.name}\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -292,7 +372,7 @@
     function openTikTokModal(car) {
       document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
       document.getElementById("modalSubtitle").innerText = `${car.year} ${car.make} ${car.model}`;
-      const script = `(Hook - 0-3s): Stop scrolling if you need a reliable vehicle right now.\n(Body - 3-10s): Fresh arrival: ${car.year} ${car.make} ${car.model} at ${car.location_name} with ${(car.mileage || 0).toLocaleString()} miles.\n(CTA - 10-15s): Fully inspected and front-line ready. Comment or message me before it's gone!`;
+      const script = `(Hook - 0-3s): Stop scrolling if you need a reliable vehicle right now.\n(Body - 3-10s): Fresh arrival: ${car.year} ${car.make} ${car.model} at ${car.location_name || currentStore.name} with ${(car.mileage || 0).toLocaleString()} miles.\n(CTA - 10-15s): Fully inspected and front-line ready. Comment or message me before it's gone!`;
 
       document.getElementById("modalBody").innerHTML = `
         <div class="space-y-3">
@@ -303,11 +383,12 @@
       document.getElementById("actionModal").classList.remove("hidden");
     }
 
-    function closeModal() {
-      document.getElementById("actionModal").classList.add("hidden");
+    function closeModal(id) {
+      document.getElementById(id).classList.add("hidden");
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+      updateStoreUI();
       fetchLiveInventory();
       setInterval(() => fetchLiveInventory(false), 30000);
     });
