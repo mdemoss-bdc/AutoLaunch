@@ -34,7 +34,7 @@
         <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm">
           <i class="fa-solid fa-building text-indigo-400"></i>
           <span id="headerStoreName">Moses Automotive Group</span>
-          <i class="fa-solid fa-pen text-[10px] text-gray-400"></i>
+          <i class="fa-solid fa-gear text-[11px] text-gray-400"></i>
         </button>
 
         <div id="liveStatusBadge" class="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
@@ -108,13 +108,13 @@
     </div>
   </main>
 
-  <!-- Change Dealership / Store URL Modal -->
+  <!-- Change Dealership / Store URL / Page Modifier Modal -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-    <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4">
+    <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
         <div>
-          <h3 class="text-lg font-bold text-white">Dealership Profile & Source URL</h3>
-          <p class="text-xs text-gray-400">Configure your store name and live inventory crawler target.</p>
+          <h3 class="text-lg font-bold text-white">Dealership & Scraper Config</h3>
+          <p class="text-xs text-gray-400">Set store name, URL, and website pagination pattern.</p>
         </div>
         <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
@@ -126,22 +126,43 @@
         </div>
 
         <div>
-          <label class="text-xs font-bold text-gray-400 uppercase">Used Inventory Web Address (URL)</label>
-          <input type="text" id="dealershipUsedUrlInput" placeholder="https://www.yourdealer.com/search-all-used-inventory.html" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
-          <p class="text-[11px] text-gray-500 mt-1">This is the target web address used by the background inventory scraper.</p>
+          <label class="text-xs font-bold text-gray-400 uppercase">Base Inventory Web Address (URL)</label>
+          <input type="text" id="dealershipUsedUrlInput" placeholder="https://www.mosescars.com/search-all-used-inventory.html" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <p class="text-[11px] text-gray-500 mt-1">The clean URL without any page numbers.</p>
         </div>
 
         <div>
-          <label class="text-xs font-bold text-gray-400 uppercase">New Inventory Web Address (Optional)</label>
-          <input type="text" id="dealershipNewUrlInput" placeholder="https://www.yourdealer.com/search-all-new-inventory.html" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-gray-400 uppercase">Page Modifier Pattern</label>
+            <span class="text-[11px] text-indigo-400 font-mono">Use {page} as placeholder</span>
+          </div>
+          <input type="text" id="dealershipModifierInput" placeholder="?pt={page}" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm font-mono text-indigo-300 focus:outline-none focus:border-indigo-500">
+          
+          <!-- Common Modifier Quick-Picks -->
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            <button type="button" onclick="setModifier('?pt={page}')" class="text-[11px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-mono border border-gray-700">?pt={page}</button>
+            <button type="button" onclick="setModifier('?page={page}')" class="text-[11px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-mono border border-gray-700">?page={page}</button>
+            <button type="button" onclick="setModifier('?p={page}')" class="text-[11px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-mono border border-gray-700">?p={page}</button>
+            <button type="button" onclick="setModifier('?pg={page}')" class="text-[11px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-mono border border-gray-700">?pg={page}</button>
+            <button type="button" onclick="setModifier('/page/{page}/')" class="text-[11px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-mono border border-gray-700">/page/{page}/</button>
+          </div>
+        </div>
+
+        <!-- Generated Ready-to-Run Colab Crawler Block -->
+        <div class="p-3 bg-gray-950/80 rounded-xl border border-gray-800 space-y-1.5">
+          <div class="flex items-center justify-between text-xs font-semibold text-gray-400">
+            <span>Crawler Target Snippet</span>
+            <button onclick="copySnippet()" class="text-indigo-400 hover:text-indigo-300 text-[11px] font-bold">Copy Config</button>
+          </div>
+          <pre id="crawlerSnippet" class="text-[11px] font-mono text-emerald-400 overflow-x-auto whitespace-pre p-2 bg-gray-900 rounded border border-gray-800/80"></pre>
         </div>
 
         <div class="pt-2 flex gap-2">
           <button onclick="saveDealershipProfile()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30">
-            Save Dealership Profile
+            Save Configuration
           </button>
           <button onclick="closeModal('dealershipModal')" class="px-4 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition">
-            Cancel
+            Close
           </button>
         </div>
       </div>
@@ -166,11 +187,11 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
-    // Default configuration (saved per user in browser localStorage)
+    // Defaults with custom modifier template support
     const DEFAULT_STORE = {
       name: "Moses Automotive Group",
       usedUrl: "https://www.mosescars.com/search-all-used-inventory.html",
-      newUrl: "https://www.mosescars.com/search-all-new-inventory.html"
+      pageModifier: "?pt={page}"
     };
 
     let currentStore = JSON.parse(localStorage.getItem("autolaunch_store")) || DEFAULT_STORE;
@@ -182,7 +203,32 @@
       document.getElementById("bannerStoreTitle").innerText = currentStore.name;
       document.getElementById("dealershipNameInput").value = currentStore.name;
       document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl;
-      document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || "";
+      document.getElementById("dealershipModifierInput").value = currentStore.pageModifier || "?pt={page}";
+      updateSnippet();
+    }
+
+    function setModifier(mod) {
+      document.getElementById("dealershipModifierInput").value = mod;
+      updateSnippet();
+    }
+
+    function updateSnippet() {
+      const url = document.getElementById("dealershipUsedUrlInput").value.trim() || DEFAULT_STORE.usedUrl;
+      const mod = document.getElementById("dealershipModifierInput").value.trim() || "?pt={page}";
+      const snippet = `BASE_URL = "${url}"\nPAGE_MODIFIER = "${mod}"`;
+      document.getElementById("crawlerSnippet").innerText = snippet;
+    }
+
+    document.addEventListener("input", (e) => {
+      if (e.target.id === "dealershipUsedUrlInput" || e.target.id === "dealershipModifierInput") {
+        updateSnippet();
+      }
+    });
+
+    function copySnippet() {
+      const text = document.getElementById("crawlerSnippet").innerText;
+      navigator.clipboard.writeText(text);
+      alert("Crawler config copied to clipboard!");
     }
 
     function openDealershipModal() {
@@ -193,13 +239,13 @@
     function saveDealershipProfile() {
       const name = document.getElementById("dealershipNameInput").value.trim() || DEFAULT_STORE.name;
       const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim() || DEFAULT_STORE.usedUrl;
-      const newUrl = document.getElementById("dealershipNewUrlInput").value.trim() || DEFAULT_STORE.newUrl;
+      const pageModifier = document.getElementById("dealershipModifierInput").value.trim() || "?pt={page}";
 
-      currentStore = { name, usedUrl, newUrl };
+      currentStore = { name, usedUrl, pageModifier };
       localStorage.setItem("autolaunch_store", JSON.stringify(currentStore));
       updateStoreUI();
       closeModal("dealershipModal");
-      alert(`Dealership updated to "${currentStore.name}". Your crawler target URL is now configured for: ${currentStore.usedUrl}`);
+      alert(`Saved! Dealer: "${currentStore.name}". Pattern: ${currentStore.pageModifier}`);
     }
 
     async function fetchLiveInventory(isManual = false) {
