@@ -759,7 +759,6 @@ applyFilters();
 function renderGrid(cars) {
   const grid = document.getElementById("inventoryGrid");
   if (!grid) return;
-  
   if (!cars.length) {
     grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500">No vehicles match your active search filters.</div>';
     return;
@@ -850,7 +849,6 @@ function renderGrid(cars) {
 let customerWishlists = [];
 let currentNotifyData = { phone: "", body: "" };
 
-// ---------------- FACEBOOK AUTO-POSTING & FEED MANAGEMENT ----------------
 async function loadFbFeed() {
   if (!currentUser) return;
   try {
@@ -889,9 +887,8 @@ function openFbFeedModal() {
 
 async function publishCarToFacebook(vin) {
   if (!currentUser) return;
-
   if (!currentStore.fbPageId || !currentStore.fbAccessToken) {
-    alert("Facebook Business Page credentials missing!\n\nPlease open 'Dealership Settings' and enter your Facebook Page ID and Page Access Token first.");
+    alert("Facebook credentials missing. Please configure Page ID and Token in Dealership Settings.");
     openDealershipModal();
     return;
   }
@@ -931,7 +928,6 @@ async function publishCarToFacebook(vin) {
     "💬 Send a direct message to check availability or schedule a test drive before it sells!";
 
   try {
-    let fbPostId = null;
     let fbEndpoint = "https://graph.facebook.com/v26.0/" + encodeURIComponent(currentStore.fbPageId);
     let payload = new FormData();
     payload.append("access_token", currentStore.fbAccessToken);
@@ -945,20 +941,12 @@ async function publishCarToFacebook(vin) {
       payload.append("message", fbCaption);
     }
 
-    const res = await fetch(fbEndpoint, {
-      method: "POST",
-      body: payload
-    });
-
+    const res = await fetch(fbEndpoint, { method: "POST", body: payload });
     const resData = await res.json();
+    if (resData.error) throw new Error(resData.error.message || "Meta API error occurred.");
 
-    if (resData.error) {
-      throw new Error(resData.error.message || "Meta API error occurred.");
-    }
+    const fbPostId = resData.post_id || resData.id;
 
-    fbPostId = resData.post_id || resData.id;
-
-    // Record in Supabase
     await supabaseClient.from("facebook_ad_feed").insert({
       user_id: currentUser.id,
       vin: car.vin,
@@ -974,12 +962,12 @@ async function publishCarToFacebook(vin) {
       status: 'published'
     });
 
-    alert("✓ Published to your Facebook Business Page successfully!\nPost ID: " + fbPostId);
+    alert("✓ Published to Facebook Page successfully!\nPost ID: " + fbPostId);
     await loadFbFeed();
     applyFilters();
   } catch (err) {
-    console.error("Facebook publish error:", err);
-    alert("Failed to publish to Facebook:\n" + err.message);
+    console.error("FB Publish error:", err);
+    alert("Failed to publish: " + err.message);
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="fa-brands fa-facebook text-blue-400"></i> + FB Feed';
@@ -999,7 +987,7 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
   try {
     if (currentStore.fbAccessToken && fbPostId) {
       const updatedMessage = "🔴 SOLD! CONGRATULATIONS TO THE NEW OWNER! 🔴\n\n" + (currentCaption || "This vehicle has been sold.");
-      const res = await fetch("https://graph.facebook.com/v26.0/" + encodeURIComponent(fbPostId), {
+      await fetch("https://graph.facebook.com/v26.0/" + encodeURIComponent(fbPostId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1007,19 +995,11 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
           message: updatedMessage
         })
       });
-
-      const resData = await res.json();
-      if (resData.error) {
-        console.warn("Meta edit post notice:", resData.error.message);
-      }
     }
 
     await supabaseClient
       .from("facebook_ad_feed")
-      .update({
-        status: "sold",
-        sold_at: new Date().toISOString()
-      })
+      .update({ status: "sold", sold_at: new Date().toISOString() })
       .eq("id", feedId);
 
     alert("✓ Vehicle marked as SOLD! Post updated on Facebook.");
@@ -1040,12 +1020,11 @@ function renderFbFeedEntries() {
   if (!container) return;
 
   const activePosts = myFbFeedList.filter(function(i) { return i.status === 'published'; });
-
   if (!activePosts.length) {
     container.innerHTML = '<div class="text-center py-10 space-y-2">' +
       '<i class="fa-brands fa-facebook text-gray-600 text-3xl"></i>' +
       '<p class="text-xs text-gray-400">No vehicles currently active in your Facebook feed.</p>' +
-      '<p class="text-[11px] text-gray-500">Click <strong>"+ FB Feed"</strong> on any car card to post automatically to your Facebook Business Page.</p>' +
+      '<p class="text-[11px] text-gray-500">Click <strong>"+ FB Feed"</strong> on any car card to post automatically.</p>' +
     '</div>';
     return;
   }
@@ -1056,10 +1035,11 @@ function renderFbFeedEntries() {
     const carTitle = (item.year || '') + " " + (item.make || '') + " " + (item.model || 'Vehicle') + (item.trim ? ' ' + item.trim : '');
     const priceClean = item.price ? "$" + item.price.toLocaleString() : "Call for Price";
     const milesClean = (item.mileage || 0).toLocaleString() + " mi";
+    const imgUrl = item.image_url || FALLBACK_IMAGE;
 
     html += '<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">' +
       '<div class="flex items-center gap-3 w-full sm:w-auto">' +
-        '<img src="' + (item.image_url || FALLBACK_IMAGE) + '" class="w-16 h-16 rounded-lg object-cover border border-gray-800 flex-shrink-0">' +
+        '<img src="' + imgUrl + '" class="w-16 h-16 rounded-lg object-cover border border-gray-800 flex-shrink-0">' +
         '<div>' +
           '<h5 class="text-sm font-bold text-white">' + carTitle + '</h5>' +
           '<div class="text-xs text-emerald-400 font-bold">' + priceClean + ' <span class="text-gray-400 font-normal">• ' + milesClean + '</span></div>' +
@@ -1080,297 +1060,293 @@ function renderFbFeedEntries() {
   container.innerHTML = html;
 }
 
-// ---------------- WISHLIST & QUICK NOTIFY FUNCTIONS ----------------
 function openWishlistModal() {
-cancelWishlistEdit();
-loadCustomerWishlists();
-document.getElementById("wishlistModal").classList.remove("hidden");
+  cancelWishlistEdit();
+  loadCustomerWishlists();
+  document.getElementById("wishlistModal").classList.remove("hidden");
 }
 
 async function loadCustomerWishlists() {
-if (!currentUser) return;
-try {
-const { data, error } = await supabaseClient
-.from("customer_wishlists")
-.select("*")
-.eq("user_id", currentUser.id)
-.order("created_at", { ascending: false });
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("customer_wishlists")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false });
 
-if (error) throw error;
-customerWishlists = data || [];
-renderWishlistEntries();
-scanWishlistMatches();
-} catch (err) {
-console.error("Error loading customer wishlists:", err);
-}
+    if (error) throw error;
+    customerWishlists = data || [];
+    renderWishlistEntries();
+    scanWishlistMatches();
+  } catch (err) {
+    console.error("Error loading customer wishlists:", err);
+  }
 }
 
 function editWishlistEntry(id) {
-const item = customerWishlists.find(function(c) { return c.id === id; });
-if (!item) return;
+  const item = customerWishlists.find(function(c) { return c.id === id; });
+  if (!item) return;
 
-document.getElementById("wlEditId").value = item.id;
-document.getElementById("wlName").value = item.customer_name || "";
-document.getElementById("wlPhone").value = item.customer_phone || "";
-document.getElementById("wlEmail").value = item.customer_email || "";
-document.getElementById("wlMake").value = item.target_make || "";
-document.getElementById("wlModel").value = item.target_model || "";
-document.getElementById("wlMinYear").value = item.min_year || "";
-document.getElementById("wlMaxMiles").value = item.max_miles || "";
-document.getElementById("wlTrans").value = item.transmission || "";
-document.getElementById("wlNotes").value = item.notes || "";
+  document.getElementById("wlEditId").value = item.id;
+  document.getElementById("wlName").value = item.customer_name || "";
+  document.getElementById("wlPhone").value = item.customer_phone || "";
+  document.getElementById("wlEmail").value = item.customer_email || "";
+  document.getElementById("wlMake").value = item.target_make || "";
+  document.getElementById("wlModel").value = item.target_model || "";
+  document.getElementById("wlMinYear").value = item.min_year || "";
+  document.getElementById("wlMaxMiles").value = item.max_miles || "";
+  document.getElementById("wlTrans").value = item.transmission || "";
+  document.getElementById("wlNotes").value = item.notes || "";
 
-document.getElementById("wlFormTitle").innerText = "Edit Customer & Specs";
-document.getElementById("wlSaveBtn").innerText = "Update Customer";
-document.getElementById("wlCancelEditBtn").classList.remove("hidden");
-
-document.getElementById("addWishlistForm").scrollIntoView({ behavior: "smooth" });
+  document.getElementById("wlFormTitle").innerText = "Edit Customer & Specs";
+  document.getElementById("wlSaveBtn").innerText = "Update Customer";
+  document.getElementById("wlCancelEditBtn").classList.remove("hidden");
+  document.getElementById("addWishlistForm").scrollIntoView({ behavior: "smooth" });
 }
 
 function cancelWishlistEdit() {
-document.getElementById("addWishlistForm").reset();
-document.getElementById("wlEditId").value = "";
-document.getElementById("wlFormTitle").innerText = "Add Customer Request";
-document.getElementById("wlSaveBtn").innerText = "Save Customer";
-document.getElementById("wlCancelEditBtn").classList.add("hidden");
+  document.getElementById("addWishlistForm").reset();
+  document.getElementById("wlEditId").value = "";
+  document.getElementById("wlFormTitle").innerText = "Add Customer Request";
+  document.getElementById("wlSaveBtn").innerText = "Save Customer";
+  document.getElementById("wlCancelEditBtn").classList.add("hidden");
 }
 
 async function saveCustomerWishlist(e) {
-e.preventDefault();
-if (!currentUser) return;
-const btn = document.getElementById("wlSaveBtn");
-const editId = document.getElementById("wlEditId").value;
-btn.disabled = true;
-btn.innerText = editId ? "Updating..." : "Saving...";
+  e.preventDefault();
+  if (!currentUser) return;
+  const btn = document.getElementById("wlSaveBtn");
+  const editId = document.getElementById("wlEditId").value;
+  btn.disabled = true;
+  btn.innerText = editId ? "Updating..." : "Saving...";
 
-const payload = {
-user_id: currentUser.id,
-customer_name: document.getElementById("wlName").value.trim(),
-customer_phone: document.getElementById("wlPhone").value.trim() || null,
-customer_email: document.getElementById("wlEmail").value.trim() || null,
-target_make: document.getElementById("wlMake").value.trim() || null,
-target_model: document.getElementById("wlModel").value.trim() || null,
-min_year: document.getElementById("wlMinYear").value ? parseInt(document.getElementById("wlMinYear").value) : null,
-max_miles: document.getElementById("wlMaxMiles").value ? parseInt(document.getElementById("wlMaxMiles").value) : null,
-transmission: document.getElementById("wlTrans").value || null,
-notes: document.getElementById("wlNotes").value.trim() || null
-};
+  const payload = {
+    user_id: currentUser.id,
+    customer_name: document.getElementById("wlName").value.trim(),
+    customer_phone: document.getElementById("wlPhone").value.trim() || null,
+    customer_email: document.getElementById("wlEmail").value.trim() || null,
+    target_make: document.getElementById("wlMake").value.trim() || null,
+    target_model: document.getElementById("wlModel").value.trim() || null,
+    min_year: document.getElementById("wlMinYear").value ? parseInt(document.getElementById("wlMinYear").value) : null,
+    max_miles: document.getElementById("wlMaxMiles").value ? parseInt(document.getElementById("wlMaxMiles").value) : null,
+    transmission: document.getElementById("wlTrans").value || null,
+    notes: document.getElementById("wlNotes").value.trim() || null
+  };
 
-try {
-let resError;
-if (editId) {
-const { error } = await supabaseClient
-.from("customer_wishlists")
-.update(payload)
-.eq("id", editId)
-.eq("user_id", currentUser.id);
-resError = error;
-} else {
-const { error } = await supabaseClient
-.from("customer_wishlists")
-.insert(payload);
-resError = error;
-}
+  try {
+    let resError;
+    if (editId) {
+      const { error } = await supabaseClient
+        .from("customer_wishlists")
+        .update(payload)
+        .eq("id", editId)
+        .eq("user_id", currentUser.id);
+      resError = error;
+    } else {
+      const { error } = await supabaseClient
+        .from("customer_wishlists")
+        .insert(payload);
+      resError = error;
+    }
 
-if (resError) throw resError;
-cancelWishlistEdit();
-await loadCustomerWishlists();
-} catch (err) {
-alert("Failed to save changes: " + err.message);
-}
-btn.disabled = false;
-btn.innerText = document.getElementById("wlEditId").value ? "Update Customer" : "Save Customer";
+    if (resError) throw resError;
+    cancelWishlistEdit();
+    await loadCustomerWishlists();
+  } catch (err) {
+    alert("Failed to save changes: " + err.message);
+  }
+  btn.disabled = false;
+  btn.innerText = document.getElementById("wlEditId").value ? "Update Customer" : "Save Customer";
 }
 
 async function deleteWishlistEntry(id) {
-if (!confirm("Are you sure you want to remove this customer request?")) return;
-try {
-const { error } = await supabaseClient.from("customer_wishlists").delete().eq("id", id).eq("user_id", currentUser.id);
-if (error) throw error;
-if (document.getElementById("wlEditId").value === id) {
-cancelWishlistEdit();
-}
-await loadCustomerWishlists();
-} catch (err) {
-alert("Delete failed: " + err.message);
-}
+  if (!confirm("Are you sure you want to remove this customer request?")) return;
+  try {
+    const { error } = await supabaseClient.from("customer_wishlists").delete().eq("id", id).eq("user_id", currentUser.id);
+    if (error) throw error;
+    if (document.getElementById("wlEditId").value === id) cancelWishlistEdit();
+    await loadCustomerWishlists();
+  } catch (err) {
+    alert("Delete failed: " + err.message);
+  }
 }
 
 function scanWishlistMatches() {
-let totalMatches = 0;
-customerWishlists.forEach(function(item) {
-const matches = findMatchingVehicles(item);
-item._matches = matches;
-totalMatches += matches.length;
-});
+  let totalMatches = 0;
+  customerWishlists.forEach(function(item) {
+    const matches = findMatchingVehicles(item);
+    item._matches = matches;
+    totalMatches += matches.length;
+  });
 
-const badge = document.getElementById("wishlistMatchBadge");
-if (badge) {
-if (totalMatches > 0) {
-badge.innerText = totalMatches;
-badge.classList.remove("hidden");
-} else {
-badge.classList.add("hidden");
-}
-}
-renderWishlistEntries();
+  const badge = document.getElementById("wishlistMatchBadge");
+  if (badge) {
+    if (totalMatches > 0) {
+      badge.innerText = totalMatches;
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+  renderWishlistEntries();
 }
 
 function findMatchingVehicles(criteria) {
-return rawInventory.filter(function(car) {
-if (criteria.target_make && (!car.make || car.make.toLowerCase().indexOf(criteria.target_make.toLowerCase()) === -1)) return false;
-if (criteria.target_model && (!car.model || car.model.toLowerCase().indexOf(criteria.target_model.toLowerCase()) === -1)) return false;
-if (criteria.min_year && (!car.year || car.year < criteria.min_year)) return false;
-if (criteria.max_miles && (!car.mileage || car.mileage > criteria.max_miles)) return false;
-if (criteria.transmission && (!car.transmission || car.transmission.toLowerCase().indexOf(criteria.transmission.toLowerCase()) === -1)) return false;
-return true;
-});
+  return rawInventory.filter(function(car) {
+    if (criteria.target_make && (!car.make || car.make.toLowerCase().indexOf(criteria.target_make.toLowerCase()) === -1)) return false;
+    if (criteria.target_model && (!car.model || car.model.toLowerCase().indexOf(criteria.target_model.toLowerCase()) === -1)) return false;
+    if (criteria.min_year && (!car.year || car.year < criteria.min_year)) return false;
+    if (criteria.max_miles && (!car.mileage || car.mileage > criteria.max_miles)) return false;
+    if (criteria.transmission && (!car.transmission || car.transmission.toLowerCase().indexOf(criteria.transmission.toLowerCase()) === -1)) return false;
+    return true;
+  });
 }
 
 function notifyCustomerSms(wishlistId, vin) {
-const item = customerWishlists.find(function(c) { return c.id === wishlistId; });
-const car = rawInventory.find(function(c) { return c.vin === vin; });
-if (!car) return;
+  const item = customerWishlists.find(function(c) { return c.id === wishlistId; });
+  const car = rawInventory.find(function(c) { return c.vin === vin; });
+  if (!car) return;
 
-const firstName = item ? item.customer_name.split(" ")[0] : "there";
-const cleanPhone = item && item.customer_phone ? item.customer_phone.replace(/[^0-9+]/g, "") : "";
-const priceText = car.price ? "$" + car.price.toLocaleString() : "Call for Price";
-const linkText = (car.detail_url || car.listing_url) ? ("\nLink: " + (car.detail_url || car.listing_url)) : "";
+  const firstName = item ? item.customer_name.split(" ")[0] : "there";
+  const cleanPhone = item && item.customer_phone ? item.customer_phone.replace(/[^0-9+]/g, "") : "";
+  const priceText = car.price ? "$" + car.price.toLocaleString() : "Call for Price";
+  const linkText = (car.detail_url || car.listing_url) ? ("\nLink: " + (car.detail_url || car.listing_url)) : "";
 
-const body = "Hey " + firstName + "! Great news—a " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " just arrived in stock at " + (car.location_name || currentStore.name) + " (" + priceText + ", " + ((car.mileage || 0).toLocaleString()) + " mi)." + linkText + "\nLet me know if you would like me to set this aside for you to test drive!";
+  const body = "Hey " + firstName + "! Great news—a " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " just arrived in stock at " + (car.location_name || currentStore.name) + " (" + priceText + ", " + ((car.mileage || 0).toLocaleString()) + " mi)." + linkText + "\nLet me know if you would like me to set this aside for you to test drive!";
 
-currentNotifyData = { phone: cleanPhone, body: body };
+  currentNotifyData = { phone: cleanPhone, body: body };
 
-if (navigator.clipboard) {
-navigator.clipboard.writeText(body).catch(function() {});
-}
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(body).catch(function() {});
+  }
 
-document.getElementById("notifyModalTitle").innerText = "Contact " + (item ? item.customer_name : "Customer");
-document.getElementById("notifyTargetPhone").value = item && item.customer_phone ? item.customer_phone : "No Phone Provided";
-document.getElementById("notifyTargetText").value = body;
+  document.getElementById("notifyModalTitle").innerText = "Contact " + (item ? item.customer_name : "Customer");
+  document.getElementById("notifyTargetPhone").value = item && item.customer_phone ? item.customer_phone : "No Phone Provided";
+  document.getElementById("notifyTargetText").value = body;
 
-const emailLink = document.getElementById("notifyEmailLink");
-if (item && item.customer_email) {
-emailLink.href = "mailto:" + item.customer_email + "?subject=" + encodeURIComponent("Fresh Arrival: " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '')) + "&body=" + encodeURIComponent(body);
-emailLink.classList.remove("hidden");
-} else {
-emailLink.classList.add("hidden");
-}
+  const emailLink = document.getElementById("notifyEmailLink");
+  if (item && item.customer_email) {
+    emailLink.href = "mailto:" + item.customer_email + "?subject=" + encodeURIComponent("Fresh Arrival: " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '')) + "&body=" + encodeURIComponent(body);
+    emailLink.classList.remove("hidden");
+  } else {
+    emailLink.classList.add("hidden");
+  }
 
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-if (isMobile) {
-const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
-window.location.href = "sms:" + cleanPhone + separator + "body=" + encodeURIComponent(body);
-} else {
-document.getElementById("notifyCustomerModal").classList.remove("hidden");
-}
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
+    window.location.href = "sms:" + cleanPhone + separator + "body=" + encodeURIComponent(body);
+  } else {
+    document.getElementById("notifyCustomerModal").classList.remove("hidden");
+  }
 }
 
 function triggerDirectDeviceSms() {
-const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
-window.location.href = "sms:" + currentNotifyData.phone + separator + "body=" + encodeURIComponent(currentNotifyData.body);
+  const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
+  window.location.href = "sms:" + currentNotifyData.phone + separator + "body=" + encodeURIComponent(currentNotifyData.body);
 }
 
 function renderWishlistEntries() {
-const container = document.getElementById("wishlistEntriesContainer");
-if (!container) return;
+  const container = document.getElementById("wishlistEntriesContainer");
+  if (!container) return;
 
-if (!customerWishlists.length) {
-container.innerHTML = '<p class="text-xs text-gray-500 text-center py-6">No customer wishlists saved yet. Add a customer above to track inventory matches automatically.</p>';
-return;
-}
+  if (!customerWishlists.length) {
+    container.innerHTML = '<p class="text-xs text-gray-500 text-center py-6">No customer wishlists saved yet. Add a customer above to track inventory matches automatically.</p>';
+    return;
+  }
 
-let html = "";
-customerWishlists.forEach(function(item) {
-const matches = item._matches || [];
-const hasMatches = matches.length > 0;
+  let html = "";
+  customerWishlists.forEach(function(item) {
+    const matches = item._matches || [];
+    const hasMatches = matches.length > 0;
 
-let matchSection = "";
-if (hasMatches) {
-matchSection = '<div class="mt-3 pt-3 border-t border-emerald-900/40">' +
-'<span class="text-[11px] font-bold text-emerald-400 block mb-2"><i class="fa-solid fa-circle-check mr-1"></i> ' + matches.length + ' Matching Vehicle(s) In Stock Right Now:</span>' +
-'<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
-matches.slice(0, 4).forEach(function(m) {
-matchSection += '<div class="p-2.5 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">' +
-'<div>' +
-'<strong class="text-white block">' + (m.year || '') + ' ' + (m.make || '') + ' ' + (m.model || '') + '</strong>' +
-'<span class="text-emerald-400 font-bold">' + (m.price ? '$' + m.price.toLocaleString() : 'Call') + '</span> • ' +
-'<span class="text-gray-400">' + ((m.mileage || 0).toLocaleString()) + ' mi</span>' +
-'</div>' +
-'<button onclick="notifyCustomerSms(\'' + item.id + '\', \'' + m.vin + '\')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm">' +
-'<i class="fa-solid fa-comment-sms text-[11px]"></i><span>Text</span>' +
-'</button>' +
-'</div>';
-});
-matchSection += '</div></div>';
-} else {
-matchSection = '<div class="mt-2 text-[11px] text-gray-500"><i class="fa-solid fa-clock mr-1"></i> No inventory currently matches these specs. AutoLaunch will highlight when one arrives.</div>';
-}
+    let matchSection = "";
+    if (hasMatches) {
+      matchSection = '<div class="mt-3 pt-3 border-t border-emerald-900/40">' +
+        '<span class="text-[11px] font-bold text-emerald-400 block mb-2"><i class="fa-solid fa-circle-check mr-1"></i> ' + matches.length + ' Matching Vehicle(s) In Stock Right Now:</span>' +
+        '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
+      matches.slice(0, 4).forEach(function(m) {
+        matchSection += '<div class="p-2.5 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">' +
+          '<div>' +
+            '<strong class="text-white block">' + (m.year || '') + ' ' + (m.make || '') + ' ' + (m.model || '') + '</strong>' +
+            '<span class="text-emerald-400 font-bold">' + (m.price ? '$' + m.price.toLocaleString() : 'Call') + '</span> • ' +
+            '<span class="text-gray-400">' + ((m.mileage || 0).toLocaleString()) + ' mi</span>' +
+          '</div>' +
+          '<button onclick="notifyCustomerSms(\'' + item.id + '\', \'' + m.vin + '\')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm">' +
+            '<i class="fa-solid fa-comment-sms text-[11px]"></i><span>Text</span>' +
+          '</button>' +
+        '</div>';
+      });
+      matchSection += '</div></div>';
+    } else {
+      matchSection = '<div class="mt-2 text-[11px] text-gray-500"><i class="fa-solid fa-clock mr-1"></i> No inventory currently matches these specs. AutoLaunch will highlight when one arrives.</div>';
+    }
 
-html += '<div class="p-4 rounded-xl ' + (hasMatches ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-gray-950/50 border-gray-800') + ' border space-y-2">' +
-'<div class="flex items-start justify-between">' +
-'<div>' +
-'<h5 class="text-sm font-bold text-white flex items-center gap-2">' +
-item.customer_name +
-(hasMatches ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">' + matches.length + ' MATCHES</span>' : '') +
-'</h5>' +
-'<div class="text-xs text-gray-400 flex flex-wrap gap-x-3 pt-0.5">' +
-(item.customer_phone ? '<span><i class="fa-solid fa-phone text-gray-500 mr-1"></i>' + item.customer_phone + '</span>' : '') +
-(item.customer_email ? '<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>' + item.customer_email + '</span>' : '') +
-'</div>' +
-'</div>' +
-'<div class="flex items-center gap-1">' +
-'<button onclick="editWishlistEntry(\'' + item.id + '\')" title="Edit Customer Request" class="text-gray-500 hover:text-indigo-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-pen-to-square text-xs"></i></button>' +
-'<button onclick="deleteWishlistEntry(\'' + item.id + '\')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>' +
-'</div>' +
-'</div>' +
-'<div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">' +
-'<span><strong>Wanted:</strong> ' + (item.min_year ? item.min_year + '+ ' : '') + (item.target_make || 'Any Make') + ' ' + (item.target_model || '') + '</span>' +
-(item.max_miles ? '<span>• Under ' + item.max_miles.toLocaleString() + ' mi</span>' : '') +
-(item.transmission ? '<span>• ' + item.transmission + '</span>' : '') +
-(item.notes ? '<span class="block text-gray-400 w-full mt-1"><em>Notes: ' + item.notes + '</em></span>' : '') +
-'</div>' +
-matchSection +
-'</div>';
-});
+    html += '<div class="p-4 rounded-xl ' + (hasMatches ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-gray-950/50 border-gray-800') + ' border space-y-2">' +
+      '<div class="flex items-start justify-between">' +
+        '<div>' +
+          '<h5 class="text-sm font-bold text-white flex items-center gap-2">' +
+            item.customer_name +
+            (hasMatches ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">' + matches.length + ' MATCHES</span>' : '') +
+          '</h5>' +
+          '<div class="text-xs text-gray-400 flex flex-wrap gap-x-3 pt-0.5">' +
+            (item.customer_phone ? '<span><i class="fa-solid fa-phone text-gray-500 mr-1"></i>' + item.customer_phone + '</span>' : '') +
+            (item.customer_email ? '<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>' + item.customer_email + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="flex items-center gap-1">' +
+          '<button onclick="editWishlistEntry(\'' + item.id + '\')" title="Edit Customer Request" class="text-gray-500 hover:text-indigo-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-pen-to-square text-xs"></i></button>' +
+          '<button onclick="deleteWishlistEntry(\'' + item.id + '\')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">' +
+        '<span><strong>Wanted:</strong> ' + (item.min_year ? item.min_year + '+ ' : '') + (item.target_make || 'Any Make') + ' ' + (item.target_model || '') + '</span>' +
+        (item.max_miles ? '<span>• Under ' + item.max_miles.toLocaleString() + ' mi</span>' : '') +
+        (item.transmission ? '<span>• ' + item.transmission + '</span>' : '') +
+        (item.notes ? '<span class="block text-gray-400 w-full mt-1"><em>Notes: ' + item.notes + '</em></span>' : '') +
+      '</div>' +
+      matchSection +
+    '</div>';
+  });
 
-container.innerHTML = html;
+  container.innerHTML = html;
 }
 
 function openShareModalByVin(vin) {
-const car = rawInventory.find(function(c) { return c.vin === vin; });
-if (!car) return;
-document.getElementById("modalTitle").innerText = "Customer Quick-Share";
-document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " | " + (car.price ? "$" + car.price.toLocaleString() : "Call");
-const urlText = (car.detail_url || car.listing_url) ? "\nView details: " + (car.detail_url || car.listing_url) : "";
-const msg = "Hey! Take a look at this " + (car.color ? car.color + ' ' : '') + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + ": " + (car.price ? "$" + car.price.toLocaleString() : "Call") + " with " + ((car.mileage || 0).toLocaleString()) + " miles. VIN: " + car.vin + "." + urlText + " Let me know if you want to take it for a drive!";
+  const car = rawInventory.find(function(c) { return c.vin === vin; });
+  if (!car) return;
+  document.getElementById("modalTitle").innerText = "Customer Quick-Share";
+  document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " | " + (car.price ? "$" + car.price.toLocaleString() : "Call");
+  const urlText = (car.detail_url || car.listing_url) ? "\nView details: " + (car.detail_url || car.listing_url) : "";
+  const msg = "Hey! Take a look at this " + (car.color ? car.color + ' ' : '') + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + ": " + (car.price ? "$" + car.price.toLocaleString() : "Call") + " with " + ((car.mileage || 0).toLocaleString()) + " miles. VIN: " + car.vin + "." + urlText + " Let me know if you want to take it for a drive!";
 
-document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
-'<textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + msg + '</textarea>' +
-'<div class="flex gap-2">' +
-'<button onclick="navigator.clipboard.writeText(document.getElementById(\'shareText\').value); alert(\'Copied to clipboard!\')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>' +
-'<a href="sms:?&body=' + encodeURIComponent(msg) + '" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>' +
-'</div>' +
-'</div>';
-document.getElementById("actionModal").classList.remove("hidden");
+  document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
+    '<textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + msg + '</textarea>' +
+    '<div class="flex gap-2">' +
+      '<button onclick="navigator.clipboard.writeText(document.getElementById(\'shareText\').value); alert(\'Copied to clipboard!\')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>' +
+      '<a href="sms:?&body=' + encodeURIComponent(msg) + '" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>' +
+    '</div>' +
+  '</div>';
+  document.getElementById("actionModal").classList.remove("hidden");
 }
 
 function openTikTokModalByVin(vin) {
-const car = rawInventory.find(function(c) { return c.vin === vin; });
-if (!car) return;
-document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
-document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '');
-const script = "(Hook - 0-3s): Stop scrolling if you need a reliable vehicle right now.\n(Body - 3-10s): Fresh arrival: " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + " with " + ((car.mileage || 0).toLocaleString()) + " miles.\n(CTA - 10-15s): Fully inspected and front-line ready. Comment or message me before it's gone!";
+  const car = rawInventory.find(function(c) { return c.vin === vin; });
+  if (!car) return;
+  document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
+  document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '');
+  const script = "(Hook - 0-3s): Stop scrolling if you need a reliable vehicle right now.\n(Body - 3-10s): Fresh arrival: " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + " with " + ((car.mileage || 0).toLocaleString()) + " miles.\n(CTA - 10-15s): Fully inspected and front-line ready. Comment or message me before it's gone!";
 
-document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
-'<textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + script + '</textarea>' +
-'<p class="text-xs text-gray-400">💡 Record vertical 9:16 video while walking around the exterior and interior.</p>' +
-'</div>';
-document.getElementById("actionModal").classList.remove("hidden");
+  document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
+    '<textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + script + '</textarea>' +
+    '<p class="text-xs text-gray-400">💡 Record vertical 9:16 video while walking around the exterior and interior.</p>' +
+  '</div>';
+  document.getElementById("actionModal").classList.remove("hidden");
 }
 
 function closeModal(id) {
-document.getElementById(id).classList.add("hidden");
+  document.getElementById(id).classList.add("hidden");
 }
 /* ============================================================================ */
 /* ======================= FUNCTION: SOCIAL / SMS GENERATORS END ============= */
