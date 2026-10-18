@@ -993,6 +993,14 @@ function toggleAdvancedPagination() {
 /* ============================================================================ */
 async function loadUserStoreSettings() {
   if (!currentUser) return;
+
+  // 1. Read local storage cache first so selections persist instantly
+  let localBackup = {};
+  try {
+    const raw = localStorage.getItem("autolaunch_settings_" + currentUser.id);
+    if (raw) localBackup = JSON.parse(raw);
+  } catch (e) {}
+
   try {
     const { data, error } = await supabaseClient
       .from("user_settings")
@@ -1002,20 +1010,25 @@ async function loadUserStoreSettings() {
 
     if (data) {
       currentStore = {
-        name: data.store_name || "My Dealership",
-        pageModifier: data.page_modifier || "?pt={page}",
-        usedUrl: data.used_url || "",
-        newUrl: data.new_url || "",
-        cpoUrl: data.certified_url || "",
-        fbPageId: data.fb_page_id || "",
-        fbAccessToken: data.fb_access_token || data.fb_page_token || "",
-        fbAutoEnabled: typeof data.fb_auto_enabled === 'boolean' ? data.fb_auto_enabled : true,
-        fbAutoConditions: Array.isArray(data.fb_auto_conditions) ? data.fb_auto_conditions : ["Used", "Certified Pre-Owned"],
-        fbAutoLocations: Array.isArray(data.fb_auto_locations) ? data.fb_auto_locations : []
+        name: data.store_name || localBackup.name || "My Dealership",
+        pageModifier: data.page_modifier || localBackup.pageModifier || "?pt={page}",
+        usedUrl: data.used_url || localBackup.usedUrl || "",
+        newUrl: data.new_url || localBackup.newUrl || "",
+        cpoUrl: data.certified_url || localBackup.cpoUrl || "",
+        fbPageId: data.fb_page_id || localBackup.fbPageId || "",
+        fbAccessToken: data.fb_access_token || data.fb_page_token || localBackup.fbAccessToken || "",
+        fbAutoEnabled: typeof data.fb_auto_enabled === 'boolean' ? data.fb_auto_enabled : (typeof localBackup.fbAutoEnabled === 'boolean' ? localBackup.fbAutoEnabled : true),
+        fbAutoConditions: Array.isArray(data.fb_auto_conditions) ? data.fb_auto_conditions : (Array.isArray(localBackup.fbAutoConditions) ? localBackup.fbAutoConditions : ["Used", "Certified Pre-Owned"]),
+        fbAutoLocations: Array.isArray(data.fb_auto_locations) ? data.fb_auto_locations : (Array.isArray(localBackup.fbAutoLocations) ? localBackup.fbAutoLocations : [])
       };
+    } else if (localBackup && localBackup.name) {
+      currentStore = Object.assign(currentStore, localBackup);
     }
   } catch (err) {
-    console.warn("User store settings fetch:", err);
+    console.warn("User store settings fetch notice:", err);
+    if (localBackup && localBackup.name) {
+      currentStore = Object.assign(currentStore, localBackup);
+    }
   }
   updateStoreUI();
 }
@@ -1121,6 +1134,7 @@ async function saveDealershipProfile() {
   const parsedCpo = parsePaginationFromUrl(cpoUrl);
   if (parsedCpo) cpoUrl = parsedCpo.baseUrl;
 
+  // 1. Update runtime object
   currentStore.name = name;
   currentStore.fbPageId = fbPageId;
   currentStore.fbAccessToken = fbAccessToken;
@@ -1132,6 +1146,12 @@ async function saveDealershipProfile() {
   currentStore.cpoUrl = cpoUrl;
   currentStore.pageModifier = pageModifier;
 
+  // 2. Save directly to localStorage so Ctrl + F5 NEVER wipes it
+  try {
+    localStorage.setItem("autolaunch_settings_" + currentUser.id, JSON.stringify(currentStore));
+  } catch (e) {}
+
+  // 3. Save to Supabase
   try {
     const { error } = await supabaseClient.from("user_settings").upsert({
       user_id: currentUser.id,
@@ -1149,11 +1169,15 @@ async function saveDealershipProfile() {
       updated_at: new Date().toISOString()
     });
 
-    if (error) throw error;
-    alert("✓ Settings & Facebook automation preferences saved successfully!");
+    if (error) {
+      console.warn("Supabase upsert warning:", error);
+      alert("✓ Settings saved locally! (Run the SQL snippet in Supabase SQL editor to enable cloud backup: " + error.message + ")");
+    } else {
+      alert("✓ Settings & Facebook automation preferences saved successfully!");
+    }
   } catch (e) {
     console.error("Save error:", e);
-    alert("Settings updated.");
+    alert("✓ Settings saved locally!");
   }
 
   btn.disabled = false;
