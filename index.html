@@ -757,85 +757,87 @@ applyFilters();
 /* ======================= FUNCTION: INVENTORY CARD RENDERER START =========== */
 /* ============================================================================ */
 function renderGrid(cars) {
-const grid = document.getElementById("inventoryGrid");
-if (!cars.length) {
-grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500">No vehicles match your active search filters.</div>';
-return;
-}
+  const grid = document.getElementById("inventoryGrid");
+  if (!grid) return;
+  
+  if (!cars.length) {
+    grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500">No vehicles match your active search filters.</div>';
+    return;
+  }
 
-let html = "";
-cars.forEach(function(car) {
-let photoUrl = car.image_url;
-if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
-if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
+  let html = "";
+  cars.forEach(function(car) {
+    let photoUrl = car.image_url;
+    if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+    if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
 
-const displayPrice = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
-const displayPayment = car.price && car.price > 0 ? "~$" + Math.round(car.price / 72) + "/mo" : "Finance Avail";
+    const displayPrice = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
+    const displayPayment = car.price && car.price > 0 ? "~$" + Math.round(car.price / 72) + "/mo" : "Finance Avail";
 
-let badgeColor = "bg-amber-500/20 text-amber-300 border-amber-500/30";
-if (car.condition === "Certified Pre-Owned") badgeColor = "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
-else if (car.condition === "New") badgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+    let badgeColor = "bg-amber-500/20 text-amber-300 border-amber-500/30";
+    if (car.condition === "Certified Pre-Owned") badgeColor = "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
+    else if (car.condition === "New") badgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
 
-const bodyBadge = (car.body_type && car.body_type !== 'Other') ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">' + car.body_type + '</span>' : '';
-const linkUrl = car.detail_url || car.listing_url || "#";
-const isSaved = savedVins.has(car.vin);
-const heartClass = isSaved ? "fa-solid fa-heart text-rose-500" : "fa-regular fa-heart text-white/80 hover:text-white";
+    const bodyBadge = (car.body_type && car.body_type !== 'Other') ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">' + car.body_type + '</span>' : '';
+    const linkUrl = car.detail_url || car.listing_url || "#";
+    const isSaved = savedVins.has(car.vin);
+    const heartClass = isSaved ? "fa-solid fa-heart text-rose-500" : "fa-regular fa-heart text-white/80 hover:text-white";
 
-const isAlreadyInFeed = myFbFeedList.some(function(item) { return item.vin === car.vin && item.status === 'published'; });
-const fbBtnClass = isAlreadyInFeed ? "bg-emerald-950/60 text-emerald-300 border-emerald-600/40" : "bg-blue-950/60 hover:bg-blue-900/60 text-blue-200 border-blue-700/40";
-const fbBtnText = isAlreadyInFeed ? "In Feed" : "+ FB Feed";
-const fbBtnIcon = isAlreadyInFeed ? "fa-solid fa-check text-emerald-400" : "fa-brands fa-facebook text-blue-400";
+    const isAlreadyInFeed = myFbFeedList.some(function(item) { return item.vin === car.vin && item.status === 'published'; });
+    const fbBtnClass = isAlreadyInFeed ? "bg-emerald-950/60 text-emerald-300 border-emerald-600/40" : "bg-blue-950/60 hover:bg-blue-900/60 text-blue-200 border-blue-700/40";
+    const fbBtnText = isAlreadyInFeed ? "In Feed" : "+ FB Feed";
+    const fbBtnIcon = isAlreadyInFeed ? "fa-solid fa-check text-emerald-400" : "fa-brands fa-facebook text-blue-400";
 
-html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
-'<div>' +
-'<div class="h-48 w-full bg-gray-900 relative overflow-hidden group border-b border-gray-800">' +
-'<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="block w-full h-full cursor-pointer">' +
-'<img src="' + photoUrl + '" onerror="this.onerror=null; this.src=\'' + FALLBACK_IMAGE + '\';" alt="Vehicle Photo" class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-300">' +
-'</a>' +
-'<div class="absolute top-3 left-3 flex gap-1.5 flex-wrap z-10">' +
-'<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + badgeColor + ' backdrop-blur-md">' + (car.condition || 'Used') + '</span>' +
-bodyBadge +
-'</div>' +
-'<button onclick="toggleWishlistVin(\'' + car.vin + '\', event)" title="' + (isSaved ? "Remove from Saved" : "Save to Wishlist") + '" class="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/10 flex items-center justify-center transition cursor-pointer">' +
-'<i class="' + heartClass + ' text-sm"></i>' +
-'</button>' +
-'<div class="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-white border border-white/10">' +
-displayPayment +
-'</div>' +
-'</div>' +
-'<div class="p-4 space-y-2">' +
-'<div class="flex items-baseline justify-between">' +
-'<span class="text-xl font-black text-white">' + displayPrice + '</span>' +
-'<span class="text-xs font-medium text-gray-400">' + ((car.mileage || 0).toLocaleString()) + ' mi</span>' +
-'</div>' +
-'<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="group flex items-center justify-between text-gray-100 hover:text-indigo-400 transition cursor-pointer">' +
-'<h4 class="font-bold text-sm truncate">' + (car.year || '') + ' ' + (car.make || '') + ' ' + (car.model || 'Vehicle') + (car.trim ? ' ' + car.trim : '') + '</h4>' +
-'<i class="fa-solid fa-arrow-up-right-from-square text-xs text-gray-500 group-hover:text-indigo-400 ml-1"></i>' +
-'</a>' +
-'<p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>' + (car.location_name || currentStore.name) + '</p>' +
-'<div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">' +
-'<span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>' + (car.color || 'Standard') + '</span>' +
-'<span>•</span>' +
-'<span><i class="fa-solid fa-gears text-gray-500 mr-1"></i>' + (car.transmission || 'Automatic') + '</span>' +
-'</div>' +
-'<p class="text-[11px] font-mono text-gray-500">VIN: ' + (car.vin || 'N/A') + '</p>' +
-'</div>' +
-'</div>' +
-'<div class="p-4 pt-0 grid grid-cols-3 gap-2">' +
-'<button onclick="openShareModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
-'<i class="fa-solid fa-share-nodes text-indigo-400"></i><span>Share</span>' +
-'</button>' +
-'<button id="cardFbBtn_' + car.vin + '" onclick="publishCarToFacebook(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer ' + fbBtnClass + '">' +
-'<i class="' + fbBtnIcon + '"></i><span>' + fbBtnText + '</span>' +
-'</button>' +
-'<button onclick="openTikTokModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
-'<i class="fa-brands fa-tiktok text-rose-400"></i><span>Video</span>' +
-'</button>' +
-'</div>' +
-'</div>';
-});
+    html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
+      '<div>' +
+        '<div class="h-48 w-full bg-gray-900 relative overflow-hidden group border-b border-gray-800">' +
+          '<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="block w-full h-full cursor-pointer">' +
+            '<img src="' + photoUrl + '" onerror="this.onerror=null; this.src=\'' + FALLBACK_IMAGE + '\';" alt="Vehicle Photo" class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-300">' +
+          '</a>' +
+          '<div class="absolute top-3 left-3 flex gap-1.5 flex-wrap z-10">' +
+            '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + badgeColor + ' backdrop-blur-md">' + (car.condition || 'Used') + '</span>' +
+            bodyBadge +
+          '</div>' +
+          '<button onclick="toggleWishlistVin(\'' + car.vin + '\', event)" title="' + (isSaved ? "Remove from Saved" : "Save to Wishlist") + '" class="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/10 flex items-center justify-center transition cursor-pointer">' +
+            '<i class="' + heartClass + ' text-sm"></i>' +
+          '</button>' +
+          '<div class="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-white border border-white/10">' +
+            displayPayment +
+          '</div>' +
+        '</div>' +
+        '<div class="p-4 space-y-2">' +
+          '<div class="flex items-baseline justify-between">' +
+            '<span class="text-xl font-black text-white">' + displayPrice + '</span>' +
+            '<span class="text-xs font-medium text-gray-400">' + ((car.mileage || 0).toLocaleString()) + ' mi</span>' +
+          '</div>' +
+          '<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="group flex items-center justify-between text-gray-100 hover:text-indigo-400 transition cursor-pointer">' +
+            '<h4 class="font-bold text-sm truncate">' + (car.year || '') + ' ' + (car.make || '') + ' ' + (car.model || 'Vehicle') + (car.trim ? ' ' + car.trim : '') + '</h4>' +
+            '<i class="fa-solid fa-arrow-up-right-from-square text-xs text-gray-500 group-hover:text-indigo-400 ml-1"></i>' +
+          '</a>' +
+          '<p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>' + (car.location_name || currentStore.name) + '</p>' +
+          '<div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">' +
+            '<span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>' + (car.color || 'Standard') + '</span>' +
+            '<span>•</span>' +
+            '<span><i class="fa-solid fa-gears text-gray-500 mr-1"></i>' + (car.transmission || 'Automatic') + '</span>' +
+          '</div>' +
+          '<p class="text-[11px] font-mono text-gray-500">VIN: ' + (car.vin || 'N/A') + '</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="p-4 pt-0 grid grid-cols-3 gap-2">' +
+        '<button onclick="openShareModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
+          '<i class="fa-solid fa-share-nodes text-indigo-400"></i><span>Share</span>' +
+        '</button>' +
+        '<button id="cardFbBtn_' + car.vin + '" onclick="publishCarToFacebook(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer ' + fbBtnClass + '">' +
+          '<i class="' + fbBtnIcon + '"></i><span>' + fbBtnText + '</span>' +
+        '</button>' +
+        '<button onclick="openTikTokModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
+          '<i class="fa-brands fa-tiktok text-rose-400"></i><span>Video</span>' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  });
 
-grid.innerHTML = html;
+  grid.innerHTML = html;
 }
 /* ============================================================================ */
 /* ======================= FUNCTION: INVENTORY CARD RENDERER END ============= */
