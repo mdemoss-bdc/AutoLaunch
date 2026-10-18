@@ -113,6 +113,13 @@
       </div>
 
       <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Facebook Feed Manager Button -->
+        <button onclick="openFbFeedModal()" class="px-3.5 py-1.5 rounded-lg bg-blue-950/60 hover:bg-blue-900/60 border border-blue-500/40 text-blue-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-sm relative">
+          <i class="fa-brands fa-facebook text-blue-400"></i>
+          <span>FB Feed</span>
+          <span id="fbFeedCountBadge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-500 text-[10px] font-black text-white ml-0.5">0</span>
+        </button>
+
         <!-- Wishlist Matchmaker Button -->
         <button onclick="openWishlistModal()" class="px-3.5 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-sm relative">
           <i class="fa-solid fa-bell text-rose-400"></i>
@@ -317,8 +324,8 @@
     <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
         <div>
-          <h3 class="text-lg font-bold text-white">Your Dealership Settings & URLs</h3>
-          <p class="text-xs text-gray-400">Configure your store name and live inventory URLs.</p>
+          <h3 class="text-lg font-bold text-white">Dealership & Social Automation Settings</h3>
+          <p class="text-xs text-gray-400">Configure your store name, inventory URLs, and Facebook Page credentials.</p>
         </div>
         <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
@@ -332,6 +339,22 @@
         <div>
           <label class="text-xs font-bold text-gray-400 uppercase">Dealership Display Name</label>
           <input type="text" id="dealershipNameInput" placeholder="e.g. University Ford WV" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <!-- Facebook Business Page Integration Box -->
+        <div class="p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/30 space-y-2.5">
+          <div class="flex items-center gap-2 text-blue-300 font-bold text-xs uppercase tracking-wider">
+            <i class="fa-brands fa-facebook text-blue-400"></i> Facebook Business Page Auto-Poster
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-gray-400 uppercase block mb-1">Facebook Page ID</label>
+            <input type="text" id="fbPageIdInput" placeholder="e.g. 109283746501928" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-gray-400 uppercase block mb-1">Page Access Token</label>
+            <input type="password" id="fbAccessTokenInput" placeholder="EAAGm0PX4ZC0BA..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
+            <p class="text-[10px] text-gray-500 mt-1">Allows AutoLaunch to publish vehicles, add images, and append 'SOLD' automatically to your page.</p>
+          </div>
         </div>
 
         <div class="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-indigo-300 leading-relaxed flex items-start gap-2.5">
@@ -586,65 +609,34 @@
 
 
   <!-- ============================================================================== -->
-  <!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR START ============ -->
+  <!-- ======================= SECTION 8: FACEBOOK FEED MANAGER START ============== -->
   <!-- ============================================================================== -->
-  <div id="wishlistModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-    <div class="glass-panel w-full max-w-4xl rounded-2xl border border-gray-800 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+  <div id="fbFeedModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-4xl rounded-2xl border border-blue-500/30 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-4">
-        <div>
-          <h3 class="text-lg font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-radar text-rose-400"></i> Customer Wishlist & Inventory Radar
-          </h3>
-          <p class="text-xs text-gray-400">Track prospective buyers. AutoLaunch scans your live inventory for exact matches.</p>
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+            <i class="fa-brands fa-facebook text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">My Active Facebook Feed</h3>
+            <p class="text-xs text-gray-400">Manage vehicles currently live on your Facebook Business Page. Mark as sold to auto-update posts.</p>
+          </div>
         </div>
-        <button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeModal('fbFeedModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
 
-      <!-- Add / Edit Customer Entry Form -->
-      <form id="addWishlistForm" onsubmit="saveCustomerWishlist(event)" class="bg-gray-950/70 p-4 rounded-xl border border-gray-800/80 space-y-3">
-        <input type="hidden" id="wlEditId" value="">
-        <div class="flex items-center justify-between">
-          <span id="wlFormTitle" class="text-xs font-bold text-indigo-400 uppercase tracking-wider block">Add Customer Request</span>
-          <button type="button" id="wlCancelEditBtn" onclick="cancelWishlistEdit()" class="text-xs text-gray-400 hover:text-white hidden cursor-pointer">
-            <i class="fa-solid fa-xmark mr-1"></i> Cancel Edit
-          </button>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <input type="text" id="wlName" required placeholder="Customer Name *" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-          <input type="tel" id="wlPhone" placeholder="Phone Number" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-          <input type="email" id="wlEmail" placeholder="Email Address" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-        </div>
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <input type="text" id="wlMake" placeholder="Make (e.g. Toyota)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-          <input type="text" id="wlModel" placeholder="Model (e.g. Tacoma)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-          <input type="number" id="wlMinYear" placeholder="Min Year (e.g. 2022)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-          <input type="number" id="wlMaxMiles" placeholder="Max Miles (e.g. 50000)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-          <select id="wlTrans" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
-            <option value="">Any Trans</option>
-            <option value="Automatic">Automatic</option>
-            <option value="Manual">Manual</option>
-          </select>
-        </div>
-        <div class="flex gap-2">
-          <input type="text" id="wlNotes" placeholder="Additional notes or trade-in info..." class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-          <button type="submit" id="wlSaveBtn" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer">
-            Save Customer
-          </button>
-        </div>
-      </form>
-
-      <!-- Customer Wishlist List & Live Matches -->
-      <div class="space-y-3">
-        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Customer Requests & Live Matches</h4>
-        <div id="wishlistEntriesContainer" class="space-y-3">
-          <p class="text-xs text-gray-500 text-center py-6">Loading wishlist requests...</p>
-        </div>
+      <div id="fbFeedContainer" class="space-y-3">
+        <p class="text-xs text-gray-500 text-center py-8">Loading your Facebook listings...</p>
       </div>
     </div>
   </div>
   <!-- ============================================================================== -->
-  <!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR END ============== -->
+  <!-- ======================= SECTION 8: FACEBOOK FEED MANAGER END ================ -->
   <!-- ============================================================================== -->
+
+
+  
 
 
   <script>
@@ -665,12 +657,15 @@
       pageModifier: "?pt={page}",
       usedUrl: "",
       newUrl: "",
-      cpoUrl: ""
+      cpoUrl: "",
+      fbPageId: "",
+      fbAccessToken: ""
     };
 
     let rawInventory = [];
     let savedVins = new Set();
     let showWishlistOnly = false;
+    let myFbFeedList = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
     /* ============================================================================ */
     /* ======================= JAVASCRIPT GLOBAL STATE END ======================== */
@@ -825,6 +820,7 @@
 
       loadWishlistFromStorage();
       await loadUserStoreSettings();
+      await loadFbFeed();
       await fetchLiveInventory(true);
     }
     /* ============================================================================ */
@@ -956,7 +952,9 @@
             pageModifier: data.page_modifier || "?pt={page}",
             usedUrl: data.used_url || "",
             newUrl: data.new_url || "",
-            cpoUrl: data.certified_url || ""
+            cpoUrl: data.certified_url || "",
+            fbPageId: data.fb_page_id || "",
+            fbAccessToken: data.fb_access_token || ""
           };
         } else {
           currentStore = {
@@ -964,7 +962,9 @@
             pageModifier: "?pt={page}",
             usedUrl: "",
             newUrl: "",
-            cpoUrl: ""
+            cpoUrl: "",
+            fbPageId: "",
+            fbAccessToken: ""
           };
         }
       } catch (err) {
@@ -978,6 +978,8 @@
       document.getElementById("bannerStoreTitle").innerText = currentStore.name || "Dealership Inventory";
       document.getElementById("dealershipSlugInput").value = currentUser ? currentUser.id : "Loading...";
       document.getElementById("dealershipNameInput").value = currentStore.name || "";
+      document.getElementById("fbPageIdInput").value = currentStore.fbPageId || "";
+      document.getElementById("fbAccessTokenInput").value = currentStore.fbAccessToken || "";
       document.getElementById("dealershipPageModifierInput").value = currentStore.pageModifier || "?pt={page}";
       document.getElementById("detectedPatternText").innerText = currentStore.pageModifier || "?pt={page}";
       document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl || "";
@@ -1002,6 +1004,8 @@
       btn.innerText = "Saving to Database...";
 
       const name = document.getElementById("dealershipNameInput").value.trim() || currentStore.name;
+      const fbPageId = document.getElementById("fbPageIdInput").value.trim();
+      const fbAccessToken = document.getElementById("fbAccessTokenInput").value.trim();
       let usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim();
       let newUrl = document.getElementById("dealershipNewUrlInput").value.trim();
       let cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim();
@@ -1025,19 +1029,21 @@
       const parsedCpo = parsePaginationFromUrl(cpoUrl);
       if (parsedCpo) cpoUrl = parsedCpo.baseUrl;
 
-      currentStore = { name, pageModifier, usedUrl, newUrl, cpoUrl };
+      currentStore = { name, pageModifier, usedUrl, newUrl, cpoUrl, fbPageId, fbAccessToken };
 
       try {
         await supabaseClient.from("user_settings").upsert({
           user_id: currentUser.id,
           store_name: name,
+          fb_page_id: fbPageId,
+          fb_access_token: fbAccessToken,
           page_modifier: pageModifier,
           used_url: usedUrl,
           new_url: newUrl,
           certified_url: cpoUrl,
           updated_at: new Date().toISOString()
         });
-        alert("✓ Settings saved successfully for " + name + "!\nAuto-detected pagination modifier: " + pageModifier);
+        alert("✓ Settings & Facebook credentials saved successfully!");
       } catch (e) {
         console.error("Save error:", e);
         alert("Settings updated.");
@@ -1385,6 +1391,11 @@
         const isSaved = savedVins.has(car.vin);
         const heartClass = isSaved ? "fa-solid fa-heart text-rose-500" : "fa-regular fa-heart text-white/80 hover:text-white";
 
+        const isAlreadyInFeed = myFbFeedList.some(function(item) { return item.vin === car.vin && item.status === 'published'; });
+        const fbBtnClass = isAlreadyInFeed ? "bg-emerald-950/60 text-emerald-300 border-emerald-600/40" : "bg-blue-950/60 hover:bg-blue-900/60 text-blue-200 border-blue-700/40";
+        const fbBtnText = isAlreadyInFeed ? "In Feed" : "+ FB Feed";
+        const fbBtnIcon = isAlreadyInFeed ? "fa-solid fa-check text-emerald-400" : "fa-brands fa-facebook text-blue-400";
+
         html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
           '<div>' +
             '<div class="h-48 w-full bg-gray-900 relative overflow-hidden group border-b border-gray-800">' +
@@ -1424,8 +1435,8 @@
             '<button onclick="openShareModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
               '<i class="fa-solid fa-share-nodes text-indigo-400"></i><span>Share</span>' +
             '</button>' +
-            '<button onclick="openFBModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/40 text-indigo-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
-              '<i class="fa-brands fa-facebook text-blue-400"></i><span>FB Ad</span>' +
+            '<button id="cardFbBtn_' + car.vin + '" onclick="publishCarToFacebook(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer ' + fbBtnClass + '">' +
+              '<i class="' + fbBtnIcon + '"></i><span>' + fbBtnText + '</span>' +
             '</button>' +
             '<button onclick="openTikTokModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
               '<i class="fa-brands fa-tiktok text-rose-400"></i><span>Video</span>' +
@@ -1447,6 +1458,240 @@
     let customerWishlists = [];
     let currentNotifyData = { phone: "", body: "" };
 
+    // ---------------- FACEBOOK AUTO-POSTING & FEED MANAGEMENT ----------------
+    async function loadFbFeed() {
+      if (!currentUser) return;
+      try {
+        const { data, error } = await supabaseClient
+          .from("facebook_ad_feed")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        myFbFeedList = data || [];
+        updateFbFeedBadge();
+        renderFbFeedEntries();
+      } catch (err) {
+        console.error("Load FB Feed error:", err);
+      }
+    }
+
+    function updateFbFeedBadge() {
+      const activeCount = myFbFeedList.filter(function(i) { return i.status === 'published'; }).length;
+      const badge = document.getElementById("fbFeedCountBadge");
+      if (badge) {
+        if (activeCount > 0) {
+          badge.innerText = activeCount;
+          badge.classList.remove("hidden");
+        } else {
+          badge.classList.add("hidden");
+        }
+      }
+    }
+
+    function openFbFeedModal() {
+      loadFbFeed();
+      document.getElementById("fbFeedModal").classList.remove("hidden");
+    }
+
+    async function publishCarToFacebook(vin) {
+      if (!currentUser) return;
+
+      if (!currentStore.fbPageId || !currentStore.fbAccessToken) {
+        alert("Facebook Business Page credentials missing!\n\nPlease open 'Dealership Settings' and enter your Facebook Page ID and Page Access Token first.");
+        openDealershipModal();
+        return;
+      }
+
+      const car = rawInventory.find(function(c) { return c.vin === vin; });
+      if (!car) return;
+
+      const btn = document.getElementById("cardFbBtn_" + vin);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-blue-400"></i> Publishing...';
+      }
+
+      const store = car.location_name || currentStore.name || "Our Dealership";
+      const carTitle = (car.year || '') + " " + (car.make || '') + " " + (car.model || 'Vehicle') + (car.trim ? ' ' + car.trim : '');
+      const priceClean = (car.price && car.price > 0) ? "$" + car.price.toLocaleString() : "Call for Price";
+      const milesClean = (car.mileage || 0).toLocaleString();
+      const listingUrl = car.detail_url || car.listing_url || "";
+
+      let photoUrl = car.image_url;
+      if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+
+      const fbCaption = "🔥 FRESH ARRIVAL: " + carTitle + " 🔥\n\n" +
+        "📍 Available at: " + store + "\n" +
+        "💰 Price: " + priceClean + "\n" +
+        "🛣️ Mileage: " + milesClean + " miles\n" +
+        "⚙️ Transmission: " + (car.transmission || "Automatic") + "\n" +
+        "🎨 Exterior: " + (car.color || "Standard") + "\n" +
+        "🏷️ Condition: " + (car.condition || "Inspected & Certified") + "\n" +
+        "🆔 VIN: " + (car.vin || "Available upon request") + "\n\n" +
+        "HIGHLIGHTS:\n" +
+        "✅ Fully inspected & front-line certified\n" +
+        "✅ Clean Title\n" +
+        "✅ All trades accepted\n" +
+        "✅ Financing available for all credit tiers\n" +
+        (listingUrl ? "✅ Full vehicle specs: " + listingUrl + "\n\n" : "\n") +
+        "💬 Send a direct message to check availability or schedule a test drive before it sells!";
+
+      try {
+        let fbPostId = null;
+
+        // Call Meta Graph API: Publish Photo with Caption directly to the Business Page Feed
+        let fbEndpoint = "https://graph.facebook.com/v19.0/" + encodeURIComponent(currentStore.fbPageId);
+        let payload = new FormData();
+        payload.append("access_token", currentStore.fbAccessToken);
+
+        if (photoUrl && photoUrl !== FALLBACK_IMAGE) {
+          fbEndpoint += "/photos";
+          payload.append("url", photoUrl);
+          payload.append("caption", fbCaption);
+        } else {
+          fbEndpoint += "/feed";
+          payload.append("message", fbCaption);
+        }
+
+        const res = await fetch(fbEndpoint, {
+          method: "POST",
+          body: payload
+        });
+
+        const resData = await res.json();
+
+        if (resData.error) {
+          throw new Error(resData.error.message || "Meta API error occurred.");
+        }
+
+        fbPostId = resData.post_id || resData.id;
+
+        // Record in Supabase
+        await supabaseClient.from("facebook_ad_feed").insert({
+          user_id: currentUser.id,
+          vin: car.vin,
+          year: car.year,
+          make: car.make,
+          model: car.model,
+          trim: car.trim,
+          price: car.price,
+          mileage: car.mileage,
+          image_url: photoUrl,
+          detail_url: listingUrl,
+          fb_post_id: fbPostId,
+          status: 'published'
+        });
+
+        alert("✓ Published to your Facebook Business Page successfully!\nPost ID: " + fbPostId);
+        await loadFbFeed();
+        applyFilters();
+      } catch (err) {
+        console.error("Facebook publish error:", err);
+        alert("Failed to publish to Facebook:\n" + err.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-brands fa-facebook text-blue-400"></i> + FB Feed';
+        }
+      }
+    }
+
+    async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
+      if (!confirm("Mark this vehicle as SOLD on Facebook?\n\nAutoLaunch will append '🔴 SOLD!' to the Facebook post and remove it from your active feed.")) return;
+
+      const btn = document.getElementById("soldBtn_" + feedId);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = "Updating FB Post...";
+      }
+
+      try {
+        // Update Facebook Post message via Meta Graph API if credentials and post_id exist
+        if (currentStore.fbAccessToken && fbPostId) {
+          const updatedMessage = "🔴 SOLD! CONGRATULATIONS TO THE NEW OWNER! 🔴\n\n" + (currentCaption || "This vehicle has been sold.");
+          const res = await fetch("https://graph.facebook.com/v19.0/" + encodeURIComponent(fbPostId), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              access_token: currentStore.fbAccessToken,
+              message: updatedMessage
+            })
+          });
+
+          const resData = await res.json();
+          if (resData.error) {
+            console.warn("Meta edit post notice:", resData.error.message);
+          }
+        }
+
+        // Update database record to 'sold'
+        await supabaseClient
+          .from("facebook_ad_feed")
+          .update({
+            status: "sold",
+            sold_at: new Date().toISOString()
+          })
+          .eq("id", feedId);
+
+        alert("✓ Vehicle marked as SOLD! Post updated on Facebook.");
+        await loadFbFeed();
+        applyFilters();
+      } catch (err) {
+        console.error("Mark sold error:", err);
+        alert("Failed to update status: " + err.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = "Mark as Sold";
+        }
+      }
+    }
+
+    function renderFbFeedEntries() {
+      const container = document.getElementById("fbFeedContainer");
+      if (!container) return;
+
+      const activePosts = myFbFeedList.filter(function(i) { return i.status === 'published'; });
+
+      if (!activePosts.length) {
+        container.innerHTML = '<div class="text-center py-10 space-y-2">' +
+          '<i class="fa-brands fa-facebook text-gray-600 text-3xl"></i>' +
+          '<p class="text-xs text-gray-400">No vehicles currently active in your Facebook feed.</p>' +
+          '<p class="text-[11px] text-gray-500">Click <strong>"+ FB Feed"</strong> on any car card to post automatically to your Facebook Business Page.</p>' +
+        '</div>';
+        return;
+      }
+
+      let html = "";
+      activePosts.forEach(function(item) {
+        const postLink = item.fb_post_id ? ("https://facebook.com/" + item.fb_post_id) : "#";
+        const carTitle = (item.year || '') + " " + (item.make || '') + " " + (item.model || 'Vehicle') + (item.trim ? ' ' + item.trim : '');
+        const priceClean = item.price ? "$" + item.price.toLocaleString() : "Call for Price";
+        const milesClean = (item.mileage || 0).toLocaleString() + " mi";
+
+        html += '<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">' +
+          '<div class="flex items-center gap-3 w-full sm:w-auto">' +
+            '<img src="' + (item.image_url || FALLBACK_IMAGE) + '" class="w-16 h-16 rounded-lg object-cover border border-gray-800 flex-shrink-0">' +
+            '<div>' +
+              '<h5 class="text-sm font-bold text-white">' + carTitle + '</h5>' +
+              '<div class="text-xs text-emerald-400 font-bold">' + priceClean + ' <span class="text-gray-400 font-normal">• ' + milesClean + '</span></div>' +
+              '<div class="flex items-center gap-2 pt-1">' +
+                '<span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">Live on Page</span>' +
+                (item.fb_post_id ? '<a href="' + postLink + '" target="_blank" class="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold cursor-pointer"><i class="fa-brands fa-facebook"></i> View Post <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>' : '') +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="flex items-center gap-2 w-full sm:w-auto justify-end">' +
+            '<button id="soldBtn_' + item.id + '" onclick="markCarAsSoldOnFacebook(\'' + item.id + '\', \'' + (item.fb_post_id || '') + '\', \'' + carTitle + '\')" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer">' +
+              '<i class="fa-solid fa-tag mr-1"></i> Mark as Sold' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    // ---------------- WISHLIST & QUICK NOTIFY FUNCTIONS ----------------
     function openWishlistModal() {
       cancelWishlistEdit();
       loadCustomerWishlists();
@@ -1591,7 +1836,6 @@
       });
     }
 
-    // Hybrid Contact Dispatcher: Auto-copies message and handles desktop vs mobile
     function notifyCustomerSms(wishlistId, vin) {
       const item = customerWishlists.find(function(c) { return c.id === wishlistId; });
       const car = rawInventory.find(function(c) { return c.vin === vin; });
@@ -1606,12 +1850,10 @@
 
       currentNotifyData = { phone: cleanPhone, body: body };
 
-      // Copy automatically to clipboard so the rep can paste anywhere
       if (navigator.clipboard) {
         navigator.clipboard.writeText(body).catch(function() {});
       }
 
-      // Populate Fallback Modal
       document.getElementById("notifyModalTitle").innerText = "Contact " + (item ? item.customer_name : "Customer");
       document.getElementById("notifyTargetPhone").value = item && item.customer_phone ? item.customer_phone : "No Phone Provided";
       document.getElementById("notifyTargetText").value = body;
@@ -1624,13 +1866,11 @@
         emailLink.classList.add("hidden");
       }
 
-      // On mobile devices, launch SMS protocol directly
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (isMobile) {
         const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
         window.location.href = "sms:" + cleanPhone + separator + "body=" + encodeURIComponent(body);
       } else {
-        // On desktop, display the direct copy/messaging modal
         document.getElementById("notifyCustomerModal").classList.remove("hidden");
       }
     }
@@ -1720,20 +1960,6 @@
           '<button onclick="navigator.clipboard.writeText(document.getElementById(\'shareText\').value); alert(\'Copied to clipboard!\')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>' +
           '<a href="sms:?&body=' + encodeURIComponent(msg) + '" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>' +
         '</div>' +
-      '</div>';
-      document.getElementById("actionModal").classList.remove("hidden");
-    }
-
-    function openFBModalByVin(vin) {
-      const car = rawInventory.find(function(c) { return c.vin === vin; });
-      if (!car) return;
-      document.getElementById("modalTitle").innerText = "Marketplace Listing Copy";
-      document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '');
-      const fbCopy = "🔥 " + (car.year || '') + " " + (car.make || '') + " " + (car.model || 'Vehicle') + (car.trim ? ' ' + car.trim : '') + " (" + (car.body_type || 'Vehicle') + ") 🔥\n\nPrice: " + (car.price ? "$" + car.price.toLocaleString() : "Call") + "\nMileage: " + ((car.mileage || 0).toLocaleString()) + "\nColor: " + (car.color || 'Standard') + "\nTransmission: " + (car.transmission || 'Automatic') + "\nLocation: " + (car.location_name || currentStore.name) + "\nStatus: Inspected & Front-Line Ready\n\n✅ Fully inspected by certified technicians\n✅ Clean Title\n✅ Easy financing options & trade-ins accepted\n\nSend a direct message to check availability or schedule a test drive!";
-
-      document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
-        '<textarea id="fbText" class="w-full h-40 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + fbCopy + '</textarea>' +
-        '<button onclick="navigator.clipboard.writeText(document.getElementById(\'fbText\').value); alert(\'Marketplace copy copied!\')" class="w-full py-2 rounded-lg bg-blue-600 text-white text-xs font-bold cursor-pointer">Copy Marketplace Text</button>' +
       '</div>';
       document.getElementById("actionModal").classList.remove("hidden");
     }
