@@ -37,22 +37,11 @@
         <button id="tabSignUp" type="button" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer">Register</button>
       </div>
 
-      <!-- Auth Form -->
+      <!-- Auth Form: Clean & Generic -->
       <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
-        <div id="signupOnlyFields" class="space-y-4 hidden">
-          <div>
-            <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Dealership Name</label>
-            <input type="text" id="authDealerName" placeholder="e.g. Moses Auto Group" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
-          </div>
-          <div>
-            <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Your Full Name</label>
-            <input type="text" id="authFullName" placeholder="e.g. Matthew DeMoss" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
-          </div>
-        </div>
-
         <div>
-          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Work Email</label>
-          <input type="email" id="authEmail" required placeholder="sales@dealership.com" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Email</label>
+          <input type="email" id="authEmail" required placeholder="name@company.com" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
         </div>
 
         <div>
@@ -95,7 +84,7 @@
 
         <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm cursor-pointer">
           <i class="fa-solid fa-building text-indigo-400"></i>
-          <span id="headerStoreName">Moses Automotive Group</span>
+          <span id="headerStoreName">Dealership Inventory</span>
           <i class="fa-solid fa-gear text-[11px] text-gray-400"></i>
         </button>
 
@@ -120,7 +109,7 @@
     <div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div>
         <div class="flex items-center gap-3 mb-1">
-          <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Moses Automotive Group</h1>
+          <h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Dealership Inventory</h1>
           <span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Locations...</span>
         </div>
         <p class="text-sm text-gray-400">Filter by Make, Model, Trim, Location, and Specs. Click any vehicle to view its live website listing.</p>
@@ -362,7 +351,6 @@
       authMode = mode;
       const tabIn = document.getElementById("tabSignIn");
       const tabUp = document.getElementById("tabSignUp");
-      const extraFields = document.getElementById("signupOnlyFields");
       const submitBtn = document.getElementById("authSubmitBtn");
       const err = document.getElementById("authErrorMsg");
       err.classList.add("hidden");
@@ -370,12 +358,10 @@
       if (mode === 'signin') {
         tabIn.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
         tabUp.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
-        extraFields.classList.add("hidden");
         submitBtn.innerText = "Sign In";
       } else {
         tabUp.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
         tabIn.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
-        extraFields.classList.remove("hidden");
         submitBtn.innerText = "Register";
       }
     }
@@ -401,28 +387,19 @@
 
       const email = document.getElementById("authEmail").value.trim();
       const password = document.getElementById("authPassword").value;
-      const dealerName = document.getElementById("authDealerName").value.trim() || "My Dealership";
-      const fullName = document.getElementById("authFullName").value.trim() || "Sales Representative";
 
       try {
         if (authMode === "signup") {
           submitBtn.innerText = "Registering...";
           const { data, error } = await supabaseClient.auth.signUp({
             email: email,
-            password: password,
-            options: {
-              data: {
-                full_name: fullName,
-                dealership_name: dealerName
-              }
-            }
+            password: password
           });
           if (error) throw error;
           
           if (data && data.session) {
             await initAppSession(data.session.user);
           } else if (data && data.user) {
-            // Auto sign-in immediately upon registration
             const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
               email: email,
               password: password
@@ -456,7 +433,7 @@
     async function initAppSession(user) {
       currentUser = user;
       document.getElementById("authOverlay").classList.add("hidden");
-      document.getElementById("userDisplayName").innerText = user.user_metadata?.full_name || user.email.split("@")[0];
+      document.getElementById("userDisplayName").innerText = user.email.split("@")[0];
       document.getElementById("userEmailBadge").innerText = user.email;
 
       // Load user profile & dealership info
