@@ -383,14 +383,26 @@ Reset All Filters
     </div>
   </div>
 
-  <!-- Automated Sync Locations Rules -->
+  <!-- ============================================================================== -->
+<!-- ======================= SUBSECTION: LOCATION RULES START ==================== -->
+<!-- ============================================================================== -->
   <div class="space-y-1.5">
-    <label class="text-[11px] font-bold text-blue-300 uppercase block">Auto-Sync Specific Locations:</label>
+    <div class="flex items-center justify-between">
+      <label class="text-[11px] font-bold text-blue-300 uppercase block">Auto-Sync Specific Locations:</label>
+      <div class="flex gap-2">
+        <button type="button" onclick="toggleAllLocations(true)" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer">Select All</button>
+        <span class="text-gray-600 text-[10px]">•</span>
+        <button type="button" onclick="toggleAllLocations(false)" class="text-[10px] text-rose-400 hover:text-rose-300 font-semibold cursor-pointer">Clear All</button>
+      </div>
+    </div>
     <div id="modalLocationList" class="max-h-28 overflow-y-auto space-y-1 bg-gray-950/60 p-2 rounded-lg border border-gray-800">
       <p class="text-[11px] text-gray-500">Loading dealer locations...</p>
     </div>
-    <p class="text-[10px] text-gray-500">Uncheck all to auto-post inventory from all available locations.</p>
+    <p class="text-[10px] text-gray-500">If all locations are unchecked, the background sync will post from all locations by default.</p>
   </div>
+<!-- ============================================================================== -->
+<!-- ======================= SUBSECTION: LOCATION RULES END ====================== -->
+<!-- ============================================================================== -->
 </div>
 
 <div class="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-indigo-300 leading-relaxed flex items-start gap-2.5">
@@ -1032,6 +1044,9 @@ document.querySelectorAll('input[name="autoCondition"]').forEach(function(cb) {
 populateModalLocationCheckboxes();
 }
 
+/* ============================================================================ */
+/* ======================= FUNCTION: MODAL LOCATION CHECKBOXES START ========== */
+/* ============================================================================ */
 function populateModalLocationCheckboxes() {
   const container = document.getElementById("modalLocationList");
   if (!container) return;
@@ -1042,14 +1057,24 @@ function populateModalLocationCheckboxes() {
     return;
   }
 
+  // Only check boxes that are explicitly included in saved settings
   container.innerHTML = uniqueLocations.map(function(loc) {
-    const isChecked = currentStore.fbAutoLocations.length === 0 || currentStore.fbAutoLocations.includes(loc);
+    const isChecked = Array.isArray(currentStore.fbAutoLocations) && currentStore.fbAutoLocations.includes(loc);
     return '<label class="flex items-center space-x-2 p-1 hover:bg-gray-900 rounded cursor-pointer">' +
       '<input type="checkbox" name="autoLocation" value="' + loc + '" class="rounded text-blue-600 bg-gray-950 border-gray-700" ' + (isChecked ? 'checked' : '') + '>' +
       '<span class="text-xs text-gray-300">' + loc + '</span>' +
     '</label>';
   }).join('');
 }
+
+function toggleAllLocations(selectAll) {
+  document.querySelectorAll('input[name="autoLocation"]').forEach(function(cb) {
+    cb.checked = selectAll;
+  });
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: MODAL LOCATION CHECKBOXES END ============ */
+/* ============================================================================ */
 
 function openDealershipModal() {
 updateStoreUI();
