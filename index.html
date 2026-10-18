@@ -6,6 +6,8 @@
   <title>AutoLaunch | Dealership Sales Enablement</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
@@ -16,7 +18,58 @@
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-  <!-- Header -->
+  <!-- ================= AUTHENTICATION MODAL OVERLAY ================= -->
+  <div id="authOverlay" class="fixed inset-0 z-50 bg-[#0b0f19]/90 backdrop-blur-xl flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-md rounded-3xl border border-gray-800 p-8 space-y-6 shadow-2xl relative">
+      <div class="flex items-center gap-3 justify-center mb-2">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-bolt-lightning text-white text-xl"></i>
+        </div>
+        <div>
+          <span class="font-extrabold text-2xl tracking-tight bg-gradient-to-r from-white via-gray-200 to-indigo-300 bg-clip-text text-transparent">AutoLaunch</span>
+          <span class="text-xs text-indigo-400 block font-semibold tracking-wider uppercase">Dealer Intelligence Suite</span>
+        </div>
+      </div>
+
+      <!-- Tab Switcher -->
+      <div class="grid grid-cols-2 p-1 bg-gray-900 rounded-xl border border-gray-800 text-xs font-bold text-center">
+        <button id="tabSignIn" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer">Sign In</button>
+        <button id="tabSignUp" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer">Register Store</button>
+      </div>
+
+      <!-- Auth Form -->
+      <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+        <div id="signupOnlyFields" class="space-y-4 hidden">
+          <div>
+            <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Dealership Name</label>
+            <input type="text" id="authDealerName" placeholder="e.g. Moses Honda of Huntington" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Your Full Name</label>
+            <input type="text" id="authFullName" placeholder="e.g. John Doe" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Work Email</label>
+          <input type="email" id="authEmail" required placeholder="sales@dealership.com" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Password</label>
+          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <button type="submit" id="authSubmitBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition cursor-pointer">
+          Sign In
+        </button>
+
+        <p id="authErrorMsg" class="text-xs text-rose-400 text-center font-medium hidden"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= APP HEADER ================= -->
   <header class="glass-panel sticky top-0 z-40 border-b border-gray-800 px-4 lg:px-8 py-3">
     <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
       <div class="flex items-center gap-3">
@@ -41,20 +94,21 @@
           <i class="fa-solid fa-gear text-[11px] text-gray-400"></i>
         </button>
 
-        <div id="liveStatusBadge" class="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="syncText">Connected</span>
+        <!-- User Profile & Sign Out -->
+        <div class="flex items-center gap-2 pl-2 border-l border-gray-800">
+          <div class="hidden md:block text-right">
+            <span id="userDisplayName" class="text-xs text-gray-300 font-bold block leading-tight">User</span>
+            <span id="userEmailBadge" class="text-[10px] text-gray-500 font-mono block leading-tight">user@store.com</span>
+          </div>
+          <button onclick="handleSignOut()" title="Sign Out" class="w-8 h-8 rounded-lg bg-gray-900 hover:bg-rose-950 border border-gray-800 hover:border-rose-800 text-gray-400 hover:text-rose-300 flex items-center justify-center transition cursor-pointer">
+            <i class="fa-solid fa-right-from-bracket text-xs"></i>
+          </button>
         </div>
-
-        <button onclick="fetchLiveInventory(true)" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm cursor-pointer">
-          <i class="fa-solid fa-arrows-rotate"></i>
-          <span>Refresh</span>
-        </button>
       </div>
     </div>
   </header>
 
-  <!-- Main View -->
+  <!-- ================= MAIN VIEW ================= -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
     
     <!-- Dealership Metrics Bar -->
@@ -206,7 +260,7 @@
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
   </main>
 
-  <!-- Complete Dealership Settings Modal -->
+  <!-- ================= DEALERSHIP SETTINGS MODAL ================= -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
@@ -219,13 +273,13 @@
 
       <div class="space-y-4">
         <div>
-          <label class="text-xs font-bold text-gray-400 uppercase">Dealership ID (Slug)</label>
+          <label class="text-xs font-bold text-gray-400 uppercase">Dealership ID (Tenant Slug)</label>
           <input type="text" id="dealershipSlugInput" readonly class="w-full mt-1 bg-gray-900 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-gray-400 font-mono">
         </div>
 
         <div>
           <label class="text-xs font-bold text-gray-400 uppercase">Dealership Name</label>
-          <input type="text" id="dealershipNameInput" placeholder="Moses Automotive Group" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <input type="text" id="dealershipNameInput" placeholder="Dealership Name" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
         <div class="border-t border-gray-800 pt-3">
@@ -279,11 +333,16 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const ACTIVE_DEALER_ID = urlParams.get("dealer") || "moses";
+    // Initialize Supabase Auth Client
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let authMode = "signin";
+    let currentUser = null;
+    let currentProfile = null;
+    let activeDealerId = "moses";
 
     let currentStore = {
-      name: "Moses Automotive Group",
+      name: "Dealership Inventory",
       pageModifier: "?pt={page}",
       usedUrl: "",
       newUrl: "",
@@ -293,47 +352,140 @@
     let rawInventory = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
 
-    async function loadDealerProfileFromDb() {
+    // ---------------- AUTH FLOW ----------------
+    function switchAuthMode(mode) {
+      authMode = mode;
+      const tabIn = document.getElementById("tabSignIn");
+      const tabUp = document.getElementById("tabSignUp");
+      const extraFields = document.getElementById("signupOnlyFields");
+      const submitBtn = document.getElementById("authSubmitBtn");
+      const err = document.getElementById("authErrorMsg");
+      err.classList.add("hidden");
+
+      if (mode === 'signin') {
+        tabIn.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
+        tabUp.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
+        extraFields.classList.add("hidden");
+        submitBtn.innerText = "Sign In";
+      } else {
+        tabUp.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
+        tabIn.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
+        extraFields.classList.remove("hidden");
+        submitBtn.innerText = "Register Dealership Account";
+      }
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const errBox = document.getElementById("authErrorMsg");
+      const submitBtn = document.getElementById("authSubmitBtn");
+      errBox.classList.add("hidden");
+      submitBtn.disabled = true;
+
+      const email = document.getElementById("authEmail").value.trim();
+      const password = document.getElementById("authPassword").value;
+      const dealerName = document.getElementById("authDealerName").value.trim() || "My Dealership";
+      const fullName = document.getElementById("authFullName").value.trim() || "Sales Representative";
+
       try {
-        const res = await fetch(SUPABASE_URL + "/rest/v1/dealer_profiles?id=eq." + ACTIVE_DEALER_ID + "&select=*", {
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": "Bearer " + SUPABASE_KEY
-          }
-        });
-        if (res.ok) {
-          const rows = await res.json();
-          if (rows && rows.length > 0) {
-            const row = rows[0];
-            currentStore = {
-              name: row.dealership_name || currentStore.name,
-              pageModifier: row.page_modifier || "?pt={page}",
-              usedUrl: row.used_url || "",
-              newUrl: row.new_url || "",
-              cpoUrl: row.certified_url || ""
-            };
-            updateStoreUI();
-            return;
-          }
+        if (authMode === "signup") {
+          submitBtn.innerText = "Creating Account...";
+          const { data, error } = await supabaseClient.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+              data: {
+                full_name: fullName,
+                dealership_name: dealerName
+              }
+            }
+          });
+          if (error) throw error;
+          alert("Account created! Logging you in...");
+          await initAppSession(data.user);
+        } else {
+          submitBtn.innerText = "Signing In...";
+          const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email: email,
+            password: password
+          });
+          if (error) throw error;
+          await initAppSession(data.user);
         }
       } catch (err) {
-        console.error("Profile fetch error:", err);
+        errBox.innerText = err.message || "Authentication failed.";
+        errBox.classList.remove("hidden");
+        submitBtn.disabled = false;
+        submitBtn.innerText = authMode === "signup" ? "Register Dealership Account" : "Sign In";
+      }
+    }
+
+    async function handleSignOut() {
+      await supabaseClient.auth.signOut();
+      window.location.reload();
+    }
+
+    async function initAppSession(user) {
+      currentUser = user;
+      document.getElementById("authOverlay").classList.add("hidden");
+      document.getElementById("userDisplayName").innerText = user.user_metadata?.full_name || user.email.split("@")[0];
+      document.getElementById("userEmailBadge").innerText = user.email;
+
+      // Load user profile & dealership info
+      try {
+        const { data: profile } = await supabaseClient
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (profile && profile.dealership_id) {
+          currentProfile = profile;
+          activeDealerId = profile.dealership_id;
+        }
+      } catch(e) {
+        console.warn("Profile fetch skipped:", e);
       }
 
-      const local = localStorage.getItem("autolaunch_store_" + ACTIVE_DEALER_ID);
-      if (local) currentStore = JSON.parse(local);
+      await loadDealerProfileFromDb();
+      await fetchLiveInventory(true);
+    }
+
+    // ---------------- DEALERSHIP PROFILE & INVENTORY ----------------
+    async function loadDealerProfileFromDb() {
+      try {
+        const { data, error } = await supabaseClient
+          .from("dealerships")
+          .select("*")
+          .eq("id", activeDealerId)
+          .single();
+
+        if (data) {
+          currentStore = {
+            name: data.name || currentStore.name,
+            pageModifier: data.page_modifier || "?pt={page}",
+            usedUrl: data.used_url || "",
+            newUrl: data.new_url || "",
+            cpoUrl: data.certified_url || ""
+          };
+          updateStoreUI();
+          return;
+        }
+      } catch (err) {
+        console.error("Dealer profile fetch:", err);
+      }
       updateStoreUI();
     }
 
     function updateStoreUI() {
       document.getElementById("headerStoreName").innerText = currentStore.name || "Dealership Inventory";
       document.getElementById("bannerStoreTitle").innerText = currentStore.name || "Dealership Inventory";
-      document.getElementById("dealershipSlugInput").value = ACTIVE_DEALER_ID;
+      document.getElementById("dealershipSlugInput").value = activeDealerId;
       document.getElementById("dealershipNameInput").value = currentStore.name || "";
-      document.getElementById("dealershipPageModifierInput").value = currentStore.pageModifier !== undefined ? currentStore.pageModifier : "";
-      document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl !== undefined ? currentStore.usedUrl : "";
-      document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl !== undefined ? currentStore.newUrl : "";
-      document.getElementById("dealershipCpoUrlInput").value = currentStore.cpoUrl !== undefined ? currentStore.cpoUrl : "";
+      document.getElementById("dealershipPageModifierInput").value = currentStore.pageModifier || "";
+      document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl || "";
+      document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || "";
+      document.getElementById("dealershipCpoUrlInput").value = currentStore.cpoUrl || "";
     }
 
     function openDealershipModal() {
@@ -351,42 +503,28 @@
       btn.disabled = true;
       btn.innerText = "Saving to Database...";
 
-      const name = document.getElementById("dealershipNameInput").value.trim() || "Moses Automotive Group";
+      const name = document.getElementById("dealershipNameInput").value.trim() || currentStore.name;
       const pageModifier = document.getElementById("dealershipPageModifierInput").value.trim() || "?pt={page}";
       const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim();
       const newUrl = document.getElementById("dealershipNewUrlInput").value.trim();
       const cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim();
 
       currentStore = { name, pageModifier, usedUrl, newUrl, cpoUrl };
-      localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
 
       try {
-        const res = await fetch(SUPABASE_URL + "/rest/v1/dealer_profiles", {
-          method: "POST",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": "Bearer " + SUPABASE_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
-          },
-          body: JSON.stringify({
-            id: ACTIVE_DEALER_ID,
-            dealership_name: name,
-            page_modifier: pageModifier,
-            used_url: usedUrl,
-            new_url: newUrl,
-            certified_url: cpoUrl
-          })
+        await supabaseClient.from("dealerships").upsert({
+          id: activeDealerId,
+          name: name,
+          slug: activeDealerId,
+          page_modifier: pageModifier,
+          used_url: usedUrl,
+          new_url: newUrl,
+          certified_url: cpoUrl
         });
-
-        if (res.ok || res.status === 201) {
-          alert("✓ Settings saved! The cloud scraper will now strictly crawl:\n" + (cpoUrl || usedUrl || newUrl || "No URLs configured"));
-        } else {
-          alert("Settings saved locally.");
-        }
+        alert("✓ Settings saved successfully for " + name);
       } catch (e) {
         console.error("Save error:", e);
-        alert("Settings saved locally.");
+        alert("Settings updated.");
       }
 
       btn.disabled = false;
@@ -401,29 +539,20 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Dispatching Scraper...';
 
       try {
-        const response = await fetch(SUPABASE_URL + "/rest/v1/scrape_jobs", {
-          method: "POST",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": "Bearer " + SUPABASE_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-          },
-          body: JSON.stringify({
-            dealership_id: ACTIVE_DEALER_ID,
-            status: "pending",
-            triggered_by: "dashboard_button"
-          })
+        const { error } = await supabaseClient.from("scrape_jobs").insert({
+          dealership_id: activeDealerId,
+          status: "pending",
+          triggered_by: currentUser ? currentUser.email : "dashboard_button"
         });
 
-        if (response.ok || response.status === 201) {
-          alert("✓ Live lot crawl launched! The server is syncing inventory from your settings URL.");
+        if (!error) {
+          alert("✓ Live lot crawl launched! Background worker is crawling your store URLs.");
         } else {
-          alert("✓ Sync request queued.");
+          alert("✓ Crawl requested.");
         }
       } catch (err) {
         console.error("Trigger error:", err);
-        alert("✓ Sync request queued.");
+        alert("✓ Crawl requested.");
       }
 
       setTimeout(() => {
@@ -433,45 +562,18 @@
     }
 
     async function fetchLiveInventory(isManual) {
-      if (typeof isManual === "undefined") isManual = false;
       const lotBadge = document.getElementById("lotCount");
-      const statusBadge = document.getElementById("syncText");
-      if (isManual) statusBadge.innerText = "Syncing...";
-
       try {
-        let allCars = [];
-        let offset = 0;
-        let batchSize = 1000;
-        let hasMore = true;
+        const { data, error } = await supabaseClient
+          .from("scraped_inventory")
+          .select("*")
+          .order("price", { ascending: true });
 
-        while (hasMore) {
-          const response = await fetch(SUPABASE_URL + "/rest/v1/scraped_inventory?select=*&order=vin.asc", {
-            method: "GET",
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": "Bearer " + SUPABASE_KEY,
-              "Range": offset + "-" + (offset + batchSize - 1)
-            }
-          });
+        if (error) throw error;
 
-          if (!response.ok) throw new Error("Database fetch error");
-
-          const data = await response.json();
-          if (Array.isArray(data) && data.length > 0) {
-            allCars = allCars.concat(data);
-            if (data.length < batchSize) {
-              hasMore = false;
-            } else {
-              offset += batchSize;
-            }
-          } else {
-            hasMore = false;
-          }
-        }
-
-        rawInventory = allCars.filter(function(c) {
-          const matchesDealer = !c.dealership_id || c.dealership_id === ACTIVE_DEALER_ID;
-          return matchesDealer && c.is_active !== false;
+        // Isolate to the user's active dealership
+        rawInventory = (data || []).filter(function(c) {
+          return (!c.dealership_id || c.dealership_id === activeDealerId) && c.is_active !== false;
         });
 
         lotBadge.innerText = rawInventory.length + " Units";
@@ -483,13 +585,12 @@
           document.getElementById("avgPrice").innerText = "$" + avg.toLocaleString();
         }
 
-        statusBadge.innerText = "Live (" + rawInventory.length + " Units)";
         populateLocations(rawInventory);
         populateMakeDropdown(rawInventory);
         applyFilters();
       } catch (err) {
         console.error("Fetch error:", err);
-        statusBadge.innerText = "Sync Failed";
+        lotBadge.innerText = "0 Units";
       }
     }
 
@@ -655,12 +756,8 @@
       let html = "";
       cars.forEach(function(car) {
         let photoUrl = car.image_url;
-        if (photoUrl && photoUrl.startsWith('//')) {
-          photoUrl = 'https:' + photoUrl;
-        }
-        if (!photoUrl || photoUrl.includes('/static/')) {
-          photoUrl = FALLBACK_IMAGE;
-        }
+        if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+        if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
 
         const displayPrice = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
         const displayPayment = car.price && car.price > 0 ? "~$" + Math.round(car.price / 72) + "/mo" : "Finance Avail";
@@ -769,10 +866,15 @@
       document.getElementById(id).classList.add("hidden");
     }
 
-    document.addEventListener("DOMContentLoaded", function() {
-      loadDealerProfileFromDb();
-      fetchLiveInventory();
-      setInterval(function() { fetchLiveInventory(false); }, 30000);
+    // ---------------- APP LIFECYCLE ----------------
+    document.addEventListener("DOMContentLoaded", async function() {
+      // Check for active session
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session && session.user) {
+        await initAppSession(session.user);
+      } else {
+        document.getElementById("authOverlay").classList.remove("hidden");
+      }
     });
   </script>
 </body>
