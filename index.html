@@ -33,8 +33,8 @@
 
       <!-- Tab Switcher -->
       <div class="grid grid-cols-2 p-1 bg-gray-900 rounded-xl border border-gray-800 text-xs font-bold text-center">
-        <button id="tabSignIn" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer">Sign In</button>
-        <button id="tabSignUp" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer">Register Store</button>
+        <button id="tabSignIn" type="button" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer">Sign In</button>
+        <button id="tabSignUp" type="button" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer">Register</button>
       </div>
 
       <!-- Auth Form -->
@@ -42,11 +42,11 @@
         <div id="signupOnlyFields" class="space-y-4 hidden">
           <div>
             <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Dealership Name</label>
-            <input type="text" id="authDealerName" placeholder="e.g. Moses Honda of Huntington" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+            <input type="text" id="authDealerName" placeholder="e.g. Moses Auto Group" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
           </div>
           <div>
             <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Your Full Name</label>
-            <input type="text" id="authFullName" placeholder="e.g. John Doe" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+            <input type="text" id="authFullName" placeholder="e.g. Matthew DeMoss" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
           </div>
         </div>
 
@@ -57,7 +57,12 @@
 
         <div>
           <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Password</label>
-          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+          <div class="relative">
+            <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-4 pr-11 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+            <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition focus:outline-none cursor-pointer">
+              <i id="passwordToggleIcon" class="fa-regular fa-eye text-sm"></i>
+            </button>
+          </div>
         </div>
 
         <button type="submit" id="authSubmitBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition cursor-pointer">
@@ -333,7 +338,7 @@
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
-    // Initialize Supabase Auth Client
+    // Initialize Supabase Client
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let authMode = "signin";
@@ -371,7 +376,19 @@
         tabUp.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
         tabIn.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
         extraFields.classList.remove("hidden");
-        submitBtn.innerText = "Register Dealership Account";
+        submitBtn.innerText = "Register";
+      }
+    }
+
+    function togglePasswordVisibility() {
+      const passInput = document.getElementById("authPassword");
+      const toggleIcon = document.getElementById("passwordToggleIcon");
+      if (passInput.type === "password") {
+        passInput.type = "text";
+        toggleIcon.className = "fa-regular fa-eye-slash text-sm";
+      } else {
+        passInput.type = "password";
+        toggleIcon.className = "fa-regular fa-eye text-sm";
       }
     }
 
@@ -389,7 +406,7 @@
 
       try {
         if (authMode === "signup") {
-          submitBtn.innerText = "Creating Account...";
+          submitBtn.innerText = "Registering...";
           const { data, error } = await supabaseClient.auth.signUp({
             email: email,
             password: password,
@@ -401,8 +418,18 @@
             }
           });
           if (error) throw error;
-          alert("Account created! Logging you in...");
-          await initAppSession(data.user);
+          
+          if (data && data.session) {
+            await initAppSession(data.session.user);
+          } else if (data && data.user) {
+            // Auto sign-in immediately upon registration
+            const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
+              email: email,
+              password: password
+            });
+            if (signInErr) throw signInErr;
+            await initAppSession(signInData.user);
+          }
         } else {
           submitBtn.innerText = "Signing In...";
           const { data, error } = await supabaseClient.auth.signInWithPassword({
@@ -413,10 +440,11 @@
           await initAppSession(data.user);
         }
       } catch (err) {
+        console.error("Auth error:", err);
         errBox.innerText = err.message || "Authentication failed.";
         errBox.classList.remove("hidden");
         submitBtn.disabled = false;
-        submitBtn.innerText = authMode === "signup" ? "Register Dealership Account" : "Sign In";
+        submitBtn.innerText = authMode === "signup" ? "Register" : "Sign In";
       }
     }
 
@@ -571,7 +599,7 @@
 
         if (error) throw error;
 
-        // Isolate to the user's active dealership
+        // Filter inventory matching current dealership
         rawInventory = (data || []).filter(function(c) {
           return (!c.dealership_id || c.dealership_id === activeDealerId) && c.is_active !== false;
         });
@@ -868,7 +896,6 @@
 
     // ---------------- APP LIFECYCLE ----------------
     document.addEventListener("DOMContentLoaded", async function() {
-      // Check for active session
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session && session.user) {
         await initAppSession(session.user);
