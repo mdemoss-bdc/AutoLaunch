@@ -250,7 +250,7 @@
         </div>
 
         <div class="pt-2 flex gap-2">
-          <button onclick="saveDealershipProfile()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30 cursor-pointer">
+          <button onclick="saveDealershipProfile()" id="saveProfileBtn" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30 cursor-pointer">
             Save Settings & URLs
           </button>
           <button onclick="closeModal('dealershipModal')" class="px-4 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition cursor-pointer">
@@ -282,7 +282,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const ACTIVE_DEALER_ID = urlParams.get("dealer") || "moses";
 
-    const DEFAULT_STORE = {
+    let currentStore = {
       name: "Moses Automotive Group",
       pageModifier: "?pt={page}",
       usedUrl: "",
@@ -290,7 +290,6 @@
       cpoUrl: ""
     };
 
-    let currentStore = JSON.parse(localStorage.getItem("autolaunch_store_" + ACTIVE_DEALER_ID)) || DEFAULT_STORE;
     let rawInventory = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
 
@@ -308,18 +307,23 @@
             const row = rows[0];
             currentStore = {
               name: row.dealership_name || currentStore.name,
-              pageModifier: row.page_modifier || currentStore.pageModifier,
-              usedUrl: row.used_url !== undefined ? row.used_url : currentStore.usedUrl,
-              newUrl: row.new_url !== undefined ? row.new_url : currentStore.newUrl,
-              cpoUrl: row.certified_url !== undefined ? row.certified_url : currentStore.cpoUrl
+              pageModifier: row.page_modifier || "?pt={page}",
+              usedUrl: row.used_url || "",
+              newUrl: row.new_url || "",
+              cpoUrl: row.certified_url || ""
             };
-            localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
             updateStoreUI();
+            return;
           }
         }
       } catch (err) {
-        console.error("Profile sync warning:", err);
+        console.error("Profile fetch error:", err);
       }
+
+      // Fallback to localStorage if offline
+      const local = localStorage.getItem("autolaunch_store_" + ACTIVE_DEALER_ID);
+      if (local) currentStore = JSON.parse(local);
+      updateStoreUI();
     }
 
     function updateStoreUI() {
@@ -344,7 +348,11 @@
     }
 
     async function saveDealershipProfile() {
-      const name = document.getElementById("dealershipNameInput").value.trim() || DEFAULT_STORE.name;
+      const btn = document.getElementById("saveProfileBtn");
+      btn.disabled = true;
+      btn.innerText = "Saving to Database...";
+
+      const name = document.getElementById("dealershipNameInput").value.trim() || "Moses Automotive Group";
       const pageModifier = document.getElementById("dealershipPageModifierInput").value.trim() || "?pt={page}";
       const usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim();
       const newUrl = document.getElementById("dealershipNewUrlInput").value.trim();
@@ -352,12 +360,10 @@
 
       currentStore = { name, pageModifier, usedUrl, newUrl, cpoUrl };
       localStorage.setItem("autolaunch_store_" + ACTIVE_DEALER_ID, JSON.stringify(currentStore));
-      updateStoreUI();
-      closeModal("dealershipModal");
 
-      // Save directly into Supabase dealer_profiles table so scraper.py reads it
       try {
-        await fetch(SUPABASE_URL + "/rest/v1/dealer_profiles", {
+        // Upsert directly into Supabase dealer_profiles
+        const res = await fetch(SUPABASE_URL + "/rest/v1/dealer_profiles", {
           method: "POST",
           headers: {
             "apikey": SUPABASE_KEY,
@@ -374,11 +380,23 @@
             certified_url: cpoUrl
           })
         });
+
+        if (res.ok || res.status === 201) {
+          alert("✓ Settings saved! The cloud scraper will now strictly crawl:\n" + (cpoUrl || usedUrl || newUrl || "No URLs configured"));
+        } else {
+          const errText = await res.text();
+          console.error("Save failure:", errText);
+          alert("Notice: Settings saved locally, but database returned: " + errText);
+        }
       } catch (e) {
-        console.error("Could not sync profile to db:", e);
+        console.error("Save network error:", e);
+        alert("Settings saved locally.");
       }
 
-      alert("Settings saved! Scraper will now crawl strictly the URLs you specified.");
+      btn.disabled = false;
+      btn.innerText = "Save Settings & URLs";
+      updateStoreUI();
+      closeModal("dealershipModal");
     }
 
     async function triggerLiveLotCrawl() {
