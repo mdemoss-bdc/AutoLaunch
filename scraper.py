@@ -6,8 +6,8 @@ from typing import List
 from playwright.async_api import async_playwright
 from supabase import create_client
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://tdsipiltwajwhzgjsupx.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w")
+SUPABASE_URL = os.environ.get("SUPABASE_URL") or "https://tdsipiltwajwhzgjsupx.supabase.co"
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w"
 USER_ID = os.environ.get("USER_ID")
 
 db = create_client(SUPABASE_URL, SUPABASE_KEY)
