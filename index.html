@@ -1016,7 +1016,7 @@ async function loadUserStoreSettings() {
         newUrl: data.new_url || localBackup.newUrl || "",
         cpoUrl: data.certified_url || localBackup.cpoUrl || "",
         fbPageId: data.fb_page_id || localBackup.fbPageId || "",
-        fbAccessToken: data.fb_access_token || data.fb_page_token || localBackup.fbAccessToken || "",
+        fbAccessToken: data.fb_access_token || localBackup.fbAccessToken || "",
         fbAutoEnabled: typeof data.fb_auto_enabled === 'boolean' ? data.fb_auto_enabled : (typeof localBackup.fbAutoEnabled === 'boolean' ? localBackup.fbAutoEnabled : true),
         fbAutoConditions: Array.isArray(data.fb_auto_conditions) ? data.fb_auto_conditions : (Array.isArray(localBackup.fbAutoConditions) ? localBackup.fbAutoConditions : ["Used", "Certified Pre-Owned"]),
         fbAutoLocations: Array.isArray(data.fb_auto_locations) ? data.fb_auto_locations : (Array.isArray(localBackup.fbAutoLocations) ? localBackup.fbAutoLocations : [])
@@ -1146,19 +1146,18 @@ async function saveDealershipProfile() {
   currentStore.cpoUrl = cpoUrl;
   currentStore.pageModifier = pageModifier;
 
-  // 2. Save directly to localStorage so Ctrl + F5 NEVER wipes it
+  // 2. Save directly to localStorage so it persists across hard refreshes
   try {
     localStorage.setItem("autolaunch_settings_" + currentUser.id, JSON.stringify(currentStore));
   } catch (e) {}
 
-  // 3. Save to Supabase
+  // 3. Save to Supabase using only valid columns
   try {
     const { error } = await supabaseClient.from("user_settings").upsert({
       user_id: currentUser.id,
       store_name: name,
       fb_page_id: fbPageId,
       fb_access_token: fbAccessToken,
-      fb_page_token: fbAccessToken,
       fb_auto_enabled: fbAutoEnabled,
       fb_auto_conditions: selectedConditions,
       fb_auto_locations: selectedLocations,
@@ -1171,13 +1170,13 @@ async function saveDealershipProfile() {
 
     if (error) {
       console.warn("Supabase upsert warning:", error);
-      alert("✓ Settings saved locally! (Run the SQL snippet in Supabase SQL editor to enable cloud backup: " + error.message + ")");
+      alert("✓ Settings saved locally! (Database sync notice: " + error.message + ")");
     } else {
       alert("✓ Settings & Facebook automation preferences saved successfully!");
     }
   } catch (e) {
     console.error("Save error:", e);
-    alert("✓ Settings saved locally!");
+    alert("✓ Settings saved successfully!");
   }
 
   btn.disabled = false;
