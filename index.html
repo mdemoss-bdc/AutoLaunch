@@ -1375,7 +1375,6 @@
       document.getElementById("wlSaveBtn").innerText = "Update Customer";
       document.getElementById("wlCancelEditBtn").classList.remove("hidden");
 
-      // Scroll form into view
       document.getElementById("addWishlistForm").scrollIntoView({ behavior: "smooth" });
     }
 
@@ -1478,6 +1477,26 @@
       });
     }
 
+    // Free Native SMS Generator: triggers default device SMS client
+    function notifyCustomerSms(wishlistId, vin) {
+      const item = customerWishlists.find(function(c) { return c.id === wishlistId; });
+      const car = rawInventory.find(function(c) { return c.vin === vin; });
+      if (!car) return;
+
+      const firstName = item ? item.customer_name.split(" ")[0] : "there";
+      const cleanPhone = item && item.customer_phone ? item.customer_phone.replace(/[^0-9+]/g, "") : "";
+      const priceText = car.price ? "$" + car.price.toLocaleString() : "Call for Price";
+      const linkText = (car.detail_url || car.listing_url) ? ("\nLink: " + (car.detail_url || car.listing_url)) : "";
+      
+      const body = "Hey " + firstName + "! Great news—a " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " just arrived in stock at " + (car.location_name || currentStore.name) + " (" + priceText + ", " + ((car.mileage || 0).toLocaleString()) + " mi)." + linkText + "\nLet me know if you would like me to set this aside for you to test drive!";
+
+      // Cross-platform SMS URI standard (handles iOS & Android)
+      const separator = (navigator.userAgent.match(/iPhone|iPad|iPod/i)) ? "&" : "?";
+      const targetUri = "sms:" + cleanPhone + separator + "body=" + encodeURIComponent(body);
+
+      window.location.href = targetUri;
+    }
+
     function renderWishlistEntries() {
       const container = document.getElementById("wishlistEntriesContainer");
       if (!container) return;
@@ -1498,13 +1517,15 @@
             '<span class="text-[11px] font-bold text-emerald-400 block mb-2"><i class="fa-solid fa-circle-check mr-1"></i> ' + matches.length + ' Matching Vehicle(s) In Stock Right Now:</span>' +
             '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
           matches.slice(0, 4).forEach(function(m) {
-            matchSection += '<div class="p-2 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">' +
+            matchSection += '<div class="p-2.5 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">' +
               '<div>' +
                 '<strong class="text-white block">' + (m.year || '') + ' ' + (m.make || '') + ' ' + (m.model || '') + '</strong>' +
                 '<span class="text-emerald-400 font-bold">' + (m.price ? '$' + m.price.toLocaleString() : 'Call') + '</span> • ' +
                 '<span class="text-gray-400">' + ((m.mileage || 0).toLocaleString()) + ' mi</span>' +
               '</div>' +
-              '<button onclick="openShareModalByVin(\'' + m.vin + '\'); closeModal(\'wishlistModal\');" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold cursor-pointer">Notify</button>' +
+              '<button onclick="notifyCustomerSms(\'' + item.id + '\', \'' + m.vin + '\')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm">' +
+                '<i class="fa-solid fa-comment-sms text-[11px]"></i><span>Text</span>' +
+              '</button>' +
             '</div>';
           });
           matchSection += '</div></div>';
