@@ -18,7 +18,7 @@
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-  <!-- <--------------------------------------------------------------------------------> -->
+<!-- <--------------------------------------------------------------------------------> -->
   <!-- <----------------------- SECTION 1: AUTHENTICATION MODAL START -----------------> -->
   <!-- <--------------------------------------------------------------------------------> -->
   <div id="authOverlay" class="fixed inset-0 z-50 bg-[#0b0f19]/90 backdrop-blur-xl flex items-center justify-center p-4">
@@ -34,12 +34,12 @@
       </div>
 
       <!-- Tab Switcher -->
-      <div class="grid grid-cols-2 p-1 bg-gray-900 rounded-xl border border-gray-800 text-xs font-bold text-center">
+      <div id="authTabSwitcher" class="grid grid-cols-2 p-1 bg-gray-900 rounded-xl border border-gray-800 text-xs font-bold text-center">
         <button id="tabSignIn" type="button" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer">Sign In</button>
         <button id="tabSignUp" type="button" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer">Register</button>
       </div>
 
-      <!-- Auth Form -->
+      <!-- Auth Form (Sign In / Register) -->
       <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
         <div>
           <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Email</label>
@@ -47,7 +47,10 @@
         </div>
 
         <div>
-          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Password</label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Password</label>
+            <button type="button" onclick="toggleForgotPasswordView(true)" class="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold transition cursor-pointer">Forgot?</button>
+          </div>
           <div class="relative">
             <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-4 pr-11 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
             <button type="button" onclick="togglePasswordVisibility('authPassword', 'passwordToggleIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition focus:outline-none cursor-pointer">
@@ -62,12 +65,36 @@
 
         <p id="authErrorMsg" class="text-xs text-rose-400 text-center font-medium hidden"></p>
       </form>
+
+      <!-- Forgot Password Sub-Form (Hidden by Default) -->
+      <form id="forgotPasswordForm" onsubmit="handleForgotPasswordSubmit(event)" class="space-y-4 hidden">
+        <div class="text-center space-y-1">
+          <h4 class="text-sm font-bold text-white">Reset Password</h4>
+          <p class="text-xs text-gray-400">Enter your account email to receive a secure password reset link.</p>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Account Email</label>
+          <input type="email" id="resetEmail" required placeholder="name@company.com" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <button type="submit" id="resetSubmitBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition cursor-pointer">
+          Send Recovery Link
+        </button>
+
+        <p id="resetStatusMsg" class="text-xs text-center font-medium hidden"></p>
+
+        <div class="text-center pt-2">
+          <button type="button" onclick="toggleForgotPasswordView(false)" class="text-xs text-gray-400 hover:text-white transition cursor-pointer">
+            <i class="fa-solid fa-arrow-left mr-1"></i> Back to Sign In
+          </button>
+        </div>
+      </form>
     </div>
   </div>
   <!-- <--------------------------------------------------------------------------------> -->
   <!-- <----------------------- SECTION 1: AUTHENTICATION MODAL END -------------------> -->
   <!-- <--------------------------------------------------------------------------------> -->
-
 
   <!-- <--------------------------------------------------------------------------------> -->
   <!-- <----------------------- SECTION 2: TOP APP HEADER START -----------------------> -->
@@ -462,11 +489,12 @@
     /* <----------------------------------------------------------------------------> */
 
 
-    /* <----------------------------------------------------------------------------> */
+/* <----------------------------------------------------------------------------> */
     /* <----------------------- FUNCTION: AUTH HANDLERS START ----------------------> */
     /* <----------------------------------------------------------------------------> */
     function switchAuthMode(mode) {
       authMode = mode;
+      toggleForgotPasswordView(false);
       const tabIn = document.getElementById("tabSignIn");
       const tabUp = document.getElementById("tabSignUp");
       const submitBtn = document.getElementById("authSubmitBtn");
@@ -481,6 +509,60 @@
         tabUp.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
         tabIn.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
         submitBtn.innerText = "Register";
+      }
+    }
+
+    function toggleForgotPasswordView(show) {
+      const authForm = document.getElementById("authForm");
+      const forgotForm = document.getElementById("forgotPasswordForm");
+      const tabSwitcher = document.getElementById("authTabSwitcher");
+      const err = document.getElementById("authErrorMsg");
+      const statusMsg = document.getElementById("resetStatusMsg");
+
+      err.classList.add("hidden");
+      statusMsg.classList.add("hidden");
+
+      if (show) {
+        authForm.classList.add("hidden");
+        tabSwitcher.classList.add("hidden");
+        forgotForm.classList.remove("hidden");
+        // Pre-fill email if already typed in sign-in box
+        document.getElementById("resetEmail").value = document.getElementById("authEmail").value || "";
+      } else {
+        forgotForm.classList.add("hidden");
+        tabSwitcher.classList.remove("hidden");
+        authForm.classList.remove("hidden");
+      }
+    }
+
+    async function handleForgotPasswordSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById("resetEmail").value.trim();
+      const statusMsg = document.getElementById("resetStatusMsg");
+      const btn = document.getElementById("resetSubmitBtn");
+
+      statusMsg.classList.add("hidden");
+      btn.disabled = true;
+      btn.innerText = "Sending Link...";
+
+      try {
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + window.location.pathname
+        });
+
+        if (error) throw error;
+
+        statusMsg.className = "text-xs text-center font-medium text-emerald-400";
+        statusMsg.innerText = "✓ Password recovery email sent! Please check your inbox.";
+        statusMsg.classList.remove("hidden");
+        btn.innerText = "Email Sent";
+      } catch (err) {
+        console.error("Reset error:", err);
+        statusMsg.className = "text-xs text-center font-medium text-rose-400";
+        statusMsg.innerText = err.message || "Failed to send reset email.";
+        statusMsg.classList.remove("hidden");
+        btn.disabled = false;
+        btn.innerText = "Send Recovery Link";
       }
     }
 
@@ -560,7 +642,6 @@
     /* <----------------------------------------------------------------------------> */
     /* <----------------------- FUNCTION: AUTH HANDLERS END ------------------------> */
     /* <----------------------------------------------------------------------------> */
-
 
     /* <----------------------------------------------------------------------------> */
     /* <----------------------- FUNCTION: ACCOUNT DELETION START -------------------> */
