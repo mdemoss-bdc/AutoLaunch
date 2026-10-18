@@ -1,20 +1,24 @@
 const { createClient } = require('@supabase/supabase-js');
 
-// Support both secret names and standard environment variables
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tdsipiltwajwhzgjsupx.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 
 if (!SUPABASE_KEY) {
-  console.error("Missing Supabase Service Role Key or API Key in environment variables.");
+  console.error("Missing Supabase Key in environment variables.");
   process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const DAILY_LIMIT = 25;
+const BATCH_SIZE = 3;
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function runAutoPoster() {
   console.log("Starting automated Facebook inventory sync worker...");
 
-  // 1. Fetch all users who enabled auto-posting
+  // 1. Fetch active users with Facebook auto-posting enabled
   const { data: users, error: userErr } = await supabase
     .from("user_settings")
     .select("*")
@@ -35,10 +39,35 @@ async function runAutoPoster() {
   for (const user of users) {
     console.log(`\n--- Processing store: ${user.store_name} (${user.user_id}) ---`);
 
+    // 2. Check rolling 24-hour post count for safety
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentPosts, error: countErr } = await supabase
+      .from("facebook_ad_feed")
+      .select("id")
+      .eq("user_id", user.user_id)
+      .gte("created_at", twentyFourHoursAgo);
+
+    if (countErr) {
+      console.error("Error checking recent post count:", countErr.message);
+      continue;
+    }
+
+    const postsInLast24h = recentPosts ? recentPosts.length : 0;
+    const remainingQuota = Math.max(0, DAILY_LIMIT - postsInLast24h);
+
+    console.log(`Posts in last 24h: ${postsInLast24h}/${DAILY_LIMIT}. Quota remaining today: ${remainingQuota}`);
+
+    if (remainingQuota <= 0) {
+      console.log("Daily limit reached. Pausing until rolling 24-hour window opens.");
+      continue;
+    }
+
+    const currentBatchLimit = Math.min(BATCH_SIZE, remainingQuota);
+
+    // 3. Fetch active inventory
     const allowedConditions = user.fb_auto_conditions || ['Used', 'Certified Pre-Owned'];
     const allowedLocations = user.fb_auto_locations || [];
 
-    // 2. Fetch inventory for this user
     const { data: cars, error: carErr } = await supabase
       .from("scraped_inventory")
       .select("*")
@@ -50,28 +79,33 @@ async function runAutoPoster() {
       continue;
     }
 
-    // 3. Filter down to user's selected conditions and locations
+    // Filter matching condition and location
     const candidates = cars.filter(car => {
       const matchCond = allowedConditions.includes(car.condition || 'Used');
       const matchLoc = !allowedLocations.length || allowedLocations.includes(car.location_name);
       return matchCond && matchLoc;
     });
 
-    // 4. Fetch list of cars already posted
-    const { data: alreadyPosted, error: feedErr } = await supabase
+    // 4. Exclude vehicles already posted to the feed
+    const { data: alreadyPosted } = await supabase
       .from("facebook_ad_feed")
       .select("vin")
       .eq("user_id", user.user_id);
 
     const postedVins = new Set((alreadyPosted || []).map(p => p.vin));
-    
-    // Pick unposted vehicles (limit batch to 3 per scheduled run)
-    const toPost = candidates.filter(car => !postedVins.has(car.vin)).slice(0, 3);
+    const toPost = candidates.filter(car => !postedVins.has(car.vin)).slice(0, currentBatchLimit);
 
-    console.log(`Found ${candidates.length} matching cars. ${toPost.length} pending auto-post.`);
+    console.log(`Matching inventory: ${candidates.length}. Scheduled to post this batch: ${toPost.length}`);
 
-    for (const car of toPost) {
+    for (let i = 0; i < toPost.length; i++) {
+      const car = toPost[i];
       await autoPublishCar(user, car);
+
+      // 30-second breather between posts if more remain in this batch
+      if (i < toPost.length - 1) {
+        console.log("Waiting 30 seconds before publishing next vehicle...");
+        await sleep(30000);
+      }
     }
   }
 }
