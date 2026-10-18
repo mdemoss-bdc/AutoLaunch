@@ -1,21 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
+
+<!-- START SECTION: HEAD & DEPENDENCIES -->
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoLaunch - Inventory & Marketing Suite</title>
+  
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Supabase JS Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Global Styling & Glassmorphism -->
   <style>
     body { background-color: #0b0f19; color: #f3f4f6; }
     .glass-card { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
     .glass-modal { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.12); }
   </style>
 </head>
+<!-- END SECTION: HEAD & DEPENDENCIES -->
+
 <body class="min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
 
-  <!-- TOP NAV -->
+  <!-- START SECTION: TOP NAVIGATION BAR -->
   <header class="border-b border-gray-800 bg-gray-950/80 sticky top-0 z-30 backdrop-blur-md">
     <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
       <div class="flex items-center space-x-3">
@@ -36,10 +48,11 @@
       </div>
     </div>
   </header>
+  <!-- END SECTION: TOP NAVIGATION BAR -->
 
-  <!-- MAIN VIEW -->
+  <!-- START SECTION: MAIN CONTENT & INVENTORY CONTROLS -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-    <!-- Header Controls & Stats -->
+    <!-- Header Controls & Status Counts -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-white flex items-center gap-2">
@@ -57,26 +70,31 @@
           <option value="Certified">Certified Pre-Owned</option>
           <option value="New">New</option>
         </select>
+        
         <select id="filterLocation" class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500">
           <option value="ALL">All Locations</option>
         </select>
+
         <input type="text" id="searchInput" placeholder="Search Year, Make, Model, VIN..." class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500 w-64">
       </div>
     </div>
 
-    <!-- Inventory Grid -->
+    <!-- Inventory Cards Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      <!-- Loading Skeleton -->
+      <!-- Loading Skeleton Spinner -->
       <div class="col-span-full py-16 text-center text-gray-400">
         <i class="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-500 mb-3"></i>
         <p>Loading dealership inventory...</p>
       </div>
     </div>
   </main>
+  <!-- END SECTION: MAIN CONTENT & INVENTORY CONTROLS -->
 
-  <!-- DEALERSHIP SETTINGS MODAL -->
+  <!-- START SECTION: DEALERSHIP SETTINGS MODAL -->
   <div id="settingsModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="glass-modal w-full max-w-2xl rounded-2xl shadow-2xl p-6 overflow-y-auto max-h-[90vh] text-gray-200">
+      
+      <!-- Modal Header -->
       <div class="flex items-center justify-between border-b border-gray-800 pb-4 mb-5">
         <div class="flex items-center space-x-2">
           <i class="fa-solid fa-gear text-indigo-400 text-xl"></i>
@@ -88,7 +106,8 @@
       </div>
 
       <form id="settingsForm" class="space-y-5">
-        <!-- Facebook API Credentials -->
+        
+        <!-- START SUBSECTION: FACEBOOK CREDENTIALS -->
         <div class="space-y-3">
           <h3 class="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Facebook Meta Integration</h3>
           <div>
@@ -100,10 +119,11 @@
             <input type="password" id="fbPageToken" placeholder="EAAUf..." class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono">
           </div>
         </div>
+        <!-- END SUBSECTION: FACEBOOK CREDENTIALS -->
 
         <hr class="border-gray-800">
 
-        <!-- AUTOMATED POSTING CRITERIA CONTROLS -->
+        <!-- START SUBSECTION: AUTOMATED POSTING CRITERIA CONTROLS -->
         <div class="space-y-4">
           <div class="flex items-center justify-between">
             <div>
@@ -116,7 +136,7 @@
             </label>
           </div>
 
-          <!-- Vehicle Conditions -->
+          <!-- Vehicle Conditions Selection -->
           <div>
             <label class="block text-xs font-medium text-gray-300 mb-2">Auto-Publish Vehicle Conditions:</label>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -139,7 +159,7 @@
             </div>
           </div>
 
-          <!-- Dealership Locations -->
+          <!-- Target Locations Selection -->
           <div>
             <label class="block text-xs font-medium text-gray-300 mb-2">Target Dealership Locations:</label>
             <div id="locationCheckboxes" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1 bg-gray-950/40 rounded-lg border border-gray-800">
@@ -155,10 +175,11 @@
             <p class="text-[11px] text-gray-500 mt-1">If no location is selected, vehicles across all locations will be posted.</p>
           </div>
         </div>
+        <!-- END SUBSECTION: AUTOMATED POSTING CRITERIA CONTROLS -->
 
         <hr class="border-gray-800">
 
-        <!-- Scraper Feeds Config -->
+        <!-- START SUBSECTION: CRAWL SOURCE URLS -->
         <div class="space-y-3">
           <h3 class="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Crawl Source Feeds</h3>
           <div>
@@ -170,19 +191,23 @@
             <input type="text" id="certifiedUrl" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none">
           </div>
         </div>
+        <!-- END SUBSECTION: CRAWL SOURCE URLS -->
 
-        <!-- Submit Button -->
+        <!-- Save Button -->
         <div class="pt-3">
           <button type="submit" id="saveSettingsBtn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 font-semibold text-white rounded-xl shadow-lg shadow-indigo-600/30 transition">
             Save Settings & URLs
           </button>
         </div>
+
       </form>
     </div>
   </div>
+  <!-- END SECTION: DEALERSHIP SETTINGS MODAL -->
 
-  <!-- APPLICATION LOGIC -->
+  <!-- START SECTION: JAVASCRIPT APPLICATION LOGIC -->
   <script>
+    // --- 1. Supabase Client Configuration ---
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_ANON = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -190,7 +215,7 @@
     let allInventory = [];
     let currentUserId = "";
 
-    // DOM Elements
+    // --- 2. DOM Elements Mapping ---
     const inventoryGrid = document.getElementById('inventoryGrid');
     const unitBadge = document.getElementById('unitBadge');
     const filterCondition = document.getElementById('filterCondition');
@@ -202,16 +227,29 @@
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
     const settingsForm = document.getElementById('settingsForm');
 
-    // Modal Toggles
-    openSettingsBtn.addEventListener('click', () => { loadSettings(); settingsModal.classList.remove('hidden'); });
-    closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
+    // --- 3. Modal Toggles & Event Handlers ---
+    if (openSettingsBtn) {
+      openSettingsBtn.addEventListener('click', () => { 
+        loadSettings(); 
+        settingsModal?.classList.remove('hidden'); 
+      });
+    }
 
-    // Handle "Select All" Conditions
-    document.getElementById('condSelectAll').addEventListener('change', (e) => {
-      document.querySelectorAll('input[name="autoCondition"]').forEach(cb => cb.checked = e.target.checked);
-    });
+    if (closeSettingsBtn) {
+      closeSettingsBtn.addEventListener('click', () => {
+        settingsModal?.classList.add('hidden');
+      });
+    }
 
-    // 1. Load Inventory
+    // Handle "Select All" Conditions Toggle
+    const condSelectAll = document.getElementById('condSelectAll');
+    if (condSelectAll) {
+      condSelectAll.addEventListener('change', (e) => {
+        document.querySelectorAll('input[name="autoCondition"]').forEach(cb => cb.checked = e.target.checked);
+      });
+    }
+
+    // --- 4. Fetch Inventory from Supabase ---
     async function fetchInventory() {
       try {
         const { data, error } = await supabase
@@ -221,27 +259,29 @@
 
         if (error) {
           console.error("Supabase fetch error:", error);
-          inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Error loading inventory: ${error.message}</div>`;
+          if (inventoryGrid) inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Error loading inventory: ${error.message}</div>`;
           return;
         }
 
         if (!data || data.length === 0) {
-          unitBadge.innerText = '0 Units';
-          inventoryGrid.innerHTML = `<div class="col-span-full py-16 text-center text-gray-500">No active inventory found. Run your scraper to populate vehicles.</div>`;
+          if (unitBadge) unitBadge.innerText = '0 Units';
+          if (inventoryGrid) inventoryGrid.innerHTML = `<div class="col-span-full py-16 text-center text-gray-500">No active inventory found.</div>`;
           return;
         }
 
         allInventory = data;
-        unitBadge.innerText = `${data.length} Units`;
+        if (unitBadge) unitBadge.innerText = `${data.length} Units`;
 
-        // Extract unique locations for the filter
+        // Populate location dropdown options
         const locations = Array.from(new Set(data.map(d => d.location_name).filter(Boolean)));
-        filterLocation.innerHTML = '<option value="ALL">All Locations</option>' + 
-          locations.map(loc => `<option value="${loc}">${loc}</option>`).join('');
+        if (filterLocation) {
+          filterLocation.innerHTML = '<option value="ALL">All Locations</option>' + 
+            locations.map(loc => `<option value="${loc}">${loc}</option>`).join('');
+        }
 
-        // Populate dynamic modal location checkboxes
+        // Populate modal location checkboxes
         const locContainer = document.getElementById('locationCheckboxes');
-        if (locations.length > 0) {
+        if (locContainer && locations.length > 0) {
           locContainer.innerHTML = locations.map(loc => `
             <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer">
               <input type="checkbox" name="autoLocation" value="${loc}" class="rounded text-indigo-600 bg-gray-800 border-gray-700" checked>
@@ -253,12 +293,13 @@
         renderCards(allInventory);
       } catch (err) {
         console.error("Unexpected error:", err);
-        inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Failed to render inventory: ${err.message}</div>`;
+        if (inventoryGrid) inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Failed to render inventory: ${err.message}</div>`;
       }
     }
 
-    // 2. Render Cards
+    // --- 5. Render Vehicle Cards ---
     function renderCards(vehicles) {
+      if (!inventoryGrid) return;
       if (vehicles.length === 0) {
         inventoryGrid.innerHTML = `<div class="col-span-full py-16 text-center text-gray-500">No vehicles match your criteria.</div>`;
         return;
@@ -300,11 +341,11 @@
       `).join('');
     }
 
-    // 3. Search & Filter Handlers
+    // --- 6. Front-End Filtering & Search ---
     function applyFilters() {
-      const cond = filterCondition.value;
-      const loc = filterLocation.value;
-      const term = searchInput.value.toLowerCase().trim();
+      const cond = filterCondition?.value || 'ALL';
+      const loc = filterLocation?.value || 'ALL';
+      const term = searchInput?.value.toLowerCase().trim() || '';
 
       const filtered = allInventory.filter(car => {
         const matchesCond = cond === 'ALL' || (car.condition && car.condition.toLowerCase().includes(cond.toLowerCase()));
@@ -317,22 +358,22 @@
       renderCards(filtered);
     }
 
-    filterCondition.addEventListener('change', applyFilters);
-    filterLocation.addEventListener('change', applyFilters);
-    searchInput.addEventListener('input', applyFilters);
+    filterCondition?.addEventListener('change', applyFilters);
+    filterLocation?.addEventListener('change', applyFilters);
+    searchInput?.addEventListener('input', applyFilters);
 
-    // 4. Load & Populate Settings
+    // --- 7. Load User Settings from Database ---
     async function loadSettings() {
       const { data } = await supabase.from('user_settings').select('*').limit(1).single();
       if (!data) return;
 
       currentUserId = data.user_id || "";
-      document.getElementById('fbPageId').value = data.fb_page_id || '';
-      document.getElementById('fbPageToken').value = data.fb_page_token || '';
-      document.getElementById('usedUrl').value = data.used_url || '';
-      document.getElementById('certifiedUrl').value = data.certified_url || '';
+      if (document.getElementById('fbPageId')) document.getElementById('fbPageId').value = data.fb_page_id || '';
+      if (document.getElementById('fbPageToken')) document.getElementById('fbPageToken').value = data.fb_page_token || '';
+      if (document.getElementById('usedUrl')) document.getElementById('usedUrl').value = data.used_url || '';
+      if (document.getElementById('certifiedUrl')) document.getElementById('certifiedUrl').value = data.certified_url || '';
 
-      if (typeof data.fb_auto_enabled === 'boolean') {
+      if (typeof data.fb_auto_enabled === 'boolean' && document.getElementById('fbAutoEnabled')) {
         document.getElementById('fbAutoEnabled').checked = data.fb_auto_enabled;
       }
 
@@ -349,66 +390,71 @@
       }
     }
 
-    // 5. Save Settings Handler
-    settingsForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const saveBtn = document.getElementById('saveSettingsBtn');
-      saveBtn.innerText = 'Saving...';
-      saveBtn.disabled = true;
+    // --- 8. Save User Settings Form Handler ---
+    if (settingsForm) {
+      settingsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const saveBtn = document.getElementById('saveSettingsBtn');
+        if (saveBtn) {
+          saveBtn.innerText = 'Saving...';
+          saveBtn.disabled = true;
+        }
 
-      const fbPageId = document.getElementById('fbPageId').value.trim();
-      const fbPageToken = document.getElementById('fbPageToken').value.trim();
-      const usedUrl = document.getElementById('usedUrl').value.trim();
-      const certifiedUrl = document.getElementById('certifiedUrl').value.trim();
-      const fbAutoEnabled = document.getElementById('fbAutoEnabled').checked;
+        const fbPageId = document.getElementById('fbPageId')?.value.trim() || '';
+        const fbPageToken = document.getElementById('fbPageToken')?.value.trim() || '';
+        const usedUrl = document.getElementById('usedUrl')?.value.trim() || '';
+        const certifiedUrl = document.getElementById('certifiedUrl')?.value.trim() || '';
+        const fbAutoEnabled = document.getElementById('fbAutoEnabled') ? document.getElementById('fbAutoEnabled').checked : true;
 
-      const selectedConditions = Array.from(
-        document.querySelectorAll('input[name="autoCondition"]:checked')
-      ).map(cb => cb.value);
+        const selectedConditions = Array.from(
+          document.querySelectorAll('input[name="autoCondition"]:checked')
+        ).map(cb => cb.value);
 
-      const selectedLocations = Array.from(
-        document.querySelectorAll('input[name="autoLocation"]:checked')
-      ).map(cb => cb.value);
+        const selectedLocations = Array.from(
+          document.querySelectorAll('input[name="autoLocation"]:checked')
+        ).map(cb => cb.value);
 
-      let query = supabase.from('user_settings');
-      const payload = {
-        fb_page_id: fbPageId,
-        fb_page_token: fbPageToken,
-        used_url: usedUrl,
-        certified_url: certifiedUrl,
-        fb_auto_conditions: selectedConditions,
-        fb_auto_locations: selectedLocations,
-        fb_auto_enabled: fbAutoEnabled
-      };
+        const payload = {
+          fb_page_id: fbPageId,
+          fb_page_token: fbPageToken,
+          used_url: usedUrl,
+          certified_url: certifiedUrl,
+          fb_auto_conditions: selectedConditions,
+          fb_auto_locations: selectedLocations,
+          fb_auto_enabled: fbAutoEnabled
+        };
 
-      let res;
-      if (currentUserId) {
-        res = await query.update(payload).eq('user_id', currentUserId);
-      } else {
-        res = await query.update(payload).limit(1);
-      }
+        let res;
+        if (currentUserId) {
+          res = await supabase.from('user_settings').update(payload).eq('user_id', currentUserId);
+        } else {
+          res = await supabase.from('user_settings').update(payload).limit(1);
+        }
 
-      saveBtn.innerText = 'Save Settings & URLs';
-      saveBtn.disabled = false;
+        if (saveBtn) {
+          saveBtn.innerText = 'Save Settings & URLs';
+          saveBtn.disabled = false;
+        }
 
-      if (res.error) {
-        alert('Error saving preferences: ' + res.error.message);
-      } else {
-        alert('Settings & Automation rules saved successfully!');
-        settingsModal.classList.add('hidden');
-      }
-    });
+        if (res?.error) {
+          alert('Error saving preferences: ' + res.error.message);
+        } else {
+          alert('Settings & Automation rules saved successfully!');
+          settingsModal?.classList.add('hidden');
+        }
+      });
+    }
 
-    // 6. Manual Single Publish Fallback
+    // --- 9. Manual Single Publish Fallback ---
     window.publishSingle = async function(vin) {
       const car = allInventory.find(c => c.vin === vin);
       if (!car) return;
 
-      const pageId = document.getElementById('fbPageId').value;
-      const token = document.getElementById('fbPageToken').value;
+      const pageId = document.getElementById('fbPageId')?.value || '1198606820007865';
+      const token = document.getElementById('fbPageToken')?.value;
 
-      if (!token || !pageId) {
-        alert('Please open Dealership Settings and add your Facebook Page ID and Token first.');
+      if (!token) {
+        alert('Please open Dealership Settings and add your Facebook Page Access Token first.');
         return;
       }
 
@@ -445,8 +491,10 @@
       }
     };
 
-    // Initial Load
+    // --- 10. Initial Run ---
     fetchInventory();
   </script>
+  <!-- END SECTION: JAVASCRIPT APPLICATION LOGIC -->
+
 </body>
 </html>
