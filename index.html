@@ -105,7 +105,7 @@
   <!-- ================= MAIN VIEW ================= -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
     
-    <!-- Dealership Metrics Bar -->
+    <!-- Metrics Bar -->
     <div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div>
         <div class="flex items-center gap-3 mb-1">
@@ -157,7 +157,7 @@
         </div>
       </div>
 
-      <!-- Make, Model, Trim Cascading Bar -->
+      <!-- Make, Model, Trim Bar -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
         <div>
           <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Make</label>
@@ -250,7 +250,7 @@
       </div>
     </div>
 
-    <!-- Grid -->
+    <!-- Inventory Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
   </main>
 
@@ -273,10 +273,9 @@
 
         <div>
           <label class="text-xs font-bold text-gray-400 uppercase">Dealership Display Name</label>
-          <input type="text" id="dealershipNameInput" placeholder="e.g. Moses Automotive Group" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <input type="text" id="dealershipNameInput" placeholder="e.g. University Ford WV" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
-        <!-- Helper Instructions Box -->
         <div class="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-indigo-300 leading-relaxed flex items-start gap-2.5">
           <i class="fa-solid fa-circle-info text-indigo-400 mt-0.5"></i>
           <div>
@@ -284,7 +283,6 @@
           </div>
         </div>
 
-        <!-- Live Inventory Feed URLs -->
         <div>
           <label class="text-xs font-bold text-indigo-400 uppercase block mb-1">Used Inventory (Page 2 URL)</label>
           <input type="text" id="dealershipUsedUrlInput" oninput="handleUrlInput(this)" placeholder="https://www.yourdealer.com/used-inventory/index.htm?page=2" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
@@ -300,13 +298,11 @@
           <input type="text" id="dealershipCpoUrlInput" oninput="handleUrlInput(this)" placeholder="https://www.yourdealer.com/search-cpo.html?pt=2" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
         </div>
 
-        <!-- Auto-Detection Status Badge -->
         <div id="detectedPatternBadge" class="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
           <i class="fa-solid fa-circle-check text-emerald-400"></i>
           <span>Pagination format: <strong id="detectedPatternText" class="font-mono text-emerald-200">?pt={page}</strong></span>
         </div>
 
-        <!-- Advanced Toggle for Technical Overrides -->
         <div class="border-t border-gray-800 pt-2">
           <button type="button" onclick="toggleAdvancedPagination()" class="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1.5 focus:outline-none cursor-pointer">
             <i class="fa-solid fa-sliders text-indigo-400"></i>
@@ -330,7 +326,7 @@
           </button>
         </div>
 
-        <!-- Danger Zone: Delete Account -->
+        <!-- Danger Zone -->
         <div class="border-t border-rose-900/40 pt-4 mt-6">
           <div class="p-3.5 rounded-xl bg-rose-950/20 border border-rose-900/30 flex items-center justify-between gap-3">
             <div>
@@ -346,7 +342,7 @@
     </div>
   </div>
 
-  <!-- ================= DELETE ACCOUNT CONFIRMATION MODAL ================= -->
+  <!-- Delete Account Modal -->
   <div id="deleteAccountModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-md rounded-2xl border border-rose-800/50 p-6 space-y-4 shadow-2xl">
       <div class="flex items-center gap-3 border-b border-gray-800 pb-3">
@@ -612,14 +608,13 @@
       }
     }
 
-    // ---------------- PER-USER SETTINGS & INVENTORY ----------------
+    // ---------------- PER-USER SETTINGS & INVENTORY (STRICT RLS) ----------------
     async function loadUserStoreSettings() {
       if (!currentUser) return;
       try {
         const { data, error } = await supabaseClient
           .from("user_settings")
           .select("*")
-          .eq("user_id", currentUser.id)
           .single();
 
         if (data) {
@@ -631,13 +626,12 @@
             cpoUrl: data.certified_url || ""
           };
         } else {
-          // If first time login, fallback to Moses config defaults
           currentStore = {
-            name: "Moses Automotive Group",
+            name: "My Dealership",
             pageModifier: "?pt={page}",
-            usedUrl: "https://www.mosescars.com/searchused.aspx",
+            usedUrl: "",
             newUrl: "",
-            cpoUrl: "https://www.mosescars.com/search-cpo.html"
+            cpoUrl: ""
           };
         }
       } catch (err) {
@@ -755,11 +749,10 @@
       if (!currentUser) return;
       const lotBadge = document.getElementById("lotCount");
       try {
-        // Query vehicles matching ONLY this user's user_id
+        // Postgres RLS automatically restricts this select to the authenticated user
         const { data, error } = await supabaseClient
           .from("scraped_inventory")
           .select("*")
-          .or(`user_id.eq.${currentUser.id},user_id.is.null`)
           .order("price", { ascending: true });
 
         if (error) throw error;
