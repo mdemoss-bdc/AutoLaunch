@@ -113,6 +113,13 @@
       </div>
 
       <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Wishlist Matchmaker Button -->
+        <button onclick="openWishlistModal()" class="px-3.5 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-sm relative">
+          <i class="fa-solid fa-bell text-rose-400"></i>
+          <span>Customer Wishlist</span>
+          <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full bg-rose-500 text-[10px] font-black text-white ml-0.5">0</span>
+        </button>
+
         <button onclick="triggerLiveLotCrawl()" id="crawlTriggerBtn" class="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-600/40 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
           <i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i>
           <span class="hidden sm:inline">Sync Dealer Site</span>
@@ -462,6 +469,62 @@
   </div>
   <!-- ============================================================================== -->
   <!-- ======================= SECTION 6: SHARE & SOCIAL COPY MODAL END ============ -->
+  <!-- ============================================================================== -->
+
+
+  <!-- ============================================================================== -->
+  <!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR START ============ -->
+  <!-- ============================================================================== -->
+  <div id="wishlistModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-4xl rounded-2xl border border-gray-800 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-4">
+        <div>
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-radar text-rose-400"></i> Customer Wishlist & Inventory Radar
+          </h3>
+          <p class="text-xs text-gray-400">Track prospective buyers. AutoLaunch scans your live inventory for exact matches.</p>
+        </div>
+        <button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <!-- Add New Customer Entry Form -->
+      <form id="addWishlistForm" onsubmit="saveCustomerWishlist(event)" class="bg-gray-950/70 p-4 rounded-xl border border-gray-800/80 space-y-3">
+        <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider block">Add Customer Request</span>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <input type="text" id="wlName" required placeholder="Customer Name *" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="tel" id="wlPhone" placeholder="Phone Number" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="email" id="wlEmail" placeholder="Email Address" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <input type="text" id="wlMake" placeholder="Make (e.g. Toyota)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="text" id="wlModel" placeholder="Model (e.g. Tacoma)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="number" id="wlMinYear" placeholder="Min Year (e.g. 2022)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="number" id="wlMaxMiles" placeholder="Max Miles (e.g. 50000)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <select id="wlTrans" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <option value="">Any Trans</option>
+            <option value="Automatic">Automatic</option>
+            <option value="Manual">Manual</option>
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <input type="text" id="wlNotes" placeholder="Additional notes or trade-in info..." class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <button type="submit" id="wlSaveBtn" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer">
+            Save Customer
+          </button>
+        </div>
+      </form>
+
+      <!-- Customer Wishlist List & Live Matches -->
+      <div class="space-y-3">
+        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Customer Requests & Live Matches</h4>
+        <div id="wishlistEntriesContainer" class="space-y-3">
+          <p class="text-xs text-gray-500 text-center py-6">Loading wishlist requests...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ============================================================================== -->
+  <!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR END ============== -->
   <!-- ============================================================================== -->
 
 
@@ -1262,6 +1325,165 @@
     /* ============================================================================ */
     /* ======================= FUNCTION: SOCIAL / SMS GENERATORS START =========== */
     /* ============================================================================ */
+    let customerWishlists = [];
+
+    function openWishlistModal() {
+      loadCustomerWishlists();
+      document.getElementById("wishlistModal").classList.remove("hidden");
+    }
+
+    async function loadCustomerWishlists() {
+      if (!currentUser) return;
+      try {
+        const { data, error } = await supabaseClient
+          .from("customer_wishlists")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        customerWishlists = data || [];
+        renderWishlistEntries();
+        scanWishlistMatches();
+      } catch (err) {
+        console.error("Error loading customer wishlists:", err);
+      }
+    }
+
+    async function saveCustomerWishlist(e) {
+      e.preventDefault();
+      if (!currentUser) return;
+      const btn = document.getElementById("wlSaveBtn");
+      btn.disabled = true;
+      btn.innerText = "Saving...";
+
+      const newEntry = {
+        user_id: currentUser.id,
+        customer_name: document.getElementById("wlName").value.trim(),
+        customer_phone: document.getElementById("wlPhone").value.trim() || null,
+        customer_email: document.getElementById("wlEmail").value.trim() || null,
+        target_make: document.getElementById("wlMake").value.trim() || null,
+        target_model: document.getElementById("wlModel").value.trim() || null,
+        min_year: document.getElementById("wlMinYear").value ? parseInt(document.getElementById("wlMinYear").value) : null,
+        max_miles: document.getElementById("wlMaxMiles").value ? parseInt(document.getElementById("wlMaxMiles").value) : null,
+        transmission: document.getElementById("wlTrans").value || null,
+        notes: document.getElementById("wlNotes").value.trim() || null
+      };
+
+      try {
+        const { error } = await supabaseClient.from("customer_wishlists").insert(newEntry);
+        if (error) throw error;
+        document.getElementById("addWishlistForm").reset();
+        await loadCustomerWishlists();
+      } catch (err) {
+        alert("Failed to save customer request: " + err.message);
+      }
+      btn.disabled = false;
+      btn.innerText = "Save Customer";
+    }
+
+    async function deleteWishlistEntry(id) {
+      if (!confirm("Are you sure you want to remove this customer request?")) return;
+      try {
+        const { error } = await supabaseClient.from("customer_wishlists").delete().eq("id", id);
+        if (error) throw error;
+        await loadCustomerWishlists();
+      } catch (err) {
+        alert("Delete failed: " + err.message);
+      }
+    }
+
+    function scanWishlistMatches() {
+      let totalMatches = 0;
+      customerWishlists.forEach(function(item) {
+        const matches = findMatchingVehicles(item);
+        item._matches = matches;
+        totalMatches += matches.length;
+      });
+
+      const badge = document.getElementById("wishlistMatchBadge");
+      if (badge) {
+        if (totalMatches > 0) {
+          badge.innerText = totalMatches;
+          badge.classList.remove("hidden");
+        } else {
+          badge.classList.add("hidden");
+        }
+      }
+      renderWishlistEntries();
+    }
+
+    function findMatchingVehicles(criteria) {
+      return rawInventory.filter(function(car) {
+        if (criteria.target_make && (!car.make || car.make.toLowerCase().indexOf(criteria.target_make.toLowerCase()) === -1)) return false;
+        if (criteria.target_model && (!car.model || car.model.toLowerCase().indexOf(criteria.target_model.toLowerCase()) === -1)) return false;
+        if (criteria.min_year && (!car.year || car.year < criteria.min_year)) return false;
+        if (criteria.max_miles && (!car.mileage || car.mileage > criteria.max_miles)) return false;
+        if (criteria.transmission && (!car.transmission || car.transmission.toLowerCase().indexOf(criteria.transmission.toLowerCase()) === -1)) return false;
+        return true;
+      });
+    }
+
+    function renderWishlistEntries() {
+      const container = document.getElementById("wishlistEntriesContainer");
+      if (!container) return;
+
+      if (!customerWishlists.length) {
+        container.innerHTML = '<p class="text-xs text-gray-500 text-center py-6">No customer wishlists saved yet. Add a customer above to track inventory matches automatically.</p>';
+        return;
+      }
+
+      let html = "";
+      customerWishlists.forEach(function(item) {
+        const matches = item._matches || [];
+        const hasMatches = matches.length > 0;
+
+        let matchSection = "";
+        if (hasMatches) {
+          matchSection = '<div class="mt-3 pt-3 border-t border-emerald-900/40">' +
+            '<span class="text-[11px] font-bold text-emerald-400 block mb-2"><i class="fa-solid fa-circle-check mr-1"></i> ' + matches.length + ' Matching Vehicle(s) In Stock Right Now:</span>' +
+            '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
+          matches.slice(0, 4).forEach(function(m) {
+            matchSection += '<div class="p-2 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">' +
+              '<div>' +
+                '<strong class="text-white block">' + (m.year || '') + ' ' + (m.make || '') + ' ' + (m.model || '') + '</strong>' +
+                '<span class="text-emerald-400 font-bold">' + (m.price ? '$' + m.price.toLocaleString() : 'Call') + '</span> • ' +
+                '<span class="text-gray-400">' + ((m.mileage || 0).toLocaleString()) + ' mi</span>' +
+              '</div>' +
+              '<button onclick="openShareModalByVin(\'' + m.vin + '\'); closeModal(\'wishlistModal\');" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold cursor-pointer">Notify</button>' +
+            '</div>';
+          });
+          matchSection += '</div></div>';
+        } else {
+          matchSection = '<div class="mt-2 text-[11px] text-gray-500"><i class="fa-solid fa-clock mr-1"></i> No inventory currently matches these specs. AutoLaunch will highlight when one arrives.</div>';
+        }
+
+        html += '<div class="p-4 rounded-xl ' + (hasMatches ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-gray-950/50 border-gray-800') + ' border space-y-2">' +
+          '<div class="flex items-start justify-between">' +
+            '<div>' +
+              '<h5 class="text-sm font-bold text-white flex items-center gap-2">' +
+                item.customer_name +
+                (hasMatches ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">' + matches.length + ' MATCHES</span>' : '') +
+              '</h5>' +
+              '<div class="text-xs text-gray-400 flex flex-wrap gap-x-3 pt-0.5">' +
+                (item.customer_phone ? '<span><i class="fa-solid fa-phone text-gray-500 mr-1"></i>' + item.customer_phone + '</span>' : '') +
+                (item.customer_email ? '<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>' + item.customer_email + '</span>' : '') +
+              '</div>' +
+            '</div>' +
+            '<button onclick="deleteWishlistEntry(\'' + item.id + '\')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1 cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>' +
+          '</div>' +
+          '<div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">' +
+            '<span><strong>Wanted:</strong> ' + (item.min_year ? item.min_year + '+ ' : '') + (item.target_make || 'Any Make') + ' ' + (item.target_model || '') + '</span>' +
+            (item.max_miles ? '<span>• Under ' + item.max_miles.toLocaleString() + ' mi</span>' : '') +
+            (item.transmission ? '<span>• ' + item.transmission + '</span>' : '') +
+            (item.notes ? '<span class="block text-gray-400 w-full mt-1"><em>Notes: ' + item.notes + '</em></span>' : '') +
+          '</div>' +
+          matchSection +
+        '</div>';
+      });
+
+      container.innerHTML = html;
+    }
+
     function openShareModalByVin(vin) {
       const car = rawInventory.find(function(c) { return c.vin === vin; });
       if (!car) return;
@@ -1323,6 +1545,7 @@
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session && session.user) {
         await initAppSession(session.user);
+        await loadCustomerWishlists();
       } else {
         document.getElementById("authOverlay").classList.remove("hidden");
       }
