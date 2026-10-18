@@ -34,14 +34,18 @@ def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
     return f"{base_url}{mod}"
 
 async def extract_cards_from_page(page, default_condition: str = "Used") -> List[dict]:
-    # Progressive scroll to trigger lazy loading of real vehicle images
-    for fraction in [0.2, 0.4, 0.6, 0.8, 1.0]:
-        await page.evaluate(f"window.scrollTo(0, document.body.scrollHeight * {fraction})")
-        await asyncio.sleep(0.7)
+    # Progressive smooth scrolling to wake up lazy-loaded vehicle image handlers
+    scroll_height = await page.evaluate("document.body.scrollHeight")
+    step = max(300, int(scroll_height / 8))
+    for y in range(0, scroll_height, step):
+        await page.evaluate(f"window.scrollTo(0, {y})")
+        await asyncio.sleep(0.2)
+    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    await asyncio.sleep(1.0)
 
     vehicles = await page.evaluate("""(defaultCond) => {
         const results = [];
-        const cards = document.querySelectorAll('.vehicle-card, .inventory-item, .vehicle-overview, .vehicle-item, [data-vin], .listing-card, .inventory-list-item, div[class*="inventory-card"]');
+        const cards = document.querySelectorAll('.vehicle-card, .inventory-item, .vehicle-overview, .vehicle-item, [data-vin], .listing-card, .inventory-list-item, div[class*="inventory-card"], div[class*="vehicle-card"]');
 
         cards.forEach(card => {
             const cardText = card.innerText || "";
@@ -49,7 +53,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             if (!vinMatch) return;
             const vin = vinMatch[1];
 
-            // 1. DETAIL PAGE URL (Target primary vehicle listing)
+            // 1. DETAIL LINK
             let detailUrl = null;
             const allLinks = Array.from(card.querySelectorAll('a[href]'));
             for (const a of allLinks) {
@@ -57,7 +61,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
                 if (/trade|kbb|value|finance|credit|contact|schedule|service|parts|direction|map|calc|review/i.test(href)) continue;
 
-                if (href.includes(vin) || /\\/(used|new|certified|vehicle-details|inventory)\\//i.test(href) || href.endsWith('.html') || href.endsWith('.htm')) {
+                if (href.includes(vin) || /\\/(used|new|certified|vehicle-details|inventory|vehicles)\\//i.test(href) || href.endsWith('.html') || href.endsWith('.htm')) {
                     try {
                         detailUrl = new URL(href, window.location.origin).href;
                         break;
@@ -73,10 +77,10 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // 2. TRUE VEHICLE IMAGE (Exclude placeholders & logo overlays)
+            // 2. REAL VEHICLE PHOTO (Extract high-res lazy-loaded vehicle photos)
             let photoUrl = null;
-            const imgs = Array.from(card.querySelectorAll('img, [data-src], [data-original], [style*="background-image"]'));
-            for (const el of imgs) {
+            const mediaCandidates = Array.from(card.querySelectorAll('img, [data-src], [data-original], [data-lazy-src], [style*="background-image"]'));
+            for (const el of mediaCandidates) {
                 let candidate = null;
                 if (el.tagName === 'IMG') {
                     candidate = el.getAttribute('data-original') || 
@@ -99,7 +103,8 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                     const isGarbage = lower.includes('/static/') || lower.includes('placeholder') || 
                                       lower.includes('logo') || lower.includes('banner') || 
                                       lower.includes('1x1') || lower.includes('pixel') || 
-                                      lower.includes('icon') || lower.endsWith('.svg');
+                                      lower.includes('icon') || lower.endsWith('.svg') ||
+                                      lower.includes('coming-soon');
 
                     if (candidate.startsWith('http') && !isGarbage) {
                         photoUrl = candidate;
@@ -108,33 +113,60 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // 3. TRUE VEHICLE PRICE (Prioritize actual selling price, ignore down payments)
+            // 3. VEHICLE PRICE (Prioritize Internet Price / Final Price / Retail Price)
             let price = null;
 
-            // Check high-priority price elements first (DealerOn specific classes)
-            const priceEl = card.querySelector('.moses-price .price-value, .final-price .price-value, .sale-price .price-value, .retail-price .price-value, [class*="price-value"], [class*="finalPrice"]');
-            if (priceEl) {
-                const pText = priceEl.innerText.replace(/[^0-9]/g, '');
-                if (pText && parseInt(pText) >= 3500) {
-                    price = parseInt(pText);
+            // Direct selector checks
+            const pSelectors = [
+                '[class*="internetPrice"]', '[class*="internet-price"]',
+                '[class*="finalPrice"]', '[class*="final-price"]',
+                '[class*="salePrice"]', '[class*="sale-price"]',
+                '[class*="retailPrice"]', '[class*="retail-price"]',
+                '.price-value', '.value'
+            ];
+            for (const sel of pSelectors) {
+                const el = card.querySelector(sel);
+                if (el && el.innerText) {
+                    const num = parseInt(el.innerText.replace(/[^0-9]/g, ''));
+                    if (num >= 4500 && num <= 250000) {
+                        price = num;
+                        break;
+                    }
                 }
             }
 
-            // Fallback: Parse card text for standard prices while explicitly rejecting lease down payments
+            // Text search targeting the exact price row
             if (!price) {
                 const lines = cardText.split('\\n');
                 for (const line of lines) {
-                    if (/down|due at signing|per month|\\/mo|savings|rebate|doc fee/i.test(line)) continue;
-                    if (/price|final|retail|msrp|sale/i.test(line)) {
+                    // Skip discounts, down payments, and savings lines
+                    if (/savings|discount|down payment|due at signing|per mo|\\/mo|rebate|doc fee/i.test(line)) continue;
+                    
+                    if (/internet price|final price|moses price|retail price|selling price|price:/i.test(line)) {
                         const m = line.match(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
                         if (m) {
                             const val = parseInt(m[1].replace(/,/g, ''));
-                            if (val >= 3500 && val < 300000) {
+                            if (val >= 4500 && val <= 250000) {
                                 price = val;
                                 break;
                             }
                         }
                     }
+                }
+            }
+
+            // Last resort: highest dollar amount on the card that isn't MSRP
+            if (!price) {
+                const matches = Array.from(cardText.matchAll(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/g));
+                const candidates = [];
+                for (const match of matches) {
+                    const val = parseInt(match[1].replace(/,/g, ''));
+                    if (val >= 4500 && val <= 250000) {
+                        candidates.push(val);
+                    }
+                }
+                if (candidates.length > 0) {
+                    price = candidates[0];
                 }
             }
 
@@ -292,7 +324,7 @@ async def run_scraper():
                 total_synced += saved
                 valid_photos = sum(1 for c in cars if c.get("image_url"))
                 valid_prices = sum(1 for c in cars if c.get("price"))
-                print(f"[+] Page {pt}: Synced {saved} units | Real Prices: {valid_prices}/{len(cars)} | Photos: {valid_photos}/{len(cars)}")
+                print(f"[+] Page {pt}: Synced {saved} units | Real Prices: {valid_prices}/{len(cars)} | Real Photos: {valid_photos}/{len(cars)}")
                 await asyncio.sleep(1)
 
         await browser.close()
