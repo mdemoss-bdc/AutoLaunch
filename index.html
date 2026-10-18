@@ -477,60 +477,777 @@ Reset All Filters
 <!-- ============================================================================== -->
 
 
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 5: ACCOUNT DELETION MODAL START ============= -->
+<!-- ============================================================================== -->
+<div id="deleteAccountModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-md rounded-2xl border border-rose-800/50 p-6 space-y-4 shadow-2xl">
+<div class="flex items-center gap-3 border-b border-gray-800 pb-3">
+<div class="w-10 h-10 rounded-xl bg-rose-600/20 border border-rose-600/40 flex items-center justify-center text-rose-400">
+<i class="fa-solid fa-triangle-exclamation text-lg"></i>
+</div>
+<div>
+<h3 class="text-base font-bold text-white">Permanently Delete Account</h3>
+<p class="text-xs text-rose-300">This action cannot be undone.</p>
+</div>
+</div>
+
+<p class="text-xs text-gray-300 leading-relaxed">
+To confirm account termination, enter your account password. All stored configurations, scrape histories, and vehicle listings will be wiped from the server.
+</p>
+
+<div class="space-y-3">
+<div>
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Confirm Password</label>
+<div class="relative">
+<input type="password" id="deleteConfirmPassword" placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-4 pr-11 py-2 text-sm text-white focus:outline-none focus:border-rose-500">
+<button type="button" onclick="togglePasswordVisibility('deleteConfirmPassword', 'deletePasswordToggleIcon')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition focus:outline-none cursor-pointer">
+<i id="deletePasswordToggleIcon" class="fa-regular fa-eye text-sm"></i>
+</button>
+</div>
+</div>
+
+<p id="deleteErrorMsg" class="text-xs text-rose-400 font-medium hidden"></p>
+
+<div class="flex gap-2 pt-2">
+<button onclick="confirmDeleteAccount()" id="confirmDeleteBtn" type="button" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 transition cursor-pointer">
+Confirm Permanent Deletion
+</button>
+<button onclick="closeModal('deleteAccountModal')" type="button" class="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs transition cursor-pointer">
+Cancel
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 5: ACCOUNT DELETION MODAL END =============== -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 6: SHARE & SOCIAL COPY MODAL START ========== -->
+<!-- ============================================================================== -->
+<div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-5">
+<div class="flex items-center justify-between border-b border-gray-800 pb-4">
+<div>
+<h3 id="modalTitle" class="text-lg font-bold text-white">Action</h3>
+<p id="modalSubtitle" class="text-xs text-gray-400"></p>
+</div>
+<button onclick="closeModal('actionModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+<div id="modalBody" class="space-y-4"></div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 6: SHARE & SOCIAL COPY MODAL END ============ -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR START ============ -->
+<!-- ============================================================================== -->
+<div id="wishlistModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-4xl rounded-2xl border border-gray-800 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+<div class="flex items-center justify-between border-b border-gray-800 pb-4">
+<div>
+<h3 class="text-lg font-bold text-white flex items-center gap-2">
+<i class="fa-solid fa-radar text-rose-400"></i> Customer Wishlist & Inventory Radar
+</h3>
+<p class="text-xs text-gray-400">Track prospective buyers. AutoLaunch scans your live inventory for exact matches.</p>
+</div>
+<button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+
+<!-- Add / Edit Customer Entry Form -->
+<form id="addWishlistForm" onsubmit="saveCustomerWishlist(event)" class="bg-gray-950/70 p-4 rounded-xl border border-gray-800/80 space-y-3">
+<input type="hidden" id="wlEditId" value="">
+<div class="flex items-center justify-between">
+<span id="wlFormTitle" class="text-xs font-bold text-indigo-400 uppercase tracking-wider block">Add Customer Request</span>
+<button type="button" id="wlCancelEditBtn" onclick="cancelWishlistEdit()" class="text-xs text-gray-400 hover:text-white hidden cursor-pointer">
+<i class="fa-solid fa-xmark mr-1"></i> Cancel Edit
+</button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<input type="text" id="wlName" required placeholder="Customer Name *" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="tel" id="wlPhone" placeholder="Phone Number" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="email" id="wlEmail" placeholder="Email Address" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+<input type="text" id="wlMake" placeholder="Make (e.g. Toyota)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="text" id="wlModel" placeholder="Model (e.g. Tacoma)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="number" id="wlMinYear" placeholder="Min Year (e.g. 2022)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="number" id="wlMaxMiles" placeholder="Max Miles (e.g. 50000)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<select id="wlTrans" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+<option value="">Any Trans</option>
+<option value="Automatic">Automatic</option>
+<option value="Manual">Manual</option>
+</select>
+</div>
+<div class="flex gap-2">
+<input type="text" id="wlNotes" placeholder="Additional notes or trade-in info..." class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<button type="submit" id="wlSaveBtn" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer">
+Save Customer
+</button>
+</div>
+</form>
+
+<!-- Customer Wishlist List & Live Matches -->
+<div class="space-y-3">
+<h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Customer Requests & Live Matches</h4>
+<div id="wishlistEntriesContainer" class="space-y-3">
+<p class="text-xs text-gray-500 text-center py-6">Loading wishlist requests...</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Customer Direct Message / Copy Fallback Modal -->
+<div id="notifyCustomerModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-lg rounded-2xl border border-emerald-500/30 p-6 space-y-4 shadow-2xl">
+<div class="flex items-center justify-between border-b border-gray-800 pb-3">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+<i class="fa-solid fa-comment-sms text-sm"></i>
+</div>
+<div>
+<h3 id="notifyModalTitle" class="text-sm font-bold text-white">Contact Customer</h3>
+<p id="notifyModalSubtitle" class="text-xs text-emerald-400 font-medium">✓ Message copied to clipboard!</p>
+</div>
+</div>
+<button onclick="closeModal('notifyCustomerModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-base"></i></button>
+</div>
+
+<div class="space-y-3">
+<div>
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Customer Phone Number</label>
+<div class="flex gap-2">
+<input type="text" id="notifyTargetPhone" readonly class="flex-1 bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-indigo-300 font-mono font-bold">
+<button onclick="navigator.clipboard.writeText(document.getElementById('notifyTargetPhone').value); alert('Phone number copied!');" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold cursor-pointer">
+Copy Phone
+</button>
+</div>
+</div>
+
+<div>
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Message Body</label>
+<textarea id="notifyTargetText" class="w-full h-32 bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-gray-200 focus:outline-none focus:border-emerald-500 leading-relaxed"></textarea>
+</div>
+
+<!-- 1-Click Launchers -->
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+<button onclick="navigator.clipboard.writeText(document.getElementById('notifyTargetText').value); alert('Message copied to clipboard!');" class="py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
+<i class="fa-regular fa-copy"></i>
+<span>Copy Text</span>
+</button>
+<button onclick="triggerDirectDeviceSms()" class="py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
+<i class="fa-solid fa-mobile-screen"></i>
+<span>Open SMS</span>
+</button>
+<a id="notifyEmailLink" href="#" class="col-span-2 sm:col-span-1 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold flex items-center justify-center gap-1.5 transition text-center">
+<i class="fa-solid fa-envelope text-indigo-400"></i>
+<span>Send Email</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR END ============== -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 8: FACEBOOK FEED MANAGER START ============== -->
+<!-- ============================================================================== -->
+<div id="fbFeedModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-4xl rounded-2xl border border-blue-500/30 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+<div class="flex items-center justify-between border-b border-gray-800 pb-4">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+      <i class="fa-brands fa-facebook text-xl"></i>
+    </div>
+    <div>
+      <h3 class="text-base font-bold text-white">My Active Facebook Feed</h3>
+      <p class="text-xs text-gray-400">Manage vehicles currently live on your Facebook Business Page. Mark as sold to auto-update posts.</p>
+    </div>
+  </div>
+  <button onclick="closeModal('fbFeedModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+
+<!-- Facebook Active Posts List -->
+<div class="space-y-3">
+  <div id="fbFeedContainer" class="space-y-3">
+    <p class="text-xs text-gray-500 text-center py-8">Loading your Facebook listings...</p>
+  </div>
+</div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 8: FACEBOOK FEED MANAGER END ================ -->
+<!-- ============================================================================== -->
+
+
+<script>
+/* ============================================================================ */
+/* ======================= JAVASCRIPT GLOBAL STATE START ====================== */
+/* ============================================================================ */
+const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
+const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
+
+// Initialize Supabase Client
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let authMode = "signin";
+let currentUser = null;
+
+let currentStore = {
+  name: "Dealership Inventory",
+  pageModifier: "?pt={page}",
+  usedUrl: "",
+  newUrl: "",
+  cpoUrl: "",
+  fbPageId: "",
+  fbAccessToken: "",
+  fbAutoEnabled: true,
+  fbAutoConditions: ["Used", "Certified Pre-Owned"],
+  fbAutoLocations: []
+};
+
+let rawInventory = [];
+let savedVins = new Set();
+let showWishlistOnly = false;
+let myFbFeedList = [];
+const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+/* ============================================================================ */
+/* ======================= JAVASCRIPT GLOBAL STATE END ======================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: AUTH HANDLERS START ====================== */
+/* ============================================================================ */
+function switchAuthMode(mode) {
+  authMode = mode;
+  toggleForgotPasswordView(false);
+  const tabIn = document.getElementById("tabSignIn");
+  const tabUp = document.getElementById("tabSignUp");
+  const submitBtn = document.getElementById("authSubmitBtn");
+  const err = document.getElementById("authErrorMsg");
+  err.classList.add("hidden");
+
+  if (mode === 'signin') {
+    tabIn.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
+    tabUp.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
+    submitBtn.innerText = "Sign In";
+  } else {
+    tabUp.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
+    tabIn.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
+    submitBtn.innerText = "Register";
+  }
+}
+
+function toggleForgotPasswordView(show) {
+  const authForm = document.getElementById("authForm");
+  const forgotForm = document.getElementById("forgotPasswordForm");
+  const tabSwitcher = document.getElementById("authTabSwitcher");
+  const err = document.getElementById("authErrorMsg");
+  const statusMsg = document.getElementById("resetStatusMsg");
+
+  err.classList.add("hidden");
+  statusMsg.classList.add("hidden");
+
+  if (show) {
+    authForm.classList.add("hidden");
+    tabSwitcher.classList.add("hidden");
+    forgotForm.classList.remove("hidden");
+    document.getElementById("resetEmail").value = document.getElementById("authEmail").value || "";
+  } else {
+    forgotForm.classList.add("hidden");
+    tabSwitcher.classList.remove("hidden");
+    authForm.classList.remove("hidden");
+  }
+}
+
+async function handleForgotPasswordSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById("resetEmail").value.trim();
+  const statusMsg = document.getElementById("resetStatusMsg");
+  const btn = document.getElementById("resetSubmitBtn");
+
+  statusMsg.classList.add("hidden");
+  btn.disabled = true;
+  btn.innerText = "Sending Link...";
+
+  try {
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+
+    if (error) throw error;
+
+    statusMsg.className = "text-xs text-center font-medium text-emerald-400";
+    statusMsg.innerText = "✓ Password recovery email sent! Please check your inbox.";
+    statusMsg.classList.remove("hidden");
+    btn.innerText = "Email Sent";
+  } catch (err) {
+    console.error("Reset error:", err);
+    statusMsg.className = "text-xs text-center font-medium text-rose-400";
+    statusMsg.innerText = err.message || "Failed to send reset email.";
+    statusMsg.classList.remove("hidden");
+    btn.disabled = false;
+    btn.innerText = "Send Recovery Link";
+  }
+}
+
+function togglePasswordVisibility(inputId, iconId) {
+  const passInput = document.getElementById(inputId);
+  const toggleIcon = document.getElementById(iconId);
+  if (passInput.type === "password") {
+    passInput.type = "text";
+    toggleIcon.className = "fa-regular fa-eye-slash text-sm";
+  } else {
+    passInput.type = "password";
+    toggleIcon.className = "fa-regular fa-eye text-sm";
+  }
+}
+
+async function handleAuthSubmit(e) {
+  e.preventDefault();
+  const errBox = document.getElementById("authErrorMsg");
+  const submitBtn = document.getElementById("authSubmitBtn");
+  errBox.classList.add("hidden");
+  submitBtn.disabled = true;
+
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+
+  try {
+    if (authMode === "signup") {
+      submitBtn.innerText = "Registering...";
+      const { data, error } = await supabaseClient.auth.signUp({
+        email: email,
+        password: password
+      });
+      if (error) throw error;
+
+      if (data && data.session) {
+        await initAppSession(data.session.user);
+      } else if (data && data.user) {
+        const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
+          email: email,
+          password: password
+        });
+        if (signInErr) throw signInErr;
+        await initAppSession(signInData.user);
+      }
+    } else {
+      submitBtn.innerText = "Signing In...";
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: password
+      });
+      if (error) throw error;
+      await initAppSession(data.user);
+    }
+  } catch (err) {
+    console.error("Auth error:", err);
+    errBox.innerText = err.message || "Authentication failed.";
+    errBox.classList.remove("hidden");
+    submitBtn.disabled = false;
+    submitBtn.innerText = authMode === "signup" ? "Register" : "Sign In";
+  }
+}
+
+async function handleSignOut() {
+  await supabaseClient.auth.signOut();
+  window.location.reload();
+}
+
+async function initAppSession(user) {
+  currentUser = user;
+  document.getElementById("authOverlay").classList.add("hidden");
+  document.getElementById("userDisplayName").innerText = user.email.split("@")[0];
+  document.getElementById("userEmailBadge").innerText = user.email;
+
+  loadWishlistFromStorage();
+  await loadUserStoreSettings();
+  await loadFbFeed();
+  await fetchLiveInventory(true);
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: AUTH HANDLERS END ======================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: ACCOUNT DELETION START =================== */
+/* ============================================================================ */
+function openDeleteAccountModal() {
+  closeModal("dealershipModal");
+  document.getElementById("deleteConfirmPassword").value = "";
+  document.getElementById("deleteErrorMsg").classList.add("hidden");
+  document.getElementById("deleteAccountModal").classList.remove("hidden");
+}
+
+async function confirmDeleteAccount() {
+  const pass = document.getElementById("deleteConfirmPassword").value;
+  const errBox = document.getElementById("deleteErrorMsg");
+  const btn = document.getElementById("confirmDeleteBtn");
+
+  if (!pass) {
+    errBox.innerText = "Please enter your password to confirm deletion.";
+    errBox.classList.remove("hidden");
+    return;
+  }
+
+  errBox.classList.add("hidden");
+  btn.disabled = true;
+  btn.innerText = "Deleting Account & Purging Data...";
+
+  try {
+    const { data, error } = await supabaseClient.rpc("delete_user_account", {
+      current_password: pass
+    });
+
+    if (error) throw error;
+
+    alert("Your account and all associated inventory data have been permanently deleted.");
+    await supabaseClient.auth.signOut();
+    window.location.reload();
+  } catch (err) {
+    console.error("Account deletion error:", err);
+    errBox.innerText = err.message || "Failed to delete account. Please verify your password.";
+    errBox.classList.remove("hidden");
+    btn.disabled = false;
+    btn.innerText = "Confirm Permanent Deletion";
+  }
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: ACCOUNT DELETION END ===================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: PAGINATION DETECTION START =============== */
+/* ============================================================================ */
+function parsePaginationFromUrl(rawUrl) {
+  if (!rawUrl || !rawUrl.trim()) return null;
+  const urlStr = rawUrl.trim();
+
+  const queryMatch = urlStr.match(/([?&])([a-zA-Z_0-9]+)=2\b/i);
+  if (queryMatch) {
+    const prefix = queryMatch[1];
+    const paramName = queryMatch[2];
+    const pattern = prefix + paramName + "={page}";
+    const cleanBaseUrl = urlStr.replace(queryMatch[0], "");
+    return { baseUrl: cleanBaseUrl, pattern: pattern };
+  }
+
+  const pathMatch = urlStr.match(/(\/(?:page|p)\/)2(\/?)/i);
+  if (pathMatch) {
+    const pattern = pathMatch[1] + "{page}" + pathMatch[2];
+    const cleanBaseUrl = urlStr.replace(pathMatch[0], "/");
+    return { baseUrl: cleanBaseUrl, pattern: pattern };
+  }
+
+  const startMatch = urlStr.match(/([?&])(start)=([0-9]+)\b/i);
+  if (startMatch) {
+    const pattern = startMatch[1] + startMatch[2] + "={page}";
+    const cleanBaseUrl = urlStr.replace(startMatch[0], "");
+    return { baseUrl: cleanBaseUrl, pattern: pattern };
+  }
+
+  return null;
+}
+
+function handleUrlInput(inputEl) {
+  const parsed = parsePaginationFromUrl(inputEl.value);
+  if (parsed) {
+    inputEl.value = parsed.baseUrl;
+    document.getElementById("dealershipPageModifierInput").value = parsed.pattern;
+    document.getElementById("detectedPatternText").innerText = parsed.pattern;
+    document.getElementById("detectedPatternBadge").classList.remove("hidden");
+  }
+}
+
+function toggleAdvancedPagination() {
+  const box = document.getElementById("advancedPaginationBox");
+  const icon = document.getElementById("advIcon");
+  if (box.classList.contains("hidden")) {
+    box.classList.remove("hidden");
+    icon.className = "fa-solid fa-chevron-up text-[10px] ml-1";
+  } else {
+    box.classList.add("hidden");
+    icon.className = "fa-solid fa-chevron-down text-[10px] ml-1";
+  }
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: PAGINATION DETECTION END ================= */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: DEALER SETTINGS START ==================== */
+/* ============================================================================ */
+async function loadUserStoreSettings() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("user_settings")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .single();
+
+    if (data) {
+      currentStore = {
+        name: data.store_name || "My Dealership",
+        pageModifier: data.page_modifier || "?pt={page}",
+        usedUrl: data.used_url || "",
+        newUrl: data.new_url || "",
+        cpoUrl: data.certified_url || "",
+        fbPageId: data.fb_page_id || "",
+        fbAccessToken: data.fb_access_token || data.fb_page_token || "",
+        fbAutoEnabled: typeof data.fb_auto_enabled === 'boolean' ? data.fb_auto_enabled : true,
+        fbAutoConditions: Array.isArray(data.fb_auto_conditions) ? data.fb_auto_conditions : ["Used", "Certified Pre-Owned"],
+        fbAutoLocations: Array.isArray(data.fb_auto_locations) ? data.fb_auto_locations : []
+      };
+    }
+  } catch (err) {
+    console.warn("User store settings fetch:", err);
+  }
+  updateStoreUI();
+}
+
+function updateStoreUI() {
+  document.getElementById("headerStoreName").innerText = currentStore.name || "Dealership Inventory";
+  document.getElementById("bannerStoreTitle").innerText = currentStore.name || "Dealership Inventory";
+  document.getElementById("dealershipSlugInput").value = currentUser ? currentUser.id : "Loading...";
+  document.getElementById("dealershipNameInput").value = currentStore.name || "";
+  document.getElementById("fbPageIdInput").value = currentStore.fbPageId || "";
+  document.getElementById("fbAccessTokenInput").value = currentStore.fbAccessToken || "";
+  document.getElementById("dealershipPageModifierInput").value = currentStore.pageModifier || "?pt={page}";
+  document.getElementById("detectedPatternText").innerText = currentStore.pageModifier || "?pt={page}";
+  document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl || "";
+  document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || "";
+  document.getElementById("dealershipCpoUrlInput").value = currentStore.cpoUrl || "";
+
+  if (document.getElementById("fbAutoEnabledInput")) {
+    document.getElementById("fbAutoEnabledInput").checked = currentStore.fbAutoEnabled;
+  }
+
+  document.querySelectorAll('input[name="autoCondition"]').forEach(function(cb) {
+    cb.checked = currentStore.fbAutoConditions.includes(cb.value);
+  });
+}
+
+function populateModalLocationCheckboxes() {
+  const container = document.getElementById("modalLocationList");
+  if (!container) return;
+
+  const uniqueLocations = Array.from(new Set(rawInventory.map(c => c.location_name).filter(Boolean))).sort();
+  if (!uniqueLocations.length) {
+    container.innerHTML = '<p class="text-[11px] text-gray-500">No active locations found yet. Sync inventory first.</p>';
+    return;
+  }
+
+  container.innerHTML = uniqueLocations.map(function(loc, idx) {
+    const isChecked = Array.isArray(currentStore.fbAutoLocations) && currentStore.fbAutoLocations.includes(loc);
+    const boxId = 'autoLocCb_' + idx;
+    return `<div class="flex items-center space-x-2 p-1.5 hover:bg-gray-900/60 rounded select-none">
+      <input type="checkbox" id="${boxId}" name="autoLocation" value="${loc.replace(/"/g, '&quot;')}" class="rounded text-blue-600 bg-gray-950 border-gray-700 cursor-pointer" ${isChecked ? 'checked' : ''}>
+      <label for="${boxId}" class="text-xs text-gray-300 cursor-pointer flex-1">${loc}</label>
+    </div>`;
+  }).join('');
+}
+
+function toggleAllLocations(selectAll) {
+  document.querySelectorAll('input[name="autoLocation"]').forEach(function(cb) {
+    cb.checked = selectAll;
+  });
+}
+
+function openDealershipModal() {
+  updateStoreUI();
+  populateModalLocationCheckboxes();
+  document.getElementById("dealershipModal").classList.remove("hidden");
+}
+
+function toggleAdvancedFilters() {
+  var panel = document.getElementById("advancedFilterPanel");
+  if (panel) panel.classList.toggle("hidden");
+}
+
+async function saveDealershipProfile() {
+  if (!currentUser) return;
+  const btn = document.getElementById("saveProfileBtn");
+  btn.disabled = true;
+  btn.innerText = "Saving to Database...";
+
+  const name = document.getElementById("dealershipNameInput").value.trim() || currentStore.name;
+  const fbPageId = document.getElementById("fbPageIdInput").value.trim();
+  const fbAccessToken = document.getElementById("fbAccessTokenInput").value.trim();
+  const fbAutoEnabled = document.getElementById("fbAutoEnabledInput") ? document.getElementById("fbAutoEnabledInput").checked : true;
+
+  const selectedConditions = Array.from(
+    document.querySelectorAll('input[name="autoCondition"]:checked')
+  ).map(cb => cb.value);
+
+  const selectedLocations = Array.from(
+    document.querySelectorAll('input[name="autoLocation"]:checked')
+  ).map(cb => cb.value);
+
+  let usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim();
+  let newUrl = document.getElementById("dealershipNewUrlInput").value.trim();
+  let cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim();
+  let pageModifier = document.getElementById("dealershipPageModifierInput").value.trim();
+
+  [usedUrl, newUrl, cpoUrl].forEach(url => {
+    const parsed = parsePaginationFromUrl(url);
+    if (parsed && (!pageModifier || pageModifier === "?pt={page}")) {
+      pageModifier = parsed.pattern;
+    }
+  });
+
+  if (!pageModifier) pageModifier = "?pt={page}";
+
+  const parsedUsed = parsePaginationFromUrl(usedUrl);
+  if (parsedUsed) usedUrl = parsedUsed.baseUrl;
+
+  const parsedNew = parsePaginationFromUrl(newUrl);
+  if (parsedNew) newUrl = parsedNew.baseUrl;
+
+  const parsedCpo = parsePaginationFromUrl(cpoUrl);
+  if (parsedCpo) cpoUrl = parsedCpo.baseUrl;
+
+  currentStore.name = name;
+  currentStore.fbPageId = fbPageId;
+  currentStore.fbAccessToken = fbAccessToken;
+  currentStore.fbAutoEnabled = fbAutoEnabled;
+  currentStore.fbAutoConditions = selectedConditions;
+  currentStore.fbAutoLocations = selectedLocations;
+  currentStore.usedUrl = usedUrl;
+  currentStore.newUrl = newUrl;
+  currentStore.cpoUrl = cpoUrl;
+  currentStore.pageModifier = pageModifier;
+
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      store_name: name,
+      fb_page_id: fbPageId,
+      fb_access_token: fbAccessToken,
+      fb_page_token: fbAccessToken,
+      fb_auto_enabled: fbAutoEnabled,
+      fb_auto_conditions: selectedConditions,
+      fb_auto_locations: selectedLocations,
+      page_modifier: pageModifier,
+      used_url: usedUrl,
+      new_url: newUrl,
+      certified_url: cpoUrl,
+      updated_at: new Date().toISOString()
+    });
+
+    if (error) throw error;
+    alert("✓ Settings & Facebook automation preferences saved successfully!");
+  } catch (e) {
+    console.error("Save error:", e);
+    alert("Settings updated.");
+  }
+
+  btn.disabled = false;
+  btn.innerText = "Save Settings & URLs";
+  updateStoreUI();
+  closeModal("dealershipModal");
+}
+
+async function triggerLiveLotCrawl() {
+  if (!currentUser) return;
+  const btn = document.getElementById("crawlTriggerBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Dispatching Scraper...';
+
+  try {
+    const { error } = await supabaseClient.from("scrape_jobs").insert({
+      user_id: currentUser.id,
+      status: "pending",
+      triggered_by: currentUser.email
+    });
+
+    if (!error) {
+      alert("✓ Live lot crawl launched for your account! The background worker is crawling your specific inventory.");
+    } else {
+      alert("✓ Crawl requested.");
+    }
+  } catch (err) {
+    console.error("Trigger error:", err);
+    alert("✓ Crawl requested.");
+  }
+
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i> <span class="hidden sm:inline">Sync Dealer Site</span>';
+  }, 8000);
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: DEALER SETTINGS END ====================== */
+/* ============================================================================ */
+
+
 /* ============================================================================ */
 /* ======================= FUNCTION: INVENTORY LOADER START =================== */
 /* ============================================================================ */
 async function fetchLiveInventory(isManual) {
-if (!currentUser) return;
-const lotBadge = document.getElementById("lotCount");
-try {
-let allCars = [];
-let from = 0;
-const step = 1000;
-let keepFetching = true;
+  if (!currentUser) return;
+  const lotBadge = document.getElementById("lotCount");
+  try {
+    let allCars = [];
+    let from = 0;
+    const step = 1000;
+    let keepFetching = true;
 
-while (keepFetching) {
-const { data, error } = await supabaseClient
-.from("scraped_inventory")
-.select("*")
-.order("price", { ascending: true })
-.range(from, from + step - 1);
+    while (keepFetching) {
+      const { data, error } = await supabaseClient
+        .from("scraped_inventory")
+        .select("*")
+        .order("price", { ascending: true })
+        .range(from, from + step - 1);
 
-if (error) throw error;
+      if (error) throw error;
 
-if (data && data.length > 0) {
-allCars = allCars.concat(data);
-if (data.length < step) {
-keepFetching = false;
-} else {
-from += step;
-}
-} else {
-keepFetching = false;
-}
-}
+      if (data && data.length > 0) {
+        allCars = allCars.concat(data);
+        if (data.length < step) {
+          keepFetching = false;
+        } else {
+          from += step;
+        }
+      } else {
+        keepFetching = false;
+      }
+    }
 
-rawInventory = allCars.filter(function(c) {
-return c.is_active !== false;
-});
+    rawInventory = allCars.filter(function(c) {
+      return c.is_active !== false;
+    });
 
-lotBadge.innerText = rawInventory.length + " Units";
+    lotBadge.innerText = rawInventory.length + " Units";
 
-const validPrices = rawInventory.map(function(c) { return c.price; }).filter(function(p) { return p && p > 500; });
-if (validPrices.length > 0) {
-const sum = validPrices.reduce(function(a, b) { return a + b; }, 0);
-const avg = Math.round(sum / validPrices.length);
-document.getElementById("avgPrice").innerText = "$" + avg.toLocaleString();
-}
+    const validPrices = rawInventory.map(function(c) { return c.price; }).filter(function(p) { return p && p > 500; });
+    if (validPrices.length > 0) {
+      const sum = validPrices.reduce(function(a, b) { return a + b; }, 0);
+      const avg = Math.round(sum / validPrices.length);
+      document.getElementById("avgPrice").innerText = "$" + avg.toLocaleString();
+    }
 
-populateLocations(rawInventory);
-populateMakeDropdown(rawInventory);
-populateModalLocationCheckboxes();
-applyFilters();
-} catch (err) {
-console.error("Fetch error:", err);
-lotBadge.innerText = "0 Units";
-}
+    populateLocations(rawInventory);
+    populateMakeDropdown(rawInventory);
+    applyFilters();
+  } catch (err) {
+    console.error("Fetch error:", err);
+    lotBadge.innerText = "0 Units";
+  }
 }
 /* ============================================================================ */
 /* ======================= FUNCTION: INVENTORY LOADER END ===================== */
@@ -541,217 +1258,218 @@ lotBadge.innerText = "0 Units";
 /* ======================= FUNCTION: DROPDOWNS & FILTER LOGIC START =========== */
 /* ============================================================================ */
 function loadWishlistFromStorage() {
-if (!currentUser) return;
-try {
-const stored = localStorage.getItem("autolaunch_wishlist_" + currentUser.id);
-savedVins = new Set(stored ? JSON.parse(stored) : []);
-} catch (e) {
-savedVins = new Set();
-}
-updateWishlistBadge();
+  if (!currentUser) return;
+  try {
+    const stored = localStorage.getItem("autolaunch_wishlist_" + currentUser.id);
+    savedVins = new Set(stored ? JSON.parse(stored) : []);
+  } catch (e) {
+    savedVins = new Set();
+  }
+  updateWishlistBadge();
 }
 
 function toggleWishlistVin(vin, event) {
-if (event) event.stopPropagation();
-if (!currentUser) return;
+  if (event) event.stopPropagation();
+  if (!currentUser) return;
 
-if (savedVins.has(vin)) {
-savedVins.delete(vin);
-} else {
-savedVins.add(vin);
-}
+  if (savedVins.has(vin)) {
+    savedVins.delete(vin);
+  } else {
+    savedVins.add(vin);
+  }
 
-try {
-localStorage.setItem("autolaunch_wishlist_" + currentUser.id, JSON.stringify(Array.from(savedVins)));
-} catch (e) {}
+  try {
+    localStorage.setItem("autolaunch_wishlist_" + currentUser.id, JSON.stringify(Array.from(savedVins)));
+  } catch (e) {}
 
-updateWishlistBadge();
-applyFilters();
+  updateWishlistBadge();
+  applyFilters();
 }
 
 function updateWishlistBadge() {
-const label = document.getElementById("wishlistCountLabel");
-const icon = document.getElementById("wishlistFilterIcon");
-const btn = document.getElementById("wishlistFilterBtn");
-if (label) label.innerText = "Saved (" + savedVins.size + ")";
+  const label = document.getElementById("wishlistCountLabel");
+  const icon = document.getElementById("wishlistFilterIcon");
+  const btn = document.getElementById("wishlistFilterBtn");
+  if (label) label.innerText = "Saved (" + savedVins.size + ")";
 
-if (btn && icon) {
-if (showWishlistOnly) {
-btn.className = "px-3 py-2 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-xs font-semibold text-rose-200 flex items-center gap-1.5 transition cursor-pointer";
-icon.className = "fa-solid fa-heart text-rose-400";
-} else {
-btn.className = "px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition cursor-pointer";
-icon.className = (savedVins.size > 0 ? "fa-solid" : "fa-regular") + " fa-heart text-rose-400";
-}
-}
+  if (btn && icon) {
+    if (showWishlistOnly) {
+      btn.className = "px-3 py-2 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-xs font-semibold text-rose-200 flex items-center gap-1.5 transition cursor-pointer";
+      icon.className = "fa-solid fa-heart text-rose-400";
+    } else {
+      btn.className = "px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition cursor-pointer";
+      icon.className = (savedVins.size > 0 ? "fa-solid" : "fa-regular") + " fa-heart text-rose-400";
+    }
+  }
 }
 
 function toggleWishlistOnly() {
-showWishlistOnly = !showWishlistOnly;
-updateWishlistBadge();
-applyFilters();
+  showWishlistOnly = !showWishlistOnly;
+  updateWishlistBadge();
+  applyFilters();
 }
 
 function populateLocations(cars) {
-const locationSelect = document.getElementById("locationFilter");
-const currentSelected = locationSelect.value;
-const uniqueLocations = Array.from(new Set(cars.map(function(c) { return c.location_name; }).filter(Boolean))).sort();
+  const locationSelect = document.getElementById("locationFilter");
+  const currentSelected = locationSelect.value;
+  const uniqueLocations = Array.from(new Set(cars.map(function(c) { return c.location_name; }).filter(Boolean))).sort();
 
-document.getElementById("activeLotsCountBadge").innerText = uniqueLocations.length + " Locations";
+  document.getElementById("activeLotsCountBadge").innerText = uniqueLocations.length + " Locations";
 
-let options = '<option value="ALL">All Locations (' + uniqueLocations.length + ')</option>';
-uniqueLocations.forEach(function(loc) {
-const count = cars.filter(function(c) { return c.location_name === loc; }).length;
-options += '<option value="' + loc + '" ' + (currentSelected === loc ? 'selected' : '') + '>' + loc + ' (' + count + ')</option>';
-});
-locationSelect.innerHTML = options;
+  let options = '<option value="ALL">All Locations (' + uniqueLocations.length + ')</option>';
+  uniqueLocations.forEach(function(loc) {
+    const count = cars.filter(function(c) { return c.location_name === loc; }).length;
+    options += '<option value="' + loc + '" ' + (currentSelected === loc ? 'selected' : '') + '>' + loc + ' (' + count + ')</option>';
+  });
+  locationSelect.innerHTML = options;
 }
 
 function populateMakeDropdown(cars) {
-const makeSelect = document.getElementById("makeFilter");
-const currentMake = makeSelect.value;
-const makes = Array.from(new Set(cars.map(function(c) { return c.make; }).filter(function(m) { return m && m !== "Other"; }))).sort();
+  const makeSelect = document.getElementById("makeFilter");
+  const currentMake = makeSelect.value;
+  const makes = Array.from(new Set(cars.map(function(c) { return c.make; }).filter(function(m) { return m && m !== "Other"; }))).sort();
 
-let options = '<option value="ALL">All Makes (' + makes.length + ')</option>';
-makes.forEach(function(m) {
-const count = cars.filter(function(c) { return c.make === m; }).length;
-options += '<option value="' + m + '" ' + (currentMake === m ? 'selected' : '') + '>' + m + ' (' + count + ')</option>';
-});
-makeSelect.innerHTML = options;
-populateModelDropdown();
+  let options = '<option value="ALL">All Makes (' + makes.length + ')</option>';
+  makes.forEach(function(m) {
+    const count = cars.filter(function(c) { return c.make === m; }).length;
+    options += '<option value="' + m + '" ' + (currentMake === m ? 'selected' : '') + '>' + m + ' (' + count + ')</option>';
+  });
+  makeSelect.innerHTML = options;
+  populateModelDropdown();
 }
 
 function onMakeChange() {
-populateModelDropdown();
-applyFilters();
+  populateModelDropdown();
+  applyFilters();
 }
 
 function populateModelDropdown() {
-const selectedMake = document.getElementById("makeFilter").value;
-const modelSelect = document.getElementById("modelFilter");
-const currentModel = modelSelect.value;
+  const selectedMake = document.getElementById("makeFilter").value;
+  const modelSelect = document.getElementById("modelFilter");
+  const currentModel = modelSelect.value;
 
-let filteredCars = rawInventory;
-if (selectedMake !== "ALL") {
-filteredCars = rawInventory.filter(function(c) { return c.make === selectedMake; });
-}
+  let filteredCars = rawInventory;
+  if (selectedMake !== "ALL") {
+    filteredCars = rawInventory.filter(function(c) { return c.make === selectedMake; });
+  }
 
-const models = Array.from(new Set(filteredCars.map(function(c) { return c.model; }).filter(function(m) { return m && m !== "Vehicle"; }))).sort();
+  const models = Array.from(new Set(filteredCars.map(function(c) { return c.model; }).filter(function(m) { return m && m !== "Vehicle"; }))).sort();
 
-let options = '<option value="ALL">All Models (' + models.length + ')</option>';
-models.forEach(function(mod) {
-const count = filteredCars.filter(function(c) { return c.model === mod; }).length;
-options += '<option value="' + mod + '" ' + (currentModel === mod ? 'selected' : '') + '>' + mod + ' (' + count + ')</option>';
-});
-modelSelect.innerHTML = options;
-populateTrimDropdown();
+  let options = '<option value="ALL">All Models (' + models.length + ')</option>';
+  models.forEach(function(mod) {
+    const count = filteredCars.filter(function(c) { return c.model === mod; }).length;
+    options += '<option value="' + mod + '" ' + (currentModel === mod ? 'selected' : '') + '>' + mod + ' (' + count + ')</option>';
+  });
+  modelSelect.innerHTML = options;
+  populateTrimDropdown();
 }
 
 function onModelChange() {
-populateTrimDropdown();
-applyFilters();
+  populateTrimDropdown();
+  applyFilters();
 }
 
 function populateTrimDropdown() {
-const selectedMake = document.getElementById("makeFilter").value;
-const selectedModel = document.getElementById("modelFilter").value;
-const trimSelect = document.getElementById("trimFilter");
-const currentTrim = trimSelect.value;
+  const selectedMake = document.getElementById("makeFilter").value;
+  const selectedModel = document.getElementById("modelFilter").value;
+  const trimSelect = document.getElementById("trimFilter");
+  const currentTrim = trimSelect.value;
 
-let filteredCars = rawInventory;
-if (selectedMake !== "ALL") {
-filteredCars = filteredCars.filter(function(c) { return c.make === selectedMake; });
-}
-if (selectedModel !== "ALL") {
-filteredCars = filteredCars.filter(function(c) { return c.model === selectedModel; });
-}
+  let filteredCars = rawInventory;
+  if (selectedMake !== "ALL") {
+    filteredCars = filteredCars.filter(function(c) { return c.make === selectedMake; });
+  }
+  if (selectedModel !== "ALL") {
+    filteredCars = filteredCars.filter(function(c) { return c.model === selectedModel; });
+  }
 
-const trims = Array.from(new Set(filteredCars.map(function(c) { return c.trim; }).filter(Boolean))).sort();
+  const trims = Array.from(new Set(filteredCars.map(function(c) { return c.trim; }).filter(Boolean))).sort();
 
-let options = '<option value="ALL">All Trims (' + trims.length + ')</option>';
-trims.forEach(function(t) {
-const count = filteredCars.filter(function(c) { return c.trim === t; }).length;
-options += '<option value="' + t + '" ' + (currentTrim === t ? 'selected' : '') + '>' + t + ' (' + count + ')</option>';
-});
-trimSelect.innerHTML = options;
+  let options = '<option value="ALL">All Trims (' + trims.length + ')</option>';
+  trims.forEach(function(t) {
+    const count = filteredCars.filter(function(c) { return c.trim === t; }).length;
+    options += '<option value="' + t + '" ' + (currentTrim === t ? 'selected' : '') + '>' + t + ' (' + count + ')</option>';
+  });
+  trimSelect.innerHTML = options;
 }
 
 function applyFilters() {
-const query = (document.getElementById("searchInput").value || "").toLowerCase();
-const locationFilter = document.getElementById("locationFilter").value;
-const cond = document.getElementById("conditionFilter").value;
-const sort = document.getElementById("sortSelect").value;
+  const query = (document.getElementById("searchInput").value || "").toLowerCase();
+  const locationFilter = document.getElementById("locationFilter").value;
+  const cond = document.getElementById("conditionFilter").value;
+  const sort = document.getElementById("sortSelect").value;
 
-const makeFilter = document.getElementById("makeFilter").value;
-const modelFilter = document.getElementById("modelFilter").value;
-const trimFilter = document.getElementById("trimFilter").value;
+  const makeFilter = document.getElementById("makeFilter").value;
+  const modelFilter = document.getElementById("modelFilter").value;
+  const trimFilter = document.getElementById("trimFilter").value;
 
-const bodyFilter = document.getElementById("bodyFilter") ? document.getElementById("bodyFilter").value : "ALL";
-const colorFilter = document.getElementById("colorFilter") ? document.getElementById("colorFilter").value : "ALL";
-const transFilter = document.getElementById("transFilter") ? document.getElementById("transFilter").value : "ALL";
-const minYear = document.getElementById("minYearFilter") ? document.getElementById("minYearFilter").value : "ALL";
-const maxMiles = document.getElementById("maxMilesFilter") ? document.getElementById("maxMilesFilter").value : "ALL";
+  const bodyFilter = document.getElementById("bodyFilter") ? document.getElementById("bodyFilter").value : "ALL";
+  const colorFilter = document.getElementById("colorFilter") ? document.getElementById("colorFilter").value : "ALL";
+  const transFilter = document.getElementById("transFilter") ? document.getElementById("transFilter").value : "ALL";
+  const minYear = document.getElementById("minYearFilter") ? document.getElementById("minYearFilter").value : "ALL";
+  const maxMiles = document.getElementById("maxMilesFilter") ? document.getElementById("maxMilesFilter").value : "ALL";
 
-let filtered = rawInventory.filter(function(car) {
-if (showWishlistOnly && !savedVins.has(car.vin)) {
-return false;
-}
+  let filtered = rawInventory.filter(function(car) {
+    if (showWishlistOnly && !savedVins.has(car.vin)) {
+      return false;
+    }
 
-const title = ((car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " " + (car.trim || '') + " " + (car.vin || '') + " " + (car.location_name || '') + " " + (car.color || '') + " " + (car.body_type || '')).toLowerCase();
-const matchesQuery = !query || title.indexOf(query) !== -1;
-const matchesLocation = locationFilter === "ALL" || (car.location_name || '') === locationFilter;
+    const title = ((car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " " + (car.trim || '') + " " + (car.vin || '') + " " + (car.location_name || '') + " " + (car.color || '') + " " + (car.body_type || '')).toLowerCase();
+    const matchesQuery = !query || title.indexOf(query) !== -1;
+    const matchesLocation = locationFilter === "ALL" || (car.location_name || '') === locationFilter;
 
-let matchesCond = false;
-if (cond === "ALL") matchesCond = true;
-else if (cond === "Used" && (car.condition === "Used" || !car.condition)) matchesCond = true;
-else if (cond === "Certified Pre-Owned" && car.condition === "Certified Pre-Owned") matchesCond = true;
-else if (cond === "New" && car.condition === "New") matchesCond = true;
+    let matchesCond = false;
+    if (cond === "ALL") matchesCond = true;
+    else if (cond === "Used" && (car.condition === "Used" || !car.condition)) matchesCond = true;
+    else if (cond === "Certified Pre-Owned" && car.condition === "Certified Pre-Owned") matchesCond = true;
+    else if (cond === "New" && car.condition === "New") matchesCond = true;
 
-const matchesMake = makeFilter === "ALL" || car.make === makeFilter;
-const matchesModel = modelFilter === "ALL" || car.model === modelFilter;
-const matchesTrim = trimFilter === "ALL" || car.trim === trimFilter;
+    const matchesMake = makeFilter === "ALL" || car.make === makeFilter;
+    const matchesModel = modelFilter === "ALL" || car.model === modelFilter;
+    const matchesTrim = trimFilter === "ALL" || car.trim === trimFilter;
 
-const matchesBody = bodyFilter === "ALL" || (car.body_type || '') === bodyFilter;
-const matchesColor = colorFilter === "ALL" || (car.color || '').toLowerCase().indexOf(colorFilter.toLowerCase()) !== -1;
-const matchesTrans = transFilter === "ALL" || (car.transmission || 'Automatic').indexOf(transFilter) !== -1;
-const matchesYear = minYear === "ALL" || ((car.year || 0) >= parseInt(minYear));
-const matchesMiles = maxMiles === "ALL" || ((car.mileage || 0) <= parseInt(maxMiles));
+    const matchesBody = bodyFilter === "ALL" || (car.body_type || '') === bodyFilter;
+    const matchesColor = colorFilter === "ALL" || (car.color || '').toLowerCase().indexOf(colorFilter.toLowerCase()) !== -1;
+    const matchesTrans = transFilter === "ALL" || (car.transmission || 'Automatic').indexOf(transFilter) !== -1;
+    const matchesYear = minYear === "ALL" || ((car.year || 0) >= parseInt(minYear));
+    const matchesMiles = maxMiles === "ALL" || ((car.mileage || 0) <= parseInt(maxMiles));
 
-return matchesQuery && matchesLocation && matchesCond && matchesMake && matchesModel && matchesTrim && matchesBody && matchesColor && matchesTrans && matchesYear && matchesMiles;
-});
+    return matchesQuery && matchesLocation && matchesCond && matchesMake && matchesModel && matchesTrim && matchesBody && matchesColor && matchesTrans && matchesYear && matchesMiles;
+  });
 
-filtered.sort(function(a, b) {
-const priceA = a.price && a.price > 0 ? a.price : 9999999;
-const priceB = b.price && b.price > 0 ? b.price : 9999999;
+  filtered.sort(function(a, b) {
+    const priceA = a.price && a.price > 0 ? a.price : 9999999;
+    const priceB = b.price && b.price > 0 ? b.price : 9999999;
 
-if (sort === "price_asc") return priceA - priceB;
-if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
-if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
-if (sort === "year_desc") return (b.year || 0) - (a.year || 0);
-return 0;
-});
+    if (sort === "price_asc") return priceA - priceB;
+    if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
+    if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
+    if (sort === "year_desc") return (b.year || 0) - (a.year || 0);
+    return 0;
+  });
 
-renderGrid(filtered);
+  renderGrid(filtered);
 }
 
 function resetFilters() {
-document.getElementById("searchInput").value = "";
-document.getElementById("locationFilter").value = "ALL";
-document.getElementById("conditionFilter").value = "ALL";
-document.getElementById("makeFilter").value = "ALL";
-showWishlistOnly = false;
-updateWishlistBadge();
-populateModelDropdown();
-if (document.getElementById("bodyFilter")) document.getElementById("bodyFilter").value = "ALL";
-if (document.getElementById("colorFilter")) document.getElementById("colorFilter").value = "ALL";
-if (document.getElementById("transFilter")) document.getElementById("transFilter").value = "ALL";
-if (document.getElementById("minYearFilter")) document.getElementById("minYearFilter").value = "ALL";
-if (document.getElementById("maxMilesFilter")) document.getElementById("maxMilesFilter").value = "ALL";
-applyFilters();
+  document.getElementById("searchInput").value = "";
+  document.getElementById("locationFilter").value = "ALL";
+  document.getElementById("conditionFilter").value = "ALL";
+  document.getElementById("makeFilter").value = "ALL";
+  showWishlistOnly = false;
+  updateWishlistBadge();
+  populateModelDropdown();
+  if (document.getElementById("bodyFilter")) document.getElementById("bodyFilter").value = "ALL";
+  if (document.getElementById("colorFilter")) document.getElementById("colorFilter").value = "ALL";
+  if (document.getElementById("transFilter")) document.getElementById("transFilter").value = "ALL";
+  if (document.getElementById("minYearFilter")) document.getElementById("minYearFilter").value = "ALL";
+  if (document.getElementById("maxMilesFilter")) document.getElementById("maxMilesFilter").value = "ALL";
+  applyFilters();
 }
 /* ============================================================================ */
 /* ======================= FUNCTION: DROPDOWNS & FILTER LOGIC END ============= */
 /* ============================================================================ */
+
 
 /* ============================================================================ */
 /* ======================= FUNCTION: INVENTORY CARD RENDERER START =========== */
@@ -777,7 +1495,7 @@ function renderGrid(cars) {
     if (car.condition === "Certified Pre-Owned") badgeColor = "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
     else if (car.condition === "New") badgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
 
-    const bodyBadge = (car.body_type && car.body_type !== 'Other') ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">' + car.body_type + '</span>' : '';
+    const bodyBadge = (car.body_type && car.body_type !== 'Other') ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${car.body_type}</span>` : '';
     const linkUrl = car.detail_url || car.listing_url || "#";
     const isSaved = savedVins.has(car.vin);
     const heartClass = isSaved ? "fa-solid fa-heart text-rose-500" : "fa-regular fa-heart text-white/80 hover:text-white";
@@ -787,53 +1505,53 @@ function renderGrid(cars) {
     const fbBtnText = isAlreadyInFeed ? "In Feed" : "+ FB Feed";
     const fbBtnIcon = isAlreadyInFeed ? "fa-solid fa-check text-emerald-400" : "fa-brands fa-facebook text-blue-400";
 
-    html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
-      '<div>' +
-        '<div class="h-48 w-full bg-gray-900 relative overflow-hidden group border-b border-gray-800">' +
-          '<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="block w-full h-full cursor-pointer">' +
-            '<img src="' + photoUrl + '" onerror="this.onerror=null; this.src=\'' + FALLBACK_IMAGE + '\';" alt="Vehicle Photo" class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-300">' +
-          '</a>' +
-          '<div class="absolute top-3 left-3 flex gap-1.5 flex-wrap z-10">' +
-            '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + badgeColor + ' backdrop-blur-md">' + (car.condition || 'Used') + '</span>' +
-            bodyBadge +
-          '</div>' +
-          '<button onclick="toggleWishlistVin(\'' + car.vin + '\', event)" title="' + (isSaved ? "Remove from Saved" : "Save to Wishlist") + '" class="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/10 flex items-center justify-center transition cursor-pointer">' +
-            '<i class="' + heartClass + ' text-sm"></i>' +
-          '</button>' +
-          '<div class="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-white border border-white/10">' +
-            displayPayment +
-          '</div>' +
-        '</div>' +
-        '<div class="p-4 space-y-2">' +
-          '<div class="flex items-baseline justify-between">' +
-            '<span class="text-xl font-black text-white">' + displayPrice + '</span>' +
-            '<span class="text-xs font-medium text-gray-400">' + ((car.mileage || 0).toLocaleString()) + ' mi</span>' +
-          '</div>' +
-          '<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="group flex items-center justify-between text-gray-100 hover:text-indigo-400 transition cursor-pointer">' +
-            '<h4 class="font-bold text-sm truncate">' + (car.year || '') + ' ' + (car.make || '') + ' ' + (car.model || 'Vehicle') + (car.trim ? ' ' + car.trim : '') + '</h4>' +
-            '<i class="fa-solid fa-arrow-up-right-from-square text-xs text-gray-500 group-hover:text-indigo-400 ml-1"></i>' +
-          '</a>' +
-          '<p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>' + (car.location_name || currentStore.name) + '</p>' +
-          '<div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">' +
-            '<span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>' + (car.color || 'Standard') + '</span>' +
-            '<span>•</span>' +
-            '<span><i class="fa-solid fa-gears text-gray-500 mr-1"></i>' + (car.transmission || 'Automatic') + '</span>' +
-          '</div>' +
-          '<p class="text-[11px] font-mono text-gray-500">VIN: ' + (car.vin || 'N/A') + '</p>' +
-        '</div>' +
-      '</div>' +
-      '<div class="p-4 pt-0 grid grid-cols-3 gap-2">' +
-        '<button onclick="openShareModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
-          '<i class="fa-solid fa-share-nodes text-indigo-400"></i><span>Share</span>' +
-        '</button>' +
-        '<button id="cardFbBtn_' + car.vin + '" onclick="publishCarToFacebook(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer ' + fbBtnClass + '">' +
-          '<i class="' + fbBtnIcon + '"></i><span>' + fbBtnText + '</span>' +
-        '</button>' +
-        '<button onclick="openTikTokModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
-          '<i class="fa-brands fa-tiktok text-rose-400"></i><span>Video</span>' +
-        '</button>' +
-      '</div>' +
-    '</div>';
+    html += `<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">
+      <div>
+        <div class="h-48 w-full bg-gray-900 relative overflow-hidden group border-b border-gray-800">
+          <a href="${linkUrl}" target="_blank" rel="noopener noreferrer" class="block w-full h-full cursor-pointer">
+            <img src="${photoUrl}" onerror="this.onerror=null; this.src='${FALLBACK_IMAGE}';" alt="Vehicle Photo" class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-300">
+          </a>
+          <div class="absolute top-3 left-3 flex gap-1.5 flex-wrap z-10">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor} backdrop-blur-md">${car.condition || 'Used'}</span>
+            ${bodyBadge}
+          </div>
+          <button onclick="toggleWishlistVin('${car.vin}', event)" title="${isSaved ? 'Remove from Saved' : 'Save to Wishlist'}" class="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/10 flex items-center justify-center transition cursor-pointer">
+            <i class="${heartClass} text-sm"></i>
+          </button>
+          <div class="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-white border border-white/10">
+            ${displayPayment}
+          </div>
+        </div>
+        <div class="p-4 space-y-2">
+          <div class="flex items-baseline justify-between">
+            <span class="text-xl font-black text-white">${displayPrice}</span>
+            <span class="text-xs font-medium text-gray-400">${(car.mileage || 0).toLocaleString()} mi</span>
+          </div>
+          <a href="${linkUrl}" target="_blank" rel="noopener noreferrer" class="group flex items-center justify-between text-gray-100 hover:text-indigo-400 transition cursor-pointer">
+            <h4 class="font-bold text-sm truncate">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim ? car.trim : ''}</h4>
+            <i class="fa-solid fa-arrow-up-right-from-square text-xs text-gray-500 group-hover:text-indigo-400 ml-1"></i>
+          </a>
+          <p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>${car.location_name || currentStore.name}</p>
+          <div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">
+            <span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>${car.color || 'Standard'}</span>
+            <span>•</span>
+            <span><i class="fa-solid fa-gears text-gray-500 mr-1"></i>${car.transmission || 'Automatic'}</span>
+          </div>
+          <p class="text-[11px] font-mono text-gray-500">VIN: ${car.vin || 'N/A'}</p>
+        </div>
+      </div>
+      <div class="p-4 pt-0 grid grid-cols-3 gap-2">
+        <button onclick="openShareModalByVin('${car.vin}')" class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
+          <i class="fa-solid fa-share-nodes text-indigo-400"></i><span>Share</span>
+        </button>
+        <button id="cardFbBtn_${car.vin}" onclick="publishCarToFacebook('${car.vin}')" class="py-2 px-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer ${fbBtnClass}">
+          <i class="${fbBtnIcon}"></i><span>${fbBtnText}</span>
+        </button>
+        <button onclick="openTikTokModalByVin('${car.vin}')" class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">
+          <i class="fa-brands fa-tiktok text-rose-400"></i><span>Video</span>
+        </button>
+      </div>
+    </div>`;
   });
 
   grid.innerHTML = html;
@@ -903,7 +1621,7 @@ async function publishCarToFacebook(vin) {
   }
 
   const store = car.location_name || currentStore.name || "Our Dealership";
-  const carTitle = (car.year || '') + " " + (car.make || '') + " " + (car.model || 'Vehicle') + (car.trim ? ' ' + car.trim : '');
+  const carTitle = `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim ? car.trim : ''}`;
   const priceClean = (car.price && car.price > 0) ? "$" + car.price.toLocaleString() : "Call for Price";
   const milesClean = (car.mileage || 0).toLocaleString();
   const listingUrl = car.detail_url || car.listing_url || "";
@@ -1021,40 +1739,40 @@ function renderFbFeedEntries() {
 
   const activePosts = myFbFeedList.filter(function(i) { return i.status === 'published'; });
   if (!activePosts.length) {
-    container.innerHTML = '<div class="text-center py-10 space-y-2">' +
-      '<i class="fa-brands fa-facebook text-gray-600 text-3xl"></i>' +
-      '<p class="text-xs text-gray-400">No vehicles currently active in your Facebook feed.</p>' +
-      '<p class="text-[11px] text-gray-500">Click <strong>"+ FB Feed"</strong> on any car card to post automatically.</p>' +
-    '</div>';
+    container.innerHTML = `<div class="text-center py-10 space-y-2">
+      <i class="fa-brands fa-facebook text-gray-600 text-3xl"></i>
+      <p class="text-xs text-gray-400">No vehicles currently active in your Facebook feed.</p>
+      <p class="text-[11px] text-gray-500">Click <strong>"+ FB Feed"</strong> on any car card to post automatically.</p>
+    </div>`;
     return;
   }
 
   let html = "";
   activePosts.forEach(function(item) {
     const postLink = item.fb_post_id ? ("https://facebook.com/" + item.fb_post_id) : "#";
-    const carTitle = (item.year || '') + " " + (item.make || '') + " " + (item.model || 'Vehicle') + (item.trim ? ' ' + item.trim : '');
+    const carTitle = `${item.year || ''} ${item.make || ''} ${item.model || 'Vehicle'} ${item.trim ? item.trim : ''}`;
     const priceClean = item.price ? "$" + item.price.toLocaleString() : "Call for Price";
     const milesClean = (item.mileage || 0).toLocaleString() + " mi";
     const imgUrl = item.image_url || FALLBACK_IMAGE;
 
-    html += '<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">' +
-      '<div class="flex items-center gap-3 w-full sm:w-auto">' +
-        '<img src="' + imgUrl + '" class="w-16 h-16 rounded-lg object-cover border border-gray-800 flex-shrink-0">' +
-        '<div>' +
-          '<h5 class="text-sm font-bold text-white">' + carTitle + '</h5>' +
-          '<div class="text-xs text-emerald-400 font-bold">' + priceClean + ' <span class="text-gray-400 font-normal">• ' + milesClean + '</span></div>' +
-          '<div class="flex items-center gap-2 pt-1">' +
-            '<span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">Live on Page</span>' +
-            (item.fb_post_id ? '<a href="' + postLink + '" target="_blank" class="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold cursor-pointer"><i class="fa-brands fa-facebook"></i> View Post <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>' : '') +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="flex items-center gap-2 w-full sm:w-auto justify-end">' +
-        '<button id="soldBtn_' + item.id + '" onclick="markCarAsSoldOnFacebook(\'' + item.id + '\', \'' + (item.fb_post_id || '') + '\', \'' + carTitle + '\')" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer">' +
-          '<i class="fa-solid fa-tag mr-1"></i> Mark as Sold' +
-        '</button>' +
-      '</div>' +
-    '</div>';
+    html += `<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        <img src="${imgUrl}" class="w-16 h-16 rounded-lg object-cover border border-gray-800 flex-shrink-0">
+        <div>
+          <h5 class="text-sm font-bold text-white">${carTitle}</h5>
+          <div class="text-xs text-emerald-400 font-bold">${priceClean} <span class="text-gray-400 font-normal">• ${milesClean}</span></div>
+          <div class="flex items-center gap-2 pt-1">
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">Live on Page</span>
+            ${item.fb_post_id ? `<a href="${postLink}" target="_blank" class="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold cursor-pointer"><i class="fa-brands fa-facebook"></i> View Post <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+        <button id="soldBtn_${item.id}" onclick="markCarAsSoldOnFacebook('${item.id}', '${item.fb_post_id || ''}', '${carTitle}')" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer">
+          <i class="fa-solid fa-tag mr-1"></i> Mark as Sold
+        </button>
+      </div>
+    </div>`;
   });
 
   container.innerHTML = html;
@@ -1267,47 +1985,47 @@ function renderWishlistEntries() {
         '<span class="text-[11px] font-bold text-emerald-400 block mb-2"><i class="fa-solid fa-circle-check mr-1"></i> ' + matches.length + ' Matching Vehicle(s) In Stock Right Now:</span>' +
         '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
       matches.slice(0, 4).forEach(function(m) {
-        matchSection += '<div class="p-2.5 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">' +
-          '<div>' +
-            '<strong class="text-white block">' + (m.year || '') + ' ' + (m.make || '') + ' ' + (m.model || '') + '</strong>' +
-            '<span class="text-emerald-400 font-bold">' + (m.price ? '$' + m.price.toLocaleString() : 'Call') + '</span> • ' +
-            '<span class="text-gray-400">' + ((m.mileage || 0).toLocaleString()) + ' mi</span>' +
-          '</div>' +
-          '<button onclick="notifyCustomerSms(\'' + item.id + '\', \'' + m.vin + '\')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm">' +
-            '<i class="fa-solid fa-comment-sms text-[11px]"></i><span>Text</span>' +
-          '</button>' +
-        '</div>';
+        matchSection += `<div class="p-2.5 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">
+          <div>
+            <strong class="text-white block">${m.year || ''} ${m.make || ''} ${m.model || ''}</strong>
+            <span class="text-emerald-400 font-bold">${m.price ? '$' + m.price.toLocaleString() : 'Call'}</span> • 
+            <span class="text-gray-400">${(m.mileage || 0).toLocaleString()} mi</span>
+          </div>
+          <button onclick="notifyCustomerSms('${item.id}', '${m.vin}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm">
+            <i class="fa-solid fa-comment-sms text-[11px]"></i><span>Text</span>
+          </button>
+        </div>`;
       });
       matchSection += '</div></div>';
     } else {
       matchSection = '<div class="mt-2 text-[11px] text-gray-500"><i class="fa-solid fa-clock mr-1"></i> No inventory currently matches these specs. AutoLaunch will highlight when one arrives.</div>';
     }
 
-    html += '<div class="p-4 rounded-xl ' + (hasMatches ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-gray-950/50 border-gray-800') + ' border space-y-2">' +
-      '<div class="flex items-start justify-between">' +
-        '<div>' +
-          '<h5 class="text-sm font-bold text-white flex items-center gap-2">' +
-            item.customer_name +
-            (hasMatches ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">' + matches.length + ' MATCHES</span>' : '') +
-          '</h5>' +
-          '<div class="text-xs text-gray-400 flex flex-wrap gap-x-3 pt-0.5">' +
-            (item.customer_phone ? '<span><i class="fa-solid fa-phone text-gray-500 mr-1"></i>' + item.customer_phone + '</span>' : '') +
-            (item.customer_email ? '<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>' + item.customer_email + '</span>' : '') +
-          '</div>' +
-        '</div>' +
-        '<div class="flex items-center gap-1">' +
-          '<button onclick="editWishlistEntry(\'' + item.id + '\')" title="Edit Customer Request" class="text-gray-500 hover:text-indigo-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-pen-to-square text-xs"></i></button>' +
-          '<button onclick="deleteWishlistEntry(\'' + item.id + '\')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">' +
-        '<span><strong>Wanted:</strong> ' + (item.min_year ? item.min_year + '+ ' : '') + (item.target_make || 'Any Make') + ' ' + (item.target_model || '') + '</span>' +
-        (item.max_miles ? '<span>• Under ' + item.max_miles.toLocaleString() + ' mi</span>' : '') +
-        (item.transmission ? '<span>• ' + item.transmission + '</span>' : '') +
-        (item.notes ? '<span class="block text-gray-400 w-full mt-1"><em>Notes: ' + item.notes + '</em></span>' : '') +
-      '</div>' +
-      matchSection +
-    '</div>';
+    html += `<div class="p-4 rounded-xl ${hasMatches ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-gray-950/50 border-gray-800'} border space-y-2">
+      <div class="flex items-start justify-between">
+        <div>
+          <h5 class="text-sm font-bold text-white flex items-center gap-2">
+            ${item.customer_name}
+            ${hasMatches ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">${matches.length} MATCHES</span>` : ''}
+          </h5>
+          <div class="text-xs text-gray-400 flex flex-wrap gap-x-3 pt-0.5">
+            ${item.customer_phone ? `<span><i class="fa-solid fa-phone text-gray-500 mr-1"></i>${item.customer_phone}</span>` : ''}
+            ${item.customer_email ? `<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>${item.customer_email}</span>` : ''}
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <button onclick="editWishlistEntry('${item.id}')" title="Edit Customer Request" class="text-gray-500 hover:text-indigo-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-pen-to-square text-xs"></i></button>
+          <button onclick="deleteWishlistEntry('${item.id}')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>
+        </div>
+      </div>
+      <div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">
+        <span><strong>Wanted:</strong> ${item.min_year ? item.min_year + '+ ' : ''}${item.target_make || 'Any Make'} ${item.target_model || ''}</span>
+        ${item.max_miles ? `<span>• Under ${item.max_miles.toLocaleString()} mi</span>` : ''}
+        ${item.transmission ? `<span>• ${item.transmission}</span>` : ''}
+        ${item.notes ? `<span class="block text-gray-400 w-full mt-1"><em>Notes: ${item.notes}</em></span>` : ''}
+      </div>
+      ${matchSection}
+    </div>`;
   });
 
   container.innerHTML = html;
@@ -1317,17 +2035,17 @@ function openShareModalByVin(vin) {
   const car = rawInventory.find(function(c) { return c.vin === vin; });
   if (!car) return;
   document.getElementById("modalTitle").innerText = "Customer Quick-Share";
-  document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " | " + (car.price ? "$" + car.price.toLocaleString() : "Call");
+  document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''} | ${car.price ? '$' + car.price.toLocaleString() : 'Call'}`;
   const urlText = (car.detail_url || car.listing_url) ? "\nView details: " + (car.detail_url || car.listing_url) : "";
   const msg = "Hey! Take a look at this " + (car.color ? car.color + ' ' : '') + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + ": " + (car.price ? "$" + car.price.toLocaleString() : "Call") + " with " + ((car.mileage || 0).toLocaleString()) + " miles. VIN: " + car.vin + "." + urlText + " Let me know if you want to take it for a drive!";
 
-  document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
-    '<textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + msg + '</textarea>' +
-    '<div class="flex gap-2">' +
-      '<button onclick="navigator.clipboard.writeText(document.getElementById(\'shareText\').value); alert(\'Copied to clipboard!\')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>' +
-      '<a href="sms:?&body=' + encodeURIComponent(msg) + '" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>' +
-    '</div>' +
-  '</div>';
+  document.getElementById("modalBody").innerHTML = `<div class="space-y-3">
+    <textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${msg}</textarea>
+    <div class="flex gap-2">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('shareText').value); alert('Copied to clipboard!')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>
+      <a href="sms:?&body=${encodeURIComponent(msg)}" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>
+    </div>
+  </div>`;
   document.getElementById("actionModal").classList.remove("hidden");
 }
 
@@ -1335,13 +2053,13 @@ function openTikTokModalByVin(vin) {
   const car = rawInventory.find(function(c) { return c.vin === vin; });
   if (!car) return;
   document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
-  document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '');
+  document.getElementById("modalSubtitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || ''}`;
   const script = "(Hook - 0-3s): Stop scrolling if you need a reliable vehicle right now.\n(Body - 3-10s): Fresh arrival: " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + " with " + ((car.mileage || 0).toLocaleString()) + " miles.\n(CTA - 10-15s): Fully inspected and front-line ready. Comment or message me before it's gone!";
 
-  document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
-    '<textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + script + '</textarea>' +
-    '<p class="text-xs text-gray-400">💡 Record vertical 9:16 video while walking around the exterior and interior.</p>' +
-  '</div>';
+  document.getElementById("modalBody").innerHTML = `<div class="space-y-3">
+    <textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">${script}</textarea>
+    <p class="text-xs text-gray-400">💡 Record vertical 9:16 video while walking around the exterior and interior.</p>
+  </div>`;
   document.getElementById("actionModal").classList.remove("hidden");
 }
 
@@ -1357,13 +2075,13 @@ function closeModal(id) {
 /* ======================= APP LIFECYCLE INITIALIZATION START ================= */
 /* ============================================================================ */
 document.addEventListener("DOMContentLoaded", async function() {
-const { data: { session } } = await supabaseClient.auth.getSession();
-if (session && session.user) {
-await initAppSession(session.user);
-await loadCustomerWishlists();
-} else {
-document.getElementById("authOverlay").classList.remove("hidden");
-}
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session && session.user) {
+    await initAppSession(session.user);
+    await loadCustomerWishlists();
+  } else {
+    document.getElementById("authOverlay").classList.remove("hidden");
+  }
 });
 /* ============================================================================ */
 /* ======================= APP LIFECYCLE INITIALIZATION END =================== */
