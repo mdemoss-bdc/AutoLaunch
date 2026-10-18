@@ -487,9 +487,15 @@
         <button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
 
-      <!-- Add New Customer Entry Form -->
+      <!-- Add / Edit Customer Entry Form -->
       <form id="addWishlistForm" onsubmit="saveCustomerWishlist(event)" class="bg-gray-950/70 p-4 rounded-xl border border-gray-800/80 space-y-3">
-        <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider block">Add Customer Request</span>
+        <input type="hidden" id="wlEditId" value="">
+        <div class="flex items-center justify-between">
+          <span id="wlFormTitle" class="text-xs font-bold text-indigo-400 uppercase tracking-wider block">Add Customer Request</span>
+          <button type="button" id="wlCancelEditBtn" onclick="cancelWishlistEdit()" class="text-xs text-gray-400 hover:text-white hidden cursor-pointer">
+            <i class="fa-solid fa-xmark mr-1"></i> Cancel Edit
+          </button>
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <input type="text" id="wlName" required placeholder="Customer Name *" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
           <input type="tel" id="wlPhone" placeholder="Phone Number" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
@@ -1328,6 +1334,7 @@
     let customerWishlists = [];
 
     function openWishlistModal() {
+      cancelWishlistEdit();
       loadCustomerWishlists();
       document.getElementById("wishlistModal").classList.remove("hidden");
     }
@@ -1349,14 +1356,46 @@
       }
     }
 
+    function editWishlistEntry(id) {
+      const item = customerWishlists.find(function(c) { return c.id === id; });
+      if (!item) return;
+
+      document.getElementById("wlEditId").value = item.id;
+      document.getElementById("wlName").value = item.customer_name || "";
+      document.getElementById("wlPhone").value = item.customer_phone || "";
+      document.getElementById("wlEmail").value = item.customer_email || "";
+      document.getElementById("wlMake").value = item.target_make || "";
+      document.getElementById("wlModel").value = item.target_model || "";
+      document.getElementById("wlMinYear").value = item.min_year || "";
+      document.getElementById("wlMaxMiles").value = item.max_miles || "";
+      document.getElementById("wlTrans").value = item.transmission || "";
+      document.getElementById("wlNotes").value = item.notes || "";
+
+      document.getElementById("wlFormTitle").innerText = "Edit Customer Request";
+      document.getElementById("wlSaveBtn").innerText = "Update Customer";
+      document.getElementById("wlCancelEditBtn").classList.remove("hidden");
+
+      // Scroll form into view
+      document.getElementById("addWishlistForm").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function cancelWishlistEdit() {
+      document.getElementById("addWishlistForm").reset();
+      document.getElementById("wlEditId").value = "";
+      document.getElementById("wlFormTitle").innerText = "Add Customer Request";
+      document.getElementById("wlSaveBtn").innerText = "Save Customer";
+      document.getElementById("wlCancelEditBtn").classList.add("hidden");
+    }
+
     async function saveCustomerWishlist(e) {
       e.preventDefault();
       if (!currentUser) return;
       const btn = document.getElementById("wlSaveBtn");
+      const editId = document.getElementById("wlEditId").value;
       btn.disabled = true;
-      btn.innerText = "Saving...";
+      btn.innerText = editId ? "Updating..." : "Saving...";
 
-      const newEntry = {
+      const payload = {
         user_id: currentUser.id,
         customer_name: document.getElementById("wlName").value.trim(),
         customer_phone: document.getElementById("wlPhone").value.trim() || null,
@@ -1370,15 +1409,28 @@
       };
 
       try {
-        const { error } = await supabaseClient.from("customer_wishlists").insert(newEntry);
-        if (error) throw error;
-        document.getElementById("addWishlistForm").reset();
+        let resError;
+        if (editId) {
+          const { error } = await supabaseClient
+            .from("customer_wishlists")
+            .update(payload)
+            .eq("id", editId);
+          resError = error;
+        } else {
+          const { error } = await supabaseClient
+            .from("customer_wishlists")
+            .insert(payload);
+          resError = error;
+        }
+
+        if (resError) throw resError;
+        cancelWishlistEdit();
         await loadCustomerWishlists();
       } catch (err) {
         alert("Failed to save customer request: " + err.message);
       }
       btn.disabled = false;
-      btn.innerText = "Save Customer";
+      btn.innerText = document.getElementById("wlEditId").value ? "Update Customer" : "Save Customer";
     }
 
     async function deleteWishlistEntry(id) {
@@ -1386,6 +1438,9 @@
       try {
         const { error } = await supabaseClient.from("customer_wishlists").delete().eq("id", id);
         if (error) throw error;
+        if (document.getElementById("wlEditId").value === id) {
+          cancelWishlistEdit();
+        }
         await loadCustomerWishlists();
       } catch (err) {
         alert("Delete failed: " + err.message);
@@ -1469,7 +1524,10 @@
                 (item.customer_email ? '<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>' + item.customer_email + '</span>' : '') +
               '</div>' +
             '</div>' +
-            '<button onclick="deleteWishlistEntry(\'' + item.id + '\')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1 cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>' +
+            '<div class="flex items-center gap-1">' +
+              '<button onclick="editWishlistEntry(\'' + item.id + '\')" title="Edit Customer Request" class="text-gray-500 hover:text-indigo-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-pen-to-square text-xs"></i></button>' +
+              '<button onclick="deleteWishlistEntry(\'' + item.id + '\')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>' +
+            '</div>' +
           '</div>' +
           '<div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">' +
             '<span><strong>Wanted:</strong> ' + (item.min_year ? item.min_year + '+ ' : '') + (item.target_make || 'Any Make') + ' ' + (item.target_model || '') + '</span>' +
