@@ -1371,7 +1371,7 @@
       document.getElementById("wlTrans").value = item.transmission || "";
       document.getElementById("wlNotes").value = item.notes || "";
 
-      document.getElementById("wlFormTitle").innerText = "Edit Customer Request";
+      document.getElementById("wlFormTitle").innerText = "Edit Customer & Specs";
       document.getElementById("wlSaveBtn").innerText = "Update Customer";
       document.getElementById("wlCancelEditBtn").classList.remove("hidden");
 
@@ -1426,7 +1426,7 @@
         cancelWishlistEdit();
         await loadCustomerWishlists();
       } catch (err) {
-        alert("Failed to save customer request: " + err.message);
+        alert("Failed to save changes: " + err.message);
       }
       btn.disabled = false;
       btn.innerText = document.getElementById("wlEditId").value ? "Update Customer" : "Save Customer";
@@ -1490,7 +1490,6 @@
       
       const body = "Hey " + firstName + "! Great news—a " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " just arrived in stock at " + (car.location_name || currentStore.name) + " (" + priceText + ", " + ((car.mileage || 0).toLocaleString()) + " mi)." + linkText + "\nLet me know if you would like me to set this aside for you to test drive!";
 
-      // Cross-platform SMS URI standard (handles iOS & Android)
       const separator = (navigator.userAgent.match(/iPhone|iPad|iPod/i)) ? "&" : "?";
       const targetUri = "sms:" + cleanPhone + separator + "body=" + encodeURIComponent(body);
 
