@@ -1,30 +1,28 @@
-name: Facebook Inventory Sync
+name: Facebook Auto-Poster Sync
 
 on:
   schedule:
-    # Runs every 2 hours automatically
+    # Runs automatically every 2 hours
     - cron: '0 */2 * * *'
-  workflow_dispatch: # Allows manual run button
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
 
 jobs:
-  sync:
+  sync-facebook:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: 22
+          node-version: 18
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: npm install @supabase/supabase-js
 
-      - name: Run FB Sync Script
+      - name: Run FB Auto Poster
         env:
-          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
-          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/fb_inventory_sync.js
