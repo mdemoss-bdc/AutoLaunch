@@ -529,6 +529,119 @@
       </div>
     </div>
   </div>
+
+  <!-- Customer Direct Message / Copy Fallback Modal -->
+  <div id="notifyCustomerModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-lg rounded-2xl border border-emerald-500/30 p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+            <i class="fa-solid fa-comment-sms text-sm"></i>
+          </div>
+          <div>
+            <h3 id="notifyModalTitle" class="text-sm font-bold text-white">Contact Customer</h3>
+            <p id="notifyModalSubtitle" class="text-xs text-emerald-400 font-medium">✓ Message copied to clipboard!</p>
+          </div>
+        </div>
+        <button onclick="closeModal('notifyCustomerModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-base"></i></button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Customer Phone Number</label>
+          <div class="flex gap-2">
+            <input type="text" id="notifyTargetPhone" readonly class="flex-1 bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-indigo-300 font-mono font-bold">
+            <button onclick="navigator.clipboard.writeText(document.getElementById('notifyTargetPhone').value); alert('Phone number copied!');" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold cursor-pointer">
+              Copy Phone
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Message Body</label>
+          <textarea id="notifyTargetText" class="w-full h-32 bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-gray-200 focus:outline-none focus:border-emerald-500 leading-relaxed"></textarea>
+        </div>
+
+        <!-- 1-Click Launchers -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+          <button onclick="navigator.clipboard.writeText(document.getElementById('notifyTargetText').value); alert('Message copied to clipboard!');" class="py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
+            <i class="fa-regular fa-copy"></i>
+            <span>Copy Text</span>
+          </button>
+          <button onclick="triggerDirectDeviceSms()" class="py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
+            <i class="fa-solid fa-mobile-screen"></i>
+            <span>Open SMS</span>
+          </button>
+          <a id="notifyEmailLink" href="#" class="col-span-2 sm:col-span-1 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold flex items-center justify-center gap-1.5 transition text-center">
+            <i class="fa-solid fa-envelope text-indigo-400"></i>
+            <span>Send Email</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ============================================================================== -->
+  <!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR END ============== -->
+  <!-- ============================================================================== -->
+
+
+  <!-- ============================================================================== -->
+  <!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR START ============ -->
+  <!-- ============================================================================== -->
+  <div id="wishlistModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-4xl rounded-2xl border border-gray-800 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-4">
+        <div>
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-radar text-rose-400"></i> Customer Wishlist & Inventory Radar
+          </h3>
+          <p class="text-xs text-gray-400">Track prospective buyers. AutoLaunch scans your live inventory for exact matches.</p>
+        </div>
+        <button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <!-- Add / Edit Customer Entry Form -->
+      <form id="addWishlistForm" onsubmit="saveCustomerWishlist(event)" class="bg-gray-950/70 p-4 rounded-xl border border-gray-800/80 space-y-3">
+        <input type="hidden" id="wlEditId" value="">
+        <div class="flex items-center justify-between">
+          <span id="wlFormTitle" class="text-xs font-bold text-indigo-400 uppercase tracking-wider block">Add Customer Request</span>
+          <button type="button" id="wlCancelEditBtn" onclick="cancelWishlistEdit()" class="text-xs text-gray-400 hover:text-white hidden cursor-pointer">
+            <i class="fa-solid fa-xmark mr-1"></i> Cancel Edit
+          </button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <input type="text" id="wlName" required placeholder="Customer Name *" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="tel" id="wlPhone" placeholder="Phone Number" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="email" id="wlEmail" placeholder="Email Address" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <input type="text" id="wlMake" placeholder="Make (e.g. Toyota)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="text" id="wlModel" placeholder="Model (e.g. Tacoma)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="number" id="wlMinYear" placeholder="Min Year (e.g. 2022)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <input type="number" id="wlMaxMiles" placeholder="Max Miles (e.g. 50000)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <select id="wlTrans" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <option value="">Any Trans</option>
+            <option value="Automatic">Automatic</option>
+            <option value="Manual">Manual</option>
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <input type="text" id="wlNotes" placeholder="Additional notes or trade-in info..." class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+          <button type="submit" id="wlSaveBtn" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer">
+            Save Customer
+          </button>
+        </div>
+      </form>
+
+      <!-- Customer Wishlist List & Live Matches -->
+      <div class="space-y-3">
+        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Customer Requests & Live Matches</h4>
+        <div id="wishlistEntriesContainer" class="space-y-3">
+          <p class="text-xs text-gray-500 text-center py-6">Loading wishlist requests...</p>
+        </div>
+      </div>
+    </div>
+  </div>
   <!-- ============================================================================== -->
   <!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR END ============== -->
   <!-- ============================================================================== -->
@@ -1332,6 +1445,7 @@
     /* ======================= FUNCTION: SOCIAL / SMS GENERATORS START =========== */
     /* ============================================================================ */
     let customerWishlists = [];
+    let currentNotifyData = { phone: "", body: "" };
 
     function openWishlistModal() {
       cancelWishlistEdit();
@@ -1477,7 +1591,7 @@
       });
     }
 
-    // Free Native SMS Generator: triggers default device SMS client
+    // Hybrid Contact Dispatcher: Auto-copies message and handles desktop vs mobile
     function notifyCustomerSms(wishlistId, vin) {
       const item = customerWishlists.find(function(c) { return c.id === wishlistId; });
       const car = rawInventory.find(function(c) { return c.vin === vin; });
@@ -1490,10 +1604,40 @@
       
       const body = "Hey " + firstName + "! Great news—a " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " just arrived in stock at " + (car.location_name || currentStore.name) + " (" + priceText + ", " + ((car.mileage || 0).toLocaleString()) + " mi)." + linkText + "\nLet me know if you would like me to set this aside for you to test drive!";
 
-      const separator = (navigator.userAgent.match(/iPhone|iPad|iPod/i)) ? "&" : "?";
-      const targetUri = "sms:" + cleanPhone + separator + "body=" + encodeURIComponent(body);
+      currentNotifyData = { phone: cleanPhone, body: body };
 
-      window.location.href = targetUri;
+      // Copy automatically to clipboard so the rep can paste anywhere
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(body).catch(function() {});
+      }
+
+      // Populate Fallback Modal
+      document.getElementById("notifyModalTitle").innerText = "Contact " + (item ? item.customer_name : "Customer");
+      document.getElementById("notifyTargetPhone").value = item && item.customer_phone ? item.customer_phone : "No Phone Provided";
+      document.getElementById("notifyTargetText").value = body;
+
+      const emailLink = document.getElementById("notifyEmailLink");
+      if (item && item.customer_email) {
+        emailLink.href = "mailto:" + item.customer_email + "?subject=" + encodeURIComponent("Fresh Arrival: " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '')) + "&body=" + encodeURIComponent(body);
+        emailLink.classList.remove("hidden");
+      } else {
+        emailLink.classList.add("hidden");
+      }
+
+      // On mobile devices, launch SMS protocol directly
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
+        window.location.href = "sms:" + cleanPhone + separator + "body=" + encodeURIComponent(body);
+      } else {
+        // On desktop, display the direct copy/messaging modal
+        document.getElementById("notifyCustomerModal").classList.remove("hidden");
+      }
+    }
+
+    function triggerDirectDeviceSms() {
+      const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
+      window.location.href = "sms:" + currentNotifyData.phone + separator + "body=" + encodeURIComponent(currentNotifyData.body);
     }
 
     function renderWishlistEntries() {
