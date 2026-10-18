@@ -10,7 +10,31 @@ const supabase = createClient(
 async function runSync() {
   console.log('--- Starting Facebook Inventory Sync ---');
 
-  // 1. Fetch current active inventory from scraped_inventory
+  // 1. Fetch user configuration/preferences
+  const { data: userSettings, error: settingsError } = await supabase
+    .from('user_settings')
+    .select('*')
+    .limit(1)
+    .single();
+
+  if (settingsError || !userSettings) {
+    console.error('Could not fetch user settings:', settingsError);
+    return;
+  }
+
+  if (userSettings.fb_auto_enabled === false) {
+    console.log('Auto-posting is currently toggled OFF in user settings. Skipping run.');
+    return;
+  }
+
+  const allowedConditions = (userSettings.fb_auto_conditions || ['Used', 'Certified Pre-Owned'])
+    .map(c => c.toLowerCase());
+  const allowedLocations = (userSettings.fb_auto_locations || [])
+    .map(l => l.toLowerCase());
+
+  console.log(`Preferences -> Conditions: [${allowedConditions.join(', ')}] | Locations: [${allowedLocations.length ? allowedLocations.join(', ') : 'ALL'}]`);
+
+  // 2. Fetch active inventory
   const { data: currentInventory, error: invError } = await supabase
     .from('scraped_inventory')
     .select('*')
@@ -21,7 +45,7 @@ async function runSync() {
     return;
   }
 
-  // 2. Fetch tracked Facebook sync records
+  // 3. Fetch tracked Facebook sync records
   const { data: trackedRecords, error: syncError } = await supabase
     .from('inventory_facebook_sync')
     .select('*');
@@ -34,15 +58,22 @@ async function runSync() {
   const trackedMap = new Map((trackedRecords || []).map(r => [r.vin, r]));
   const currentVins = new Set(currentInventory.map(car => car.vin));
 
-  // --- PART A: Auto-Publish New Certified / Used Vehicles ---
-  const eligibleVehicles = currentInventory.filter(car => 
-    car.condition &&
-    (car.condition.toLowerCase().includes('certified') || car.condition.toLowerCase().includes('used')) &&
-    car.image_url &&
-    !trackedMap.has(car.vin)
-  );
+  // --- Filter based on user preferences ---
+  const eligibleVehicles = currentInventory.filter(car => {
+    if (!car.vin || trackedMap.has(car.vin) || !car.image_url) return false;
 
-  console.log(`Found ${eligibleVehicles.length} eligible new units. Publishing up to 3...`);
+    // Condition filter (New, Used, Certified, All)
+    const carCond = (car.condition || '').toLowerCase();
+    const matchesCondition = allowedConditions.includes('all') || allowedConditions.some(cond => carCond.includes(cond));
+
+    // Location filter
+    const carLoc = (car.location_name || '').toLowerCase();
+    const matchesLocation = allowedLocations.length === 0 || allowedLocations.some(loc => carLoc.includes(loc));
+
+    return matchesCondition && matchesLocation;
+  });
+
+  console.log(`Found ${eligibleVehicles.length} units matching user criteria. Publishing up to 3...`);
 
   for (const car of eligibleVehicles.slice(0, 3)) {
     try {
@@ -53,7 +84,7 @@ async function runSync() {
         `⚙️ Condition: ${car.condition}\n` +
         `🎨 Color: ${car.color || 'Standard'}\n` +
         `🆔 VIN: ${car.vin}\n\n` +
-        `✅ Fully inspected & front-line certified\n` +
+        `✅ Fully inspected & front-line ready\n` +
         `✅ Clean Title\n` +
         `✅ All trades accepted\n` +
         `🔗 Full vehicle specs: ${car.detail_url || ''}\n\n` +
@@ -89,7 +120,7 @@ async function runSync() {
     }
   }
 
-  // --- PART B: Post "SOLD" Comment on Missing Inventory ---
+  // --- Mark SOLD Vehicles ---
   const activeTrackedCars = (trackedRecords || []).filter(r => r.status === 'active' && r.fb_post_id);
   const soldCars = activeTrackedCars.filter(car => !currentVins.has(car.vin));
 
