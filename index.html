@@ -280,7 +280,7 @@
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
     // Direct Embedded Dispatch Authentication Key
-    const GH_DISPATCH_TOKEN = "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";
+    const GH_DISPATCH_TOKEN = "github_pat_11CJ7SCEY0Sp90zHTZ1A4v_x0hrlAvbRkFUaoOVn2zDzl9ma8PXgAwNHIQ9TE000ryZMMNZQ6";
 
     const urlParams = new URLSearchParams(window.location.search);
     const ACTIVE_DEALER_ID = urlParams.get("dealer") || "moses";
@@ -420,7 +420,7 @@
           alert("✓ Cloud Scraper launched! GitHub Actions is running now.");
         } else {
           // If workflows dispatch requires repository_dispatch as fallback:
-          await fetch("https://api.github.com/repos/mdemoss-bdc/AutoLaunch/dispatches", {
+          const fallbackRes = await fetch("https://api.github.com/repos/mdemoss-bdc/AutoLaunch/dispatches", {
             method: "POST",
             headers: {
               "Accept": "application/vnd.github+json",
@@ -432,11 +432,17 @@
               client_payload: { dealership_id: ACTIVE_DEALER_ID }
             })
           });
-          alert("✓ Cloud Scraper launched successfully!");
+
+          if (fallbackRes.ok || fallbackRes.status === 204) {
+            alert("✓ Cloud Scraper launched successfully!");
+          } else {
+            const err = await ghResponse.json().catch(() => ({}));
+            alert("GitHub API Error: " + (err.message || ghResponse.statusText));
+          }
         }
       } catch (err) {
         console.error("Workflow trigger error:", err);
-        alert("✓ Scrape request dispatched.");
+        alert("Network error contacting GitHub API.");
       }
 
       setTimeout(() => {
