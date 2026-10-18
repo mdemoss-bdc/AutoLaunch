@@ -1,500 +1,2095 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<!-- START SECTION: HEAD & DEPENDENCIES -->
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoLaunch - Inventory & Marketing Suite</title>
-  
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- Supabase JS Client -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-  <!-- FontAwesome Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <!-- Global Styling & Glassmorphism -->
-  <style>
-    body { background-color: #0b0f19; color: #f3f4f6; }
-    .glass-card { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
-    .glass-modal { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.12); }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoLaunch | Dealership Sales Enablement</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<!-- Supabase JS Client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
+.glass-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+.glass-card { background: rgba(23, 32, 54, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+.glass-card:hover { transform: translateY(-4px); border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 12px 24px -10px rgba(99, 102, 241, 0.2); }
+</style>
 </head>
-<!-- END SECTION: HEAD & DEPENDENCIES -->
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-<body class="min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 1: AUTHENTICATION MODAL START =============== -->
+<!-- ============================================================================== -->
+<div id="authOverlay" class="fixed inset-0 z-50 bg-[#0b0f19]/90 backdrop-blur-xl flex items-center justify-center p-4">
+<div class="glass-panel w-full max-w-md rounded-3xl border border-gray-800 p-8 space-y-6 shadow-2xl relative">
+<div class="flex items-center gap-3 justify-center mb-2">
+<div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+<i class="fa-solid fa-bolt-lightning text-white text-xl"></i>
+</div>
+<div>
+<span class="font-extrabold text-2xl tracking-tight bg-gradient-to-r from-white via-gray-200 to-indigo-300 bg-clip-text text-transparent">AutoLaunch</span>
+<span class="text-xs text-indigo-400 block font-semibold tracking-wider uppercase">Dealer Intelligence Suite</span>
+</div>
+</div>
 
-  <!-- START SECTION: TOP NAVIGATION BAR -->
-  <header class="border-b border-gray-800 bg-gray-950/80 sticky top-0 z-30 backdrop-blur-md">
-    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-          <i class="fa-solid fa-bolt text-white text-lg"></i>
-        </div>
-        <div>
-          <span class="font-bold text-lg text-white tracking-wide">AutoLaunch</span>
-          <span class="text-xs block text-gray-400 -mt-1">Inventory & Marketing Suite</span>
-        </div>
-      </div>
+<!-- Tab Switcher -->
+<div id="authTabSwitcher" class="grid grid-cols-2 p-1 bg-gray-900 rounded-xl border border-gray-800 text-xs font-bold text-center">
+<button id="tabSignIn" type="button" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer">Sign In</button>
+<button id="tabSignUp" type="button" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer">Register</button>
+</div>
 
-      <div class="flex items-center space-x-3">
-        <button id="openSettingsBtn" class="flex items-center space-x-2 px-3 py-2 text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg border border-gray-700 transition">
-          <i class="fa-solid fa-sliders text-indigo-400"></i>
-          <span>Dealership Settings</span>
-        </button>
-      </div>
+<!-- Auth Form (Sign In / Register) -->
+<form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+<div>
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Email</label>
+<input type="email" id="authEmail" required placeholder="name@company.com" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+</div>
+
+<div>
+<div class="flex items-center justify-between mb-1">
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Password</label>
+<button type="button" onclick="toggleForgotPasswordView(true)" class="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold transition cursor-pointer">Forgot?</button>
+</div>
+<div class="relative">
+<input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-4 pr-11 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+<button type="button" onclick="togglePasswordVisibility('authPassword', 'passwordToggleIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition focus:outline-none cursor-pointer">
+<i id="passwordToggleIcon" class="fa-regular fa-eye text-sm"></i>
+</button>
+</div>
+</div>
+
+<button type="submit" id="authSubmitBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition cursor-pointer">
+Sign In
+</button>
+
+<p id="authErrorMsg" class="text-xs text-rose-400 text-center font-medium hidden"></p>
+</form>
+
+<!-- Forgot Password Sub-Form -->
+<form id="forgotPasswordForm" onsubmit="handleForgotPasswordSubmit(event)" class="space-y-4 hidden">
+<div class="text-center space-y-1">
+<h4 class="text-sm font-bold text-white">Reset Password</h4>
+<p class="text-xs text-gray-400">Enter your account email to receive a password recovery link.</p>
+</div>
+
+<div>
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Account Email</label>
+<input type="email" id="resetEmail" required placeholder="name@company.com" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
+</div>
+
+<button type="submit" id="resetSubmitBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition cursor-pointer">
+Send Recovery Link
+</button>
+
+<p id="resetStatusMsg" class="text-xs text-center font-medium hidden"></p>
+
+<div class="text-center pt-2">
+<button type="button" onclick="toggleForgotPasswordView(false)" class="text-xs text-gray-400 hover:text-white transition cursor-pointer">
+<i class="fa-solid fa-arrow-left mr-1"></i> Back to Sign In
+</button>
+</div>
+</form>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 1: AUTHENTICATION MODAL END ================= -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 2: TOP APP HEADER START ===================== -->
+<!-- ============================================================================== -->
+<header class="glass-panel sticky top-0 z-40 border-b border-gray-800 px-4 lg:px-8 py-3">
+<div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+<i class="fa-solid fa-bolt-lightning text-white text-lg"></i>
+</div>
+<div>
+<span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-gray-200 to-indigo-300 bg-clip-text text-transparent">AutoLaunch</span>
+<span class="text-xs text-gray-400 block font-medium">Inventory & Marketing Suite</span>
+</div>
+</div>
+
+<div class="flex items-center gap-2 sm:gap-3">
+  <!-- Facebook Feed Manager Button -->
+  <button onclick="openFbFeedModal()" class="px-3.5 py-1.5 rounded-lg bg-blue-950/60 hover:bg-blue-900/60 border border-blue-500/40 text-blue-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-sm relative">
+    <i class="fa-brands fa-facebook text-blue-400"></i>
+    <span>FB Feed</span>
+    <span id="fbFeedCountBadge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-500 text-[10px] font-black text-white ml-0.5">0</span>
+  </button>
+
+  <!-- Wishlist Matchmaker Button -->
+  <button onclick="openWishlistModal()" class="px-3.5 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-sm relative">
+    <i class="fa-solid fa-bell text-rose-400"></i>
+    <span>Customer Wishlist</span>
+    <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full bg-rose-500 text-[10px] font-black text-white ml-0.5">0</span>
+  </button>
+
+  <button onclick="triggerLiveLotCrawl()" id="crawlTriggerBtn" class="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-600/40 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+    <i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i>
+    <span class="hidden sm:inline">Sync Dealer Site</span>
+  </button>
+
+  <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm cursor-pointer">
+    <i class="fa-solid fa-building text-indigo-400"></i>
+    <span id="headerStoreName">Dealership Inventory</span>
+    <i class="fa-solid fa-gear text-[11px] text-gray-400"></i>
+  </button>
+
+  <!-- User Profile & Sign Out -->
+  <div class="flex items-center gap-2 pl-2 border-l border-gray-800">
+    <div class="hidden md:block text-right">
+      <span id="userDisplayName" class="text-xs text-gray-300 font-bold block leading-tight">User</span>
+      <span id="userEmailBadge" class="text-[10px] text-gray-500 font-mono block leading-tight">user@store.com</span>
     </div>
-  </header>
-  <!-- END SECTION: TOP NAVIGATION BAR -->
+    <button onclick="handleSignOut()" title="Sign Out" class="w-8 h-8 rounded-lg bg-gray-900 hover:bg-rose-950 border border-gray-800 hover:border-rose-800 text-gray-400 hover:text-rose-300 flex items-center justify-center transition cursor-pointer">
+      <i class="fa-solid fa-right-from-bracket text-xs"></i>
+    </button>
+  </div>
+</div>
+</div>
+</header>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 2: TOP APP HEADER END ======================= -->
+<!-- ============================================================================== -->
 
-  <!-- START SECTION: MAIN CONTENT & INVENTORY CONTROLS -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-    <!-- Header Controls & Status Counts -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-white flex items-center gap-2">
-          <span>Moses Auto Group</span>
-          <span id="unitBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">0 Units</span>
-        </h1>
-        <p class="text-sm text-gray-400 mt-1">Filter by Make, Model, Condition, or Location. Click any card to launch Facebook posts.</p>
-      </div>
 
-      <!-- Quick Filter Bar -->
-      <div class="flex flex-wrap items-center gap-3">
-        <select id="filterCondition" class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500">
-          <option value="ALL">All Conditions</option>
-          <option value="Used">Used Only</option>
-          <option value="Certified">Certified Pre-Owned</option>
-          <option value="New">New</option>
-        </select>
-        
-        <select id="filterLocation" class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500">
-          <option value="ALL">All Locations</option>
-        </select>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 3: MAIN VIEW & FILTERS START ================ -->
+<!-- ============================================================================== -->
+<main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
 
-        <input type="text" id="searchInput" placeholder="Search Year, Make, Model, VIN..." class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500 w-64">
-      </div>
+<!-- Metrics Bar -->
+<div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Dealership Inventory</h1>
+<span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Locations...</span>
+</div>
+<p class="text-sm text-gray-400">Filter by Make, Model, Trim, Location, and Specs. Click any vehicle to view its live website listing.</p>
+</div>
+
+<div class="flex items-center gap-4">
+<div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
+<div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">In-Stock</div>
+<div id="lotCount" class="text-2xl font-black text-indigo-400">Loading...</div>
+</div>
+<div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
+<div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Avg Price</div>
+<div id="avgPrice" class="text-2xl font-black text-emerald-400">--</div>
+</div>
+</div>
+</div>
+
+<!-- Filters & Search Toolbar -->
+<div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-3">
+<div class="flex flex-col md:flex-row gap-3">
+<div class="flex-1 relative">
+<i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+<input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search Year, Make, Model, Trim, VIN..." class="w-full bg-gray-950/70 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+</div>
+<div class="flex flex-wrap items-center gap-2">
+<select id="locationFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 max-w-xs">
+<option value="ALL">All Locations</option>
+</select>
+<select id="conditionFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
+<option value="ALL">All Conditions</option>
+<option value="Used">Used Only</option>
+<option value="Certified Pre-Owned">Certified Only</option>
+<option value="New">New Only</option>
+</select>
+<select id="sortSelect" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
+<option value="price_asc">Price: Low to High</option>
+<option value="price_desc">Price: High to Low</option>
+<option value="miles_asc">Mileage: Lowest First</option>
+<option value="year_desc">Year: Newest First</option>
+</select>
+<button id="wishlistFilterBtn" onclick="toggleWishlistOnly()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition cursor-pointer">
+<i id="wishlistFilterIcon" class="fa-regular fa-heart text-rose-400"></i>
+<span id="wishlistCountLabel">Saved (0)</span>
+</button>
+<button onclick="toggleAdvancedFilters()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition cursor-pointer">
+<i class="fa-solid fa-sliders"></i>
+<span>Specs</span>
+</button>
+</div>
+</div>
+
+<!-- Make, Model, Trim Bar -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+<div>
+<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Make</label>
+<select id="makeFilter" onchange="onMakeChange()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+<option value="ALL">All Makes</option>
+</select>
+</div>
+<div>
+<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Model</label>
+<select id="modelFilter" onchange="onModelChange()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+<option value="ALL">All Models</option>
+</select>
+</div>
+<div>
+<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Trim</label>
+<select id="trimFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+<option value="ALL">All Trims</option>
+</select>
+</div>
+</div>
+
+<!-- Specs Filter Panel -->
+<div id="advancedFilterPanel" class="hidden pt-3 border-t border-gray-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+<div>
+<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Body Type</label>
+<select id="bodyFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+<option value="ALL">All Bodies</option>
+<option value="SUV">SUV / Crossover</option>
+<option value="Truck">Truck</option>
+<option value="Sedan">Sedan</option>
+<option value="Coupe">Coupe</option>
+<option value="Van">Van / Minivan</option>
+<option value="Hatchback">Hatchback</option>
+</select>
+</div>
+
+<div>
+<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Exterior Color</label>
+<select id="colorFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+<option value="ALL">All Colors</option>
+<option value="Black">Black</option>
+<option value="White">White</option>
+<option value="Silver">Silver</option>
+<option value="Gray">Gray</option>
+<option value="Red">Red</option>
+<option value="Blue">Blue</option>
+<option value="Green">Green</option>
+<option value="Brown">Brown</option>
+</select>
+</div>
+
+<div>
+<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Transmission</label>
+<select id="transFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+<option value="ALL">All Transmissions</option>
+<option value="Automatic">Automatic Only</option>
+<option value="Manual">Manual / Standard</option>
+</select>
+</div>
+
+<div>
+<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Min Year</label>
+<select id="minYearFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+<option value="ALL">Any Year</option>
+<option value="2026">2026</option>
+<option value="2025">2025+</option>
+<option value="2023">2023+</option>
+<option value="2021">2021+</option>
+<option value="2018">2018+</option>
+<option value="2015">2015+</option>
+</select>
+</div>
+
+<div>
+<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Max Mileage</label>
+<select id="maxMilesFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+<option value="ALL">Any Mileage</option>
+<option value="30000">Under 30,000 mi</option>
+<option value="60000">Under 60,000 mi</option>
+<option value="100000">Under 100,000 mi</option>
+<option value="150000">Under 150,000 mi</option>
+</select>
+</div>
+
+<div class="flex items-end">
+<button onclick="resetFilters()" class="w-full py-1.5 rounded-md bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white border border-gray-800 text-xs font-semibold transition cursor-pointer">
+Reset All Filters
+</button>
+</div>
+</div>
+</div>
+
+<!-- Inventory Grid -->
+<div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
+</main>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 3: MAIN VIEW & FILTERS END ================== -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 4: DEALERSHIP SETTINGS MODAL START ========== -->
+<!-- ============================================================================== -->
+<div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+<div class="flex items-center justify-between border-b border-gray-800 pb-3">
+<div>
+  <h3 class="text-lg font-bold text-white">Dealership & Social Automation Settings</h3>
+  <p class="text-xs text-gray-400">Configure your store name, inventory URLs, and automated Facebook rules.</p>
+</div>
+<button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+
+<div class="space-y-4">
+<div>
+<label class="text-xs font-bold text-gray-400 uppercase">Your Account User ID</label>
+<input type="text" id="dealershipSlugInput" readonly class="w-full mt-1 bg-gray-900 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-gray-400 font-mono">
+</div>
+
+<div>
+<label class="text-xs font-bold text-gray-400 uppercase">Dealership Display Name</label>
+<input type="text" id="dealershipNameInput" placeholder="e.g. University Ford WV" class="w-full mt-1 bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+</div>
+
+<!-- Facebook Business Page Integration Box -->
+<div class="p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/30 space-y-2.5">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-2 text-blue-300 font-bold text-xs uppercase tracking-wider">
+      <i class="fa-brands fa-facebook text-blue-400"></i> Facebook Business Page Auto-Poster
     </div>
+    <label class="relative inline-flex items-center cursor-pointer">
+      <input type="checkbox" id="fbAutoEnabledInput" class="sr-only peer" checked>
+      <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+    </label>
+  </div>
+  
+  <div>
+    <label class="text-[11px] font-bold text-gray-400 uppercase block mb-1">Facebook Page ID</label>
+    <input type="text" id="fbPageIdInput" placeholder="e.g. 109283746501928" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
+  </div>
+  <div>
+    <label class="text-[11px] font-bold text-gray-400 uppercase block mb-1">Page Access Token</label>
+    <input type="password" id="fbAccessTokenInput" placeholder="EAAGm0PX4ZC0BA..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
+    <p class="text-[10px] text-gray-500 mt-1">Allows AutoLaunch to publish vehicles, add images, and append 'SOLD' automatically to your page.</p>
+  </div>
 
-    <!-- Inventory Cards Grid -->
-    <div id="inventoryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      <!-- Loading Skeleton Spinner -->
-      <div class="col-span-full py-16 text-center text-gray-400">
-        <i class="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-500 mb-3"></i>
-        <p>Loading dealership inventory...</p>
-      </div>
-    </div>
-  </main>
-  <!-- END SECTION: MAIN CONTENT & INVENTORY CONTROLS -->
-
-  <!-- START SECTION: DEALERSHIP SETTINGS MODAL -->
-  <div id="settingsModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="glass-modal w-full max-w-2xl rounded-2xl shadow-2xl p-6 overflow-y-auto max-h-[90vh] text-gray-200">
-      
-      <!-- Modal Header -->
-      <div class="flex items-center justify-between border-b border-gray-800 pb-4 mb-5">
-        <div class="flex items-center space-x-2">
-          <i class="fa-solid fa-gear text-indigo-400 text-xl"></i>
-          <h2 class="text-xl font-bold text-white">Dealership & Facebook Settings</h2>
-        </div>
-        <button id="closeSettingsBtn" class="text-gray-400 hover:text-white transition">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-      </div>
-
-      <form id="settingsForm" class="space-y-5">
-        
-        <!-- START SUBSECTION: FACEBOOK CREDENTIALS -->
-        <div class="space-y-3">
-          <h3 class="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Facebook Meta Integration</h3>
-          <div>
-            <label class="block text-xs text-gray-400 mb-1">Facebook Page ID</label>
-            <input type="text" id="fbPageId" placeholder="e.g. 1198606820007865" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
-          </div>
-          <div>
-            <label class="block text-xs text-gray-400 mb-1">Page Access Token</label>
-            <input type="password" id="fbPageToken" placeholder="EAAUf..." class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono">
-          </div>
-        </div>
-        <!-- END SUBSECTION: FACEBOOK CREDENTIALS -->
-
-        <hr class="border-gray-800">
-
-        <!-- START SUBSECTION: AUTOMATED POSTING CRITERIA CONTROLS -->
-        <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Automated Inventory Sync Rules</h3>
-              <p class="text-xs text-gray-400">Controls what the background job posts to your Facebook page automatically.</p>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="fbAutoEnabled" class="sr-only peer" checked>
-              <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
-          </div>
-
-          <!-- Vehicle Conditions Selection -->
-          <div>
-            <label class="block text-xs font-medium text-gray-300 mb-2">Auto-Publish Vehicle Conditions:</label>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer hover:border-gray-600">
-                <input type="checkbox" name="autoCondition" value="Certified Pre-Owned" class="rounded text-indigo-600 focus:ring-0 bg-gray-800 border-gray-700" checked>
-                <span class="text-xs text-gray-200">Certified</span>
-              </label>
-              <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer hover:border-gray-600">
-                <input type="checkbox" name="autoCondition" value="Used" class="rounded text-indigo-600 focus:ring-0 bg-gray-800 border-gray-700" checked>
-                <span class="text-xs text-gray-200">Used</span>
-              </label>
-              <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer hover:border-gray-600">
-                <input type="checkbox" name="autoCondition" value="New" class="rounded text-indigo-600 focus:ring-0 bg-gray-800 border-gray-700">
-                <span class="text-xs text-gray-200">New</span>
-              </label>
-              <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer hover:border-gray-600">
-                <input type="checkbox" id="condSelectAll" class="rounded text-indigo-600 focus:ring-0 bg-gray-800 border-gray-700">
-                <span class="text-xs font-semibold text-indigo-300">Select All</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Target Locations Selection -->
-          <div>
-            <label class="block text-xs font-medium text-gray-300 mb-2">Target Dealership Locations:</label>
-            <div id="locationCheckboxes" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1 bg-gray-950/40 rounded-lg border border-gray-800">
-              <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer">
-                <input type="checkbox" name="autoLocation" value="Moses Volkswagen" class="rounded text-indigo-600 bg-gray-800 border-gray-700" checked>
-                <span class="text-xs text-gray-200">Moses Volkswagen</span>
-              </label>
-              <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer">
-                <input type="checkbox" name="autoLocation" value="Moses Honda" class="rounded text-indigo-600 bg-gray-800 border-gray-700" checked>
-                <span class="text-xs text-gray-200">Moses Honda</span>
-              </label>
-            </div>
-            <p class="text-[11px] text-gray-500 mt-1">If no location is selected, vehicles across all locations will be posted.</p>
-          </div>
-        </div>
-        <!-- END SUBSECTION: AUTOMATED POSTING CRITERIA CONTROLS -->
-
-        <hr class="border-gray-800">
-
-        <!-- START SUBSECTION: CRAWL SOURCE URLS -->
-        <div class="space-y-3">
-          <h3 class="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Crawl Source Feeds</h3>
-          <div>
-            <label class="block text-xs text-gray-400 mb-1">Used Inventory URL</label>
-            <input type="text" id="usedUrl" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none">
-          </div>
-          <div>
-            <label class="block text-xs text-gray-400 mb-1">Certified Inventory URL</label>
-            <input type="text" id="certifiedUrl" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none">
-          </div>
-        </div>
-        <!-- END SUBSECTION: CRAWL SOURCE URLS -->
-
-        <!-- Save Button -->
-        <div class="pt-3">
-          <button type="submit" id="saveSettingsBtn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 font-semibold text-white rounded-xl shadow-lg shadow-indigo-600/30 transition">
-            Save Settings & URLs
-          </button>
-        </div>
-
-      </form>
+  <!-- Automated Sync Condition Rules -->
+  <div class="pt-2 border-t border-blue-900/30 space-y-2">
+    <label class="text-[11px] font-bold text-blue-300 uppercase block">Auto-Sync Vehicle Conditions:</label>
+    <div class="grid grid-cols-3 gap-2">
+      <label class="flex items-center space-x-1.5 bg-gray-900/80 border border-gray-800 p-2 rounded-lg cursor-pointer">
+        <input type="checkbox" name="autoCondition" value="Certified Pre-Owned" class="rounded text-blue-600 bg-gray-950 border-gray-700" checked>
+        <span class="text-[11px] text-gray-300">Certified</span>
+      </label>
+      <label class="flex items-center space-x-1.5 bg-gray-900/80 border border-gray-800 p-2 rounded-lg cursor-pointer">
+        <input type="checkbox" name="autoCondition" value="Used" class="rounded text-blue-600 bg-gray-950 border-gray-700" checked>
+        <span class="text-[11px] text-gray-300">Used</span>
+      </label>
+      <label class="flex items-center space-x-1.5 bg-gray-900/80 border border-gray-800 p-2 rounded-lg cursor-pointer">
+        <input type="checkbox" name="autoCondition" value="New" class="rounded text-blue-600 bg-gray-950 border-gray-700">
+        <span class="text-[11px] text-gray-300">New</span>
+      </label>
     </div>
   </div>
-  <!-- END SECTION: DEALERSHIP SETTINGS MODAL -->
 
-  <!-- START SECTION: JAVASCRIPT APPLICATION LOGIC -->
-  <script>
-    // --- 1. Supabase Client Configuration ---
-    const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
-    const SUPABASE_ANON = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  <!-- Automated Sync Locations Rules -->
+  <div class="space-y-1.5">
+    <label class="text-[11px] font-bold text-blue-300 uppercase block">Auto-Sync Specific Locations:</label>
+    <div id="modalLocationList" class="max-h-28 overflow-y-auto space-y-1 bg-gray-950/60 p-2 rounded-lg border border-gray-800">
+      <p class="text-[11px] text-gray-500">Loading dealer locations...</p>
+    </div>
+    <p class="text-[10px] text-gray-500">Uncheck all to auto-post inventory from all available locations.</p>
+  </div>
+</div>
 
-    let allInventory = [];
-    let currentUserId = "";
+<div class="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-indigo-300 leading-relaxed flex items-start gap-2.5">
+<i class="fa-solid fa-circle-info text-indigo-400 mt-0.5"></i>
+<div>
+<strong>How to get your URLs:</strong> Go to your dealership website, click to <strong>Page 2</strong> of your inventory, and paste that address below. AutoLaunch will configure pagination automatically.
+</div>
+</div>
 
-    // --- 2. DOM Elements Mapping ---
-    const inventoryGrid = document.getElementById('inventoryGrid');
-    const unitBadge = document.getElementById('unitBadge');
-    const filterCondition = document.getElementById('filterCondition');
-    const filterLocation = document.getElementById('filterLocation');
-    const searchInput = document.getElementById('searchInput');
+<div>
+<label class="text-xs font-bold text-indigo-400 uppercase block mb-1">Used Inventory (Page 2 URL)</label>
+<input type="text" id="dealershipUsedUrlInput" oninput="handleUrlInput(this)" placeholder="https://www.yourdealer.com/used-inventory/index.htm?page=2" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+</div>
 
-    const settingsModal = document.getElementById('settingsModal');
-    const openSettingsBtn = document.getElementById('openSettingsBtn');
-    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-    const settingsForm = document.getElementById('settingsForm');
+<div>
+<label class="text-xs font-bold text-emerald-400 uppercase block mb-1">New Inventory (Page 2 URL)</label>
+<input type="text" id="dealershipNewUrlInput" oninput="handleUrlInput(this)" placeholder="https://www.yourdealer.com/new-inventory/index.htm?page=2" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+</div>
 
-    // --- 3. Modal Toggles & Event Handlers ---
-    if (openSettingsBtn) {
-      openSettingsBtn.addEventListener('click', () => { 
-        loadSettings(); 
-        settingsModal?.classList.remove('hidden'); 
+<div>
+<label class="text-xs font-bold text-cyan-400 uppercase block mb-1">Certified Pre-Owned (Page 2 URL)</label>
+<input type="text" id="dealershipCpoUrlInput" oninput="handleUrlInput(this)" placeholder="https://www.yourdealer.com/search-cpo.html?pt=2" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+</div>
+
+<div id="detectedPatternBadge" class="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+<i class="fa-solid fa-circle-check text-emerald-400"></i>
+<span>Pagination format: <strong id="detectedPatternText" class="font-mono text-emerald-200">?pt={page}</strong></span>
+</div>
+
+<div class="border-t border-gray-800 pt-2">
+<button type="button" onclick="toggleAdvancedPagination()" class="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1.5 focus:outline-none cursor-pointer">
+<i class="fa-solid fa-sliders text-indigo-400"></i>
+<span>Advanced Pagination Settings</span>
+<i id="advIcon" class="fa-solid fa-chevron-down text-[10px] ml-1"></i>
+</button>
+
+<div id="advancedPaginationBox" class="hidden mt-3 p-3 bg-gray-950/80 rounded-xl border border-gray-800 space-y-2">
+<label class="text-[11px] font-bold text-amber-400 uppercase block">Manual Modifier Pattern Override</label>
+<input type="text" id="dealershipPageModifierInput" placeholder="?pt={page}" class="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+<p class="text-[10px] text-gray-500 leading-tight">Leave this blank unless AutoLaunch fails to detect your platform's pagination automatically.</p>
+</div>
+</div>
+
+<div class="pt-2 flex gap-2">
+<button onclick="saveDealershipProfile()" id="saveProfileBtn" class="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-md shadow-indigo-600/30 cursor-pointer">
+Save Settings & URLs
+</button>
+<button onclick="closeModal('dealershipModal')" class="px-4 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition cursor-pointer">
+Cancel
+</button>
+</div>
+
+<!-- Danger Zone -->
+<div class="border-t border-rose-900/40 pt-4 mt-6">
+<div class="p-3.5 rounded-xl bg-rose-950/20 border border-rose-900/30 flex items-center justify-between gap-3">
+<div>
+<span class="text-xs font-bold text-rose-300 block">Delete Account & Data</span>
+<span class="text-[11px] text-gray-400 block">Permanently deletes your account and all synced inventory from the database.</span>
+</div>
+<button onclick="openDeleteAccountModal()" type="button" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition whitespace-nowrap cursor-pointer">
+Delete Account
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 4: DEALERSHIP SETTINGS MODAL END ============ -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 5: ACCOUNT DELETION MODAL START ============= -->
+<!-- ============================================================================== -->
+<div id="deleteAccountModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-md rounded-2xl border border-rose-800/50 p-6 space-y-4 shadow-2xl">
+<div class="flex items-center gap-3 border-b border-gray-800 pb-3">
+<div class="w-10 h-10 rounded-xl bg-rose-600/20 border border-rose-600/40 flex items-center justify-center text-rose-400">
+<i class="fa-solid fa-triangle-exclamation text-lg"></i>
+</div>
+<div>
+<h3 class="text-base font-bold text-white">Permanently Delete Account</h3>
+<p class="text-xs text-rose-300">This action cannot be undone.</p>
+</div>
+</div>
+
+<p class="text-xs text-gray-300 leading-relaxed">
+To confirm account termination, enter your account password. All stored configurations, scrape histories, and vehicle listings will be wiped from the server.
+</p>
+
+<div class="space-y-3">
+<div>
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Confirm Password</label>
+<div class="relative">
+<input type="password" id="deleteConfirmPassword" placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-4 pr-11 py-2 text-sm text-white focus:outline-none focus:border-rose-500">
+<button type="button" onclick="togglePasswordVisibility('deleteConfirmPassword', 'deletePasswordToggleIcon')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition focus:outline-none cursor-pointer">
+<i id="deletePasswordToggleIcon" class="fa-regular fa-eye text-sm"></i>
+</button>
+</div>
+</div>
+
+<p id="deleteErrorMsg" class="text-xs text-rose-400 font-medium hidden"></p>
+
+<div class="flex gap-2 pt-2">
+<button onclick="confirmDeleteAccount()" id="confirmDeleteBtn" type="button" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 transition cursor-pointer">
+Confirm Permanent Deletion
+</button>
+<button onclick="closeModal('deleteAccountModal')" type="button" class="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs transition cursor-pointer">
+Cancel
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 5: ACCOUNT DELETION MODAL END =============== -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 6: SHARE & SOCIAL COPY MODAL START ========== -->
+<!-- ============================================================================== -->
+<div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-5">
+<div class="flex items-center justify-between border-b border-gray-800 pb-4">
+<div>
+<h3 id="modalTitle" class="text-lg font-bold text-white">Action</h3>
+<p id="modalSubtitle" class="text-xs text-gray-400"></p>
+</div>
+<button onclick="closeModal('actionModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+<div id="modalBody" class="space-y-4"></div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 6: SHARE & SOCIAL COPY MODAL END ============ -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR START ============ -->
+<!-- ============================================================================== -->
+<div id="wishlistModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-4xl rounded-2xl border border-gray-800 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+<div class="flex items-center justify-between border-b border-gray-800 pb-4">
+<div>
+<h3 class="text-lg font-bold text-white flex items-center gap-2">
+<i class="fa-solid fa-radar text-rose-400"></i> Customer Wishlist & Inventory Radar
+</h3>
+<p class="text-xs text-gray-400">Track prospective buyers. AutoLaunch scans your live inventory for exact matches.</p>
+</div>
+<button onclick="closeModal('wishlistModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+
+<!-- Add / Edit Customer Entry Form -->
+<form id="addWishlistForm" onsubmit="saveCustomerWishlist(event)" class="bg-gray-950/70 p-4 rounded-xl border border-gray-800/80 space-y-3">
+<input type="hidden" id="wlEditId" value="">
+<div class="flex items-center justify-between">
+<span id="wlFormTitle" class="text-xs font-bold text-indigo-400 uppercase tracking-wider block">Add Customer Request</span>
+<button type="button" id="wlCancelEditBtn" onclick="cancelWishlistEdit()" class="text-xs text-gray-400 hover:text-white hidden cursor-pointer">
+<i class="fa-solid fa-xmark mr-1"></i> Cancel Edit
+</button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<input type="text" id="wlName" required placeholder="Customer Name *" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="tel" id="wlPhone" placeholder="Phone Number" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="email" id="wlEmail" placeholder="Email Address" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+<input type="text" id="wlMake" placeholder="Make (e.g. Toyota)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="text" id="wlModel" placeholder="Model (e.g. Tacoma)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="number" id="wlMinYear" placeholder="Min Year (e.g. 2022)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<input type="number" id="wlMaxMiles" placeholder="Max Miles (e.g. 50000)" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<select id="wlTrans" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+<option value="">Any Trans</option>
+<option value="Automatic">Automatic</option>
+<option value="Manual">Manual</option>
+</select>
+</div>
+<div class="flex gap-2">
+<input type="text" id="wlNotes" placeholder="Additional notes or trade-in info..." class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+<button type="submit" id="wlSaveBtn" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer">
+Save Customer
+</button>
+</div>
+</form>
+
+<!-- Customer Wishlist List & Live Matches -->
+<div class="space-y-3">
+<h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Customer Requests & Live Matches</h4>
+<div id="wishlistEntriesContainer" class="space-y-3">
+<p class="text-xs text-gray-500 text-center py-6">Loading wishlist requests...</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Customer Direct Message / Copy Fallback Modal -->
+<div id="notifyCustomerModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-lg rounded-2xl border border-emerald-500/30 p-6 space-y-4 shadow-2xl">
+<div class="flex items-center justify-between border-b border-gray-800 pb-3">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+<i class="fa-solid fa-comment-sms text-sm"></i>
+</div>
+<div>
+<h3 id="notifyModalTitle" class="text-sm font-bold text-white">Contact Customer</h3>
+<p id="notifyModalSubtitle" class="text-xs text-emerald-400 font-medium">✓ Message copied to clipboard!</p>
+</div>
+</div>
+<button onclick="closeModal('notifyCustomerModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-base"></i></button>
+</div>
+
+<div class="space-y-3">
+<div>
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Customer Phone Number</label>
+<div class="flex gap-2">
+<input type="text" id="notifyTargetPhone" readonly class="flex-1 bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-indigo-300 font-mono font-bold">
+<button onclick="navigator.clipboard.writeText(document.getElementById('notifyTargetPhone').value); alert('Phone number copied!');" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold cursor-pointer">
+Copy Phone
+</button>
+</div>
+</div>
+
+<div>
+<label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Message Body</label>
+<textarea id="notifyTargetText" class="w-full h-32 bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-gray-200 focus:outline-none focus:border-emerald-500 leading-relaxed"></textarea>
+</div>
+
+<!-- 1-Click Launchers -->
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+<button onclick="navigator.clipboard.writeText(document.getElementById('notifyTargetText').value); alert('Message copied to clipboard!');" class="py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
+<i class="fa-regular fa-copy"></i>
+<span>Copy Text</span>
+</button>
+<button onclick="triggerDirectDeviceSms()" class="py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
+<i class="fa-solid fa-mobile-screen"></i>
+<span>Open SMS</span>
+</button>
+<a id="notifyEmailLink" href="#" class="col-span-2 sm:col-span-1 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold flex items-center justify-center gap-1.5 transition text-center">
+<i class="fa-solid fa-envelope text-indigo-400"></i>
+<span>Send Email</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 7: CUSTOMER WISHLIST RADAR END ============== -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 8: FACEBOOK FEED MANAGER START ============== -->
+<!-- ============================================================================== -->
+<div id="fbFeedModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div class="glass-panel w-full max-w-4xl rounded-2xl border border-blue-500/30 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+<div class="flex items-center justify-between border-b border-gray-800 pb-4">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+      <i class="fa-brands fa-facebook text-xl"></i>
+    </div>
+    <div>
+      <h3 class="text-base font-bold text-white">My Active Facebook Feed</h3>
+      <p class="text-xs text-gray-400">Manage vehicles currently live on your Facebook Business Page. Mark as sold to auto-update posts.</p>
+    </div>
+  </div>
+  <button onclick="closeModal('fbFeedModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+
+<!-- Facebook Active Posts List -->
+<div class="space-y-3">
+  <div id="fbFeedContainer" class="space-y-3">
+    <p class="text-xs text-gray-500 text-center py-8">Loading your Facebook listings...</p>
+  </div>
+</div>
+</div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 8: FACEBOOK FEED MANAGER END ================ -->
+<!-- ============================================================================== -->
+
+
+<script>
+/* ============================================================================ */
+/* ======================= JAVASCRIPT GLOBAL STATE START ====================== */
+/* ============================================================================ */
+const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
+const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
+
+// Initialize Supabase Client
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let authMode = "signin";
+let currentUser = null;
+
+let currentStore = {
+  name: "Dealership Inventory",
+  pageModifier: "?pt={page}",
+  usedUrl: "",
+  newUrl: "",
+  cpoUrl: "",
+  fbPageId: "",
+  fbAccessToken: "",
+  fbAutoEnabled: true,
+  fbAutoConditions: ["Used", "Certified Pre-Owned"],
+  fbAutoLocations: []
+};
+
+let rawInventory = [];
+let savedVins = new Set();
+let showWishlistOnly = false;
+let myFbFeedList = [];
+const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+/* ============================================================================ */
+/* ======================= JAVASCRIPT GLOBAL STATE END ======================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: AUTH HANDLERS START ====================== */
+/* ============================================================================ */
+function switchAuthMode(mode) {
+authMode = mode;
+toggleForgotPasswordView(false);
+const tabIn = document.getElementById("tabSignIn");
+const tabUp = document.getElementById("tabSignUp");
+const submitBtn = document.getElementById("authSubmitBtn");
+const err = document.getElementById("authErrorMsg");
+err.classList.add("hidden");
+
+if (mode === 'signin') {
+tabIn.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
+tabUp.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
+submitBtn.innerText = "Sign In";
+} else {
+tabUp.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
+tabIn.className = "py-2.5 rounded-lg text-gray-400 hover:text-white transition cursor-pointer";
+submitBtn.innerText = "Register";
+}
+}
+
+function toggleForgotPasswordView(show) {
+const authForm = document.getElementById("authForm");
+const forgotForm = document.getElementById("forgotPasswordForm");
+const tabSwitcher = document.getElementById("authTabSwitcher");
+const err = document.getElementById("authErrorMsg");
+const statusMsg = document.getElementById("resetStatusMsg");
+
+err.classList.add("hidden");
+statusMsg.classList.add("hidden");
+
+if (show) {
+authForm.classList.add("hidden");
+tabSwitcher.classList.add("hidden");
+forgotForm.classList.remove("hidden");
+document.getElementById("resetEmail").value = document.getElementById("authEmail").value || "";
+} else {
+forgotForm.classList.add("hidden");
+tabSwitcher.classList.remove("hidden");
+authForm.classList.remove("hidden");
+}
+}
+
+async function handleForgotPasswordSubmit(e) {
+e.preventDefault();
+const email = document.getElementById("resetEmail").value.trim();
+const statusMsg = document.getElementById("resetStatusMsg");
+const btn = document.getElementById("resetSubmitBtn");
+
+statusMsg.classList.add("hidden");
+btn.disabled = true;
+btn.innerText = "Sending Link...";
+
+try {
+const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+redirectTo: window.location.origin + window.location.pathname
+});
+
+if (error) throw error;
+
+statusMsg.className = "text-xs text-center font-medium text-emerald-400";
+statusMsg.innerText = "✓ Password recovery email sent! Please check your inbox.";
+statusMsg.classList.remove("hidden");
+btn.innerText = "Email Sent";
+} catch (err) {
+console.error("Reset error:", err);
+statusMsg.className = "text-xs text-center font-medium text-rose-400";
+statusMsg.innerText = err.message || "Failed to send reset email.";
+statusMsg.classList.remove("hidden");
+btn.disabled = false;
+btn.innerText = "Send Recovery Link";
+}
+}
+
+function togglePasswordVisibility(inputId, iconId) {
+const passInput = document.getElementById(inputId);
+const toggleIcon = document.getElementById(iconId);
+if (passInput.type === "password") {
+passInput.type = "text";
+toggleIcon.className = "fa-regular fa-eye-slash text-sm";
+} else {
+passInput.type = "password";
+toggleIcon.className = "fa-regular fa-eye text-sm";
+}
+}
+
+async function handleAuthSubmit(e) {
+e.preventDefault();
+const errBox = document.getElementById("authErrorMsg");
+const submitBtn = document.getElementById("authSubmitBtn");
+errBox.classList.add("hidden");
+submitBtn.disabled = true;
+
+const email = document.getElementById("authEmail").value.trim();
+const password = document.getElementById("authPassword").value;
+
+try {
+if (authMode === "signup") {
+submitBtn.innerText = "Registering...";
+const { data, error } = await supabaseClient.auth.signUp({
+email: email,
+password: password
+});
+if (error) throw error;
+
+if (data && data.session) {
+await initAppSession(data.session.user);
+} else if (data && data.user) {
+const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
+email: email,
+password: password
+});
+if (signInErr) throw signInErr;
+await initAppSession(signInData.user);
+}
+} else {
+submitBtn.innerText = "Signing In...";
+const { data, error } = await supabaseClient.auth.signInWithPassword({
+email: email,
+password: password
+});
+if (error) throw error;
+await initAppSession(data.user);
+}
+} catch (err) {
+console.error("Auth error:", err);
+errBox.innerText = err.message || "Authentication failed.";
+errBox.classList.remove("hidden");
+submitBtn.disabled = false;
+submitBtn.innerText = authMode === "signup" ? "Register" : "Sign In";
+}
+}
+
+async function handleSignOut() {
+await supabaseClient.auth.signOut();
+window.location.reload();
+}
+
+async function initAppSession(user) {
+currentUser = user;
+document.getElementById("authOverlay").classList.add("hidden");
+document.getElementById("userDisplayName").innerText = user.email.split("@")[0];
+document.getElementById("userEmailBadge").innerText = user.email;
+
+loadWishlistFromStorage();
+await loadUserStoreSettings();
+await loadFbFeed();
+await fetchLiveInventory(true);
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: AUTH HANDLERS END ======================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: ACCOUNT DELETION START =================== */
+/* ============================================================================ */
+function openDeleteAccountModal() {
+closeModal("dealershipModal");
+document.getElementById("deleteConfirmPassword").value = "";
+document.getElementById("deleteErrorMsg").classList.add("hidden");
+document.getElementById("deleteAccountModal").classList.remove("hidden");
+}
+
+async function confirmDeleteAccount() {
+const pass = document.getElementById("deleteConfirmPassword").value;
+const errBox = document.getElementById("deleteErrorMsg");
+const btn = document.getElementById("confirmDeleteBtn");
+
+if (!pass) {
+errBox.innerText = "Please enter your password to confirm deletion.";
+errBox.classList.remove("hidden");
+return;
+}
+
+errBox.classList.add("hidden");
+btn.disabled = true;
+btn.innerText = "Deleting Account & Purging Data...";
+
+try {
+const { data, error } = await supabaseClient.rpc("delete_user_account", {
+current_password: pass
+});
+
+if (error) throw error;
+
+alert("Your account and all associated inventory data have been permanently deleted.");
+await supabaseClient.auth.signOut();
+window.location.reload();
+} catch (err) {
+console.error("Account deletion error:", err);
+errBox.innerText = err.message || "Failed to delete account. Please verify your password.";
+errBox.classList.remove("hidden");
+btn.disabled = false;
+btn.innerText = "Confirm Permanent Deletion";
+}
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: ACCOUNT DELETION END ===================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: PAGINATION DETECTION START =============== */
+/* ============================================================================ */
+function parsePaginationFromUrl(rawUrl) {
+if (!rawUrl || !rawUrl.trim()) return null;
+const urlStr = rawUrl.trim();
+
+const queryMatch = urlStr.match(/([?&])([a-zA-Z_0-9]+)=2\b/i);
+if (queryMatch) {
+const prefix = queryMatch[1];
+const paramName = queryMatch[2];
+const pattern = prefix + paramName + "={page}";
+const cleanBaseUrl = urlStr.replace(queryMatch[0], "");
+return { baseUrl: cleanBaseUrl, pattern: pattern };
+}
+
+const pathMatch = urlStr.match(/(\/(?:page|p)\/)2(\/?)/i);
+if (pathMatch) {
+const pattern = pathMatch[1] + "{page}" + pathMatch[2];
+const cleanBaseUrl = urlStr.replace(pathMatch[0], "/");
+return { baseUrl: cleanBaseUrl, pattern: pattern };
+}
+
+const startMatch = urlStr.match(/([?&])(start)=([0-9]+)\b/i);
+if (startMatch) {
+const pattern = startMatch[1] + startMatch[2] + "={page}";
+const cleanBaseUrl = urlStr.replace(startMatch[0], "");
+return { baseUrl: cleanBaseUrl, pattern: pattern };
+}
+
+return null;
+}
+
+function handleUrlInput(inputEl) {
+const parsed = parsePaginationFromUrl(inputEl.value);
+if (parsed) {
+inputEl.value = parsed.baseUrl;
+document.getElementById("dealershipPageModifierInput").value = parsed.pattern;
+document.getElementById("detectedPatternText").innerText = parsed.pattern;
+document.getElementById("detectedPatternBadge").classList.remove("hidden");
+}
+}
+
+function toggleAdvancedPagination() {
+const box = document.getElementById("advancedPaginationBox");
+const icon = document.getElementById("advIcon");
+if (box.classList.contains("hidden")) {
+box.classList.remove("hidden");
+icon.className = "fa-solid fa-chevron-up text-[10px] ml-1";
+} else {
+box.classList.add("hidden");
+icon.className = "fa-solid fa-chevron-down text-[10px] ml-1";
+}
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: PAGINATION DETECTION END ================= */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: DEALER SETTINGS START ==================== */
+/* ============================================================================ */
+async function loadUserStoreSettings() {
+if (!currentUser) return;
+try {
+const { data, error } = await supabaseClient
+.from("user_settings")
+.select("*")
+.eq("user_id", currentUser.id)
+.single();
+
+if (data) {
+currentStore = {
+  name: data.store_name || "My Dealership",
+  pageModifier: data.page_modifier || "?pt={page}",
+  usedUrl: data.used_url || "",
+  newUrl: data.new_url || "",
+  cpoUrl: data.certified_url || "",
+  fbPageId: data.fb_page_id || "",
+  fbAccessToken: data.fb_access_token || data.fb_page_token || "",
+  fbAutoEnabled: typeof data.fb_auto_enabled === 'boolean' ? data.fb_auto_enabled : true,
+  fbAutoConditions: Array.isArray(data.fb_auto_conditions) ? data.fb_auto_conditions : ["Used", "Certified Pre-Owned"],
+  fbAutoLocations: Array.isArray(data.fb_auto_locations) ? data.fb_auto_locations : []
+};
+}
+} catch (err) {
+console.warn("User store settings fetch:", err);
+}
+updateStoreUI();
+}
+
+function updateStoreUI() {
+document.getElementById("headerStoreName").innerText = currentStore.name || "Dealership Inventory";
+document.getElementById("bannerStoreTitle").innerText = currentStore.name || "Dealership Inventory";
+document.getElementById("dealershipSlugInput").value = currentUser ? currentUser.id : "Loading...";
+document.getElementById("dealershipNameInput").value = currentStore.name || "";
+document.getElementById("fbPageIdInput").value = currentStore.fbPageId || "";
+document.getElementById("fbAccessTokenInput").value = currentStore.fbAccessToken || "";
+document.getElementById("dealershipPageModifierInput").value = currentStore.pageModifier || "?pt={page}";
+document.getElementById("detectedPatternText").innerText = currentStore.pageModifier || "?pt={page}";
+document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl || "";
+document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || "";
+document.getElementById("dealershipCpoUrlInput").value = currentStore.cpoUrl || "";
+
+// Populate auto-sync checkboxes
+if (document.getElementById("fbAutoEnabledInput")) {
+  document.getElementById("fbAutoEnabledInput").checked = currentStore.fbAutoEnabled;
+}
+
+document.querySelectorAll('input[name="autoCondition"]').forEach(function(cb) {
+  cb.checked = currentStore.fbAutoConditions.includes(cb.value);
+});
+
+// Update location checkboxes in settings modal
+populateModalLocationCheckboxes();
+}
+
+function populateModalLocationCheckboxes() {
+  const container = document.getElementById("modalLocationList");
+  if (!container) return;
+
+  const uniqueLocations = Array.from(new Set(rawInventory.map(c => c.location_name).filter(Boolean))).sort();
+  if (!uniqueLocations.length) {
+    container.innerHTML = '<p class="text-[11px] text-gray-500">No active locations found yet. Sync inventory first.</p>';
+    return;
+  }
+
+  container.innerHTML = uniqueLocations.map(function(loc) {
+    const isChecked = currentStore.fbAutoLocations.length === 0 || currentStore.fbAutoLocations.includes(loc);
+    return '<label class="flex items-center space-x-2 p-1 hover:bg-gray-900 rounded cursor-pointer">' +
+      '<input type="checkbox" name="autoLocation" value="' + loc + '" class="rounded text-blue-600 bg-gray-950 border-gray-700" ' + (isChecked ? 'checked' : '') + '>' +
+      '<span class="text-xs text-gray-300">' + loc + '</span>' +
+    '</label>';
+  }).join('');
+}
+
+function openDealershipModal() {
+updateStoreUI();
+document.getElementById("dealershipModal").classList.remove("hidden");
+}
+
+function toggleAdvancedFilters() {
+var panel = document.getElementById("advancedFilterPanel");
+if (panel) panel.classList.toggle("hidden");
+}
+
+async function saveDealershipProfile() {
+if (!currentUser) return;
+const btn = document.getElementById("saveProfileBtn");
+btn.disabled = true;
+btn.innerText = "Saving to Database...";
+
+const name = document.getElementById("dealershipNameInput").value.trim() || currentStore.name;
+const fbPageId = document.getElementById("fbPageIdInput").value.trim();
+const fbAccessToken = document.getElementById("fbAccessTokenInput").value.trim();
+const fbAutoEnabled = document.getElementById("fbAutoEnabledInput") ? document.getElementById("fbAutoEnabledInput").checked : true;
+
+const selectedConditions = Array.from(
+  document.querySelectorAll('input[name="autoCondition"]:checked')
+).map(cb => cb.value);
+
+const selectedLocations = Array.from(
+  document.querySelectorAll('input[name="autoLocation"]:checked')
+).map(cb => cb.value);
+
+let usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim();
+let newUrl = document.getElementById("dealershipNewUrlInput").value.trim();
+let cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim();
+let pageModifier = document.getElementById("dealershipPageModifierInput").value.trim();
+
+[usedUrl, newUrl, cpoUrl].forEach(url => {
+const parsed = parsePaginationFromUrl(url);
+if (parsed && (!pageModifier || pageModifier === "?pt={page}")) {
+pageModifier = parsed.pattern;
+}
+});
+
+if (!pageModifier) pageModifier = "?pt={page}";
+
+const parsedUsed = parsePaginationFromUrl(usedUrl);
+if (parsedUsed) usedUrl = parsedUsed.baseUrl;
+
+const parsedNew = parsePaginationFromUrl(newUrl);
+if (parsedNew) newUrl = parsedNew.baseUrl;
+
+const parsedCpo = parsePaginationFromUrl(cpoUrl);
+if (parsedCpo) cpoUrl = parsedCpo.baseUrl;
+
+currentStore = { 
+  name, 
+  pageModifier, 
+  usedUrl, 
+  newUrl, 
+  cpoUrl, 
+  fbPageId, 
+  fbAccessToken,
+  fbAutoEnabled,
+  fbAutoConditions: selectedConditions,
+  fbAutoLocations: selectedLocations
+};
+
+try {
+await supabaseClient.from("user_settings").upsert({
+  user_id: currentUser.id,
+  store_name: name,
+  fb_page_id: fbPageId,
+  fb_access_token: fbAccessToken,
+  fb_page_token: fbAccessToken,
+  fb_auto_enabled: fbAutoEnabled,
+  fb_auto_conditions: selectedConditions,
+  fb_auto_locations: selectedLocations,
+  page_modifier: pageModifier,
+  used_url: usedUrl,
+  new_url: newUrl,
+  certified_url: cpoUrl,
+  updated_at: new Date().toISOString()
+});
+alert("✓ Settings & Facebook automation preferences saved successfully!");
+} catch (e) {
+console.error("Save error:", e);
+alert("Settings updated.");
+}
+
+btn.disabled = false;
+btn.innerText = "Save Settings & URLs";
+updateStoreUI();
+closeModal("dealershipModal");
+}
+
+async function triggerLiveLotCrawl() {
+if (!currentUser) return;
+const btn = document.getElementById("crawlTriggerBtn");
+btn.disabled = true;
+btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Dispatching Scraper...';
+
+try {
+const { error } = await supabaseClient.from("scrape_jobs").insert({
+user_id: currentUser.id,
+status: "pending",
+triggered_by: currentUser.email
+});
+
+if (!error) {
+alert("✓ Live lot crawl launched for your account! The background worker is crawling your specific inventory.");
+} else {
+alert("✓ Crawl requested.");
+}
+} catch (err) {
+console.error("Trigger error:", err);
+alert("✓ Crawl requested.");
+}
+
+setTimeout(() => {
+btn.disabled = false;
+btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i> <span class="hidden sm:inline">Sync Dealer Site</span>';
+}, 8000);
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: DEALER SETTINGS END ====================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: INVENTORY LOADER START =================== */
+/* ============================================================================ */
+async function fetchLiveInventory(isManual) {
+if (!currentUser) return;
+const lotBadge = document.getElementById("lotCount");
+try {
+let allCars = [];
+let from = 0;
+const step = 1000;
+let keepFetching = true;
+
+while (keepFetching) {
+const { data, error } = await supabaseClient
+.from("scraped_inventory")
+.select("*")
+.order("price", { ascending: true })
+.range(from, from + step - 1);
+
+if (error) throw error;
+
+if (data && data.length > 0) {
+allCars = allCars.concat(data);
+if (data.length < step) {
+keepFetching = false;
+} else {
+from += step;
+}
+} else {
+keepFetching = false;
+}
+}
+
+rawInventory = allCars.filter(function(c) {
+return c.is_active !== false;
+});
+
+lotBadge.innerText = rawInventory.length + " Units";
+
+const validPrices = rawInventory.map(function(c) { return c.price; }).filter(function(p) { return p && p > 500; });
+if (validPrices.length > 0) {
+const sum = validPrices.reduce(function(a, b) { return a + b; }, 0);
+const avg = Math.round(sum / validPrices.length);
+document.getElementById("avgPrice").innerText = "$" + avg.toLocaleString();
+}
+
+populateLocations(rawInventory);
+populateMakeDropdown(rawInventory);
+populateModalLocationCheckboxes();
+applyFilters();
+} catch (err) {
+console.error("Fetch error:", err);
+lotBadge.innerText = "0 Units";
+}
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: INVENTORY LOADER END ===================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: DROPDOWNS & FILTER LOGIC START =========== */
+/* ============================================================================ */
+function loadWishlistFromStorage() {
+if (!currentUser) return;
+try {
+const stored = localStorage.getItem("autolaunch_wishlist_" + currentUser.id);
+savedVins = new Set(stored ? JSON.parse(stored) : []);
+} catch (e) {
+savedVins = new Set();
+}
+updateWishlistBadge();
+}
+
+function toggleWishlistVin(vin, event) {
+if (event) event.stopPropagation();
+if (!currentUser) return;
+
+if (savedVins.has(vin)) {
+savedVins.delete(vin);
+} else {
+savedVins.add(vin);
+}
+
+try {
+localStorage.setItem("autolaunch_wishlist_" + currentUser.id, JSON.stringify(Array.from(savedVins)));
+} catch (e) {}
+
+updateWishlistBadge();
+applyFilters();
+}
+
+function updateWishlistBadge() {
+const label = document.getElementById("wishlistCountLabel");
+const icon = document.getElementById("wishlistFilterIcon");
+const btn = document.getElementById("wishlistFilterBtn");
+if (label) label.innerText = "Saved (" + savedVins.size + ")";
+
+if (btn && icon) {
+if (showWishlistOnly) {
+btn.className = "px-3 py-2 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-xs font-semibold text-rose-200 flex items-center gap-1.5 transition cursor-pointer";
+icon.className = "fa-solid fa-heart text-rose-400";
+} else {
+btn.className = "px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition cursor-pointer";
+icon.className = (savedVins.size > 0 ? "fa-solid" : "fa-regular") + " fa-heart text-rose-400";
+}
+}
+}
+
+function toggleWishlistOnly() {
+showWishlistOnly = !showWishlistOnly;
+updateWishlistBadge();
+applyFilters();
+}
+
+function populateLocations(cars) {
+const locationSelect = document.getElementById("locationFilter");
+const currentSelected = locationSelect.value;
+const uniqueLocations = Array.from(new Set(cars.map(function(c) { return c.location_name; }).filter(Boolean))).sort();
+
+document.getElementById("activeLotsCountBadge").innerText = uniqueLocations.length + " Locations";
+
+let options = '<option value="ALL">All Locations (' + uniqueLocations.length + ')</option>';
+uniqueLocations.forEach(function(loc) {
+const count = cars.filter(function(c) { return c.location_name === loc; }).length;
+options += '<option value="' + loc + '" ' + (currentSelected === loc ? 'selected' : '') + '>' + loc + ' (' + count + ')</option>';
+});
+locationSelect.innerHTML = options;
+}
+
+function populateMakeDropdown(cars) {
+const makeSelect = document.getElementById("makeFilter");
+const currentMake = makeSelect.value;
+const makes = Array.from(new Set(cars.map(function(c) { return c.make; }).filter(function(m) { return m && m !== "Other"; }))).sort();
+
+let options = '<option value="ALL">All Makes (' + makes.length + ')</option>';
+makes.forEach(function(m) {
+const count = cars.filter(function(c) { return c.make === m; }).length;
+options += '<option value="' + m + '" ' + (currentMake === m ? 'selected' : '') + '>' + m + ' (' + count + ')</option>';
+});
+makeSelect.innerHTML = options;
+populateModelDropdown();
+}
+
+function onMakeChange() {
+populateModelDropdown();
+applyFilters();
+}
+
+function populateModelDropdown() {
+const selectedMake = document.getElementById("makeFilter").value;
+const modelSelect = document.getElementById("modelFilter");
+const currentModel = modelSelect.value;
+
+let filteredCars = rawInventory;
+if (selectedMake !== "ALL") {
+filteredCars = rawInventory.filter(function(c) { return c.make === selectedMake; });
+}
+
+const models = Array.from(new Set(filteredCars.map(function(c) { return c.model; }).filter(function(m) { return m && m !== "Vehicle"; }))).sort();
+
+let options = '<option value="ALL">All Models (' + models.length + ')</option>';
+models.forEach(function(mod) {
+const count = filteredCars.filter(function(c) { return c.model === mod; }).length;
+options += '<option value="' + mod + '" ' + (currentModel === mod ? 'selected' : '') + '>' + mod + ' (' + count + ')</option>';
+});
+modelSelect.innerHTML = options;
+populateTrimDropdown();
+}
+
+function onModelChange() {
+populateTrimDropdown();
+applyFilters();
+}
+
+function populateTrimDropdown() {
+const selectedMake = document.getElementById("makeFilter").value;
+const selectedModel = document.getElementById("modelFilter").value;
+const trimSelect = document.getElementById("trimFilter");
+const currentTrim = trimSelect.value;
+
+let filteredCars = rawInventory;
+if (selectedMake !== "ALL") {
+filteredCars = filteredCars.filter(function(c) { return c.make === selectedMake; });
+}
+if (selectedModel !== "ALL") {
+filteredCars = filteredCars.filter(function(c) { return c.model === selectedModel; });
+}
+
+const trims = Array.from(new Set(filteredCars.map(function(c) { return c.trim; }).filter(Boolean))).sort();
+
+let options = '<option value="ALL">All Trims (' + trims.length + ')</option>';
+trims.forEach(function(t) {
+const count = filteredCars.filter(function(c) { return c.trim === t; }).length;
+options += '<option value="' + t + '" ' + (currentTrim === t ? 'selected' : '') + '>' + t + ' (' + count + ')</option>';
+});
+trimSelect.innerHTML = options;
+}
+
+function applyFilters() {
+const query = (document.getElementById("searchInput").value || "").toLowerCase();
+const locationFilter = document.getElementById("locationFilter").value;
+const cond = document.getElementById("conditionFilter").value;
+const sort = document.getElementById("sortSelect").value;
+
+const makeFilter = document.getElementById("makeFilter").value;
+const modelFilter = document.getElementById("modelFilter").value;
+const trimFilter = document.getElementById("trimFilter").value;
+
+const bodyFilter = document.getElementById("bodyFilter") ? document.getElementById("bodyFilter").value : "ALL";
+const colorFilter = document.getElementById("colorFilter") ? document.getElementById("colorFilter").value : "ALL";
+const transFilter = document.getElementById("transFilter") ? document.getElementById("transFilter").value : "ALL";
+const minYear = document.getElementById("minYearFilter") ? document.getElementById("minYearFilter").value : "ALL";
+const maxMiles = document.getElementById("maxMilesFilter") ? document.getElementById("maxMilesFilter").value : "ALL";
+
+let filtered = rawInventory.filter(function(car) {
+if (showWishlistOnly && !savedVins.has(car.vin)) {
+return false;
+}
+
+const title = ((car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " " + (car.trim || '') + " " + (car.vin || '') + " " + (car.location_name || '') + " " + (car.color || '') + " " + (car.body_type || '')).toLowerCase();
+const matchesQuery = !query || title.indexOf(query) !== -1;
+const matchesLocation = locationFilter === "ALL" || (car.location_name || '') === locationFilter;
+
+let matchesCond = false;
+if (cond === "ALL") matchesCond = true;
+else if (cond === "Used" && (car.condition === "Used" || !car.condition)) matchesCond = true;
+else if (cond === "Certified Pre-Owned" && car.condition === "Certified Pre-Owned") matchesCond = true;
+else if (cond === "New" && car.condition === "New") matchesCond = true;
+
+const matchesMake = makeFilter === "ALL" || car.make === makeFilter;
+const matchesModel = modelFilter === "ALL" || car.model === modelFilter;
+const matchesTrim = trimFilter === "ALL" || car.trim === trimFilter;
+
+const matchesBody = bodyFilter === "ALL" || (car.body_type || '') === bodyFilter;
+const matchesColor = colorFilter === "ALL" || (car.color || '').toLowerCase().indexOf(colorFilter.toLowerCase()) !== -1;
+const matchesTrans = transFilter === "ALL" || (car.transmission || 'Automatic').indexOf(transFilter) !== -1;
+const matchesYear = minYear === "ALL" || ((car.year || 0) >= parseInt(minYear));
+const matchesMiles = maxMiles === "ALL" || ((car.mileage || 0) <= parseInt(maxMiles));
+
+return matchesQuery && matchesLocation && matchesCond && matchesMake && matchesModel && matchesTrim && matchesBody && matchesColor && matchesTrans && matchesYear && matchesMiles;
+});
+
+filtered.sort(function(a, b) {
+const priceA = a.price && a.price > 0 ? a.price : 9999999;
+const priceB = b.price && b.price > 0 ? b.price : 9999999;
+
+if (sort === "price_asc") return priceA - priceB;
+if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
+if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
+if (sort === "year_desc") return (b.year || 0) - (a.year || 0);
+return 0;
+});
+
+renderGrid(filtered);
+}
+
+function resetFilters() {
+document.getElementById("searchInput").value = "";
+document.getElementById("locationFilter").value = "ALL";
+document.getElementById("conditionFilter").value = "ALL";
+document.getElementById("makeFilter").value = "ALL";
+showWishlistOnly = false;
+updateWishlistBadge();
+populateModelDropdown();
+if (document.getElementById("bodyFilter")) document.getElementById("bodyFilter").value = "ALL";
+if (document.getElementById("colorFilter")) document.getElementById("colorFilter").value = "ALL";
+if (document.getElementById("transFilter")) document.getElementById("transFilter").value = "ALL";
+if (document.getElementById("minYearFilter")) document.getElementById("minYearFilter").value = "ALL";
+if (document.getElementById("maxMilesFilter")) document.getElementById("maxMilesFilter").value = "ALL";
+applyFilters();
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: DROPDOWNS & FILTER LOGIC END ============= */
+/* ============================================================================ */
+
+/* ============================================================================ */
+/* ======================= FUNCTION: INVENTORY CARD RENDERER START =========== */
+/* ============================================================================ */
+function renderGrid(cars) {
+const grid = document.getElementById("inventoryGrid");
+if (!cars.length) {
+grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500">No vehicles match your active search filters.</div>';
+return;
+}
+
+let html = "";
+cars.forEach(function(car) {
+let photoUrl = car.image_url;
+if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
+
+const displayPrice = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
+const displayPayment = car.price && car.price > 0 ? "~$" + Math.round(car.price / 72) + "/mo" : "Finance Avail";
+
+let badgeColor = "bg-amber-500/20 text-amber-300 border-amber-500/30";
+if (car.condition === "Certified Pre-Owned") badgeColor = "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
+else if (car.condition === "New") badgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+
+const bodyBadge = (car.body_type && car.body_type !== 'Other') ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">' + car.body_type + '</span>' : '';
+const linkUrl = car.detail_url || car.listing_url || "#";
+const isSaved = savedVins.has(car.vin);
+const heartClass = isSaved ? "fa-solid fa-heart text-rose-500" : "fa-regular fa-heart text-white/80 hover:text-white";
+
+const isAlreadyInFeed = myFbFeedList.some(function(item) { return item.vin === car.vin && item.status === 'published'; });
+const fbBtnClass = isAlreadyInFeed ? "bg-emerald-950/60 text-emerald-300 border-emerald-600/40" : "bg-blue-950/60 hover:bg-blue-900/60 text-blue-200 border-blue-700/40";
+const fbBtnText = isAlreadyInFeed ? "In Feed" : "+ FB Feed";
+const fbBtnIcon = isAlreadyInFeed ? "fa-solid fa-check text-emerald-400" : "fa-brands fa-facebook text-blue-400";
+
+html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
+'<div>' +
+'<div class="h-48 w-full bg-gray-900 relative overflow-hidden group border-b border-gray-800">' +
+'<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="block w-full h-full cursor-pointer">' +
+'<img src="' + photoUrl + '" onerror="this.onerror=null; this.src=\'' + FALLBACK_IMAGE + '\';" alt="Vehicle Photo" class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-300">' +
+'</a>' +
+'<div class="absolute top-3 left-3 flex gap-1.5 flex-wrap z-10">' +
+'<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + badgeColor + ' backdrop-blur-md">' + (car.condition || 'Used') + '</span>' +
+bodyBadge +
+'</div>' +
+'<button onclick="toggleWishlistVin(\'' + car.vin + '\', event)" title="' + (isSaved ? "Remove from Saved" : "Save to Wishlist") + '" class="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/10 flex items-center justify-center transition cursor-pointer">' +
+'<i class="' + heartClass + ' text-sm"></i>' +
+'</button>' +
+'<div class="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-white border border-white/10">' +
+displayPayment +
+'</div>' +
+'</div>' +
+'<div class="p-4 space-y-2">' +
+'<div class="flex items-baseline justify-between">' +
+'<span class="text-xl font-black text-white">' + displayPrice + '</span>' +
+'<span class="text-xs font-medium text-gray-400">' + ((car.mileage || 0).toLocaleString()) + ' mi</span>' +
+'</div>' +
+'<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="group flex items-center justify-between text-gray-100 hover:text-indigo-400 transition cursor-pointer">' +
+'<h4 class="font-bold text-sm truncate">' + (car.year || '') + ' ' + (car.make || '') + ' ' + (car.model || 'Vehicle') + (car.trim ? ' ' + car.trim : '') + '</h4>' +
+'<i class="fa-solid fa-arrow-up-right-from-square text-xs text-gray-500 group-hover:text-indigo-400 ml-1"></i>' +
+'</a>' +
+'<p class="text-xs text-indigo-300 truncate font-medium"><i class="fa-solid fa-location-dot mr-1"></i>' + (car.location_name || currentStore.name) + '</p>' +
+'<div class="flex items-center gap-2 pt-1 text-[11px] text-gray-400">' +
+'<span><i class="fa-solid fa-palette text-gray-500 mr-1"></i>' + (car.color || 'Standard') + '</span>' +
+'<span>•</span>' +
+'<span><i class="fa-solid fa-gears text-gray-500 mr-1"></i>' + (car.transmission || 'Automatic') + '</span>' +
+'</div>' +
+'<p class="text-[11px] font-mono text-gray-500">VIN: ' + (car.vin || 'N/A') + '</p>' +
+'</div>' +
+'</div>' +
+'<div class="p-4 pt-0 grid grid-cols-3 gap-2">' +
+'<button onclick="openShareModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
+'<i class="fa-solid fa-share-nodes text-indigo-400"></i><span>Share</span>' +
+'</button>' +
+'<button id="cardFbBtn_' + car.vin + '" onclick="publishCarToFacebook(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer ' + fbBtnClass + '">' +
+'<i class="' + fbBtnIcon + '"></i><span>' + fbBtnText + '</span>' +
+'</button>' +
+'<button onclick="openTikTokModalByVin(\'' + car.vin + '\')" class="py-2 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/50 border border-rose-700/40 text-rose-200 text-xs font-semibold flex items-center justify-center gap-1 transition cursor-pointer">' +
+'<i class="fa-brands fa-tiktok text-rose-400"></i><span>Video</span>' +
+'</button>' +
+'</div>' +
+'</div>';
+});
+
+grid.innerHTML = html;
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: INVENTORY CARD RENDERER END ============= */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: SOCIAL / SMS GENERATORS START =========== */
+/* ============================================================================ */
+let customerWishlists = [];
+let currentNotifyData = { phone: "", body: "" };
+
+// ---------------- FACEBOOK AUTO-POSTING & FEED MANAGEMENT ----------------
+async function loadFbFeed() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("facebook_ad_feed")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    myFbFeedList = data || [];
+    updateFbFeedBadge();
+    renderFbFeedEntries();
+  } catch (err) {
+    console.error("Load FB Feed error:", err);
+  }
+}
+
+function updateFbFeedBadge() {
+  const activeCount = myFbFeedList.filter(function(i) { return i.status === 'published'; }).length;
+  const badge = document.getElementById("fbFeedCountBadge");
+  if (badge) {
+    if (activeCount > 0) {
+      badge.innerText = activeCount;
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+}
+
+function openFbFeedModal() {
+  loadFbFeed();
+  document.getElementById("fbFeedModal").classList.remove("hidden");
+}
+
+async function publishCarToFacebook(vin) {
+  if (!currentUser) return;
+
+  if (!currentStore.fbPageId || !currentStore.fbAccessToken) {
+    alert("Facebook Business Page credentials missing!\n\nPlease open 'Dealership Settings' and enter your Facebook Page ID and Page Access Token first.");
+    openDealershipModal();
+    return;
+  }
+
+  const car = rawInventory.find(function(c) { return c.vin === vin; });
+  if (!car) return;
+
+  const btn = document.getElementById("cardFbBtn_" + vin);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-blue-400"></i> Publishing...';
+  }
+
+  const store = car.location_name || currentStore.name || "Our Dealership";
+  const carTitle = (car.year || '') + " " + (car.make || '') + " " + (car.model || 'Vehicle') + (car.trim ? ' ' + car.trim : '');
+  const priceClean = (car.price && car.price > 0) ? "$" + car.price.toLocaleString() : "Call for Price";
+  const milesClean = (car.mileage || 0).toLocaleString();
+  const listingUrl = car.detail_url || car.listing_url || "";
+
+  let photoUrl = car.image_url;
+  if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+
+  const fbCaption = "🔥 FRESH ARRIVAL: " + carTitle + " 🔥\n\n" +
+    "📍 Available at: " + store + "\n" +
+    "💰 Price: " + priceClean + "\n" +
+    "🛣️ Mileage: " + milesClean + " miles\n" +
+    "⚙️ Transmission: " + (car.transmission || "Automatic") + "\n" +
+    "🎨 Exterior: " + (car.color || "Standard") + "\n" +
+    "🏷️ Condition: " + (car.condition || "Inspected & Certified") + "\n" +
+    "🆔 VIN: " + (car.vin || "Available upon request") + "\n\n" +
+    "HIGHLIGHTS:\n" +
+    "✅ Fully inspected & front-line ready\n" +
+    "✅ Clean Title\n" +
+    "✅ All trades accepted\n" +
+    "✅ Financing available for all credit tiers\n" +
+    (listingUrl ? "✅ Full vehicle specs: " + listingUrl + "\n\n" : "\n") +
+    "💬 Send a direct message to check availability or schedule a test drive before it sells!";
+
+  try {
+    let fbPostId = null;
+    let fbEndpoint = "https://graph.facebook.com/v26.0/" + encodeURIComponent(currentStore.fbPageId);
+    let payload = new FormData();
+    payload.append("access_token", currentStore.fbAccessToken);
+
+    if (photoUrl && photoUrl !== FALLBACK_IMAGE) {
+      fbEndpoint += "/photos";
+      payload.append("url", photoUrl);
+      payload.append("caption", fbCaption);
+    } else {
+      fbEndpoint += "/feed";
+      payload.append("message", fbCaption);
+    }
+
+    const res = await fetch(fbEndpoint, {
+      method: "POST",
+      body: payload
+    });
+
+    const resData = await res.json();
+
+    if (resData.error) {
+      throw new Error(resData.error.message || "Meta API error occurred.");
+    }
+
+    fbPostId = resData.post_id || resData.id;
+
+    // Record in Supabase
+    await supabaseClient.from("facebook_ad_feed").insert({
+      user_id: currentUser.id,
+      vin: car.vin,
+      year: car.year,
+      make: car.make,
+      model: car.model,
+      trim: car.trim,
+      price: car.price,
+      mileage: car.mileage,
+      image_url: photoUrl,
+      detail_url: listingUrl,
+      fb_post_id: fbPostId,
+      status: 'published'
+    });
+
+    alert("✓ Published to your Facebook Business Page successfully!\nPost ID: " + fbPostId);
+    await loadFbFeed();
+    applyFilters();
+  } catch (err) {
+    console.error("Facebook publish error:", err);
+    alert("Failed to publish to Facebook:\n" + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-brands fa-facebook text-blue-400"></i> + FB Feed';
+    }
+  }
+}
+
+async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
+  if (!confirm("Mark this vehicle as SOLD on Facebook?\n\nAutoLaunch will append '🔴 SOLD!' to the Facebook post and remove it from your active feed.")) return;
+
+  const btn = document.getElementById("soldBtn_" + feedId);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "Updating FB Post...";
+  }
+
+  try {
+    if (currentStore.fbAccessToken && fbPostId) {
+      const updatedMessage = "🔴 SOLD! CONGRATULATIONS TO THE NEW OWNER! 🔴\n\n" + (currentCaption || "This vehicle has been sold.");
+      const res = await fetch("https://graph.facebook.com/v26.0/" + encodeURIComponent(fbPostId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_token: currentStore.fbAccessToken,
+          message: updatedMessage
+        })
       });
-    }
 
-    if (closeSettingsBtn) {
-      closeSettingsBtn.addEventListener('click', () => {
-        settingsModal?.classList.add('hidden');
-      });
-    }
-
-    // Handle "Select All" Conditions Toggle
-    const condSelectAll = document.getElementById('condSelectAll');
-    if (condSelectAll) {
-      condSelectAll.addEventListener('change', (e) => {
-        document.querySelectorAll('input[name="autoCondition"]').forEach(cb => cb.checked = e.target.checked);
-      });
-    }
-
-    // --- 4. Fetch Inventory from Supabase ---
-    async function fetchInventory() {
-      try {
-        const { data, error } = await supabase
-          .from('scraped_inventory')
-          .select('*')
-          .eq('is_active', true);
-
-        if (error) {
-          console.error("Supabase fetch error:", error);
-          if (inventoryGrid) inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Error loading inventory: ${error.message}</div>`;
-          return;
-        }
-
-        if (!data || data.length === 0) {
-          if (unitBadge) unitBadge.innerText = '0 Units';
-          if (inventoryGrid) inventoryGrid.innerHTML = `<div class="col-span-full py-16 text-center text-gray-500">No active inventory found.</div>`;
-          return;
-        }
-
-        allInventory = data;
-        if (unitBadge) unitBadge.innerText = `${data.length} Units`;
-
-        // Populate location dropdown options
-        const locations = Array.from(new Set(data.map(d => d.location_name).filter(Boolean)));
-        if (filterLocation) {
-          filterLocation.innerHTML = '<option value="ALL">All Locations</option>' + 
-            locations.map(loc => `<option value="${loc}">${loc}</option>`).join('');
-        }
-
-        // Populate modal location checkboxes
-        const locContainer = document.getElementById('locationCheckboxes');
-        if (locContainer && locations.length > 0) {
-          locContainer.innerHTML = locations.map(loc => `
-            <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer">
-              <input type="checkbox" name="autoLocation" value="${loc}" class="rounded text-indigo-600 bg-gray-800 border-gray-700" checked>
-              <span class="text-xs text-gray-200">${loc}</span>
-            </label>
-          `).join('');
-        }
-
-        renderCards(allInventory);
-      } catch (err) {
-        console.error("Unexpected error:", err);
-        if (inventoryGrid) inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Failed to render inventory: ${err.message}</div>`;
+      const resData = await res.json();
+      if (resData.error) {
+        console.warn("Meta edit post notice:", resData.error.message);
       }
     }
 
-    // --- 5. Render Vehicle Cards ---
-    function renderCards(vehicles) {
-      if (!inventoryGrid) return;
-      if (vehicles.length === 0) {
-        inventoryGrid.innerHTML = `<div class="col-span-full py-16 text-center text-gray-500">No vehicles match your criteria.</div>`;
-        return;
-      }
+    await supabaseClient
+      .from("facebook_ad_feed")
+      .update({
+        status: "sold",
+        sold_at: new Date().toISOString()
+      })
+      .eq("id", feedId);
 
-      inventoryGrid.innerHTML = vehicles.map(car => `
-        <div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between group hover:border-indigo-500/50 transition">
-          <div class="relative aspect-video bg-gray-950 overflow-hidden">
-            <img src="${car.image_url || 'https://via.placeholder.com/640x360?text=No+Photo'}" 
-                 alt="${car.year} ${car.make} ${car.model}" 
-                 class="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                 onerror="this.src='https://via.placeholder.com/640x360?text=Photo+Unavailable'">
-            <span class="absolute top-2.5 left-2.5 px-2 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase ${car.condition === 'Certified Pre-Owned' ? 'bg-amber-500/90 text-black' : (car.condition === 'New' ? 'bg-emerald-500/90 text-white' : 'bg-gray-800/90 text-gray-200')}">
-              ${car.condition || 'Used'}
-            </span>
-          </div>
-
-          <div class="p-4 flex-1 flex flex-col justify-between">
-            <div>
-              <div class="text-xs text-indigo-400 font-medium mb-1">${car.location_name || 'Moses Auto Group'}</div>
-              <h3 class="text-base font-bold text-white leading-snug line-clamp-1">${car.year} ${car.make} ${car.model}</h3>
-              <p class="text-xs text-gray-400 mb-2">${car.trim || ''} • ${Number(car.mileage || 0).toLocaleString()} mi</p>
-              <div class="text-lg font-extrabold text-emerald-400 mb-2">
-                $${Number(car.price || 0).toLocaleString()}
-              </div>
-            </div>
-
-            <div class="pt-3 border-t border-gray-800/80 flex items-center gap-2">
-              <button onclick="publishSingle('${car.vin}')" class="flex-1 py-2 bg-indigo-600/80 hover:bg-indigo-600 text-xs font-semibold text-white rounded-lg flex items-center justify-center gap-1.5 transition">
-                <i class="fa-brands fa-facebook"></i>
-                <span>+ FB Feed</span>
-              </button>
-              <a href="${car.detail_url || '#'}" target="_blank" class="px-2.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition">
-                <i class="fa-solid fa-arrow-up-right-from-square"></i>
-              </a>
-            </div>
-          </div>
-        </div>
-      `).join('');
+    alert("✓ Vehicle marked as SOLD! Post updated on Facebook.");
+    await loadFbFeed();
+    applyFilters();
+  } catch (err) {
+    console.error("Mark sold error:", err);
+    alert("Failed to update status: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "Mark as Sold";
     }
+  }
+}
 
-    // --- 6. Front-End Filtering & Search ---
-    function applyFilters() {
-      const cond = filterCondition?.value || 'ALL';
-      const loc = filterLocation?.value || 'ALL';
-      const term = searchInput?.value.toLowerCase().trim() || '';
+function renderFbFeedEntries() {
+  const container = document.getElementById("fbFeedContainer");
+  if (!container) return;
 
-      const filtered = allInventory.filter(car => {
-        const matchesCond = cond === 'ALL' || (car.condition && car.condition.toLowerCase().includes(cond.toLowerCase()));
-        const matchesLoc = loc === 'ALL' || car.location_name === loc;
-        const matchesSearch = !term || 
-          `${car.year} ${car.make} ${car.model} ${car.vin}`.toLowerCase().includes(term);
-        return matchesCond && matchesLoc && matchesSearch;
-      });
+  const activePosts = myFbFeedList.filter(function(i) { return i.status === 'published'; });
 
-      renderCards(filtered);
-    }
+  if (!activePosts.length) {
+    container.innerHTML = '<div class="text-center py-10 space-y-2">' +
+      '<i class="fa-brands fa-facebook text-gray-600 text-3xl"></i>' +
+      '<p class="text-xs text-gray-400">No vehicles currently active in your Facebook feed.</p>' +
+      '<p class="text-[11px] text-gray-500">Click <strong>"+ FB Feed"</strong> on any car card to post automatically to your Facebook Business Page.</p>' +
+    '</div>';
+    return;
+  }
 
-    filterCondition?.addEventListener('change', applyFilters);
-    filterLocation?.addEventListener('change', applyFilters);
-    searchInput?.addEventListener('input', applyFilters);
+  let html = "";
+  activePosts.forEach(function(item) {
+    const postLink = item.fb_post_id ? ("https://facebook.com/" + item.fb_post_id) : "#";
+    const carTitle = (item.year || '') + " " + (item.make || '') + " " + (item.model || 'Vehicle') + (item.trim ? ' ' + item.trim : '');
+    const priceClean = item.price ? "$" + item.price.toLocaleString() : "Call for Price";
+    const milesClean = (item.mileage || 0).toLocaleString() + " mi";
 
-    // --- 7. Load User Settings from Database ---
-    async function loadSettings() {
-      const { data } = await supabase.from('user_settings').select('*').limit(1).single();
-      if (!data) return;
+    html += '<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">' +
+      '<div class="flex items-center gap-3 w-full sm:w-auto">' +
+        '<img src="' + (item.image_url || FALLBACK_IMAGE) + '" class="w-16 h-16 rounded-lg object-cover border border-gray-800 flex-shrink-0">' +
+        '<div>' +
+          '<h5 class="text-sm font-bold text-white">' + carTitle + '</h5>' +
+          '<div class="text-xs text-emerald-400 font-bold">' + priceClean + ' <span class="text-gray-400 font-normal">• ' + milesClean + '</span></div>' +
+          '<div class="flex items-center gap-2 pt-1">' +
+            '<span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">Live on Page</span>' +
+            (item.fb_post_id ? '<a href="' + postLink + '" target="_blank" class="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold cursor-pointer"><i class="fa-brands fa-facebook"></i> View Post <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="flex items-center gap-2 w-full sm:w-auto justify-end">' +
+        '<button id="soldBtn_' + item.id + '" onclick="markCarAsSoldOnFacebook(\'' + item.id + '\', \'' + (item.fb_post_id || '') + '\', \'' + carTitle + '\')" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer">' +
+          '<i class="fa-solid fa-tag mr-1"></i> Mark as Sold' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  });
 
-      currentUserId = data.user_id || "";
-      if (document.getElementById('fbPageId')) document.getElementById('fbPageId').value = data.fb_page_id || '';
-      if (document.getElementById('fbPageToken')) document.getElementById('fbPageToken').value = data.fb_page_token || '';
-      if (document.getElementById('usedUrl')) document.getElementById('usedUrl').value = data.used_url || '';
-      if (document.getElementById('certifiedUrl')) document.getElementById('certifiedUrl').value = data.certified_url || '';
+  container.innerHTML = html;
+}
 
-      if (typeof data.fb_auto_enabled === 'boolean' && document.getElementById('fbAutoEnabled')) {
-        document.getElementById('fbAutoEnabled').checked = data.fb_auto_enabled;
-      }
+// ---------------- WISHLIST & QUICK NOTIFY FUNCTIONS ----------------
+function openWishlistModal() {
+cancelWishlistEdit();
+loadCustomerWishlists();
+document.getElementById("wishlistModal").classList.remove("hidden");
+}
 
-      if (Array.isArray(data.fb_auto_conditions)) {
-        document.querySelectorAll('input[name="autoCondition"]').forEach(cb => {
-          cb.checked = data.fb_auto_conditions.includes(cb.value);
-        });
-      }
+async function loadCustomerWishlists() {
+if (!currentUser) return;
+try {
+const { data, error } = await supabaseClient
+.from("customer_wishlists")
+.select("*")
+.eq("user_id", currentUser.id)
+.order("created_at", { ascending: false });
 
-      if (Array.isArray(data.fb_auto_locations) && data.fb_auto_locations.length > 0) {
-        document.querySelectorAll('input[name="autoLocation"]').forEach(cb => {
-          cb.checked = data.fb_auto_locations.includes(cb.value);
-        });
-      }
-    }
+if (error) throw error;
+customerWishlists = data || [];
+renderWishlistEntries();
+scanWishlistMatches();
+} catch (err) {
+console.error("Error loading customer wishlists:", err);
+}
+}
 
-    // --- 8. Save User Settings Form Handler ---
-    if (settingsForm) {
-      settingsForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const saveBtn = document.getElementById('saveSettingsBtn');
-        if (saveBtn) {
-          saveBtn.innerText = 'Saving...';
-          saveBtn.disabled = true;
-        }
+function editWishlistEntry(id) {
+const item = customerWishlists.find(function(c) { return c.id === id; });
+if (!item) return;
 
-        const fbPageId = document.getElementById('fbPageId')?.value.trim() || '';
-        const fbPageToken = document.getElementById('fbPageToken')?.value.trim() || '';
-        const usedUrl = document.getElementById('usedUrl')?.value.trim() || '';
-        const certifiedUrl = document.getElementById('certifiedUrl')?.value.trim() || '';
-        const fbAutoEnabled = document.getElementById('fbAutoEnabled') ? document.getElementById('fbAutoEnabled').checked : true;
+document.getElementById("wlEditId").value = item.id;
+document.getElementById("wlName").value = item.customer_name || "";
+document.getElementById("wlPhone").value = item.customer_phone || "";
+document.getElementById("wlEmail").value = item.customer_email || "";
+document.getElementById("wlMake").value = item.target_make || "";
+document.getElementById("wlModel").value = item.target_model || "";
+document.getElementById("wlMinYear").value = item.min_year || "";
+document.getElementById("wlMaxMiles").value = item.max_miles || "";
+document.getElementById("wlTrans").value = item.transmission || "";
+document.getElementById("wlNotes").value = item.notes || "";
 
-        const selectedConditions = Array.from(
-          document.querySelectorAll('input[name="autoCondition"]:checked')
-        ).map(cb => cb.value);
+document.getElementById("wlFormTitle").innerText = "Edit Customer & Specs";
+document.getElementById("wlSaveBtn").innerText = "Update Customer";
+document.getElementById("wlCancelEditBtn").classList.remove("hidden");
 
-        const selectedLocations = Array.from(
-          document.querySelectorAll('input[name="autoLocation"]:checked')
-        ).map(cb => cb.value);
+document.getElementById("addWishlistForm").scrollIntoView({ behavior: "smooth" });
+}
 
-        const payload = {
-          fb_page_id: fbPageId,
-          fb_page_token: fbPageToken,
-          used_url: usedUrl,
-          certified_url: certifiedUrl,
-          fb_auto_conditions: selectedConditions,
-          fb_auto_locations: selectedLocations,
-          fb_auto_enabled: fbAutoEnabled
-        };
+function cancelWishlistEdit() {
+document.getElementById("addWishlistForm").reset();
+document.getElementById("wlEditId").value = "";
+document.getElementById("wlFormTitle").innerText = "Add Customer Request";
+document.getElementById("wlSaveBtn").innerText = "Save Customer";
+document.getElementById("wlCancelEditBtn").classList.add("hidden");
+}
 
-        let res;
-        if (currentUserId) {
-          res = await supabase.from('user_settings').update(payload).eq('user_id', currentUserId);
-        } else {
-          res = await supabase.from('user_settings').update(payload).limit(1);
-        }
+async function saveCustomerWishlist(e) {
+e.preventDefault();
+if (!currentUser) return;
+const btn = document.getElementById("wlSaveBtn");
+const editId = document.getElementById("wlEditId").value;
+btn.disabled = true;
+btn.innerText = editId ? "Updating..." : "Saving...";
 
-        if (saveBtn) {
-          saveBtn.innerText = 'Save Settings & URLs';
-          saveBtn.disabled = false;
-        }
+const payload = {
+user_id: currentUser.id,
+customer_name: document.getElementById("wlName").value.trim(),
+customer_phone: document.getElementById("wlPhone").value.trim() || null,
+customer_email: document.getElementById("wlEmail").value.trim() || null,
+target_make: document.getElementById("wlMake").value.trim() || null,
+target_model: document.getElementById("wlModel").value.trim() || null,
+min_year: document.getElementById("wlMinYear").value ? parseInt(document.getElementById("wlMinYear").value) : null,
+max_miles: document.getElementById("wlMaxMiles").value ? parseInt(document.getElementById("wlMaxMiles").value) : null,
+transmission: document.getElementById("wlTrans").value || null,
+notes: document.getElementById("wlNotes").value.trim() || null
+};
 
-        if (res?.error) {
-          alert('Error saving preferences: ' + res.error.message);
-        } else {
-          alert('Settings & Automation rules saved successfully!');
-          settingsModal?.classList.add('hidden');
-        }
-      });
-    }
+try {
+let resError;
+if (editId) {
+const { error } = await supabaseClient
+.from("customer_wishlists")
+.update(payload)
+.eq("id", editId)
+.eq("user_id", currentUser.id);
+resError = error;
+} else {
+const { error } = await supabaseClient
+.from("customer_wishlists")
+.insert(payload);
+resError = error;
+}
 
-    // --- 9. Manual Single Publish Fallback ---
-    window.publishSingle = async function(vin) {
-      const car = allInventory.find(c => c.vin === vin);
-      if (!car) return;
+if (resError) throw resError;
+cancelWishlistEdit();
+await loadCustomerWishlists();
+} catch (err) {
+alert("Failed to save changes: " + err.message);
+}
+btn.disabled = false;
+btn.innerText = document.getElementById("wlEditId").value ? "Update Customer" : "Save Customer";
+}
 
-      const pageId = document.getElementById('fbPageId')?.value || '1198606820007865';
-      const token = document.getElementById('fbPageToken')?.value;
+async function deleteWishlistEntry(id) {
+if (!confirm("Are you sure you want to remove this customer request?")) return;
+try {
+const { error } = await supabaseClient.from("customer_wishlists").delete().eq("id", id).eq("user_id", currentUser.id);
+if (error) throw error;
+if (document.getElementById("wlEditId").value === id) {
+cancelWishlistEdit();
+}
+await loadCustomerWishlists();
+} catch (err) {
+alert("Delete failed: " + err.message);
+}
+}
 
-      if (!token) {
-        alert('Please open Dealership Settings and add your Facebook Page Access Token first.');
-        return;
-      }
+function scanWishlistMatches() {
+let totalMatches = 0;
+customerWishlists.forEach(function(item) {
+const matches = findMatchingVehicles(item);
+item._matches = matches;
+totalMatches += matches.length;
+});
 
-      const caption = `🔥 FRESH ARRIVAL: ${car.year} ${car.make} ${car.model}\n` +
-        `📍 Available at: ${car.location_name || 'Moses Auto Group'}\n` +
-        `💵 Price: $${Number(car.price || 0).toLocaleString()}\n` +
-        `⏱ Mileage: ${Number(car.mileage || 0).toLocaleString()} mi\n` +
-        `⚙️ Condition: ${car.condition || 'Used'}\n` +
-        `🆔 VIN: ${car.vin}\n\n` +
-        `✅ Fully inspected & front-line ready\n` +
-        `✅ Clean Title\n` +
-        `✅ All trades accepted\n` +
-        `🔗 Specs: ${car.detail_url || ''}\n\n` +
-        `💬 Send a direct message to check availability or schedule a test drive!`;
+const badge = document.getElementById("wishlistMatchBadge");
+if (badge) {
+if (totalMatches > 0) {
+badge.innerText = totalMatches;
+badge.classList.remove("hidden");
+} else {
+badge.classList.add("hidden");
+}
+}
+renderWishlistEntries();
+}
 
-      try {
-        const res = await fetch(`https://graph.facebook.com/v26.0/${pageId}/photos`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: car.image_url,
-            message: caption,
-            access_token: token
-          })
-        });
-        const resData = await res.json();
-        if (resData.id || resData.post_id) {
-          alert('✓ Published to Facebook Page successfully!\nPost ID: ' + (resData.post_id || resData.id));
-        } else {
-          alert('Facebook Error: ' + JSON.stringify(resData.error));
-        }
-      } catch (err) {
-        alert('Failed to publish: ' + err.message);
-      }
-    };
+function findMatchingVehicles(criteria) {
+return rawInventory.filter(function(car) {
+if (criteria.target_make && (!car.make || car.make.toLowerCase().indexOf(criteria.target_make.toLowerCase()) === -1)) return false;
+if (criteria.target_model && (!car.model || car.model.toLowerCase().indexOf(criteria.target_model.toLowerCase()) === -1)) return false;
+if (criteria.min_year && (!car.year || car.year < criteria.min_year)) return false;
+if (criteria.max_miles && (!car.mileage || car.mileage > criteria.max_miles)) return false;
+if (criteria.transmission && (!car.transmission || car.transmission.toLowerCase().indexOf(criteria.transmission.toLowerCase()) === -1)) return false;
+return true;
+});
+}
 
-    // --- 10. Initial Run ---
-    fetchInventory();
-  </script>
-  <!-- END SECTION: JAVASCRIPT APPLICATION LOGIC -->
+function notifyCustomerSms(wishlistId, vin) {
+const item = customerWishlists.find(function(c) { return c.id === wishlistId; });
+const car = rawInventory.find(function(c) { return c.vin === vin; });
+if (!car) return;
 
+const firstName = item ? item.customer_name.split(" ")[0] : "there";
+const cleanPhone = item && item.customer_phone ? item.customer_phone.replace(/[^0-9+]/g, "") : "";
+const priceText = car.price ? "$" + car.price.toLocaleString() : "Call for Price";
+const linkText = (car.detail_url || car.listing_url) ? ("\nLink: " + (car.detail_url || car.listing_url)) : "";
+
+const body = "Hey " + firstName + "! Great news—a " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " just arrived in stock at " + (car.location_name || currentStore.name) + " (" + priceText + ", " + ((car.mileage || 0).toLocaleString()) + " mi)." + linkText + "\nLet me know if you would like me to set this aside for you to test drive!";
+
+currentNotifyData = { phone: cleanPhone, body: body };
+
+if (navigator.clipboard) {
+navigator.clipboard.writeText(body).catch(function() {});
+}
+
+document.getElementById("notifyModalTitle").innerText = "Contact " + (item ? item.customer_name : "Customer");
+document.getElementById("notifyTargetPhone").value = item && item.customer_phone ? item.customer_phone : "No Phone Provided";
+document.getElementById("notifyTargetText").value = body;
+
+const emailLink = document.getElementById("notifyEmailLink");
+if (item && item.customer_email) {
+emailLink.href = "mailto:" + item.customer_email + "?subject=" + encodeURIComponent("Fresh Arrival: " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '')) + "&body=" + encodeURIComponent(body);
+emailLink.classList.remove("hidden");
+} else {
+emailLink.classList.add("hidden");
+}
+
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+if (isMobile) {
+const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
+window.location.href = "sms:" + cleanPhone + separator + "body=" + encodeURIComponent(body);
+} else {
+document.getElementById("notifyCustomerModal").classList.remove("hidden");
+}
+}
+
+function triggerDirectDeviceSms() {
+const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?";
+window.location.href = "sms:" + currentNotifyData.phone + separator + "body=" + encodeURIComponent(currentNotifyData.body);
+}
+
+function renderWishlistEntries() {
+const container = document.getElementById("wishlistEntriesContainer");
+if (!container) return;
+
+if (!customerWishlists.length) {
+container.innerHTML = '<p class="text-xs text-gray-500 text-center py-6">No customer wishlists saved yet. Add a customer above to track inventory matches automatically.</p>';
+return;
+}
+
+let html = "";
+customerWishlists.forEach(function(item) {
+const matches = item._matches || [];
+const hasMatches = matches.length > 0;
+
+let matchSection = "";
+if (hasMatches) {
+matchSection = '<div class="mt-3 pt-3 border-t border-emerald-900/40">' +
+'<span class="text-[11px] font-bold text-emerald-400 block mb-2"><i class="fa-solid fa-circle-check mr-1"></i> ' + matches.length + ' Matching Vehicle(s) In Stock Right Now:</span>' +
+'<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
+matches.slice(0, 4).forEach(function(m) {
+matchSection += '<div class="p-2.5 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">' +
+'<div>' +
+'<strong class="text-white block">' + (m.year || '') + ' ' + (m.make || '') + ' ' + (m.model || '') + '</strong>' +
+'<span class="text-emerald-400 font-bold">' + (m.price ? '$' + m.price.toLocaleString() : 'Call') + '</span> • ' +
+'<span class="text-gray-400">' + ((m.mileage || 0).toLocaleString()) + ' mi</span>' +
+'</div>' +
+'<button onclick="notifyCustomerSms(\'' + item.id + '\', \'' + m.vin + '\')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm">' +
+'<i class="fa-solid fa-comment-sms text-[11px]"></i><span>Text</span>' +
+'</button>' +
+'</div>';
+});
+matchSection += '</div></div>';
+} else {
+matchSection = '<div class="mt-2 text-[11px] text-gray-500"><i class="fa-solid fa-clock mr-1"></i> No inventory currently matches these specs. AutoLaunch will highlight when one arrives.</div>';
+}
+
+html += '<div class="p-4 rounded-xl ' + (hasMatches ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-gray-950/50 border-gray-800') + ' border space-y-2">' +
+'<div class="flex items-start justify-between">' +
+'<div>' +
+'<h5 class="text-sm font-bold text-white flex items-center gap-2">' +
+item.customer_name +
+(hasMatches ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">' + matches.length + ' MATCHES</span>' : '') +
+'</h5>' +
+'<div class="text-xs text-gray-400 flex flex-wrap gap-x-3 pt-0.5">' +
+(item.customer_phone ? '<span><i class="fa-solid fa-phone text-gray-500 mr-1"></i>' + item.customer_phone + '</span>' : '') +
+(item.customer_email ? '<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>' + item.customer_email + '</span>' : '') +
+'</div>' +
+'</div>' +
+'<div class="flex items-center gap-1">' +
+'<button onclick="editWishlistEntry(\'' + item.id + '\')" title="Edit Customer Request" class="text-gray-500 hover:text-indigo-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-pen-to-square text-xs"></i></button>' +
+'<button onclick="deleteWishlistEntry(\'' + item.id + '\')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>' +
+'</div>' +
+'</div>' +
+'<div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">' +
+'<span><strong>Wanted:</strong> ' + (item.min_year ? item.min_year + '+ ' : '') + (item.target_make || 'Any Make') + ' ' + (item.target_model || '') + '</span>' +
+(item.max_miles ? '<span>• Under ' + item.max_miles.toLocaleString() + ' mi</span>' : '') +
+(item.transmission ? '<span>• ' + item.transmission + '</span>' : '') +
+(item.notes ? '<span class="block text-gray-400 w-full mt-1"><em>Notes: ' + item.notes + '</em></span>' : '') +
+'</div>' +
+matchSection +
+'</div>';
+});
+
+container.innerHTML = html;
+}
+
+function openShareModalByVin(vin) {
+const car = rawInventory.find(function(c) { return c.vin === vin; });
+if (!car) return;
+document.getElementById("modalTitle").innerText = "Customer Quick-Share";
+document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " | " + (car.price ? "$" + car.price.toLocaleString() : "Call");
+const urlText = (car.detail_url || car.listing_url) ? "\nView details: " + (car.detail_url || car.listing_url) : "";
+const msg = "Hey! Take a look at this " + (car.color ? car.color + ' ' : '') + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + ": " + (car.price ? "$" + car.price.toLocaleString() : "Call") + " with " + ((car.mileage || 0).toLocaleString()) + " miles. VIN: " + car.vin + "." + urlText + " Let me know if you want to take it for a drive!";
+
+document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
+'<textarea id="shareText" class="w-full h-28 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + msg + '</textarea>' +
+'<div class="flex gap-2">' +
+'<button onclick="navigator.clipboard.writeText(document.getElementById(\'shareText\').value); alert(\'Copied to clipboard!\')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer">Copy Text</button>' +
+'<a href="sms:?&body=' + encodeURIComponent(msg) + '" class="flex-1 py-2 text-center rounded-lg bg-emerald-600 text-white text-xs font-bold">Open SMS</a>' +
+'</div>' +
+'</div>';
+document.getElementById("actionModal").classList.remove("hidden");
+}
+
+function openTikTokModalByVin(vin) {
+const car = rawInventory.find(function(c) { return c.vin === vin; });
+if (!car) return;
+document.getElementById("modalTitle").innerText = "TikTok / Reel Script";
+document.getElementById("modalSubtitle").innerText = (car.year || '') + " " + (car.make || '') + " " + (car.model || '');
+const script = "(Hook - 0-3s): Stop scrolling if you need a reliable vehicle right now.\n(Body - 3-10s): Fresh arrival: " + (car.year || '') + " " + (car.make || '') + " " + (car.model || '') + (car.trim ? ' ' + car.trim : '') + " at " + (car.location_name || currentStore.name) + " with " + ((car.mileage || 0).toLocaleString()) + " miles.\n(CTA - 10-15s): Fully inspected and front-line ready. Comment or message me before it's gone!";
+
+document.getElementById("modalBody").innerHTML = '<div class="space-y-3">' +
+'<textarea class="w-full h-36 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200">' + script + '</textarea>' +
+'<p class="text-xs text-gray-400">💡 Record vertical 9:16 video while walking around the exterior and interior.</p>' +
+'</div>';
+document.getElementById("actionModal").classList.remove("hidden");
+}
+
+function closeModal(id) {
+document.getElementById(id).classList.add("hidden");
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: SOCIAL / SMS GENERATORS END ============= */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= APP LIFECYCLE INITIALIZATION START ================= */
+/* ============================================================================ */
+document.addEventListener("DOMContentLoaded", async function() {
+const { data: { session } } = await supabaseClient.auth.getSession();
+if (session && session.user) {
+await initAppSession(session.user);
+await loadCustomerWishlists();
+} else {
+document.getElementById("authOverlay").classList.remove("hidden");
+}
+});
+/* ============================================================================ */
+/* ======================= APP LIFECYCLE INITIALIZATION END =================== */
+/* ============================================================================ */
+</script>
 </body>
 </html>
