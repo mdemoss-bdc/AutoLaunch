@@ -2083,9 +2083,9 @@ function openTikTokModalByVin(vin) {
   const milesDisplay = car.mileage ? `${car.mileage.toLocaleString()} mi` : "Low Miles";
   const storeName = car.location_name || currentStore.name || "Our Dealership";
 
-  let photoUrl = car.image_url;
-  if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
-  if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
+  let rawPhotoUrl = car.image_url;
+  if (rawPhotoUrl && rawPhotoUrl.startsWith('//')) rawPhotoUrl = 'https:' + rawPhotoUrl;
+  let photoUrl = rawPhotoUrl ? `https://images.weserv.nl/?url=${encodeURIComponent(rawPhotoUrl)}&default=${encodeURIComponent(FALLBACK_IMAGE)}` : FALLBACK_IMAGE;
 
   const script = `🔥 FRESH ARRIVAL: ${carTitle}!\n` +
     `📍 Available now at ${storeName}\n` +
@@ -2161,9 +2161,9 @@ async function renderVehicleVideoFile(vin) {
   const priceDisplay = car.price && car.price > 0 ? `$${car.price.toLocaleString()}` : "Call for Price";
   const storeName = car.location_name || currentStore.name || "Our Dealership";
 
-  let photoUrl = car.image_url;
-  if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
-  if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
+  let rawPhotoUrl = car.image_url;
+  if (rawPhotoUrl && rawPhotoUrl.startsWith('//')) rawPhotoUrl = 'https:' + rawPhotoUrl;
+  let photoUrl = rawPhotoUrl ? `https://images.weserv.nl/?url=${encodeURIComponent(rawPhotoUrl)}&default=${encodeURIComponent(FALLBACK_IMAGE)}` : FALLBACK_IMAGE;
 
   const img = new Image();
   img.crossOrigin = "anonymous";
