@@ -749,15 +749,34 @@
       if (!currentUser) return;
       const lotBadge = document.getElementById("lotCount");
       try {
-        // Postgres RLS automatically restricts this select to the authenticated user
-        const { data, error } = await supabaseClient
-          .from("scraped_inventory")
-          .select("*")
-          .order("price", { ascending: true });
+        let allCars = [];
+        let from = 0;
+        const step = 1000;
+        let keepFetching = true;
 
-        if (error) throw error;
+        // Fetch in 1,000-row chunks to pull beyond the default Supabase REST ceiling
+        while (keepFetching) {
+          const { data, error } = await supabaseClient
+            .from("scraped_inventory")
+            .select("*")
+            .order("price", { ascending: true })
+            .range(from, from + step - 1);
 
-        rawInventory = (data || []).filter(function(c) {
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allCars = allCars.concat(data);
+            if (data.length < step) {
+              keepFetching = false;
+            } else {
+              from += step;
+            }
+          } else {
+            keepFetching = false;
+          }
+        }
+
+        rawInventory = allCars.filter(function(c) {
           return c.is_active !== false;
         });
 
@@ -770,6 +789,14 @@
           document.getElementById("avgPrice").innerText = "$" + avg.toLocaleString();
         }
 
+        populateLocations(rawInventory);
+        populateMakeDropdown(rawInventory);
+        applyFilters();
+      } catch (err) {
+        console.error("Fetch error:", err);
+        lotBadge.innerText = "0 Units";
+      }
+    }
         populateLocations(rawInventory);
         populateMakeDropdown(rawInventory);
         applyFilters();
