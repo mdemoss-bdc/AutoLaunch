@@ -192,6 +192,10 @@
             <option value="miles_asc">Mileage: Lowest First</option>
             <option value="year_desc">Year: Newest First</option>
           </select>
+          <button id="wishlistFilterBtn" onclick="toggleWishlistOnly()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition cursor-pointer">
+            <i id="wishlistFilterIcon" class="fa-regular fa-heart text-rose-400"></i>
+            <span id="wishlistCountLabel">Saved (0)</span>
+          </button>
           <button onclick="toggleAdvancedFilters()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition cursor-pointer">
             <i class="fa-solid fa-sliders"></i>
             <span>Specs</span>
@@ -298,7 +302,6 @@
   <!-- ============================================================================== -->
   <!-- ======================= SECTION 3: MAIN VIEW & FILTERS END ================== -->
   <!-- ============================================================================== -->
-
 
   <!-- ============================================================================== -->
   <!-- ======================= SECTION 4: DEALERSHIP SETTINGS MODAL START ========== -->
@@ -484,6 +487,8 @@
     };
 
     let rawInventory = [];
+    let savedVins = new Set();
+    let showWishlistOnly = false;
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
     /* ============================================================================ */
     /* ======================= JAVASCRIPT GLOBAL STATE END ======================== */
@@ -636,6 +641,7 @@
       document.getElementById("userDisplayName").innerText = user.email.split("@")[0];
       document.getElementById("userEmailBadge").innerText = user.email;
 
+      loadWishlistFromStorage();
       await loadUserStoreSettings();
       await fetchLiveInventory(true);
     }
@@ -956,6 +962,58 @@
     /* ============================================================================ */
     /* ======================= FUNCTION: DROPDOWNS & FILTER LOGIC START =========== */
     /* ============================================================================ */
+    function loadWishlistFromStorage() {
+      if (!currentUser) return;
+      try {
+        const stored = localStorage.getItem("autolaunch_wishlist_" + currentUser.id);
+        savedVins = new Set(stored ? JSON.parse(stored) : []);
+      } catch (e) {
+        savedVins = new Set();
+      }
+      updateWishlistBadge();
+    }
+
+    function toggleWishlistVin(vin, event) {
+      if (event) event.stopPropagation();
+      if (!currentUser) return;
+
+      if (savedVins.has(vin)) {
+        savedVins.delete(vin);
+      } else {
+        savedVins.add(vin);
+      }
+
+      try {
+        localStorage.setItem("autolaunch_wishlist_" + currentUser.id, JSON.stringify(Array.from(savedVins)));
+      } catch (e) {}
+
+      updateWishlistBadge();
+      applyFilters();
+    }
+
+    function updateWishlistBadge() {
+      const label = document.getElementById("wishlistCountLabel");
+      const icon = document.getElementById("wishlistFilterIcon");
+      const btn = document.getElementById("wishlistFilterBtn");
+      if (label) label.innerText = "Saved (" + savedVins.size + ")";
+
+      if (btn && icon) {
+        if (showWishlistOnly) {
+          btn.className = "px-3 py-2 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-xs font-semibold text-rose-200 flex items-center gap-1.5 transition cursor-pointer";
+          icon.className = "fa-solid fa-heart text-rose-400";
+        } else {
+          btn.className = "px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition cursor-pointer";
+          icon.className = (savedVins.size > 0 ? "fa-solid" : "fa-regular") + " fa-heart text-rose-400";
+        }
+      }
+    }
+
+    function toggleWishlistOnly() {
+      showWishlistOnly = !showWishlistOnly;
+      updateWishlistBadge();
+      applyFilters();
+    }
+
     function populateLocations(cars) {
       const locationSelect = document.getElementById("locationFilter");
       const currentSelected = locationSelect.value;
@@ -1057,6 +1115,10 @@
       const maxMiles = document.getElementById("maxMilesFilter") ? document.getElementById("maxMilesFilter").value : "ALL";
 
       let filtered = rawInventory.filter(function(car) {
+        if (showWishlistOnly && !savedVins.has(car.vin)) {
+          return false;
+        }
+
         const title = ((car.year || '') + " " + (car.make || '') + " " + (car.model || '') + " " + (car.trim || '') + " " + (car.vin || '') + " " + (car.location_name || '') + " " + (car.color || '') + " " + (car.body_type || '')).toLowerCase();
         const matchesQuery = !query || title.indexOf(query) !== -1;
         const matchesLocation = locationFilter === "ALL" || (car.location_name || '') === locationFilter;
@@ -1099,6 +1161,8 @@
       document.getElementById("locationFilter").value = "ALL";
       document.getElementById("conditionFilter").value = "ALL";
       document.getElementById("makeFilter").value = "ALL";
+      showWishlistOnly = false;
+      updateWishlistBadge();
       populateModelDropdown();
       if (document.getElementById("bodyFilter")) document.getElementById("bodyFilter").value = "ALL";
       if (document.getElementById("colorFilter")) document.getElementById("colorFilter").value = "ALL";
@@ -1110,7 +1174,6 @@
     /* ============================================================================ */
     /* ======================= FUNCTION: DROPDOWNS & FILTER LOGIC END ============= */
     /* ============================================================================ */
-
 
     /* ============================================================================ */
     /* ======================= FUNCTION: INVENTORY CARD RENDERER START =========== */
@@ -1137,19 +1200,26 @@
 
         const bodyBadge = (car.body_type && car.body_type !== 'Other') ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">' + car.body_type + '</span>' : '';
         const linkUrl = car.detail_url || car.listing_url || "#";
+        const isSaved = savedVins.has(car.vin);
+        const heartClass = isSaved ? "fa-solid fa-heart text-rose-500" : "fa-regular fa-heart text-white/80 hover:text-white";
 
         html += '<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">' +
           '<div>' +
-            '<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="block h-48 w-full bg-gray-900 relative overflow-hidden group cursor-pointer border-b border-gray-800">' +
-              '<img src="' + photoUrl + '" onerror="this.onerror=null; this.src=\'' + FALLBACK_IMAGE + '\';" alt="Vehicle Photo" class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-300">' +
+            '<div class="h-48 w-full bg-gray-900 relative overflow-hidden group border-b border-gray-800">' +
+              '<a href="' + linkUrl + '" target="_blank" rel="noopener noreferrer" class="block w-full h-full cursor-pointer">' +
+                '<img src="' + photoUrl + '" onerror="this.onerror=null; this.src=\'' + FALLBACK_IMAGE + '\';" alt="Vehicle Photo" class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-300">' +
+              '</a>' +
               '<div class="absolute top-3 left-3 flex gap-1.5 flex-wrap z-10">' +
                 '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + badgeColor + ' backdrop-blur-md">' + (car.condition || 'Used') + '</span>' +
                 bodyBadge +
               '</div>' +
+              '<button onclick="toggleWishlistVin(\'' + car.vin + '\', event)" title="' + (isSaved ? "Remove from Saved" : "Save to Wishlist") + '" class="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/10 flex items-center justify-center transition cursor-pointer">' +
+                '<i class="' + heartClass + ' text-sm"></i>' +
+              '</button>' +
               '<div class="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-white border border-white/10">' +
                 displayPayment +
               '</div>' +
-            '</a>' +
+            '</div>' +
             '<div class="p-4 space-y-2">' +
               '<div class="flex items-baseline justify-between">' +
                 '<span class="text-xl font-black text-white">' + displayPrice + '</span>' +
