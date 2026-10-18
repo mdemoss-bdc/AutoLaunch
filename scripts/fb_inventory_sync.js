@@ -1,10 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
+// Support both secret names and standard environment variables
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tdsipiltwajwhzgjsupx.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("Missing Supabase credentials in environment variables.");
+if (!SUPABASE_KEY) {
+  console.error("Missing Supabase Service Role Key or API Key in environment variables.");
   process.exit(1);
 }
 
@@ -22,8 +23,8 @@ async function runAutoPoster() {
     .not("fb_access_token", "is", null);
 
   if (userErr) {
-    console.error("Failed fetching user settings:", userErr);
-    return;
+    console.error("Failed fetching user settings:", userErr.message);
+    process.exit(1);
   }
 
   if (!users || !users.length) {
@@ -49,7 +50,7 @@ async function runAutoPoster() {
       continue;
     }
 
-    // 3. Filter against user criteria
+    // 3. Filter down to user's selected conditions and locations
     const candidates = cars.filter(car => {
       const matchCond = allowedConditions.includes(car.condition || 'Used');
       const matchLoc = !allowedLocations.length || allowedLocations.includes(car.location_name);
@@ -64,7 +65,7 @@ async function runAutoPoster() {
 
     const postedVins = new Set((alreadyPosted || []).map(p => p.vin));
     
-    // Pick unposted vehicles (limit batch to 3 per scheduled run to avoid spam flags)
+    // Pick unposted vehicles (limit batch to 3 per scheduled run)
     const toPost = candidates.filter(car => !postedVins.has(car.vin)).slice(0, 3);
 
     console.log(`Found ${candidates.length} matching cars. ${toPost.length} pending auto-post.`);
