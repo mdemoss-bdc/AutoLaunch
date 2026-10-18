@@ -1,8 +1,9 @@
 import asyncio
+import json
 import os
 import re
 import sys
-from typing import List
+from typing import List, Dict, Any, Optional
 from playwright.async_api import async_playwright
 from supabase import create_client
 
@@ -34,26 +35,134 @@ def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
     return f"{base_url}{mod}"
 
 async def extract_cards_from_page(page, default_condition: str = "Used") -> List[dict]:
-    # Progressive smooth scrolling to wake up lazy-loaded vehicle image handlers
+    # Progressive smooth scrolling to trigger all lazy-loaded image listeners across DealerOn, Dealer.com, CDK, Inspire
     scroll_height = await page.evaluate("document.body.scrollHeight")
-    step = max(300, int(scroll_height / 8))
+    step = max(350, int(scroll_height / 10))
     for y in range(0, scroll_height, step):
         await page.evaluate(f"window.scrollTo(0, {y})")
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.15)
     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
     await asyncio.sleep(1.0)
 
     vehicles = await page.evaluate("""(defaultCond) => {
         const results = [];
-        const cards = document.querySelectorAll('.vehicle-card, .inventory-item, .vehicle-overview, .vehicle-item, [data-vin], .listing-card, .inventory-list-item, div[class*="inventory-card"], div[class*="vehicle-card"]');
+        const seenVins = new Set();
+
+        // -------------------------------------------------------------
+        // STRATEGY 1: SCHEMA.ORG / JSON-LD (Standard across 90%+ Dealer Sites)
+        // -------------------------------------------------------------
+        try {
+            const jsonScripts = document.querySelectorAll('script[type="application/ld+json"]');
+            jsonScripts.forEach(script => {
+                try {
+                    let data = JSON.parse(script.innerText);
+                    if (!data) return;
+                    let items = [];
+                    if (Array.isArray(data)) items = data;
+                    else if (data['@graph'] && Array.isArray(data['@graph'])) items = data['@graph'];
+                    else items = [data];
+
+                    items.forEach(item => {
+                        const type = (item['@type'] || '').toLowerCase();
+                        if (type.includes('car') || type.includes('vehicle') || type.includes('product') || item.vehicleIdentificationNumber || item.vin) {
+                            const vin = item.vehicleIdentificationNumber || item.vin;
+                            if (vin && /^[A-HJ-NPR-Z0-9]{17}$/i.test(vin) && !seenVins.has(vin.toUpperCase())) {
+                                seenVins.add(vin.toUpperCase());
+
+                                let price = null;
+                                if (item.offers) {
+                                    const offer = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+                                    if (offer && offer.price) {
+                                        const p = parseInt(String(offer.price).replace(/[^0-9]/g, ''));
+                                        if (p >= 4000 && p <= 350000) price = p;
+                                    }
+                                }
+
+                                let image = null;
+                                if (item.image) {
+                                    if (typeof item.image === 'string') image = item.image;
+                                    else if (Array.isArray(item.image) && item.image[0]) {
+                                        image = typeof item.image[0] === 'string' ? item.image[0] : (item.image[0].url || item.image[0].contentUrl);
+                                    } else if (item.image.url) {
+                                        image = item.image.url;
+                                    }
+                                }
+
+                                let url = item.url || (item.offers && item.offers.url ? item.offers.url : null);
+                                if (url && url.startsWith('/')) url = window.location.origin + url;
+
+                                let year = item.modelDate ? parseInt(item.modelDate) : null;
+                                if (!year && item.name) {
+                                    const yM = item.name.match(/\\b(20[0-2][0-9]|199[0-9])\\b/);
+                                    if (yM) year = parseInt(yM[1]);
+                                }
+
+                                const make = (typeof item.brand === 'object' ? (item.brand.name || '') : (item.brand || item.manufacturer || '')).trim() || 'Other';
+                                const model = (item.model || '').trim() || 'Vehicle';
+                                const mileage = item.mileageFromOdometer ? parseInt(String(item.mileageFromOdometer.value || item.mileageFromOdometer).replace(/[^0-9]/g, '')) : null;
+
+                                results.push({
+                                    vin: vin.toUpperCase(),
+                                    year: year || 2026,
+                                    make: make,
+                                    model: model,
+                                    trim: '',
+                                    price: price,
+                                    mileage: mileage,
+                                    location_name: "Dealership Lot",
+                                    image_url: image,
+                                    detail_url: url,
+                                    color: (item.color || 'Standard'),
+                                    body_type: (item.bodyType || 'Other'),
+                                    transmission: "Automatic",
+                                    status: "Available",
+                                    condition: defaultCond,
+                                    dealership_id: "moses",
+                                    is_active: true
+                                });
+                            }
+                        }
+                    });
+                } catch(e) {}
+            });
+        } catch(e) {}
+
+        // If JSON-LD populated vehicles, return them immediately
+        if (results.length > 0) {
+            return results;
+        }
+
+        // -------------------------------------------------------------
+        // STRATEGY 2: UNIVERSAL DOM PARSER
+        // Supports Dealer.com, DealerOn, CDK, Dealer Inspire, DealerSocket
+        // -------------------------------------------------------------
+        const cardSelectors = [
+            // CDK / Sincro & Dealer.com
+            '.vehicle-card', '.inventory-item', '.vehicle-overview', '.vehicle-item',
+            // DealerOn
+            '.inventory-list-item', '.vehicleListCard', '.vehicleCard', '.v-card',
+            // Dealer Inspire
+            '.inventory-vehicle', '.vehicle-list-item', '.vehicleCard',
+            // Generic fallback
+            '[data-vin]', '.listing-card', 'div[class*="inventory-card"]', 'div[class*="vehicle-card"]'
+        ];
+
+        const cards = document.querySelectorAll(cardSelectors.join(', '));
 
         cards.forEach(card => {
             const cardText = card.innerText || "";
-            const vinMatch = cardText.match(/\\b([A-HJ-NPR-Z0-9]{17})\\b/);
-            if (!vinMatch) return;
-            const vin = vinMatch[1];
+            let vin = card.getAttribute('data-vin') || 
+                      card.getAttribute('data-vehicle-vin') || 
+                      (card.querySelector('[data-vin]') ? card.querySelector('[data-vin]').getAttribute('data-vin') : null);
 
-            // 1. DETAIL LINK
+            if (!vin) {
+                const vinMatch = cardText.match(/\\b([A-HJ-NPR-Z0-9]{17})\\b/i);
+                if (vinMatch) vin = vinMatch[1];
+            }
+            if (!vin || vin.length !== 17 || seenVins.has(vin.toUpperCase())) return;
+            seenVins.add(vin.toUpperCase());
+
+            // 1. DETAIL URL
             let detailUrl = null;
             const allLinks = Array.from(card.querySelectorAll('a[href]'));
             for (const a of allLinks) {
@@ -61,7 +170,9 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
                 if (/trade|kbb|value|finance|credit|contact|schedule|service|parts|direction|map|calc|review/i.test(href)) continue;
 
-                if (href.includes(vin) || /\\/(used|new|certified|vehicle-details|inventory|vehicles)\\//i.test(href) || href.endsWith('.html') || href.endsWith('.htm')) {
+                if (href.toUpperCase().includes(vin.toUpperCase()) || 
+                    /\\/(used|new|certified|vehicle-details|inventory|vehicles|vdp)\\//i.test(href) || 
+                    href.endsWith('.html') || href.endsWith('.htm')) {
                     try {
                         detailUrl = new URL(href, window.location.origin).href;
                         break;
@@ -69,42 +180,39 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
             if (!detailUrl) {
-                const headingLink = card.querySelector('h2 a, h3 a, h4 a, .vehicle-title a, .title a');
-                if (headingLink && headingLink.getAttribute('href')) {
+                const hLink = card.querySelector('h2 a, h3 a, h4 a, .vehicle-title a, .title a, a[class*="headline"]');
+                if (hLink && hLink.getAttribute('href')) {
                     try {
-                        detailUrl = new URL(headingLink.getAttribute('href'), window.location.origin).href;
+                        detailUrl = new URL(hLink.getAttribute('href'), window.location.origin).href;
                     } catch(e) {}
                 }
             }
 
-            // 2. REAL VEHICLE PHOTO (Extract high-res lazy-loaded vehicle photos)
+            // 2. HIGH-RES VEHICLE PHOTO
             let photoUrl = null;
-            const mediaCandidates = Array.from(card.querySelectorAll('img, [data-src], [data-original], [data-lazy-src], [style*="background-image"]'));
-            for (const el of mediaCandidates) {
-                let candidate = null;
-                if (el.tagName === 'IMG') {
-                    candidate = el.getAttribute('data-original') || 
-                                el.getAttribute('data-src') || 
+            const imgs = Array.from(card.querySelectorAll('img, source[srcset], [data-src], [data-original], [data-lazy-src], [data-lazy], [data-image], .photo-thumb img, picture img'));
+            for (const el of imgs) {
+                let candidate = el.getAttribute('data-src') || 
+                                el.getAttribute('data-original') || 
                                 el.getAttribute('data-lazy-src') || 
+                                el.getAttribute('data-lazy') || 
+                                el.getAttribute('data-image') ||
+                                (el.tagName === 'SOURCE' ? el.getAttribute('srcset') : null) ||
                                 el.currentSrc || 
-                                el.src;
-                } else {
-                    candidate = el.getAttribute('data-src') || el.getAttribute('data-original');
-                    if (!candidate) {
-                        const style = el.getAttribute('style') || '';
-                        const match = style.match(/url\\(['"]?(http[^'"]+)['"]?\\)/i);
-                        if (match) candidate = match[1];
-                    }
-                }
+                                el.getAttribute('src');
 
                 if (candidate) {
+                    if (candidate.includes(',')) candidate = candidate.split(',')[0].trim().split(' ')[0];
                     if (candidate.startsWith('//')) candidate = window.location.protocol + candidate;
+                    else if (candidate.startsWith('/')) candidate = window.location.origin + candidate;
+
                     const lower = candidate.toLowerCase();
                     const isGarbage = lower.includes('/static/') || lower.includes('placeholder') || 
                                       lower.includes('logo') || lower.includes('banner') || 
                                       lower.includes('1x1') || lower.includes('pixel') || 
                                       lower.includes('icon') || lower.endsWith('.svg') ||
-                                      lower.includes('coming-soon');
+                                      lower.includes('coming-soon') || lower.includes('stock-image') ||
+                                      lower.includes('photo-coming');
 
                     if (candidate.startsWith('http') && !isGarbage) {
                         photoUrl = candidate;
@@ -113,77 +221,100 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 }
             }
 
-            // 3. VEHICLE PRICE (Prioritize Internet Price / Final Price / Retail Price)
+            // 3. SELLING PRICE ACROSS ALL CMS ENGINES
             let price = null;
 
-            // Direct selector checks
-            const pSelectors = [
-                '[class*="internetPrice"]', '[class*="internet-price"]',
+            // Priority 1: Known Vendor Price Classes (DealerOn, CDK, Dealer.com, Dealer Inspire)
+            const priceSelectors = [
+                // Dealer.com & CDK
+                '[class*="mosesPrice"]', '[class*="moses-price"]',
                 '[class*="finalPrice"]', '[class*="final-price"]',
+                '[class*="internetPrice"]', '[class*="internet-price"]',
                 '[class*="salePrice"]', '[class*="sale-price"]',
-                '[class*="retailPrice"]', '[class*="retail-price"]',
-                '.price-value', '.value'
+                // DealerOn
+                '.final-price .price-value', '.internet-price .price-value', '.selling-price',
+                // Dealer Inspire
+                '.normal-price .price', '.di-price', '.price-details .price',
+                // Generic / Attributes
+                '[data-price]', '[itemprop="price"]', '.primary-price', '.price-value', '.value'
             ];
-            for (const sel of pSelectors) {
+
+            for (const sel of priceSelectors) {
                 const el = card.querySelector(sel);
-                if (el && el.innerText) {
-                    const num = parseInt(el.innerText.replace(/[^0-9]/g, ''));
-                    if (num >= 4500 && num <= 250000) {
-                        price = num;
+                if (el) {
+                    const dataP = el.getAttribute('data-price') || el.getAttribute('content');
+                    if (dataP && parseInt(dataP) >= 4000) {
+                        price = parseInt(dataP);
                         break;
+                    }
+                    if (el.innerText) {
+                        const num = parseInt(el.innerText.replace(/[^0-9]/g, ''));
+                        if (num >= 4000 && num <= 350000) {
+                            price = num;
+                            break;
+                        }
                     }
                 }
             }
 
-            // Text search targeting the exact price row
+            // Priority 2: Structured Label Matching (Moses Price, Internet Price, Sale Price, Final Price)
             if (!price) {
-                const lines = cardText.split('\\n');
-                for (const line of lines) {
-                    // Skip discounts, down payments, and savings lines
-                    if (/savings|discount|down payment|due at signing|per mo|\\/mo|rebate|doc fee/i.test(line)) continue;
-                    
-                    if (/internet price|final price|moses price|retail price|selling price|price:/i.test(line)) {
+                const lines = cardText.split('\\n').map(l => l.trim()).filter(Boolean);
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (/per mo|\\/mo|down|discount|savings|rebate|doc fee|estimate/i.test(line)) continue;
+
+                    if (/price|final|sale|internet|selling|our price|market price/i.test(line)) {
                         const m = line.match(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
                         if (m) {
                             const val = parseInt(m[1].replace(/,/g, ''));
-                            if (val >= 4500 && val <= 250000) {
+                            if (val >= 4000 && val <= 350000) {
                                 price = val;
                                 break;
+                            }
+                        }
+                        // Check line directly above label
+                        if (i > 0) {
+                            const prevLine = lines[i - 1];
+                            const prevMatch = prevLine.match(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
+                            if (prevMatch) {
+                                const val = parseInt(prevMatch[1].replace(/,/g, ''));
+                                if (val >= 4000 && val <= 350000) {
+                                    price = val;
+                                    break;
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Last resort: highest dollar amount on the card that isn't MSRP
+            // Priority 3: Fallback to largest non-MSRP dollar amount on card
             if (!price) {
                 const matches = Array.from(cardText.matchAll(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/g));
-                const candidates = [];
-                for (const match of matches) {
-                    const val = parseInt(match[1].replace(/,/g, ''));
-                    if (val >= 4500 && val <= 250000) {
-                        candidates.push(val);
+                for (const m of matches) {
+                    const val = parseInt(m[1].replace(/,/g, ''));
+                    if (val >= 4000 && val <= 350000) {
+                        price = val;
+                        break;
                     }
-                }
-                if (candidates.length > 0) {
-                    price = candidates[0];
                 }
             }
 
-            // 4. ROOFTOP LOCATION
+            // 4. DEALER / ROOFTOP LOCATION
             let exactLocation = "";
-            const locEl = card.querySelector('[class*="location"], [class*="dealership"], i[class*="marker"] ~ span');
+            const locEl = card.querySelector('[class*="location"], [class*="dealership"], [class*="store-name"], i[class*="marker"] ~ span');
             if (locEl && locEl.innerText.trim().length > 3) exactLocation = locEl.innerText.trim();
             if (!exactLocation) {
                 const lines = cardText.split('\\n').map(l => l.trim()).filter(Boolean);
                 for (const line of lines) {
-                    if (/^(Moses|Hendrick|Sonic|CarMax|AutoNation|Ken Garff|Penske)/i.test(line) && !/Price|Stock|VIN|Save|Doc|Value|Trade/i.test(line)) {
+                    if (/^(Moses|Hendrick|Sonic|CarMax|AutoNation|Ken Garff|Penske|Bill|Bob|Joe|Jim)/i.test(line) && !/Price|Stock|VIN|Save|Doc|Value|Trade/i.test(line)) {
                         exactLocation = line;
                         break;
                     }
                 }
             }
-            if (!exactLocation) exactLocation = "Dealership Lot";
+            if (!exactLocation) exactLocation = "Moses Automotive Group";
 
             // 5. YEAR, MAKE, MODEL, TRIM
             const yearMatch = cardText.match(/\\b(20[0-2][0-9]|199[0-9])\\b/);
@@ -201,7 +332,9 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                     detectedMake = m;
                     const words = mMatch[1].split('\\n')[0].trim().split(' ').filter(Boolean);
                     detectedModel = words[0] || "Vehicle";
-                    if (words.length > 1) detectedTrim = words.slice(1).join(' ').replace(/SE|LE|XLE|Sport|AWD|4WD|FWD/gi, '').trim();
+                    if (words.length > 1) {
+                        detectedTrim = words.slice(1).join(' ').replace(/SE|LE|XLE|Sport|AWD|4WD|FWD/gi, '').trim();
+                    }
                     break;
                 }
             }
@@ -224,10 +357,11 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
             if (/SUV|Crossover|Sport Utility/i.test(cardText)) bodyType = "SUV";
             else if (/Truck|Crew Cab|Pickup/i.test(cardText)) bodyType = "Truck";
             else if (/Sedan/i.test(cardText)) bodyType = "Sedan";
-            else if (/Van|Minivan|Odyssey|Sienna|Pacifica|Carnival/i.test(cardText)) bodyType = "Van";
+            else if (/Coupe|Mustang/i.test(cardText)) bodyType = "Coupe";
+            else if (/Van|Minivan|Odyssey|Sienna|Pacifica/i.test(cardText)) bodyType = "Van";
 
             results.push({
-                vin: vin,
+                vin: vin.toUpperCase(),
                 year: year,
                 make: detectedMake,
                 model: detectedModel,
@@ -246,6 +380,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used") -> List
                 is_active: true
             });
         });
+
         return results;
     }""", default_condition)
 
