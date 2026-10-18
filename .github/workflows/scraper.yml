@@ -1,43 +1,32 @@
 name: AutoLaunch Scraper Runner
 
 on:
-  schedule:
-    # Runs automatically every 2 hours
-    - cron: '0 */2 * * *'
   workflow_dispatch:
-  repository_dispatch:
-    types: [trigger-scrape]
-
-permissions:
-  contents: read
+    inputs:
+      user_id:
+        description: 'User UUID to crawl for'
+        required: true
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-
     steps:
-      - name: Check out repository
+      - name: Check out repo
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
-      - name: Install Python packages
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install playwright supabase nest-asyncio
+          pip install playwright supabase
+          playwright install --with-deps chromium
 
-      - name: Install Playwright Chromium & System Dependencies
-        run: |
-          python -m playwright install --with-deps chromium
-
-      - name: Execute Scraper
+      - name: Run Scraper
         env:
-          SUPABASE_URL: "https://tdsipiltwajwhzgjsupx.supabase.co"
-          SUPABASE_KEY: "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w"
-          DEALERSHIP_ID: "moses"
-        run: |
-          python scraper.py
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+        run: python scraper.py
