@@ -2,8 +2,8 @@ name: Facebook Inventory Sync
 
 on:
   schedule:
-    # Runs every 4 hours automatically
-    - cron: '0 */4 * * *'
+    # Runs every 2 hours automatically
+    - cron: '0 */2 * * *'
   workflow_dispatch: # Allows manual run button
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
         run: npm install @supabase/supabase-js
