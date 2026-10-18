@@ -48,7 +48,7 @@
           <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Password</label>
           <div class="relative">
             <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-4 pr-11 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500">
-            <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition focus:outline-none cursor-pointer">
+            <button type="button" onclick="togglePasswordVisibility('authPassword', 'passwordToggleIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition focus:outline-none cursor-pointer">
               <i id="passwordToggleIcon" class="fa-regular fa-eye text-sm"></i>
             </button>
           </div>
@@ -305,6 +305,61 @@
             Cancel
           </button>
         </div>
+
+        <!-- Danger Zone: Delete Account -->
+        <div class="border-t border-rose-900/40 pt-4 mt-6">
+          <div class="p-3.5 rounded-xl bg-rose-950/20 border border-rose-900/30 flex items-center justify-between gap-3">
+            <div>
+              <span class="text-xs font-bold text-rose-300 block">Delete Account & Data</span>
+              <span class="text-[11px] text-gray-400 block">Permanently deletes your account, store profile, and all synced inventory from the database.</span>
+            </div>
+            <button onclick="openDeleteAccountModal()" type="button" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition whitespace-nowrap cursor-pointer">
+              Delete Account
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= DELETE ACCOUNT CONFIRMATION MODAL ================= -->
+  <div id="deleteAccountModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel w-full max-w-md rounded-2xl border border-rose-800/50 p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center gap-3 border-b border-gray-800 pb-3">
+        <div class="w-10 h-10 rounded-xl bg-rose-600/20 border border-rose-600/40 flex items-center justify-center text-rose-400">
+          <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Permanently Delete Account</h3>
+          <p class="text-xs text-rose-300">This action cannot be undone.</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-gray-300 leading-relaxed">
+        To confirm account termination, enter your account password. All stored configurations, scrape histories, and vehicle listings will be wiped from the server.
+      </p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Confirm Password</label>
+          <div class="relative">
+            <input type="password" id="deleteConfirmPassword" placeholder="••••••••" class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-4 pr-11 py-2 text-sm text-white focus:outline-none focus:border-rose-500">
+            <button type="button" onclick="togglePasswordVisibility('deleteConfirmPassword', 'deletePasswordToggleIcon')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition focus:outline-none cursor-pointer">
+              <i id="deletePasswordToggleIcon" class="fa-regular fa-eye text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <p id="deleteErrorMsg" class="text-xs text-rose-400 font-medium hidden"></p>
+
+        <div class="flex gap-2 pt-2">
+          <button onclick="confirmDeleteAccount()" id="confirmDeleteBtn" type="button" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 transition cursor-pointer">
+            Confirm Permanent Deletion
+          </button>
+          <button onclick="closeModal('deleteAccountModal')" type="button" class="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs transition cursor-pointer">
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -366,9 +421,9 @@
       }
     }
 
-    function togglePasswordVisibility() {
-      const passInput = document.getElementById("authPassword");
-      const toggleIcon = document.getElementById("passwordToggleIcon");
+    function togglePasswordVisibility(inputId, iconId) {
+      const passInput = document.getElementById(inputId);
+      const toggleIcon = document.getElementById(iconId);
       if (passInput.type === "password") {
         passInput.type = "text";
         toggleIcon.className = "fa-regular fa-eye-slash text-sm";
@@ -454,6 +509,48 @@
 
       await loadDealerProfileFromDb();
       await fetchLiveInventory(true);
+    }
+
+    // ---------------- ACCOUNT DELETION ----------------
+    function openDeleteAccountModal() {
+      closeModal("dealershipModal");
+      document.getElementById("deleteConfirmPassword").value = "";
+      document.getElementById("deleteErrorMsg").classList.add("hidden");
+      document.getElementById("deleteAccountModal").classList.remove("hidden");
+    }
+
+    async function confirmDeleteAccount() {
+      const pass = document.getElementById("deleteConfirmPassword").value;
+      const errBox = document.getElementById("deleteErrorMsg");
+      const btn = document.getElementById("confirmDeleteBtn");
+
+      if (!pass) {
+        errBox.innerText = "Please enter your password to confirm deletion.";
+        errBox.classList.remove("hidden");
+        return;
+      }
+
+      errBox.classList.add("hidden");
+      btn.disabled = true;
+      btn.innerText = "Deleting Account & Purging Data...";
+
+      try {
+        const { data, error } = await supabaseClient.rpc("delete_user_account", {
+          current_password: pass
+        });
+
+        if (error) throw error;
+
+        alert("Your account and all associated dealership data have been permanently deleted.");
+        await supabaseClient.auth.signOut();
+        window.location.reload();
+      } catch (err) {
+        console.error("Account deletion error:", err);
+        errBox.innerText = err.message || "Failed to delete account. Please verify your password.";
+        errBox.classList.remove("hidden");
+        btn.disabled = false;
+        btn.innerText = "Confirm Permanent Deletion";
+      }
     }
 
     // ---------------- DEALERSHIP PROFILE & INVENTORY ----------------
