@@ -18,7 +18,7 @@
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-<!-- <--------------------------------------------------------------------------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
   <!-- <----------------------- SECTION 1: AUTHENTICATION MODAL START -----------------> -->
   <!-- <--------------------------------------------------------------------------------> -->
   <div id="authOverlay" class="fixed inset-0 z-50 bg-[#0b0f19]/90 backdrop-blur-xl flex items-center justify-center p-4">
@@ -66,11 +66,11 @@
         <p id="authErrorMsg" class="text-xs text-rose-400 text-center font-medium hidden"></p>
       </form>
 
-      <!-- Forgot Password Sub-Form (Hidden by Default) -->
+      <!-- Forgot Password Sub-Form -->
       <form id="forgotPasswordForm" onsubmit="handleForgotPasswordSubmit(event)" class="space-y-4 hidden">
         <div class="text-center space-y-1">
           <h4 class="text-sm font-bold text-white">Reset Password</h4>
-          <p class="text-xs text-gray-400">Enter your account email to receive a secure password reset link.</p>
+          <p class="text-xs text-gray-400">Enter your account email to receive a password recovery link.</p>
         </div>
 
         <div>
@@ -95,6 +95,7 @@
   <!-- <--------------------------------------------------------------------------------> -->
   <!-- <----------------------- SECTION 1: AUTHENTICATION MODAL END -------------------> -->
   <!-- <--------------------------------------------------------------------------------> -->
+
 
   <!-- <--------------------------------------------------------------------------------> -->
   <!-- <----------------------- SECTION 2: TOP APP HEADER START -----------------------> -->
@@ -187,6 +188,7 @@
           </select>
           <select id="sortSelect" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
             <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
             <option value="price_desc">Price: High to Low</option>
             <option value="miles_asc">Mileage: Lowest First</option>
             <option value="year_desc">Year: Newest First</option>
@@ -489,7 +491,7 @@
     /* <----------------------------------------------------------------------------> */
 
 
-/* <----------------------------------------------------------------------------> */
+    /* <----------------------------------------------------------------------------> */
     /* <----------------------- FUNCTION: AUTH HANDLERS START ----------------------> */
     /* <----------------------------------------------------------------------------> */
     function switchAuthMode(mode) {
@@ -526,7 +528,6 @@
         authForm.classList.add("hidden");
         tabSwitcher.classList.add("hidden");
         forgotForm.classList.remove("hidden");
-        // Pre-fill email if already typed in sign-in box
         document.getElementById("resetEmail").value = document.getElementById("authEmail").value || "";
       } else {
         forgotForm.classList.add("hidden");
@@ -642,6 +643,7 @@
     /* <----------------------------------------------------------------------------> */
     /* <----------------------- FUNCTION: AUTH HANDLERS END ------------------------> */
     /* <----------------------------------------------------------------------------> */
+
 
     /* <----------------------------------------------------------------------------> */
     /* <----------------------- FUNCTION: ACCOUNT DELETION START -------------------> */
@@ -905,7 +907,6 @@
         const step = 1000;
         let keepFetching = true;
 
-        // Fetch in 1,000-row chunks to pull beyond the default Supabase REST ceiling
         while (keepFetching) {
           const { data, error } = await supabaseClient
             .from("scraped_inventory")
