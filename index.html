@@ -18,7 +18,9 @@
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-  <!-- ================= AUTHENTICATION MODAL OVERLAY ================= -->
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 1: AUTHENTICATION MODAL START -----------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
   <div id="authOverlay" class="fixed inset-0 z-50 bg-[#0b0f19]/90 backdrop-blur-xl flex items-center justify-center p-4">
     <div class="glass-panel w-full max-w-md rounded-3xl border border-gray-800 p-8 space-y-6 shadow-2xl relative">
       <div class="flex items-center gap-3 justify-center mb-2">
@@ -62,8 +64,14 @@
       </form>
     </div>
   </div>
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 1: AUTHENTICATION MODAL END -------------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
 
-  <!-- ================= APP HEADER ================= -->
+
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 2: TOP APP HEADER START -----------------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
   <header class="glass-panel sticky top-0 z-40 border-b border-gray-800 px-4 lg:px-8 py-3">
     <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
       <div class="flex items-center gap-3">
@@ -101,8 +109,14 @@
       </div>
     </div>
   </header>
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 2: TOP APP HEADER END -------------------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
 
-  <!-- ================= MAIN VIEW ================= -->
+
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 3: MAIN VIEW & FILTERS START ------------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
     
     <!-- Metrics Bar -->
@@ -253,8 +267,14 @@
     <!-- Inventory Grid -->
     <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
   </main>
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 3: MAIN VIEW & FILTERS END --------------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
 
-  <!-- ================= USER SETTINGS MODAL ================= -->
+
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 4: DEALERSHIP SETTINGS MODAL START ------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
   <div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-lg rounded-2xl border border-gray-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
@@ -341,8 +361,14 @@
       </div>
     </div>
   </div>
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 4: DEALERSHIP SETTINGS MODAL END --------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
 
-  <!-- Delete Account Modal -->
+
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 5: ACCOUNT DELETION MODAL START ---------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
   <div id="deleteAccountModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-md rounded-2xl border border-rose-800/50 p-6 space-y-4 shadow-2xl">
       <div class="flex items-center gap-3 border-b border-gray-800 pb-3">
@@ -383,8 +409,14 @@
       </div>
     </div>
   </div>
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 5: ACCOUNT DELETION MODAL END -----------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
 
-  <!-- Share / Action Modal -->
+
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 6: SHARE & SOCIAL COPY MODAL START ------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
   <div id="actionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-panel w-full max-w-xl rounded-2xl border border-gray-800 p-6 space-y-5">
       <div class="flex items-center justify-between border-b border-gray-800 pb-4">
@@ -397,8 +429,15 @@
       <div id="modalBody" class="space-y-4"></div>
     </div>
   </div>
+  <!-- <--------------------------------------------------------------------------------> -->
+  <!-- <----------------------- SECTION 6: SHARE & SOCIAL COPY MODAL END --------------> -->
+  <!-- <--------------------------------------------------------------------------------> -->
+
 
   <script>
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- JAVASCRIPT GLOBAL STATE START ----------------------> */
+    /* <----------------------------------------------------------------------------> */
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
@@ -418,8 +457,14 @@
 
     let rawInventory = [];
     const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- JAVASCRIPT GLOBAL STATE END ------------------------> */
+    /* <----------------------------------------------------------------------------> */
 
-    // ---------------- AUTH FLOW ----------------
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: AUTH HANDLERS START ----------------------> */
+    /* <----------------------------------------------------------------------------> */
     function switchAuthMode(mode) {
       authMode = mode;
       const tabIn = document.getElementById("tabSignIn");
@@ -512,8 +557,14 @@
       await loadUserStoreSettings();
       await fetchLiveInventory(true);
     }
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: AUTH HANDLERS END ------------------------> */
+    /* <----------------------------------------------------------------------------> */
 
-    // ---------------- ACCOUNT DELETION ----------------
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: ACCOUNT DELETION START -------------------> */
+    /* <----------------------------------------------------------------------------> */
     function openDeleteAccountModal() {
       closeModal("dealershipModal");
       document.getElementById("deleteConfirmPassword").value = "";
@@ -554,8 +605,14 @@
         btn.innerText = "Confirm Permanent Deletion";
       }
     }
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: ACCOUNT DELETION END ---------------------> */
+    /* <----------------------------------------------------------------------------> */
 
-    // ---------------- AUTOMATIC PAGINATION DETECTION ----------------
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: PAGINATION DETECTION START ---------------> */
+    /* <----------------------------------------------------------------------------> */
     function parsePaginationFromUrl(rawUrl) {
       if (!rawUrl || !rawUrl.trim()) return null;
       const urlStr = rawUrl.trim();
@@ -607,8 +664,14 @@
         icon.className = "fa-solid fa-chevron-down text-[10px] ml-1";
       }
     }
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: PAGINATION DETECTION END -----------------> */
+    /* <----------------------------------------------------------------------------> */
 
-    // ---------------- PER-USER SETTINGS & INVENTORY (STRICT RLS) ----------------
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: DEALER SETTINGS START --------------------> */
+    /* <----------------------------------------------------------------------------> */
     async function loadUserStoreSettings() {
       if (!currentUser) return;
       try {
@@ -744,7 +807,14 @@
         btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i> <span class="hidden sm:inline">Sync Dealer Site</span>';
       }, 8000);
     }
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: DEALER SETTINGS END ----------------------> */
+    /* <----------------------------------------------------------------------------> */
 
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: INVENTORY LOADER START -------------------> */
+    /* <----------------------------------------------------------------------------> */
     async function fetchLiveInventory(isManual) {
       if (!currentUser) return;
       const lotBadge = document.getElementById("lotCount");
@@ -797,15 +867,14 @@
         lotBadge.innerText = "0 Units";
       }
     }
-        populateLocations(rawInventory);
-        populateMakeDropdown(rawInventory);
-        applyFilters();
-      } catch (err) {
-        console.error("Fetch error:", err);
-        lotBadge.innerText = "0 Units";
-      }
-    }
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: INVENTORY LOADER END ---------------------> */
+    /* <----------------------------------------------------------------------------> */
 
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: DROPDOWNS & FILTER LOGIC START -----------> */
+    /* <----------------------------------------------------------------------------> */
     function populateLocations(cars) {
       const locationSelect = document.getElementById("locationFilter");
       const currentSelected = locationSelect.value;
@@ -957,7 +1026,14 @@
       if (document.getElementById("maxMilesFilter")) document.getElementById("maxMilesFilter").value = "ALL";
       applyFilters();
     }
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: DROPDOWNS & FILTER LOGIC END -------------> */
+    /* <----------------------------------------------------------------------------> */
 
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: INVENTORY CARD RENDERER START -----------> */
+    /* <----------------------------------------------------------------------------> */
     function renderGrid(cars) {
       const grid = document.getElementById("inventoryGrid");
       if (!cars.length) {
@@ -1027,7 +1103,14 @@
 
       grid.innerHTML = html;
     }
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: INVENTORY CARD RENDERER END -------------> */
+    /* <----------------------------------------------------------------------------> */
 
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: SOCIAL / SMS GENERATORS START -----------> */
+    /* <----------------------------------------------------------------------------> */
     function openShareModalByVin(vin) {
       const car = rawInventory.find(function(c) { return c.vin === vin; });
       if (!car) return;
@@ -1077,8 +1160,14 @@
     function closeModal(id) {
       document.getElementById(id).classList.add("hidden");
     }
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- FUNCTION: SOCIAL / SMS GENERATORS END -------------> */
+    /* <----------------------------------------------------------------------------> */
 
-    // ---------------- APP LIFECYCLE ----------------
+
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- APP LIFECYCLE INITIALIZATION START -----------------> */
+    /* <----------------------------------------------------------------------------> */
     document.addEventListener("DOMContentLoaded", async function() {
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session && session.user) {
@@ -1087,6 +1176,9 @@
         document.getElementById("authOverlay").classList.remove("hidden");
       }
     });
+    /* <----------------------------------------------------------------------------> */
+    /* <----------------------- APP LIFECYCLE INITIALIZATION END -------------------> */
+    /* <----------------------------------------------------------------------------> */
   </script>
 </body>
 </html>
