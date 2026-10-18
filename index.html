@@ -103,9 +103,7 @@
 
         <hr class="border-gray-800">
 
-        <!-- ===================================================================== -->
-        <!-- AUTOMATED POSTING CRITERIA CONTROLS                                    -->
-        <!-- ===================================================================== -->
+        <!-- AUTOMATED POSTING CRITERIA CONTROLS -->
         <div class="space-y-4">
           <div class="flex items-center justify-between">
             <div>
@@ -145,7 +143,6 @@
           <div>
             <label class="block text-xs font-medium text-gray-300 mb-2">Target Dealership Locations:</label>
             <div id="locationCheckboxes" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1 bg-gray-950/40 rounded-lg border border-gray-800">
-              <!-- Dynamically populated or default options -->
               <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer">
                 <input type="checkbox" name="autoLocation" value="Moses Volkswagen" class="rounded text-indigo-600 bg-gray-800 border-gray-700" checked>
                 <span class="text-xs text-gray-200">Moses Volkswagen</span>
@@ -186,13 +183,12 @@
 
   <!-- APPLICATION LOGIC -->
   <script>
-    // Supabase Initialization
     const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
     const SUPABASE_ANON = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
     let allInventory = [];
-    let currentUserId = "default_user";
+    let currentUserId = "";
 
     // DOM Elements
     const inventoryGrid = document.getElementById('inventoryGrid');
@@ -217,37 +213,48 @@
 
     // 1. Load Inventory
     async function fetchInventory() {
-      const { data, error } = await supabase
-        .from('scraped_inventory')
-        .select('*')
-        .eq('is_active', true)
-        .order('id', { ascending: false });
+      try {
+        const { data, error } = await supabase
+          .from('scraped_inventory')
+          .select('*')
+          .eq('is_active', true);
 
-      if (error || !data) {
-        inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Error loading inventory: ${error?.message}</div>`;
-        return;
+        if (error) {
+          console.error("Supabase fetch error:", error);
+          inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Error loading inventory: ${error.message}</div>`;
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          unitBadge.innerText = '0 Units';
+          inventoryGrid.innerHTML = `<div class="col-span-full py-16 text-center text-gray-500">No active inventory found. Run your scraper to populate vehicles.</div>`;
+          return;
+        }
+
+        allInventory = data;
+        unitBadge.innerText = `${data.length} Units`;
+
+        // Extract unique locations for the filter
+        const locations = Array.from(new Set(data.map(d => d.location_name).filter(Boolean)));
+        filterLocation.innerHTML = '<option value="ALL">All Locations</option>' + 
+          locations.map(loc => `<option value="${loc}">${loc}</option>`).join('');
+
+        // Populate dynamic modal location checkboxes
+        const locContainer = document.getElementById('locationCheckboxes');
+        if (locations.length > 0) {
+          locContainer.innerHTML = locations.map(loc => `
+            <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer">
+              <input type="checkbox" name="autoLocation" value="${loc}" class="rounded text-indigo-600 bg-gray-800 border-gray-700" checked>
+              <span class="text-xs text-gray-200">${loc}</span>
+            </label>
+          `).join('');
+        }
+
+        renderCards(allInventory);
+      } catch (err) {
+        console.error("Unexpected error:", err);
+        inventoryGrid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400">Failed to render inventory: ${err.message}</div>`;
       }
-
-      allInventory = data;
-      unitBadge.innerText = `${data.length} Units`;
-
-      // Extract unique locations for the filter
-      const locations = Array.from(new Set(data.map(d => d.location_name).filter(Boolean)));
-      filterLocation.innerHTML = '<option value="ALL">All Locations</option>' + 
-        locations.map(loc => `<option value="${loc}">${loc}</option>`).join('');
-
-      // Populate dynamic modal location checkboxes
-      const locContainer = document.getElementById('locationCheckboxes');
-      if (locations.length > 0) {
-        locContainer.innerHTML = locations.map(loc => `
-          <label class="flex items-center space-x-2 bg-gray-900/80 border border-gray-700 p-2.5 rounded-lg cursor-pointer">
-            <input type="checkbox" name="autoLocation" value="${loc}" class="rounded text-indigo-600 bg-gray-800 border-gray-700" checked>
-            <span class="text-xs text-gray-200">${loc}</span>
-          </label>
-        `).join('');
-      }
-
-      renderCards(allInventory);
     }
 
     // 2. Render Cards
@@ -319,13 +326,12 @@
       const { data } = await supabase.from('user_settings').select('*').limit(1).single();
       if (!data) return;
 
-      currentUserId = data.user_id || currentUserId;
+      currentUserId = data.user_id || "";
       document.getElementById('fbPageId').value = data.fb_page_id || '';
       document.getElementById('fbPageToken').value = data.fb_page_token || '';
       document.getElementById('usedUrl').value = data.used_url || '';
       document.getElementById('certifiedUrl').value = data.certified_url || '';
 
-      // Set automation preferences
       if (typeof data.fb_auto_enabled === 'boolean') {
         document.getElementById('fbAutoEnabled').checked = data.fb_auto_enabled;
       }
@@ -343,9 +349,7 @@
       }
     }
 
-    // =========================================================================
-    // 5. SAVE SETTINGS HANDLER (INCLUDES NEW CONDITIONS, LOCATIONS, & TOGGLE)
-    // =========================================================================
+    // 5. Save Settings Handler
     settingsForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const saveBtn = document.getElementById('saveSettingsBtn');
@@ -358,34 +362,37 @@
       const certifiedUrl = document.getElementById('certifiedUrl').value.trim();
       const fbAutoEnabled = document.getElementById('fbAutoEnabled').checked;
 
-      // Extract checked conditions
       const selectedConditions = Array.from(
         document.querySelectorAll('input[name="autoCondition"]:checked')
       ).map(cb => cb.value);
 
-      // Extract checked locations
       const selectedLocations = Array.from(
         document.querySelectorAll('input[name="autoLocation"]:checked')
       ).map(cb => cb.value);
 
-      const { error } = await supabase
-        .from('user_settings')
-        .update({
-          fb_page_id: fbPageId,
-          fb_page_token: fbPageToken,
-          used_url: usedUrl,
-          certified_url: certifiedUrl,
-          fb_auto_conditions: selectedConditions,
-          fb_auto_locations: selectedLocations,
-          fb_auto_enabled: fbAutoEnabled
-        })
-        .eq('user_id', currentUserId);
+      let query = supabase.from('user_settings');
+      const payload = {
+        fb_page_id: fbPageId,
+        fb_page_token: fbPageToken,
+        used_url: usedUrl,
+        certified_url: certifiedUrl,
+        fb_auto_conditions: selectedConditions,
+        fb_auto_locations: selectedLocations,
+        fb_auto_enabled: fbAutoEnabled
+      };
+
+      let res;
+      if (currentUserId) {
+        res = await query.update(payload).eq('user_id', currentUserId);
+      } else {
+        res = await query.update(payload).limit(1);
+      }
 
       saveBtn.innerText = 'Save Settings & URLs';
       saveBtn.disabled = false;
 
-      if (error) {
-        alert('Error saving preferences: ' + error.message);
+      if (res.error) {
+        alert('Error saving preferences: ' + res.error.message);
       } else {
         alert('Settings & Automation rules saved successfully!');
         settingsModal.classList.add('hidden');
@@ -397,11 +404,11 @@
       const car = allInventory.find(c => c.vin === vin);
       if (!car) return;
 
-      const pageId = document.getElementById('fbPageId').value || '1198606820007865';
+      const pageId = document.getElementById('fbPageId').value;
       const token = document.getElementById('fbPageToken').value;
 
-      if (!token) {
-        alert('Please open Dealership Settings and add your Facebook Page Access Token first.');
+      if (!token || !pageId) {
+        alert('Please open Dealership Settings and add your Facebook Page ID and Token first.');
         return;
       }
 
@@ -411,7 +418,7 @@
         `⏱ Mileage: ${Number(car.mileage || 0).toLocaleString()} mi\n` +
         `⚙️ Condition: ${car.condition || 'Used'}\n` +
         `🆔 VIN: ${car.vin}\n\n` +
-        `✅ Fully inspected & front-line certified\n` +
+        `✅ Fully inspected & front-line ready\n` +
         `✅ Clean Title\n` +
         `✅ All trades accepted\n` +
         `🔗 Specs: ${car.detail_url || ''}\n\n` +
