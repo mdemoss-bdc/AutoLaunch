@@ -2,9 +2,9 @@ name: Facebook Auto-Poster Sync
 
 on:
   schedule:
-    # Runs automatically every 3 hours (8 times per day x 3 vehicles = max 24 per day)
+    # Runs automatically every 3 hours (8 times a day x 3 vehicles)
     - cron: '0 */3 * * *'
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
 
 jobs:
   sync-facebook:
