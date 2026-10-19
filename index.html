@@ -350,161 +350,156 @@ Send Recovery Link
 
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 4: DEALERSHIP SETTINGS MODAL START ========== -->
+<!-- ======================= SECTION: DEALERSHIP SETTINGS MODAL START ========= -->
 <!-- ============================================================================== -->
-<div id="dealershipModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-  <div class="glass-panel w-full max-w-5xl rounded-3xl border border-gray-800 p-6 space-y-4 shadow-2xl">
+<div id="dealershipModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-panel w-full max-w-4xl rounded-2xl border border-gray-800 p-6 space-y-6 max-h-[90vh] overflow-y-auto">
     
-    <!-- Modal Header -->
-    <div class="flex items-center justify-between border-b border-gray-800 pb-3">
-      <div>
-        <h3 class="text-lg font-bold text-white flex items-center gap-2">
-          <i class="fa-solid fa-sliders text-indigo-400"></i> Dealership & Social Automation Settings
-        </h3>
-        <p class="text-xs text-gray-400">Configure your store identity, automated Facebook rules, and website feed sources.</p>
+    <div class="flex items-center justify-between border-b border-gray-800 pb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+          <i class="fa-solid fa-sliders text-lg"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Dealership & Automation Settings</h3>
+          <p class="text-xs text-gray-400">Configure your store identity, crawler feeds, and API credentials.</p>
+        </div>
       </div>
-      <button onclick="closeModal('dealershipModal')" class="text-gray-400 hover:text-white cursor-pointer p-1">
-        <i class="fa-solid fa-xmark text-lg"></i>
+      <button onclick="closeModal('dealershipModal')" class="w-8 h-8 rounded-lg bg-gray-900 border border-gray-800 text-gray-400 hover:text-white flex items-center justify-center transition cursor-pointer">
+        <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
 
-    <!-- 2-Column Responsive Body -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
-      
-      <!-- LEFT COLUMN: Identity & Facebook Auto-Sync Rules -->
-      <div class="space-y-3.5">
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Account User ID</label>
-            <input type="text" id="dealershipSlugInput" readonly class="w-full bg-gray-900 border border-gray-800 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 font-mono truncate">
-          </div>
-          <div>
-            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Dealership Name</label>
-            <input type="text" id="dealershipNameInput" placeholder="e.g. Moses Auto Group" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+    <!-- Store Profile & ID -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-400 mb-1">ACCOUNT USER ID</label>
+        <div class="relative">
+          <input type="text" id="settingsUserId" readonly class="w-full bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono pr-10 cursor-not-allowed">
+          <button type="button" onclick="copyCredential('settingsUserId')" title="Copy User ID" class="absolute right-2.5 top-2 text-gray-500 hover:text-indigo-400 text-xs cursor-pointer">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-400 mb-1">DEALERSHIP NAME</label>
+        <input type="text" id="settingsDealershipName" placeholder="e.g. Moses Auto Group" class="w-full bg-gray-900/80 border border-gray-800 focus:border-indigo-500 rounded-lg px-3 py-2 text-xs text-white">
+      </div>
+    </div>
+
+    <!-- API Keys & Automation Credentials Manager -->
+    <div class="bg-gray-950/70 border border-indigo-900/30 rounded-xl p-4 space-y-4">
+      <div class="flex items-center justify-between border-b border-gray-800/80 pb-2">
+        <span class="text-xs font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+          <i class="fa-solid fa-key text-indigo-400"></i> API Keys & Credentials
+        </span>
+        <span class="text-[11px] text-gray-500">Stored securely per user profile</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <!-- Supabase Project URL -->
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-400 mb-1">SUPABASE URL</label>
+          <div class="relative flex items-center">
+            <input type="password" id="key_supabase_url" placeholder="https://xyz.supabase.co" class="w-full bg-gray-900/90 border border-gray-800 focus:border-indigo-500 rounded-lg pl-3 pr-16 py-2 text-xs text-gray-200 font-mono">
+            <div class="absolute right-2 flex items-center gap-1.5 text-gray-500">
+              <button type="button" onclick="toggleSecretVisibility('key_supabase_url')" class="hover:text-gray-300 text-xs p-1 cursor-pointer">
+                <i id="key_supabase_url_eye" class="fa-regular fa-eye"></i>
+              </button>
+              <button type="button" onclick="copyCredential('key_supabase_url')" title="Copy Key" class="hover:text-indigo-400 text-xs p-1 cursor-pointer">
+                <i class="fa-regular fa-copy"></i>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Facebook Automation Box -->
-        <div class="p-3.5 rounded-2xl bg-blue-950/25 border border-blue-500/30 space-y-2.5">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-1.5 text-blue-300 font-bold text-xs uppercase tracking-wider">
-              <i class="fa-brands fa-facebook text-blue-400"></i> Facebook Auto-Poster
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="fbAutoEnabledInput" class="sr-only peer" checked>
-              <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Page ID</label>
-              <input type="text" id="fbPageIdInput" placeholder="1198606820007865" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
-            </div>
-            <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Access Token</label>
-              <input type="password" id="fbAccessTokenInput" placeholder="EAAGm..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
+        <!-- Supabase Anon Key -->
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-400 mb-1">SUPABASE ANON KEY</label>
+          <div class="relative flex items-center">
+            <input type="password" id="key_supabase_anon" placeholder="sb_publishable_..." class="w-full bg-gray-900/90 border border-gray-800 focus:border-indigo-500 rounded-lg pl-3 pr-16 py-2 text-xs text-gray-200 font-mono">
+            <div class="absolute right-2 flex items-center gap-1.5 text-gray-500">
+              <button type="button" onclick="toggleSecretVisibility('key_supabase_anon')" class="hover:text-gray-300 text-xs p-1 cursor-pointer">
+                <i id="key_supabase_anon_eye" class="fa-regular fa-eye"></i>
+              </button>
+              <button type="button" onclick="copyCredential('key_supabase_anon')" title="Copy Key" class="hover:text-indigo-400 text-xs p-1 cursor-pointer">
+                <i class="fa-regular fa-copy"></i>
+              </button>
             </div>
           </div>
+        </div>
 
-          <!-- Conditions -->
-          <div>
-            <label class="text-[10px] font-bold text-blue-300 uppercase block mb-1">Auto-Sync Conditions:</label>
-            <div class="grid grid-cols-3 gap-1.5">
-              <label class="flex items-center space-x-1.5 bg-gray-900/80 border border-gray-800 p-1.5 rounded-md cursor-pointer">
-                <input type="checkbox" name="autoCondition" value="Certified Pre-Owned" class="rounded text-blue-600 bg-gray-950 border-gray-700 text-xs" checked>
-                <span class="text-[11px] text-gray-300">Certified</span>
-              </label>
-              <label class="flex items-center space-x-1.5 bg-gray-900/80 border border-gray-700/80 p-1.5 rounded-md cursor-pointer">
-                <input type="checkbox" name="autoCondition" value="Used" class="rounded text-blue-600 bg-gray-950 border-gray-700 text-xs" checked>
-                <span class="text-[11px] text-gray-300">Used</span>
-              </label>
-              <label class="flex items-center space-x-1.5 bg-gray-900/80 border border-gray-700/80 p-1.5 rounded-md cursor-pointer">
-                <input type="checkbox" name="autoCondition" value="New" class="rounded text-blue-600 bg-gray-950 border-gray-700 text-xs">
-                <span class="text-[11px] text-gray-300">New</span>
-              </label>
+        <!-- Facebook Page ID -->
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-400 mb-1">FACEBOOK PAGE ID</label>
+          <div class="relative flex items-center">
+            <input type="text" id="key_fb_page_id" placeholder="e.g. 119860682007865" class="w-full bg-gray-900/90 border border-gray-800 focus:border-indigo-500 rounded-lg pl-3 pr-16 py-2 text-xs text-gray-200 font-mono">
+            <div class="absolute right-2 flex items-center gap-1.5 text-gray-500">
+              <button type="button" onclick="copyCredential('key_fb_page_id')" title="Copy Key" class="hover:text-indigo-400 text-xs p-1 cursor-pointer">
+                <i class="fa-regular fa-copy"></i>
+              </button>
             </div>
           </div>
+        </div>
 
-          <!-- Locations -->
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-[10px] font-bold text-blue-300 uppercase block">Target Locations:</label>
-              <div class="flex gap-2">
-                <button type="button" onclick="toggleAllLocations(true)" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer">Select All</button>
-                <span class="text-gray-600 text-[10px]">•</span>
-                <button type="button" onclick="toggleAllLocations(false)" class="text-[10px] text-rose-400 hover:text-rose-300 font-semibold cursor-pointer">Clear All</button>
-              </div>
-            </div>
-            <div id="modalLocationList" class="max-h-28 overflow-y-auto space-y-1 bg-gray-950/70 p-2 rounded-lg border border-gray-800 text-xs">
-              <p class="text-[11px] text-gray-500">Loading dealer locations...</p>
+        <!-- Facebook Access Token -->
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-400 mb-1">FACEBOOK ACCESS TOKEN</label>
+          <div class="relative flex items-center">
+            <input type="password" id="key_fb_token" placeholder="EAA..." class="w-full bg-gray-900/90 border border-gray-800 focus:border-indigo-500 rounded-lg pl-3 pr-16 py-2 text-xs text-gray-200 font-mono">
+            <div class="absolute right-2 flex items-center gap-1.5 text-gray-500">
+              <button type="button" onclick="toggleSecretVisibility('key_fb_token')" class="hover:text-gray-300 text-xs p-1 cursor-pointer">
+                <i id="key_fb_token_eye" class="fa-regular fa-eye"></i>
+              </button>
+              <button type="button" onclick="copyCredential('key_fb_token')" title="Copy Key" class="hover:text-indigo-400 text-xs p-1 cursor-pointer">
+                <i class="fa-regular fa-copy"></i>
+              </button>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- RIGHT COLUMN: Scraper Feeds & Submission Controls -->
-      <div class="space-y-3">
-        <div class="p-2.5 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-[11px] text-indigo-300 leading-snug flex items-center gap-2">
-          <i class="fa-solid fa-circle-info text-indigo-400 text-xs"></i>
-          <span>Paste <strong>Page 2</strong> URLs from your site. Pagination will auto-configure.</span>
-        </div>
-
-        <div>
-          <label class="text-[10px] font-bold text-indigo-400 uppercase block mb-1">Used Inventory (Page 2 URL)</label>
-          <input type="text" id="dealershipUsedUrlInput" oninput="handleUrlInput(this)" placeholder="https://www.yourdealer.com/used-inventory/index.htm?page=2" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-        </div>
-
-        <div>
-          <label class="text-[10px] font-bold text-emerald-400 uppercase block mb-1">New Inventory (Page 2 URL)</label>
-          <input type="text" id="dealershipNewUrlInput" oninput="handleUrlInput(this)" placeholder="https://www.yourdealer.com/new-inventory/index.htm?page=2" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-        </div>
-
-        <div>
-          <label class="text-[10px] font-bold text-cyan-400 uppercase block mb-1">Certified Pre-Owned (Page 2 URL)</label>
-          <input type="text" id="dealershipCpoUrlInput" oninput="handleUrlInput(this)" placeholder="https://www.yourdealer.com/search-cpo.html?pt=2" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-        </div>
-
-        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800 text-xs">
-          <div class="flex items-center gap-1.5 text-emerald-300">
-            <i class="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
-            <span class="text-[11px]">Pattern: <strong id="detectedPatternText" class="font-mono text-emerald-200">?pt={page}</strong></span>
-          </div>
-          <button type="button" onclick="toggleAdvancedPagination()" class="text-[11px] text-gray-400 hover:text-white flex items-center gap-1">
-            <span>Override</span>
-            <i id="advIcon" class="fa-solid fa-chevron-down text-[9px]"></i>
-          </button>
-        </div>
-
-        <div id="advancedPaginationBox" class="hidden p-2.5 bg-gray-950 rounded-lg border border-gray-800 space-y-1">
-          <label class="text-[10px] font-bold text-amber-400 uppercase block">Manual Pattern Override</label>
-          <input type="text" id="dealershipPageModifierInput" placeholder="?pt={page}" class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1 text-xs text-white font-mono">
-        </div>
-
-        <!-- Buttons & Danger Zone -->
-        <div class="pt-2 flex gap-2">
-          <button onclick="saveDealershipProfile()" id="saveProfileBtn" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-md shadow-indigo-600/30 cursor-pointer">
-            Save Settings & URLs
-          </button>
-          <button onclick="closeModal('dealershipModal')" class="px-3.5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs transition cursor-pointer">
-            Cancel
-          </button>
-        </div>
-
-        <div class="pt-2 border-t border-rose-900/20 flex items-center justify-between">
-          <span class="text-[11px] text-gray-500">Need to remove all data?</span>
-          <button onclick="openDeleteAccountModal()" type="button" class="text-xs text-rose-400 hover:text-rose-300 font-semibold cursor-pointer">
-            Delete Account
-          </button>
-        </div>
+    <!-- Website Crawler Feed URLs -->
+    <div class="bg-gray-950/70 border border-gray-800 rounded-xl p-4 space-y-3">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-2">
+        <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+          <i class="fa-solid fa-globe"></i> Dealer Website Crawler Feeds
+        </span>
+        <span class="text-[11px] text-gray-500">Paste Page 2 URLs from inventory searches</span>
       </div>
 
+      <div class="space-y-2.5">
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-400 mb-1">USED INVENTORY (PAGE 2 URL)</label>
+          <input type="text" id="settingsUsedUrl" placeholder="https://www.dealersite.com/search-all-used-inventory.html" class="w-full bg-gray-900/90 border border-gray-800 focus:border-indigo-500 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-400 mb-1">NEW INVENTORY (PAGE 2 URL)</label>
+          <input type="text" id="settingsNewUrl" placeholder="https://www.dealersite.com/search-all-new-inventory.html" class="w-full bg-gray-900/90 border border-gray-800 focus:border-indigo-500 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-400 mb-1">CERTIFIED PRE-OWNED (PAGE 2 URL)</label>
+          <input type="text" id="settingsCpoUrl" placeholder="https://www.dealersite.com/search-cpo.html" class="w-full bg-gray-900/90 border border-gray-800 focus:border-indigo-500 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center justify-between pt-2">
+      <button onclick="closeModal('dealershipModal')" class="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-gray-400 text-xs font-semibold cursor-pointer">
+        Cancel
+      </button>
+      <button onclick="saveAllSettingsAndCredentials()" id="saveSettingsBtn" class="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/30">
+        <i class="fa-solid fa-floppy-disk"></i>
+        <span>Save Settings & Keys</span>
+      </button>
     </div>
 
   </div>
 </div>
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 4: DEALERSHIP SETTINGS MODAL END ============ -->
+<!-- ======================= SECTION: DEALERSHIP SETTINGS MODAL END ============= -->
 <!-- ============================================================================== -->
 
 
@@ -1060,197 +1055,112 @@ function toggleAdvancedPagination() {
 /* ============================================================================ */
 /* ======================= FUNCTION: DEALER SETTINGS START ==================== */
 /* ============================================================================ */
-async function loadUserStoreSettings() {
-  if (!currentUser) return;
+function toggleSecretVisibility(inputId) {
+  const input = document.getElementById(inputId);
+  const eye = document.getElementById(inputId + "_eye");
+  if (!input) return;
 
-  let localBackup = {};
+  if (input.type === "password") {
+    input.type = "text";
+    if (eye) eye.className = "fa-solid fa-eye-slash text-indigo-400";
+  } else {
+    input.type = "password";
+    if (eye) eye.className = "fa-regular fa-eye";
+  }
+}
+
+async function copyCredential(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input || !input.value) return;
+
   try {
-    const raw = localStorage.getItem("autolaunch_settings_" + currentUser.id);
-    if (raw) localBackup = JSON.parse(raw);
-  } catch (e) {}
+    await navigator.clipboard.writeText(input.value);
+    const originalPlaceholder = input.placeholder;
+    input.placeholder = "Copied to clipboard!";
+    setTimeout(() => {
+      input.placeholder = originalPlaceholder;
+    }, 1500);
+  } catch (err) {
+    input.select();
+    document.execCommand("copy");
+  }
+}
+
+async function openDealershipModal() {
+  if (!currentUser) return;
+  document.getElementById("settingsUserId").value = currentUser.id;
+  document.getElementById("dealershipModal").classList.remove("hidden");
 
   try {
     const { data, error } = await supabaseClient
       .from("user_settings")
       .select("*")
       .eq("user_id", currentUser.id)
-      .single();
+      .maybeSingle();
 
+    if (error) throw error;
     if (data) {
-      currentStore = {
-        name: data.store_name || localBackup.name || "My Dealership",
-        pageModifier: data.page_modifier || localBackup.pageModifier || "?pt={page}",
-        usedUrl: data.used_url || localBackup.usedUrl || "",
-        newUrl: data.new_url || localBackup.newUrl || "",
-        cpoUrl: data.certified_url || localBackup.cpoUrl || "",
-        fbPageId: data.fb_page_id || localBackup.fbPageId || "",
-        fbAccessToken: data.fb_access_token || localBackup.fbAccessToken || "",
-        fbAutoEnabled: typeof data.fb_auto_enabled === 'boolean' ? data.fb_auto_enabled : (typeof localBackup.fbAutoEnabled === 'boolean' ? localBackup.fbAutoEnabled : true),
-        fbAutoConditions: Array.isArray(data.fb_auto_conditions) ? data.fb_auto_conditions : (Array.isArray(localBackup.fbAutoConditions) ? localBackup.fbAutoConditions : ["Used", "Certified Pre-Owned"]),
-        fbAutoLocations: Array.isArray(data.fb_auto_locations) ? data.fb_auto_locations : (Array.isArray(localBackup.fbAutoLocations) ? localBackup.fbAutoLocations : [])
-      };
-    } else if (localBackup && localBackup.name) {
-      currentStore = Object.assign(currentStore, localBackup);
+      document.getElementById("settingsDealershipName").value = data.dealership_name || data.store_name || "";
+      document.getElementById("key_supabase_url").value = data.supabase_project_url || "";
+      document.getElementById("key_supabase_anon").value = data.supabase_anon_key || "";
+      document.getElementById("key_fb_page_id").value = data.fb_page_id || "";
+      document.getElementById("key_fb_token").value = data.fb_access_token || "";
+      document.getElementById("settingsUsedUrl").value = data.used_url || "";
+      document.getElementById("settingsNewUrl").value = data.new_url || "";
+      document.getElementById("settingsCpoUrl").value = data.certified_url || "";
     }
   } catch (err) {
-    console.warn("User store settings fetch notice:", err);
-    if (localBackup && localBackup.name) {
-      currentStore = Object.assign(currentStore, localBackup);
-    }
+    console.error("Error loading user credentials:", err);
   }
-  updateStoreUI();
 }
 
-function updateStoreUI() {
-  document.getElementById("headerStoreName").innerText = currentStore.name || "Dealership Inventory";
-  document.getElementById("bannerStoreTitle").innerText = currentStore.name || "Dealership Inventory";
-  document.getElementById("dealershipSlugInput").value = currentUser ? currentUser.id : "Loading...";
-  document.getElementById("dealershipNameInput").value = currentStore.name || "";
-  document.getElementById("fbPageIdInput").value = currentStore.fbPageId || "";
-  document.getElementById("fbAccessTokenInput").value = currentStore.fbAccessToken || "";
-  document.getElementById("dealershipPageModifierInput").value = currentStore.pageModifier || "?pt={page}";
-  document.getElementById("detectedPatternText").innerText = currentStore.pageModifier || "?pt={page}";
-  document.getElementById("dealershipUsedUrlInput").value = currentStore.usedUrl || "";
-  document.getElementById("dealershipNewUrlInput").value = currentStore.newUrl || "";
-  document.getElementById("dealershipCpoUrlInput").value = currentStore.cpoUrl || "";
+async function saveAllSettingsAndCredentials() {
+  if (!currentUser) return;
+  const btn = document.getElementById("saveSettingsBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
 
-  if (document.getElementById("fbAutoEnabledInput")) {
-    document.getElementById("fbAutoEnabledInput").checked = currentStore.fbAutoEnabled;
+  const dealershipName = document.getElementById("settingsDealershipName").value.trim();
+  const payload = {
+    user_id: currentUser.id,
+    dealership_name: dealershipName,
+    store_name: dealershipName,
+    supabase_project_url: document.getElementById("key_supabase_url").value.trim(),
+    supabase_anon_key: document.getElementById("key_supabase_anon").value.trim(),
+    fb_page_id: document.getElementById("key_fb_page_id").value.trim(),
+    fb_access_token: document.getElementById("key_fb_token").value.trim(),
+    used_url: document.getElementById("settingsUsedUrl").value.trim(),
+    new_url: document.getElementById("settingsNewUrl").value.trim(),
+    certified_url: document.getElementById("settingsCpoUrl").value.trim(),
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert(payload, { onConflict: "user_id" });
+
+    if (error) throw error;
+
+    const headerName = document.getElementById("headerStoreName");
+    const bannerTitle = document.getElementById("bannerStoreTitle");
+    if (headerName && payload.dealership_name) headerName.innerText = payload.dealership_name;
+    if (bannerTitle && payload.dealership_name) bannerTitle.innerText = payload.dealership_name;
+
+    closeModal("dealershipModal");
+    alert("✓ All credentials and settings successfully saved!");
+  } catch (err) {
+    console.error("Save settings error:", err);
+    alert("Failed to save settings: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span>Save Settings & Keys</span>';
   }
-
-  document.querySelectorAll('input[name="autoCondition"]').forEach(function(cb) {
-    cb.checked = currentStore.fbAutoConditions.includes(cb.value);
-  });
-}
-
-function populateModalLocationCheckboxes() {
-  const container = document.getElementById("modalLocationList");
-  if (!container) return;
-
-  const uniqueLocations = Array.from(new Set(rawInventory.map(c => c.location_name).filter(Boolean))).sort();
-  if (!uniqueLocations.length) {
-    container.innerHTML = '<p class="text-[11px] text-gray-500">No active locations found yet. Sync inventory first.</p>';
-    return;
-  }
-
-  container.innerHTML = uniqueLocations.map(function(loc, idx) {
-    const isChecked = Array.isArray(currentStore.fbAutoLocations) && currentStore.fbAutoLocations.includes(loc);
-    const boxId = 'autoLocCb_' + idx;
-    return `<div class="flex items-center space-x-2 p-1.5 hover:bg-gray-900/60 rounded select-none">
-      <input type="checkbox" id="${boxId}" name="autoLocation" value="${loc.replace(/"/g, '&quot;')}" class="rounded text-blue-600 bg-gray-950 border-gray-700 cursor-pointer" ${isChecked ? 'checked' : ''}>
-      <label for="${boxId}" class="text-xs text-gray-300 cursor-pointer flex-1">${loc}</label>
-    </div>`;
-  }).join('');
-}
-
-function toggleAllLocations(selectAll) {
-  document.querySelectorAll('input[name="autoLocation"]').forEach(function(cb) {
-    cb.checked = selectAll;
-  });
-}
-
-function openDealershipModal() {
-  updateStoreUI();
-  populateModalLocationCheckboxes();
-  document.getElementById("dealershipModal").classList.remove("hidden");
 }
 
 function toggleAdvancedFilters() {
   var panel = document.getElementById("advancedFilterPanel");
   if (panel) panel.classList.toggle("hidden");
-}
-
-async function saveDealershipProfile() {
-  if (!currentUser) return;
-  const btn = document.getElementById("saveProfileBtn");
-  btn.disabled = true;
-  btn.innerText = "Saving to Database...";
-
-  const name = document.getElementById("dealershipNameInput").value.trim() || currentStore.name;
-  const fbPageId = document.getElementById("fbPageIdInput").value.trim();
-  const fbAccessToken = document.getElementById("fbAccessTokenInput").value.trim();
-  const fbAutoEnabled = document.getElementById("fbAutoEnabledInput") ? document.getElementById("fbAutoEnabledInput").checked : true;
-
-  const selectedConditions = Array.from(
-    document.querySelectorAll('input[name="autoCondition"]:checked')
-  ).map(cb => cb.value);
-
-  const selectedLocations = Array.from(
-    document.querySelectorAll('input[name="autoLocation"]:checked')
-  ).map(cb => cb.value);
-
-  let usedUrl = document.getElementById("dealershipUsedUrlInput").value.trim();
-  let newUrl = document.getElementById("dealershipNewUrlInput").value.trim();
-  let cpoUrl = document.getElementById("dealershipCpoUrlInput").value.trim();
-  let pageModifier = document.getElementById("dealershipPageModifierInput").value.trim();
-
-  [usedUrl, newUrl, cpoUrl].forEach(url => {
-    const parsed = parsePaginationFromUrl(url);
-    if (parsed && (!pageModifier || pageModifier === "?pt={page}")) {
-      pageModifier = parsed.pattern;
-    }
-  });
-
-  if (!pageModifier) pageModifier = "?pt={page}";
-
-  const parsedUsed = parsePaginationFromUrl(usedUrl);
-  if (parsedUsed) usedUrl = parsedUsed.baseUrl;
-
-  const parsedNew = parsePaginationFromUrl(newUrl);
-  if (parsedNew) newUrl = parsedNew.baseUrl;
-
-  const parsedCpo = parsePaginationFromUrl(cpoUrl);
-  if (parsedCpo) cpoUrl = parsedCpo.baseUrl;
-
-  // 1. Update runtime object
-  currentStore.name = name;
-  currentStore.fbPageId = fbPageId;
-  currentStore.fbAccessToken = fbAccessToken;
-  currentStore.fbAutoEnabled = fbAutoEnabled;
-  currentStore.fbAutoConditions = selectedConditions;
-  currentStore.fbAutoLocations = selectedLocations;
-  currentStore.usedUrl = usedUrl;
-  currentStore.newUrl = newUrl;
-  currentStore.cpoUrl = cpoUrl;
-  currentStore.pageModifier = pageModifier;
-
-  // 2. Save directly to localStorage
-  try {
-    localStorage.setItem("autolaunch_settings_" + currentUser.id, JSON.stringify(currentStore));
-  } catch (e) {}
-
-  // 3. Save to Supabase
-  try {
-    const { error } = await supabaseClient.from("user_settings").upsert({
-      user_id: currentUser.id,
-      store_name: name,
-      fb_page_id: fbPageId,
-      fb_access_token: fbAccessToken,
-      fb_auto_enabled: fbAutoEnabled,
-      fb_auto_conditions: selectedConditions,
-      fb_auto_locations: selectedLocations,
-      page_modifier: pageModifier,
-      used_url: usedUrl,
-      new_url: newUrl,
-      certified_url: cpoUrl,
-      updated_at: new Date().toISOString()
-    });
-
-    if (error) {
-      console.warn("Supabase upsert warning:", error);
-      alert("✓ Settings saved locally! (Database sync notice: " + error.message + ")");
-    } else {
-      alert("✓ Settings & Facebook automation preferences saved successfully!");
-    }
-  } catch (e) {
-    console.error("Save error:", e);
-    alert("✓ Settings saved successfully!");
-  }
-
-  btn.disabled = false;
-  btn.innerText = "Save Settings & URLs";
-  updateStoreUI();
-  closeModal("dealershipModal");
 }
 
 async function triggerLiveLotCrawl() {
