@@ -1589,14 +1589,14 @@ function renderGrid(cars) {
     const fbBtnText = isAlreadyInFeed ? "In Feed" : "+ FB Feed";
     const fbBtnIcon = isAlreadyInFeed ? "fa-solid fa-check text-emerald-400" : "fa-brands fa-facebook text-blue-400";
 
-    // Marketplace Auto-Poster Queue Status
+    // Marketplace Queue Status using VIN
     const isMpPosted = !!car.marketplace_posted_at;
     const isMpQueued = !!car.queued_for_marketplace;
     let mpBtnHtml = '';
     if (isMpPosted) {
       mpBtnHtml = `<span class="py-1 px-2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 text-[10px] font-bold flex items-center justify-center gap-1"><i class="fa-solid fa-check"></i> MP Posted</span>`;
     } else {
-      mpBtnHtml = `<button id="mpBtn_${car.id}" onclick="toggleMarketplaceQueue('${car.id}', ${isMpQueued ? 'true' : 'false'})" class="py-1 px-2 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer ${
+      mpBtnHtml = `<button id="mpBtn_${car.vin}" onclick="toggleMarketplaceQueue('${car.vin}', ${isMpQueued ? 'true' : 'false'})" class="py-1 px-2 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer ${
         isMpQueued
           ? 'bg-blue-600 text-white shadow-sm'
           : 'bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-700'
@@ -2291,9 +2291,9 @@ function closeModal(id) {
   document.getElementById(id).classList.add("hidden");
 }
 
-async function toggleMarketplaceQueue(vehicleId, currentStatus) {
+async function toggleMarketplaceQueue(vehicleVin, currentStatus) {
   if (!currentUser) return;
-  const btn = document.getElementById("mpBtn_" + vehicleId);
+  const btn = document.getElementById("mpBtn_" + vehicleVin);
   const nextStatus = !currentStatus;
 
   if (btn) {
@@ -2305,12 +2305,12 @@ async function toggleMarketplaceQueue(vehicleId, currentStatus) {
     const { error } = await supabaseClient
       .from("scraped_inventory")
       .update({ queued_for_marketplace: nextStatus })
-      .eq("id", vehicleId);
+      .eq("vin", vehicleVin);
 
     if (error) throw error;
 
-    // Update in-memory state and re-render grid
-    const targetCar = rawInventory.find(function(c) { return c.id === vehicleId; });
+    // Update locally in memory and refresh card buttons
+    const targetCar = rawInventory.find(function(c) { return c.vin === vehicleVin; });
     if (targetCar) {
       targetCar.queued_for_marketplace = nextStatus;
     }
