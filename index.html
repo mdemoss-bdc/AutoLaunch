@@ -994,65 +994,6 @@ async function confirmDeleteAccount() {
 
 
 /* ============================================================================ */
-/* ======================= FUNCTION: PAGINATION DETECTION START =============== */
-/* ============================================================================ */
-function parsePaginationFromUrl(rawUrl) {
-  if (!rawUrl || !rawUrl.trim()) return null;
-  const urlStr = rawUrl.trim();
-
-  const queryMatch = urlStr.match(/([?&])([a-zA-Z_0-9]+)=2\b/i);
-  if (queryMatch) {
-    const prefix = queryMatch[1];
-    const paramName = queryMatch[2];
-    const pattern = prefix + paramName + "={page}";
-    const cleanBaseUrl = urlStr.replace(queryMatch[0], "");
-    return { baseUrl: cleanBaseUrl, pattern: pattern };
-  }
-
-  const pathMatch = urlStr.match(/(\/(?:page|p)\/)2(\/?)/i);
-  if (pathMatch) {
-    const pattern = pathMatch[1] + "{page}" + pathMatch[2];
-    const cleanBaseUrl = urlStr.replace(pathMatch[0], "/");
-    return { baseUrl: cleanBaseUrl, pattern: pattern };
-  }
-
-  const startMatch = urlStr.match(/([?&])(start)=([0-9]+)\b/i);
-  if (startMatch) {
-    const pattern = startMatch[1] + startMatch[2] + "={page}";
-    const cleanBaseUrl = urlStr.replace(startMatch[0], "");
-    return { baseUrl: cleanBaseUrl, pattern: pattern };
-  }
-
-  return null;
-}
-
-function handleUrlInput(inputEl) {
-  const parsed = parsePaginationFromUrl(inputEl.value);
-  if (parsed) {
-    inputEl.value = parsed.baseUrl;
-    document.getElementById("dealershipPageModifierInput").value = parsed.pattern;
-    document.getElementById("detectedPatternText").innerText = parsed.pattern;
-    document.getElementById("detectedPatternBadge").classList.remove("hidden");
-  }
-}
-
-function toggleAdvancedPagination() {
-  const box = document.getElementById("advancedPaginationBox");
-  const icon = document.getElementById("advIcon");
-  if (box.classList.contains("hidden")) {
-    box.classList.remove("hidden");
-    icon.className = "fa-solid fa-chevron-up text-[10px] ml-1";
-  } else {
-    box.classList.add("hidden");
-    icon.className = "fa-solid fa-chevron-down text-[10px] ml-1";
-  }
-}
-/* ============================================================================ */
-/* ======================= FUNCTION: PAGINATION DETECTION END ================= */
-/* ============================================================================ */
-
-
-/* ============================================================================ */
 /* ======================= FUNCTION: DEALER SETTINGS START ==================== */
 /* ============================================================================ */
 function toggleSecretVisibility(inputId) {
@@ -1083,6 +1024,34 @@ async function copyCredential(inputId) {
   } catch (err) {
     input.select();
     document.execCommand("copy");
+  }
+}
+
+async function loadUserStoreSettings() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("user_settings")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) {
+      currentStore.name = data.dealership_name || data.store_name || "Dealership Inventory";
+      currentStore.usedUrl = data.used_url || "";
+      currentStore.newUrl = data.new_url || "";
+      currentStore.cpoUrl = data.certified_url || "";
+      currentStore.fbPageId = data.fb_page_id || "";
+      currentStore.fbAccessToken = data.fb_access_token || "";
+
+      const headerName = document.getElementById("headerStoreName");
+      const bannerTitle = document.getElementById("bannerStoreTitle");
+      if (headerName && currentStore.name) headerName.innerText = currentStore.name;
+      if (bannerTitle && currentStore.name) bannerTitle.innerText = currentStore.name;
+    }
+  } catch (err) {
+    console.warn("Notice loading user settings:", err);
   }
 }
 
@@ -1142,6 +1111,7 @@ async function saveAllSettingsAndCredentials() {
 
     if (error) throw error;
 
+    currentStore.name = dealershipName;
     const headerName = document.getElementById("headerStoreName");
     const bannerTitle = document.getElementById("bannerStoreTitle");
     if (headerName && payload.dealership_name) headerName.innerText = payload.dealership_name;
@@ -2192,15 +2162,6 @@ function openShareModalByVin(vin) {
 /* ============================================================================ */
 
 
-/* ============================================================================ */
-/* ======================= FUNCTION: 9:16 VIDEO RENDERER START ================ */
-/* ============================================================================ */
-// Video generator removed.
-/* ============================================================================ */
-/* ======================= FUNCTION: 9:16 VIDEO RENDERER END ================== */
-/* ============================================================================ */
-
-
 <!-- ============================================================================== -->
 <!-- ======================= FUNCTION: UI HELPERS START ========================= -->
 <!-- ============================================================================== -->
@@ -2242,7 +2203,6 @@ async function toggleMarketplaceQueue(vehicleVin, currentStatus) {
 }
 
 function triggerMarketplacePosterRun() {
-  // Dispatches the custom Windows protocol to launch the local script
   window.location.href = "autolaunch://run";
 }
 <!-- ============================================================================== -->
