@@ -1772,10 +1772,15 @@ function renderFbFeedEntries() {
   let html = "";
   activePosts.forEach(function(item) {
     const postLink = item.fb_post_id ? ("https://facebook.com/" + item.fb_post_id) : "#";
-    const carTitle = `${item.year || ''} ${item.make || ''} ${item.model || 'Vehicle'} ${item.trim ? item.trim : ''}`;
+    const carTitle = `${item.year || ''} ${item.make || ''} ${item.model || 'Vehicle'} ${item.trim ? item.trim : ''}`.trim();
     const priceClean = item.price ? "$" + item.price.toLocaleString() : "Call for Price";
     const milesClean = (item.mileage || 0).toLocaleString() + " mi";
     const imgUrl = item.image_url || FALLBACK_IMAGE;
+
+    // Cross-reference raw inventory to pull stock number if available
+    const matchedInv = rawInventory.find(c => c.vin === item.vin) || {};
+    const stockNumber = item.stock_number || matchedInv.stock_number || matchedInv.stock || "N/A";
+    const vinNumber = item.vin || matchedInv.vin || "N/A";
 
     html += `<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-3 w-full sm:w-auto">
@@ -1783,6 +1788,11 @@ function renderFbFeedEntries() {
         <div>
           <h5 class="text-sm font-bold text-white">${carTitle}</h5>
           <div class="text-xs text-emerald-400 font-bold">${priceClean} <span class="text-gray-400 font-normal">• ${milesClean}</span></div>
+          <div class="flex items-center gap-2 pt-1 font-mono text-[11px] text-gray-400">
+            <span>VIN: <strong class="text-gray-300 font-normal">${vinNumber}</strong></span>
+            <span>•</span>
+            <span>Stock: <strong class="text-indigo-300 font-semibold">${stockNumber}</strong></span>
+          </div>
           <div class="flex items-center gap-2 pt-1">
             <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">Live on Page</span>
             ${item.fb_post_id ? `<a href="${postLink}" target="_blank" class="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold cursor-pointer"><i class="fa-brands fa-facebook"></i> View Post <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>` : ''}
