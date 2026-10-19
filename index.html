@@ -1763,22 +1763,27 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
   }
 }
 
-function extractStockFromVehicle(car) {
-  if (!car) return "N/A";
-  if (car.stock_number) return car.stock_number;
-  if (car.stock_no) return car.stock_no;
-  if (car.stockNumber) return car.stockNumber;
-  if (car.stock && typeof car.stock === 'string') return car.stock;
+function getExactStockNumber(item, matchedInv) {
+  // Check all exact keys where the scraper stores stock numbers
+  const sources = [
+    item.stock, item.stock_number, item.stock_no, item.stockNumber, item.stock_id,
+    matchedInv.stock, matchedInv.stock_number, matchedInv.stock_no, matchedInv.stockNumber, matchedInv.stock_id
+  ];
 
-  const url = car.detail_url || car.listing_url || "";
-  const matchUrlStock = url.match(/[?&/](?:stock|stockno|stock-number|stock_number)=([a-zA-Z0-9]+)/i) ||
-                        url.match(/\/([a-zA-Z0-9]{5,10})\.htm/i);
-  if (matchUrlStock && matchUrlStock[1] && matchUrlStock[1] !== 'index') {
-    return matchUrlStock[1].toUpperCase();
+  for (const val of sources) {
+    if (val && typeof val === 'string' && val.trim() !== "" && val.trim() !== "N/A") {
+      return val.trim();
+    }
+    if (typeof val === 'number') {
+      return String(val);
+    }
   }
 
-  if (car.vin && car.vin.length >= 8) {
-    return car.vin.slice(-8);
+  // Look in the listing or detail URL query params for stock
+  const url = (matchedInv.detail_url || matchedInv.listing_url || item.detail_url || "");
+  const match = url.match(/[?&/](?:stock|stockno|stock-number|stock_number)=([a-zA-Z0-9_-]+)/i);
+  if (match && match[1] && match[1].toLowerCase() !== 'index') {
+    return match[1].toUpperCase();
   }
 
   return "N/A";
@@ -1802,11 +1807,11 @@ function renderFbFeedEntries() {
     return;
   }
 
-  // Filter based on live search input (Stock #, VIN, Title)
+  // Search filter across Stock #, VIN, and Year Make Model
   if (query) {
     activePosts = activePosts.filter(item => {
       const matchedInv = rawInventory.find(c => c.vin === item.vin) || {};
-      const stockNumber = extractStockFromVehicle(matchedInv).toLowerCase();
+      const stockNumber = getExactStockNumber(item, matchedInv).toLowerCase();
       const vinNumber = (item.vin || matchedInv.vin || "").toLowerCase();
       const carTitle = `${item.year || ''} ${item.make || ''} ${item.model || ''} ${item.trim || ''}`.toLowerCase();
       return stockNumber.includes(query) || vinNumber.includes(query) || carTitle.includes(query);
@@ -1829,7 +1834,7 @@ function renderFbFeedEntries() {
     const imgUrl = item.image_url || FALLBACK_IMAGE;
 
     const matchedInv = rawInventory.find(c => c.vin === item.vin) || {};
-    const stockNumber = extractStockFromVehicle(matchedInv);
+    const stockNumber = getExactStockNumber(item, matchedInv);
     const vinNumber = item.vin || matchedInv.vin || "N/A";
 
     html += `<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
