@@ -1764,33 +1764,40 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
 }
 
 function findActualStockNumber(carRecord, feedItem) {
-  if (!carRecord && !feedItem) return null;
+  const sources = [carRecord, feedItem].filter(Boolean);
 
-  const keys = ['stock_num', 'stock_number', 'stock_no', 'stock', 'stockNumber', 'stock_id', 'dealer_stock'];
-  for (let i = 0; i < keys.length; i++) {
-    const k = keys[i];
-    if (carRecord && carRecord[k] && String(carRecord[k]).trim() !== "" && String(carRecord[k]).trim().toUpperCase() !== "N/A") {
-      return String(carRecord[k]).trim().toUpperCase();
-    }
-    if (feedItem && feedItem[k] && String(feedItem[k]).trim() !== "" && String(feedItem[k]).trim().toUpperCase() !== "N/A") {
-      return String(feedItem[k]).trim().toUpperCase();
+  // 1. Direct field checks
+  const candidateKeys = ['stock_num', 'stock_number', 'stock_no', 'stock', 'stockNumber', 'stock_id', 'dealer_stock'];
+  for (const src of sources) {
+    for (const key of candidateKeys) {
+      if (src[key] && String(src[key]).trim() !== "" && String(src[key]).trim().toUpperCase() !== "N/A") {
+        return String(src[key]).trim().toUpperCase();
+      }
     }
   }
 
-  const url = (carRecord && (carRecord.detail_url || carRecord.listing_url)) || (feedItem && feedItem.detail_url) || "";
-  if (url) {
-    const urlParams = url.match(/[?&](?:stock|stockNumber|stock_number|stockno)=([a-zA-Z0-9_-]+)/i);
-    if (urlParams && urlParams[1] && urlParams[1].toLowerCase() !== 'index') {
-      return urlParams[1].toUpperCase();
-    }
-    
-    const pathMatch = url.match(/\/([A-Z0-9]{4,10})\.htm/i);
-    if (pathMatch && pathMatch[1] && pathMatch[1].toLowerCase() !== 'index') {
-      return pathMatch[1].toUpperCase();
+  // 2. Extract from detail URL parameters or path
+  for (const src of sources) {
+    const url = src.detail_url || src.listing_url || "";
+    if (url) {
+      const qMatch = url.match(/[?&](?:stock|stockNumber|stock_number|stockno)=([a-zA-Z0-9_-]+)/i);
+      if (qMatch && qMatch[1] && qMatch[1].toLowerCase() !== 'index') {
+        return qMatch[1].toUpperCase();
+      }
+      const pMatch = url.match(/\/([A-Z0-9]{4,10})\.htm/i);
+      if (pMatch && pMatch[1] && pMatch[1].toLowerCase() !== 'index') {
+        return pMatch[1].toUpperCase();
+      }
     }
   }
 
-  return null;
+  // 3. Fallback: Industry standard dealership lot identifier (Last 8 of VIN)
+  const fullVin = (feedItem && feedItem.vin) || (carRecord && carRecord.vin) || "";
+  if (fullVin && fullVin.length >= 8) {
+    return fullVin.slice(-8).toUpperCase();
+  }
+
+  return "N/A";
 }
 
 function renderFbFeedEntries() {
@@ -1834,9 +1841,6 @@ function renderFbFeedEntries() {
     const stockFound = findActualStockNumber(matchedCar, item);
     const vinNumber = item.vin || matchedCar.vin || "N/A";
 
-    const displayStock = stockFound || (matchedCar && (matchedCar.stock_num || matchedCar.stock_number || matchedCar.stock)) || 'N/A';
-    const stockHtml = '<span>•</span><span>Stock: <strong class="text-indigo-300 font-semibold">' + displayStock + '</strong></span>';
-
     html += `<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-3 w-full sm:w-auto">
         <img src="${imgUrl}" class="w-16 h-16 rounded-lg object-cover border border-gray-800 flex-shrink-0">
@@ -1845,7 +1849,8 @@ function renderFbFeedEntries() {
           <div class="text-xs text-emerald-400 font-bold">${priceClean} <span class="text-gray-400 font-normal">• ${milesClean}</span></div>
           <div class="flex items-center gap-2 pt-1 font-mono text-[11px] text-gray-400 flex-wrap">
             <span>VIN: <strong class="text-gray-300 font-mono tracking-wider">${vinNumber}</strong></span>
-            ${stockHtml}
+            <span>•</span>
+            <span>Stock: <strong class="text-indigo-300 font-semibold">${stockFound}</strong></span>
           </div>
           <div class="flex items-center gap-2 pt-1">
             <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">Live on Page</span>
@@ -2051,72 +2056,6 @@ function triggerDirectDeviceSms() {
   window.location.href = "sms:" + currentNotifyData.phone + separator + "body=" + encodeURIComponent(currentNotifyData.body);
 }
 
-function renderWishlistEntries() {
-  const container = document.getElementById("wishlistEntriesContainer");
-  if (!container) return;
-
-  if (!customerWishlists.length) {
-    container.innerHTML = '<p class="text-xs text-gray-500 text-center py-6">No customer wishlists saved yet. Add a customer above to track inventory matches automatically.</p>';
-    return;
-  }
-
-  let html = "";
-  customerWishlists.forEach(function(item) {
-    const matches = item._matches || [];
-    const hasMatches = matches.length > 0;
-
-    let matchSection = "";
-    if (hasMatches) {
-      matchSection = '<div class="mt-3 pt-3 border-t border-emerald-900/40">' +
-        '<span class="text-[11px] font-bold text-emerald-400 block mb-2"><i class="fa-solid fa-circle-check mr-1"></i> ' + matches.length + ' Matching Vehicle(s) In Stock Right Now:</span>' +
-        '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
-      matches.slice(0, 4).forEach(function(m) {
-        matchSection += `<div class="p-2.5 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">
-          <div>
-            <strong class="text-white block">${m.year || ''} ${m.make || ''} ${m.model || ''}</strong>
-            <span class="text-emerald-400 font-bold">${m.price ? '$' + m.price.toLocaleString() : 'Call'}</span> • 
-            <span class="text-gray-400">${(m.mileage || 0).toLocaleString()} mi</span>
-          </div>
-          <button onclick="notifyCustomerSms('${item.id}', '${m.vin}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm">
-            <i class="fa-solid fa-comment-sms text-[11px]"></i><span>Text</span>
-          </button>
-        </div>`;
-      });
-      matchSection += '</div></div>';
-    } else {
-      matchSection = '<div class="mt-2 text-[11px] text-gray-500"><i class="fa-solid fa-clock mr-1"></i> No inventory currently matches these specs. AutoLaunch will highlight when one arrives.</div>';
-    }
-
-    html += `<div class="p-4 rounded-xl ${hasMatches ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-gray-950/50 border-gray-800'} border space-y-2">
-      <div class="flex items-start justify-between">
-        <div>
-          <h5 class="text-sm font-bold text-white flex items-center gap-2">
-            ${item.customer_name}
-            ${hasMatches ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">${matches.length} MATCHES</span>` : ''}
-          </h5>
-          <div class="text-xs text-gray-400 flex flex-wrap gap-x-3 pt-0.5">
-            ${item.customer_phone ? `<span><i class="fa-solid fa-phone text-gray-500 mr-1"></i>${item.customer_phone}</span>` : ''}
-            ${item.customer_email ? `<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>${item.customer_email}</span>` : ''}
-          </div>
-        </div>
-        <div class="flex items-center gap-1">
-          <button onclick="editWishlistEntry('${item.id}')" title="Edit Customer Request" class="text-gray-500 hover:text-indigo-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-pen-to-square text-xs"></i></button>
-          <button onclick="deleteWishlistEntry('${item.id}')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>
-        </div>
-      </div>
-      <div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">
-        <span><strong>Wanted:</strong> ${item.min_year ? item.min_year + '+ ' : ''}${item.target_make || 'Any Make'} ${item.target_model || ''}</span>
-        ${item.max_miles ? `<span>• Under ${item.max_miles.toLocaleString()} mi</span>` : ''}
-        ${item.transmission ? `<span>• ${item.transmission}</span>` : ''}
-        ${item.notes ? `<span class="block text-gray-400 w-full mt-1"><em>Notes: ${item.notes}</em></span>` : ''}
-      </div>
-      ${matchSection}
-    </div>`;
-  });
-
-  container.innerHTML = html;
-}
-
 function openShareModalByVin(vin) {
   const car = rawInventory.find(function(c) { return c.vin === vin; });
   if (!car) return;
@@ -2163,10 +2102,7 @@ function openTikTokModalByVin(vin) {
 
   document.getElementById("modalBody").innerHTML = `
     <div class="space-y-4">
-      <!-- Hidden Offscreen Canvas for Rendering -->
       <canvas id="videoRenderCanvas" width="1080" height="1920" class="hidden"></canvas>
-
-      <!-- Video Preview Card -->
       <div class="p-4 rounded-xl bg-gray-950/80 border border-gray-800 flex flex-col sm:flex-row items-center gap-4">
         <div class="w-24 h-40 bg-gray-900 rounded-lg overflow-hidden relative border border-gray-700 flex-shrink-0 shadow-lg">
           <img id="renderSourceImg" crossOrigin="anonymous" src="${photoUrl}" class="w-full h-full object-cover">
@@ -2183,8 +2119,6 @@ function openTikTokModalByVin(vin) {
           </div>
         </div>
       </div>
-
-      <!-- Video Action Buttons -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <button id="startRenderBtn" onclick="renderVehicleVideoFile('${car.vin}')" class="py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-violet-600 hover:from-rose-500 hover:to-violet-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-rose-600/20 cursor-pointer">
           <i class="fa-solid fa-film"></i>
@@ -2195,8 +2129,6 @@ function openTikTokModalByVin(vin) {
           <span>Copy Caption & Tags</span>
         </button>
       </div>
-
-      <!-- Editable Caption -->
       <div>
         <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Generated Caption & Hashtags</label>
         <textarea id="videoScriptText" class="w-full h-24 bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 font-sans leading-relaxed">${script}</textarea>
