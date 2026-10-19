@@ -2331,31 +2331,9 @@ async function toggleMarketplaceQueue(vehicleVin, currentStatus) {
   }
 }
 
-async function triggerMarketplacePosterRun() {
-  if (!currentUser) return;
-  const btn = document.getElementById("runPosterBtn");
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-blue-400"></i> Dispatching Poster...';
-
-  try {
-    const { error } = await supabaseClient
-      .from("poster_jobs")
-      .insert({
-        user_id: currentUser.id,
-        status: "pending"
-      });
-
-    if (error) throw error;
-    alert("✓ Posting job dispatched! Your local worker will process queued vehicles now.");
-  } catch (err) {
-    console.error("Poster dispatch error:", err);
-    alert("Failed to dispatch poster: " + err.message);
-  }
-
-  setTimeout(() => {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-play text-blue-400"></i> <span class="hidden sm:inline">Run Auto Poster</span>';
-  }, 4000);
+function triggerMarketplacePosterRun() {
+  // Dispatches the custom Windows protocol to launch the local script
+  window.location.href = "autolaunch://run";
 }
 <!-- ============================================================================== -->
 <!-- ======================= FUNCTION: UI HELPERS END =========================== -->
