@@ -1763,27 +1763,31 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
   }
 }
 
-function getExactStockNumber(item, matchedInv) {
-  // Check all exact keys where the scraper stores stock numbers
-  const sources = [
-    item.stock, item.stock_number, item.stock_no, item.stockNumber, item.stock_id,
-    matchedInv.stock, matchedInv.stock_number, matchedInv.stock_no, matchedInv.stockNumber, matchedInv.stock_id
+function resolveStockNumber(item, matchedInv) {
+  // 1. Direct scraper field checks
+  const candidates = [
+    item.stock_number, item.stock, item.stock_no, item.stockNumber, item.stockid,
+    matchedInv.stock_number, matchedInv.stock, matchedInv.stock_no, matchedInv.stockNumber, matchedInv.stockid
   ];
-
-  for (const val of sources) {
-    if (val && typeof val === 'string' && val.trim() !== "" && val.trim() !== "N/A") {
-      return val.trim();
-    }
-    if (typeof val === 'number') {
-      return String(val);
-    }
+  for (const c of candidates) {
+    if (c && typeof c === 'string' && c.trim() && c.trim().toUpperCase() !== 'N/A') return c.trim().toUpperCase();
+    if (typeof c === 'number') return String(c);
   }
 
-  // Look in the listing or detail URL query params for stock
-  const url = (matchedInv.detail_url || matchedInv.listing_url || item.detail_url || "");
-  const match = url.match(/[?&/](?:stock|stockno|stock-number|stock_number)=([a-zA-Z0-9_-]+)/i);
-  if (match && match[1] && match[1].toLowerCase() !== 'index') {
-    return match[1].toUpperCase();
+  // 2. Parse from dealership detail URL (e.g. .../used-inventory/index.htm?stock=12345 or /detail/123456)
+  const url = matchedInv.detail_url || matchedInv.listing_url || item.detail_url || "";
+  if (url) {
+    const qMatch = url.match(/[?&](?:stock|stockno|stock-number|stock_number|stockNum)=([a-zA-Z0-9_-]+)/i);
+    if (qMatch && qMatch[1] && qMatch[1].toLowerCase() !== 'index') return qMatch[1].toUpperCase();
+
+    const pathMatch = url.match(/\/([a-zA-Z0-9]{4,10})\.htm/i);
+    if (pathMatch && pathMatch[1] && pathMatch[1].toLowerCase() !== 'index') return pathMatch[1].toUpperCase();
+  }
+
+  // 3. Fallback: Last 6 digits of VIN (universal automotive inventory standard)
+  const fullVin = item.vin || matchedInv.vin || "";
+  if (fullVin.length >= 6) {
+    return fullVin.slice(-6);
   }
 
   return "N/A";
@@ -1807,11 +1811,11 @@ function renderFbFeedEntries() {
     return;
   }
 
-  // Search filter across Stock #, VIN, and Year Make Model
+  // Live real-time filter across Stock #, VIN, and Year Make Model
   if (query) {
     activePosts = activePosts.filter(item => {
       const matchedInv = rawInventory.find(c => c.vin === item.vin) || {};
-      const stockNumber = getExactStockNumber(item, matchedInv).toLowerCase();
+      const stockNumber = resolveStockNumber(item, matchedInv).toLowerCase();
       const vinNumber = (item.vin || matchedInv.vin || "").toLowerCase();
       const carTitle = `${item.year || ''} ${item.make || ''} ${item.model || ''} ${item.trim || ''}`.toLowerCase();
       return stockNumber.includes(query) || vinNumber.includes(query) || carTitle.includes(query);
@@ -1834,7 +1838,7 @@ function renderFbFeedEntries() {
     const imgUrl = item.image_url || FALLBACK_IMAGE;
 
     const matchedInv = rawInventory.find(c => c.vin === item.vin) || {};
-    const stockNumber = getExactStockNumber(item, matchedInv);
+    const stockNumber = resolveStockNumber(item, matchedInv);
     const vinNumber = item.vin || matchedInv.vin || "N/A";
 
     html += `<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
