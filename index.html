@@ -1651,7 +1651,7 @@ async function publishCarToFacebook(vin) {
   }
 
   const store = car.location_name || currentStore.name || "Our Dealership";
-  const carTitle = `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim ? car.trim : ''}`;
+  const carTitle = `${car.year \vert{}\vert{} ''}${car.make || ''} ${car.model \vert{}\vert{} 'Vehicle'}${car.trim ? car.trim : ''}`;
   const priceClean = (car.price && car.price > 0) ? "$" + car.price.toLocaleString() : "Call for Price";
   const milesClean = (car.mileage || 0).toLocaleString();
   const listingUrl = car.detail_url || car.listing_url || "";
@@ -1763,34 +1763,36 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
   }
 }
 
-function resolveStockNumber(item, matchedInv) {
-  // 1. Direct scraper field checks
-  const candidates = [
-    item.stock_number, item.stock, item.stock_no, item.stockNumber, item.stockid,
-    matchedInv.stock_number, matchedInv.stock, matchedInv.stock_no, matchedInv.stockNumber, matchedInv.stockid
-  ];
-  for (const c of candidates) {
-    if (c && typeof c === 'string' && c.trim() && c.trim().toUpperCase() !== 'N/A') return c.trim().toUpperCase();
-    if (typeof c === 'number') return String(c);
+function findActualStockNumber(carRecord, feedItem) {
+  if (!carRecord && !feedItem) return null;
+
+  // 1. Check all direct properties
+  const keys = ['stock_number', 'stock_no', 'stock', 'stockNumber', 'stock_id', 'dealer_stock'];
+  for (const k of keys) {
+    if (carRecord && carRecord[k] && String(carRecord[k]).trim() !== "" && String(carRecord[k]).trim().toUpperCase() !== "N/A") {
+      return String(carRecord[k]).trim().toUpperCase();
+    }
+    if (feedItem && feedItem[k] && String(feedItem[k]).trim() !== "" && String(feedItem[k]).trim().toUpperCase() !== "N/A") {
+      return String(feedItem[k]).trim().toUpperCase();
+    }
   }
 
-  // 2. Parse from dealership detail URL (e.g. .../used-inventory/index.htm?stock=12345 or /detail/123456)
-  const url = matchedInv.detail_url || matchedInv.listing_url || item.detail_url || "";
+  // 2. Parse from detail_url or listing_url query parameters
+  const url = (carRecord && (carRecord.detail_url || carRecord.listing_url)) || (feedItem && feedItem.detail_url) || "";
   if (url) {
-    const qMatch = url.match(/[?&](?:stock|stockno|stock-number|stock_number|stockNum)=([a-zA-Z0-9_-]+)/i);
-    if (qMatch && qMatch[1] && qMatch[1].toLowerCase() !== 'index') return qMatch[1].toUpperCase();
-
-    const pathMatch = url.match(/\/([a-zA-Z0-9]{4,10})\.htm/i);
-    if (pathMatch && pathMatch[1] && pathMatch[1].toLowerCase() !== 'index') return pathMatch[1].toUpperCase();
+    const urlParams = url.match(/[?&](?:stock|stockNumber|stock_number|stockno)=([a-zA-Z0-9_-]+)/i);
+    if (urlParams && urlParams[1] && urlParams[1].toLowerCase() !== 'index') {
+      return urlParams[1].toUpperCase();
+    }
+    
+    // Check path for patterns like /used/Honda/.../12345A.htm
+    const pathMatch = url.match(/\/([A-Z0-9]{4,10})\.htm/i);
+    if (pathMatch && pathMatch[1] && pathMatch[1].toLowerCase() !== 'index') {
+      return pathMatch[1].toUpperCase();
+    }
   }
 
-  // 3. Fallback: Last 6 digits of VIN (universal automotive inventory standard)
-  const fullVin = item.vin || matchedInv.vin || "";
-  if (fullVin.length >= 6) {
-    return fullVin.slice(-6);
-  }
-
-  return "N/A";
+  return null;
 }
 
 function renderFbFeedEntries() {
@@ -1811,14 +1813,14 @@ function renderFbFeedEntries() {
     return;
   }
 
-  // Live real-time filter across Stock #, VIN, and Year Make Model
+  // Filter based on live search (VIN, Stock #, Year, Make, Model)
   if (query) {
     activePosts = activePosts.filter(item => {
-      const matchedInv = rawInventory.find(c => c.vin === item.vin) || {};
-      const stockNumber = resolveStockNumber(item, matchedInv).toLowerCase();
-      const vinNumber = (item.vin || matchedInv.vin || "").toLowerCase();
-      const carTitle = `${item.year || ''} ${item.make || ''} ${item.model || ''} ${item.trim || ''}`.toLowerCase();
-      return stockNumber.includes(query) || vinNumber.includes(query) || carTitle.includes(query);
+      const matchedCar = rawInventory.find(c => c.vin === item.vin) || {};
+      const actualStock = (findActualStockNumber(matchedCar, item) || "").toLowerCase();
+      const vinStr = (item.vin || matchedCar.vin || "").toLowerCase();
+      const carTitle = `${item.year \vert{}\vert{} ''}${item.make || ''} ${item.model \vert{}\vert{} ''}${item.trim || ''}`.toLowerCase();
+      return vinStr.includes(query) || actualStock.includes(query) || carTitle.includes(query);
     });
 
     if (!activePosts.length) {
@@ -1832,14 +1834,19 @@ function renderFbFeedEntries() {
   let html = "";
   activePosts.forEach(function(item) {
     const postLink = item.fb_post_id ? ("https://facebook.com/" + item.fb_post_id) : "#";
-    const carTitle = `${item.year || ''} ${item.make || ''} ${item.model || 'Vehicle'} ${item.trim ? item.trim : ''}`.trim();
+    const carTitle = `${item.year \vert{}\vert{} ''}${item.make || ''} ${item.model \vert{}\vert{} 'Vehicle'}${item.trim ? item.trim : ''}`.trim();
     const priceClean = item.price ? "$" + item.price.toLocaleString() : "Call for Price";
     const milesClean = (item.mileage || 0).toLocaleString() + " mi";
     const imgUrl = item.image_url || FALLBACK_IMAGE;
 
-    const matchedInv = rawInventory.find(c => c.vin === item.vin) || {};
-    const stockNumber = resolveStockNumber(item, matchedInv);
-    const vinNumber = item.vin || matchedInv.vin || "N/A";
+    const matchedCar = rawInventory.find(c => c.vin === item.vin) || {};
+    const stockFound = findActualStockNumber(matchedCar, item);
+    const vinNumber = item.vin || matchedCar.vin || "N/A";
+
+    // Only render the Stock badge if an actual lot stock number exists
+    const stockHtml = stockFound 
+      ? `<span>•</span><span>Stock: <strong class="text-indigo-300 font-semibold">${stockFound}</strong></span>` 
+      : ``;
 
     html += `<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-3 w-full sm:w-auto">
@@ -1847,10 +1854,9 @@ function renderFbFeedEntries() {
         <div>
           <h5 class="text-sm font-bold text-white">${carTitle}</h5>
           <div class="text-xs text-emerald-400 font-bold">${priceClean} <span class="text-gray-400 font-normal">• ${milesClean}</span></div>
-          <div class="flex items-center gap-2 pt-1 font-mono text-[11px] text-gray-400">
-            <span>VIN: <strong class="text-gray-300 font-normal">${vinNumber}</strong></span>
-            <span>•</span>
-            <span>Stock: <strong class="text-indigo-300 font-semibold">${stockNumber}</strong></span>
+          <div class="flex items-center gap-2 pt-1 font-mono text-[11px] text-gray-400 flex-wrap">
+            <span>VIN: <strong class="text-gray-300 font-mono tracking-wider">${vinNumber}</strong></span>
+            ${stockHtml}
           </div>
           <div class="flex items-center gap-2 pt-1">
             <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">Live on Page</span>
