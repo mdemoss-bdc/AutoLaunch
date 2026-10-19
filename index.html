@@ -1555,9 +1555,9 @@ function resetFilters() {
 /* ============================================================================ */
 
 
-/* ============================================================================ */
-/* ======================= FUNCTION: INVENTORY CARD RENDERER START =========== */
-/* ============================================================================ */
+<!-- ============================================================================== -->
+<!-- ======================= FUNCTION: INVENTORY CARD RENDERER START =========== -->
+<!-- ============================================================================== -->
 function renderGrid(cars) {
   const grid = document.getElementById("inventoryGrid");
   if (!grid) return;
@@ -1588,6 +1588,20 @@ function renderGrid(cars) {
     const fbBtnClass = isAlreadyInFeed ? "bg-emerald-950/60 text-emerald-300 border-emerald-600/40" : "bg-blue-950/60 hover:bg-blue-900/60 text-blue-200 border-blue-700/40";
     const fbBtnText = isAlreadyInFeed ? "In Feed" : "+ FB Feed";
     const fbBtnIcon = isAlreadyInFeed ? "fa-solid fa-check text-emerald-400" : "fa-brands fa-facebook text-blue-400";
+
+    // Marketplace Auto-Poster Queue Status
+    const isMpPosted = !!car.marketplace_posted_at;
+    const isMpQueued = !!car.queued_for_marketplace;
+    let mpBtnHtml = '';
+    if (isMpPosted) {
+      mpBtnHtml = `<span class="py-1 px-2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 text-[10px] font-bold flex items-center justify-center gap-1"><i class="fa-solid fa-check"></i> MP Posted</span>`;
+    } else {
+      mpBtnHtml = `<button id="mpBtn_${car.id}" onclick="toggleMarketplaceQueue('${car.id}', ${isMpQueued ? 'true' : 'false'})" class="py-1 px-2 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer ${
+        isMpQueued
+          ? 'bg-blue-600 text-white shadow-sm'
+          : 'bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-700'
+      }"><i class="fa-solid fa-layer-group"></i> ${isMpQueued ? 'Queued' : '+ Queue MP'}</button>`;
+    }
 
     html += `<div class="glass-card rounded-2xl overflow-hidden flex flex-col justify-between">
       <div>
@@ -1624,22 +1638,25 @@ function renderGrid(cars) {
           <p class="text-[11px] font-mono text-gray-500">Stock: ${car.stock_num || car.stock_number || car.stock || 'N/A'} &bull; VIN: ${car.vin || 'N/A'}</p>
         </div>
       </div>
-      <div class="p-4 pt-0 grid grid-cols-2 gap-2">
-        <button onclick="openShareModalByVin('${car.vin}')" class="py-2.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
-          <i class="fa-solid fa-share-nodes text-indigo-400"></i><span>Quick Share</span>
-        </button>
-        <button id="cardFbBtn_${car.vin}" onclick="publishCarToFacebook('${car.vin}')" class="py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${fbBtnClass}">
-          <i class="${fbBtnIcon}"></i><span>${fbBtnText}</span>
-        </button>
+      <div class="p-4 pt-0 space-y-2">
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="openShareModalByVin('${car.vin}')" class="py-2 px-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
+            <i class="fa-solid fa-share-nodes text-indigo-400"></i><span>Share</span>
+          </button>
+          <button id="cardFbBtn_${car.vin}" onclick="publishCarToFacebook('${car.vin}')" class="py-2 px-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${fbBtnClass}">
+            <i class="${fbBtnIcon}"></i><span>${fbBtnText}</span>
+          </button>
+        </div>
+        ${mpBtnHtml}
       </div>
     </div>`;
   });
 
   grid.innerHTML = html;
 }
-/* ============================================================================ */
-/* ======================= FUNCTION: INVENTORY CARD RENDERER END ============= */
-/* ============================================================================ */
+<!-- ============================================================================== -->
+<!-- ======================= FUNCTION: INVENTORY CARD RENDERER END ============= -->
+<!-- ============================================================================== -->
 
 
 /* ============================================================================ */
@@ -2267,15 +2284,49 @@ function openShareModalByVin(vin) {
 /* ============================================================================ */
 
 
-/* ============================================================================ */
-/* ======================= FUNCTION: UI HELPERS START ========================= */
-/* ============================================================================ */
+<!-- ============================================================================== -->
+<!-- ======================= FUNCTION: UI HELPERS START ========================= -->
+<!-- ============================================================================== -->
 function closeModal(id) {
   document.getElementById(id).classList.add("hidden");
 }
-/* ============================================================================ */
-/* ======================= FUNCTION: UI HELPERS END =========================== */
-/* ============================================================================ */
+
+async function toggleMarketplaceQueue(vehicleId, currentStatus) {
+  if (!currentUser) return;
+  const btn = document.getElementById("mpBtn_" + vehicleId);
+  const nextStatus = !currentStatus;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+  }
+
+  try {
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({ queued_for_marketplace: nextStatus })
+      .eq("id", vehicleId);
+
+    if (error) throw error;
+
+    // Update in-memory state and re-render grid
+    const targetCar = rawInventory.find(function(c) { return c.id === vehicleId; });
+    if (targetCar) {
+      targetCar.queued_for_marketplace = nextStatus;
+    }
+    applyFilters();
+  } catch (err) {
+    console.error("Queue update error:", err);
+    alert("Could not update marketplace queue status: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-layer-group"></i> ${currentStatus ? 'Queued' : '+ Queue MP'}`;
+    }
+  }
+}
+<!-- ============================================================================== -->
+<!-- ======================= FUNCTION: UI HELPERS END =========================== -->
+<!-- ============================================================================== -->
 
 
 /* ============================================================================ */
