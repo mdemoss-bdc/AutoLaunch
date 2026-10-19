@@ -100,8 +100,15 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                                 const model = (item.model || '').trim() || 'Vehicle';
                                 const mileage = item.mileageFromOdometer ? parseInt(String(item.mileageFromOdometer.value || item.mileageFromOdometer).replace(/[^0-9]/g, '')) : null;
 
+                                // STOCK NUMBER: Check schema fields (sku, identifier, mpn)
+                                let stockNum = (item.sku || item.identifier || item.mpn || '').toString().trim();
+                                if (!stockNum || stockNum.toLowerCase() === 'n/a') {
+                                    stockNum = vin.toUpperCase().slice(-8);
+                                }
+
                                 results.push({
                                     vin: vin.toUpperCase(),
+                                    stock_number: stockNum,
                                     user_id: uid,
                                     year: year || 2026,
                                     make: make,
@@ -176,7 +183,33 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 }
             }
 
-            // 2. VEHICLE PHOTO
+            // 2. STOCK NUMBER EXTRACTION
+            let stockNum = card.getAttribute('data-stocknumber') || 
+                           card.getAttribute('data-stock') || 
+                           card.getAttribute('data-stock-number');
+
+            if (!stockNum) {
+                const stockEl = card.querySelector('[class*="stock-number"], [class*="stockNumber"], [class*="stock_number"], .stock, .stock-num, [data-name="stockNumber"]');
+                if (stockEl) {
+                    const text = stockEl.innerText.replace(/Stock\\s*(?:#|Number|No|:)?\\s*/i, '').trim();
+                    if (text && text.length >= 3 && !text.toUpperCase().includes('N/A')) {
+                        stockNum = text;
+                    }
+                }
+            }
+
+            if (!stockNum) {
+                const stockMatch = cardText.match(/Stock\\s*(?:#|Number|No|:)?\\s*([A-Za-z0-9_-]{3,15})/i);
+                if (stockMatch && stockMatch[1] && !stockMatch[1].toUpperCase().includes('VIN')) {
+                    stockNum = stockMatch[1].trim();
+                }
+            }
+
+            if (!stockNum) {
+                stockNum = vin.toUpperCase().slice(-8);
+            }
+
+            // 3. VEHICLE PHOTO
             let photoUrl = null;
             const imgs = Array.from(card.querySelectorAll('img, source[srcset], [data-src], [data-original], [data-lazy-src], [data-lazy], [data-image], .photo-thumb img, picture img'));
             for (const el of imgs) {
@@ -184,7 +217,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                                 el.getAttribute('data-original') || 
                                 el.getAttribute('data-lazy-src') || 
                                 el.getAttribute('data-lazy') || 
-                                el.getAttribute('data-image') ||
+                                el.getAttribute('data-image') || 
                                 (el.tagName === 'SOURCE' ? el.getAttribute('srcset') : null) ||
                                 el.currentSrc || 
                                 el.getAttribute('src');
@@ -209,7 +242,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 }
             }
 
-            // 3. TRUE PRICE EXTRACTION
+            // 4. TRUE PRICE EXTRACTION
             let price = null;
             const priceSelectors = [
                 '[class*="mosesPrice"]', '[class*="moses-price"]',
@@ -280,7 +313,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 }
             }
 
-            // 4. LOCATION
+            // 5. LOCATION
             let exactLocation = "";
             const locEl = card.querySelector('[class*="location"], [class*="dealership"], [class*="store-name"], i[class*="marker"] ~ span');
             if (locEl && locEl.innerText.trim().length > 3) exactLocation = locEl.innerText.trim();
@@ -295,7 +328,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             }
             if (!exactLocation) exactLocation = "Dealership Lot";
 
-            // 5. YEAR, MAKE, MODEL, TRIM
+            // 6. YEAR, MAKE, MODEL, TRIM
             const yearMatch = cardText.match(/\\b(20[0-2][0-9]|199[0-9])\\b/);
             const year = yearMatch ? parseInt(yearMatch[1]) : 2026;
 
@@ -318,11 +351,11 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 }
             }
 
-            // 6. MILEAGE
+            // 7. MILEAGE
             const mileMatch = cardText.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})\\s*(?:miles|mi\\b)/i);
             const mileage = mileMatch ? parseInt(mileMatch[1].replace(/,/g, '')) : (defaultCond === "New" ? 5 : null);
 
-            // 7. COLOR
+            // 8. COLOR
             let color = "Standard";
             const colorRegex = /\\b(Black|White|Silver|Gray|Grey|Red|Blue|Navy|Brown|Green|Gold|Beige|Tan|Burgundy|Orange|Yellow|Charcoal)\\b/i;
             const extMatch = cardText.match(colorRegex);
@@ -331,7 +364,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 if (color === "Grey") color = "Gray";
             }
 
-            // 8. BODY TYPE
+            // 9. BODY TYPE
             let bodyType = "Other";
             if (/SUV|Crossover|Sport Utility/i.test(cardText)) bodyType = "SUV";
             else if (/Truck|Crew Cab|Pickup/i.test(cardText)) bodyType = "Truck";
@@ -341,6 +374,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
 
             results.push({
                 vin: vin.toUpperCase(),
+                stock_number: stockNum,
                 user_id: uid,
                 year: year,
                 make: detectedMake,
