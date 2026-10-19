@@ -55,7 +55,7 @@ async function runAutoPoster() {
     const postsInLast24h = recentPosts ? recentPosts.length : 0;
     const remainingQuota = Math.max(0, DAILY_LIMIT - postsInLast24h);
 
-    console.log(`Posts in last 24h: ${postsInLast24h}/${DAILY_LIMIT}. Quota remaining today: ${remainingQuota}`);
+    console.log(`Posts in last 24h: ${postsInLast24h}/${DAILY_LIMIT}. Quota remaining: ${remainingQuota}`);
 
     if (remainingQuota <= 0) {
       console.log("Daily limit reached. Pausing until rolling 24-hour window opens.");
