@@ -134,9 +134,16 @@ Send Recovery Link
     <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full bg-rose-500 text-[10px] font-black text-white ml-0.5">0</span>
   </button>
 
+  <!-- Sync Dealer Site Button -->
   <button onclick="triggerLiveLotCrawl()" id="crawlTriggerBtn" class="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-600/40 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
     <i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i>
     <span class="hidden sm:inline">Sync Dealer Site</span>
+  </button>
+
+  <!-- Auto-Post Runner Button -->
+  <button onclick="triggerMarketplacePosterRun()" id="runPosterBtn" class="px-3 py-1.5 rounded-lg bg-blue-950/70 hover:bg-blue-900 border border-blue-600/40 text-blue-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-sm">
+    <i class="fa-solid fa-play text-blue-400"></i>
+    <span class="hidden sm:inline">Run Auto Poster</span>
   </button>
 
   <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm cursor-pointer">
@@ -2309,7 +2316,6 @@ async function toggleMarketplaceQueue(vehicleVin, currentStatus) {
 
     if (error) throw error;
 
-    // Update locally in memory and refresh card buttons
     const targetCar = rawInventory.find(function(c) { return c.vin === vehicleVin; });
     if (targetCar) {
       targetCar.queued_for_marketplace = nextStatus;
@@ -2323,6 +2329,33 @@ async function toggleMarketplaceQueue(vehicleVin, currentStatus) {
       btn.innerHTML = `<i class="fa-solid fa-layer-group"></i> ${currentStatus ? 'Queued' : '+ Queue MP'}`;
     }
   }
+}
+
+async function triggerMarketplacePosterRun() {
+  if (!currentUser) return;
+  const btn = document.getElementById("runPosterBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-blue-400"></i> Dispatching Poster...';
+
+  try {
+    const { error } = await supabaseClient
+      .from("poster_jobs")
+      .insert({
+        user_id: currentUser.id,
+        status: "pending"
+      });
+
+    if (error) throw error;
+    alert("✓ Posting job dispatched! Your local worker will process queued vehicles now.");
+  } catch (err) {
+    console.error("Poster dispatch error:", err);
+    alert("Failed to dispatch poster: " + err.message);
+  }
+
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-play text-blue-400"></i> <span class="hidden sm:inline">Run Auto Poster</span>';
+  }, 4000);
 }
 <!-- ============================================================================== -->
 <!-- ======================= FUNCTION: UI HELPERS END =========================== -->
