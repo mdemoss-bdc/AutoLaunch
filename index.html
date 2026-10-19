@@ -166,159 +166,176 @@ Send Recovery Link
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 3: MAIN VIEW & FILTERS START ================ -->
 <!-- ============================================================================== -->
-<main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-6">
+<main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-8">
 
-<!-- Metrics Bar -->
-<div class="glass-panel p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-<div>
-<div class="flex items-center gap-3 mb-1">
-<h1 id="bannerStoreTitle" class="text-2xl font-bold text-white tracking-tight">Dealership Inventory</h1>
-<span id="activeLotsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Loading Locations...</span>
-</div>
-<p class="text-sm text-gray-400">Filter by Make, Model, Trim, Location, and Specs. Click any vehicle to view its live website listing.</p>
-</div>
+  <!-- Command Center Hero Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800/80 pb-6">
+    <div class="space-y-1.5">
+      <div class="flex items-center gap-2 text-[11px] font-bold text-amber-500 uppercase tracking-widest">
+        <i class="fa-solid fa-shapes text-xs"></i>
+        <span>Command Center</span>
+      </div>
+      <h1 id="bannerStoreTitle" class="text-3xl font-extrabold text-white tracking-tight">Dashboard Hub</h1>
+      <p class="text-xs text-gray-400">Load a vehicle into paperwork, copy an SMS card, and watch live scrape KPIs in one place.</p>
+    </div>
+    
+    <div class="flex items-center gap-3">
+      <!-- Quick Status Badges -->
+      <div class="hidden md:flex items-center gap-3 pr-2">
+        <div class="px-3.5 py-1.5 rounded-lg bg-gray-900/80 border border-gray-800 text-xs">
+          <span class="text-gray-500 mr-1.5">Stock:</span>
+          <strong id="lotCount" class="text-amber-400 font-mono">0 Units</strong>
+        </div>
+        <div class="px-3.5 py-1.5 rounded-lg bg-gray-900/80 border border-gray-800 text-xs">
+          <span class="text-gray-500 mr-1.5">Avg:</span>
+          <strong id="avgPrice" class="text-emerald-400 font-mono">--</strong>
+        </div>
+      </div>
+      
+      <!-- Refresh Inventory Button -->
+      <button onclick="fetchLiveInventory(true)" class="px-3.5 py-2 rounded-lg bg-gray-900/90 hover:bg-gray-800 border border-gray-700/70 text-gray-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-sm">
+        <i class="fa-solid fa-arrows-rotate text-xs text-gray-400"></i>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </div>
 
-<div class="flex items-center gap-4">
-<div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
-<div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">In-Stock</div>
-<div id="lotCount" class="text-2xl font-black text-indigo-400">Loading...</div>
-</div>
-<div class="px-5 py-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center min-w-[130px]">
-<div class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Avg Price</div>
-<div id="avgPrice" class="text-2xl font-black text-emerald-400">--</div>
-</div>
-</div>
-</div>
+  <!-- Search & Filter Controls Toolbar -->
+  <div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-3">
+    <div class="flex flex-col md:flex-row gap-3">
+      <div class="flex-1 relative">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+        <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search Year, Make, Model, Trim, VIN, Stock #..." class="w-full bg-gray-950/70 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-amber-500 transition">
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="locationFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-amber-500 max-w-xs">
+          <option value="ALL">All Locations</option>
+        </select>
+        <select id="conditionFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-amber-500">
+          <option value="ALL">All Conditions</option>
+          <option value="Used">Used Only</option>
+          <option value="Certified Pre-Owned">Certified Only</option>
+          <option value="New">New Only</option>
+        </select>
+        <select id="sortSelect" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-amber-500">
+          <option value="price_asc">Price: Low to High</option>
+          <option value="price_desc">Price: High to Low</option>
+          <option value="miles_asc">Mileage: Lowest First</option>
+          <option value="year_desc">Year: Newest First</option>
+        </select>
+        <button id="wishlistFilterBtn" onclick="toggleWishlistOnly()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition cursor-pointer">
+          <i id="wishlistFilterIcon" class="fa-regular fa-heart text-rose-400"></i>
+          <span id="wishlistCountLabel">Saved (0)</span>
+        </button>
+        <button onclick="toggleAdvancedFilters()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-amber-400 flex items-center gap-1.5 transition cursor-pointer">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Specs</span>
+        </button>
+      </div>
+    </div>
 
-<!-- Filters & Search Toolbar -->
-<div class="glass-panel p-4 rounded-xl border border-gray-800 space-y-3">
-<div class="flex flex-col md:flex-row gap-3">
-<div class="flex-1 relative">
-<i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-<input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search Year, Make, Model, Trim, VIN..." class="w-full bg-gray-950/70 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500">
-</div>
-<div class="flex flex-wrap items-center gap-2">
-<select id="locationFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 max-w-xs">
-<option value="ALL">All Locations</option>
-</select>
-<select id="conditionFilter" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
-<option value="ALL">All Conditions</option>
-<option value="Used">Used Only</option>
-<option value="Certified Pre-Owned">Certified Only</option>
-<option value="New">New Only</option>
-</select>
-<select id="sortSelect" onchange="applyFilters()" class="bg-gray-950/70 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
-<option value="price_asc">Price: Low to High</option>
-<option value="price_desc">Price: High to Low</option>
-<option value="miles_asc">Mileage: Lowest First</option>
-<option value="year_desc">Year: Newest First</option>
-</select>
-<button id="wishlistFilterBtn" onclick="toggleWishlistOnly()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition cursor-pointer">
-<i id="wishlistFilterIcon" class="fa-regular fa-heart text-rose-400"></i>
-<span id="wishlistCountLabel">Saved (0)</span>
-</button>
-<button onclick="toggleAdvancedFilters()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition cursor-pointer">
-<i class="fa-solid fa-sliders"></i>
-<span>Specs</span>
-</button>
-</div>
-</div>
+    <!-- Make, Model, Trim Bar -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+      <div>
+        <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Make</label>
+        <select id="makeFilter" onchange="onMakeChange()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500">
+          <option value="ALL">All Makes</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Model</label>
+        <select id="modelFilter" onchange="onModelChange()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500">
+          <option value="ALL">All Models</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Trim</label>
+        <select id="trimFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500">
+          <option value="ALL">All Trims</option>
+        </select>
+      </div>
+    </div>
 
-<!-- Make, Model, Trim Bar -->
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-<div>
-<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Make</label>
-<select id="makeFilter" onchange="onMakeChange()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-<option value="ALL">All Makes</option>
-</select>
-</div>
-<div>
-<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Model</label>
-<select id="modelFilter" onchange="onModelChange()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-<option value="ALL">All Models</option>
-</select>
-</div>
-<div>
-<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Trim</label>
-<select id="trimFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-<option value="ALL">All Trims</option>
-</select>
-</div>
-</div>
+    <!-- Specs Drawer -->
+    <div id="advancedFilterPanel" class="hidden pt-3 border-t border-gray-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      <div>
+        <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Body Type</label>
+        <select id="bodyFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500">
+          <option value="ALL">All Bodies</option>
+          <option value="SUV">SUV / Crossover</option>
+          <option value="Truck">Truck</option>
+          <option value="Sedan">Sedan</option>
+          <option value="Coupe">Coupe</option>
+          <option value="Van">Van / Minivan</option>
+          <option value="Hatchback">Hatchback</option>
+        </select>
+      </div>
 
-<!-- Specs Filter Panel -->
-<div id="advancedFilterPanel" class="hidden pt-3 border-t border-gray-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-<div>
-<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Body Type</label>
-<select id="bodyFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
-<option value="ALL">All Bodies</option>
-<option value="SUV">SUV / Crossover</option>
-<option value="Truck">Truck</option>
-<option value="Sedan">Sedan</option>
-<option value="Coupe">Coupe</option>
-<option value="Van">Van / Minivan</option>
-<option value="Hatchback">Hatchback</option>
-</select>
-</div>
+      <div>
+        <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Exterior Color</label>
+        <select id="colorFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500">
+          <option value="ALL">All Colors</option>
+          <option value="Black">Black</option>
+          <option value="White">White</option>
+          <option value="Silver">Silver</option>
+          <option value="Gray">Gray</option>
+          <option value="Red">Red</option>
+          <option value="Blue">Blue</option>
+          <option value="Green">Green</option>
+          <option value="Brown">Brown</option>
+        </select>
+      </div>
 
-<div>
-<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Exterior Color</label>
-<select id="colorFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
-<option value="ALL">All Colors</option>
-<option value="Black">Black</option>
-<option value="White">White</option>
-<option value="Silver">Silver</option>
-<option value="Gray">Gray</option>
-<option value="Red">Red</option>
-<option value="Blue">Blue</option>
-<option value="Green">Green</option>
-<option value="Brown">Brown</option>
-</select>
-</div>
+      <div>
+        <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Transmission</label>
+        <select id="transFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500">
+          <option value="ALL">All Transmissions</option>
+          <option value="Automatic">Automatic Only</option>
+          <option value="Manual">Manual / Standard</option>
+        </select>
+      </div>
 
-<div>
-<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Transmission</label>
-<select id="transFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
-<option value="ALL">All Transmissions</option>
-<option value="Automatic">Automatic Only</option>
-<option value="Manual">Manual / Standard</option>
-</select>
-</div>
+      <div>
+        <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Min Year</label>
+        <select id="minYearFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500">
+          <option value="ALL">Any Year</option>
+          <option value="2026">2026</option>
+          <option value="2025">2025+</option>
+          <option value="2023">2023+</option>
+          <option value="2021">2021+</option>
+          <option value="2018">2018+</option>
+          <option value="2015">2015+</option>
+        </select>
+      </div>
 
-<div>
-<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Min Year</label>
-<select id="minYearFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
-<option value="ALL">Any Year</option>
-<option value="2026">2026</option>
-<option value="2025">2025+</option>
-<option value="2023">2023+</option>
-<option value="2021">2021+</option>
-<option value="2018">2018+</option>
-<option value="2015">2015+</option>
-</select>
-</div>
+      <div>
+        <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Max Mileage</label>
+        <select id="maxMilesFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500">
+          <option value="ALL">Any Mileage</option>
+          <option value="30000">Under 30,000 mi</option>
+          <option value="60000">Under 60,000 mi</option>
+          <option value="100000">Under 100,000 mi</option>
+          <option value="150000">Under 150,000 mi</option>
+        </select>
+      </div>
 
-<div>
-<label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Max Mileage</label>
-<select id="maxMilesFilter" onchange="applyFilters()" class="w-full bg-gray-950 border border-gray-800 rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
-<option value="ALL">Any Mileage</option>
-<option value="30000">Under 30,000 mi</option>
-<option value="60000">Under 60,000 mi</option>
-<option value="100000">Under 100,000 mi</option>
-<option value="150000">Under 150,000 mi</option>
-</select>
-</div>
+      <div class="flex items-end">
+        <button onclick="resetFilters()" class="w-full py-1.5 rounded-md bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white border border-gray-800 text-xs font-semibold transition cursor-pointer">
+          Reset All Filters
+        </button>
+      </div>
+    </div>
+  </div>
 
-<div class="flex items-end">
-<button onclick="resetFilters()" class="w-full py-1.5 rounded-md bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white border border-gray-800 text-xs font-semibold transition cursor-pointer">
-Reset All Filters
-</button>
-</div>
-</div>
-</div>
+  <!-- Section Title: Live Scraped Showroom Inventory -->
+  <div class="flex items-center gap-2.5 pt-2">
+    <i class="fa-solid fa-truck-front text-amber-500 text-sm"></i>
+    <h2 class="text-base font-bold text-white tracking-wide">Live Scraped Showroom Inventory</h2>
+    <span id="activeLotsCountBadge" class="hidden"></span>
+  </div>
 
-<!-- Inventory Grid -->
-<div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
+  <!-- Inventory Grid -->
+  <div id="inventoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
 </main>
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 3: MAIN VIEW & FILTERS END ================== -->
