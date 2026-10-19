@@ -662,7 +662,7 @@ Copy Phone
 <!-- ======================= SECTION 8: FACEBOOK FEED MANAGER START ============== -->
 <!-- ============================================================================== -->
 <div id="fbFeedModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-<div class="glass-panel w-full max-w-4xl rounded-2xl border border-blue-500/30 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+<div class="glass-panel w-full max-w-4xl rounded-2xl border border-blue-500/30 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
 <div class="flex items-center justify-between border-b border-gray-800 pb-4">
   <div class="flex items-center gap-3">
     <div class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
@@ -674,6 +674,12 @@ Copy Phone
     </div>
   </div>
   <button onclick="closeModal('fbFeedModal')" class="text-gray-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+</div>
+
+<!-- Stock Number & VIN Search Bar -->
+<div class="relative">
+  <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+  <input type="text" id="fbFeedSearchInput" oninput="renderFbFeedEntries()" placeholder="Search active feed by Stock #, VIN, Make, or Model..." class="w-full bg-gray-950/80 border border-gray-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
 </div>
 
 <!-- Facebook Active Posts List -->
