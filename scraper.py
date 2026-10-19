@@ -49,6 +49,29 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
         const results = [];
         const seenVins = new Set();
 
+        const commonMakes = [
+            'Toyota', 'Honda', 'Ford', 'Chevrolet', 'Chevy', 'GMC', 'Jeep', 
+            'Subaru', 'Nissan', 'Hyundai', 'Kia', 'BMW', 'Mercedes-Benz', 
+            'Audi', 'Lexus', 'Ram', 'Dodge', 'Chrysler', 'Mazda', 'Volkswagen', 
+            'VW', 'Cadillac', 'Buick', 'Acura', 'Lincoln', 'Volvo', 'Infiniti', 
+            'Porsche', 'Mitsubishi'
+        ];
+
+        function parseFromUrl(url) {
+            if (!url) return null;
+            // Matches formats like: /used-Huntington-2020-Lincoln-NAUTILUS-SUV-2LMPJ8K94LBL05090
+            const m = url.match(/(?:used|new|cpo|certified)-[^-]+-(\\d{4})-([A-Za-z0-9]+)-([A-Za-z0-9]+)(?:-([A-Za-z0-9_-]+))?/i);
+            if (m) {
+                return {
+                    year: parseInt(m[1]),
+                    make: m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase(),
+                    model: m[3].charAt(0).toUpperCase() + m[3].slice(1).toLowerCase(),
+                    trim: (m[4] || '').replace(/SUV|Sedan|Truck|Coupe/gi, '').trim()
+                };
+            }
+            return null;
+        }
+
         // STRATEGY 1: JSON-LD / SCHEMA.ORG
         try {
             const jsonScripts = document.querySelectorAll('script[type="application/ld+json"]');
@@ -96,11 +119,24 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                                     if (yM) year = parseInt(yM[1]);
                                 }
 
-                                const make = (typeof item.brand === 'object' ? (item.brand.name || '') : (item.brand || item.manufacturer || '')).trim() || 'Other';
-                                const model = (item.model || '').trim() || 'Vehicle';
+                                let make = (typeof item.brand === 'object' ? (item.brand.name || '') : (item.brand || item.manufacturer || '')).trim();
+                                let model = (item.model || '').trim();
+                                let trim = '';
+
+                                // Overwrite if URL contains exact vehicle specs
+                                const urlParsed = parseFromUrl(url);
+                                if (urlParsed) {
+                                    year = urlParsed.year || year;
+                                    make = urlParsed.make || make;
+                                    model = urlParsed.model || model;
+                                    trim = urlParsed.trim || '';
+                                }
+
+                                if (model.toUpperCase() === 'VIN' || !model) model = 'Vehicle';
+                                if (!make || make.toUpperCase() === 'OTHER') make = 'Other';
+
                                 const mileage = item.mileageFromOdometer ? parseInt(String(item.mileageFromOdometer.value || item.mileageFromOdometer).replace(/[^0-9]/g, '')) : null;
 
-                                // STOCK NUMBER: Check schema fields (sku, identifier, mpn)
                                 let stockNum = (item.sku || item.identifier || item.mpn || '').toString().trim();
                                 if (!stockNum || stockNum.toLowerCase() === 'n/a') {
                                     stockNum = vin.toUpperCase().slice(-8);
@@ -113,7 +149,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                                     year: year || 2026,
                                     make: make,
                                     model: model,
-                                    trim: '',
+                                    trim: trim,
                                     price: price,
                                     mileage: mileage,
                                     location_name: "Dealership Lot",
@@ -231,7 +267,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                     const isGarbage = lower.includes('/static/') || lower.includes('placeholder') || 
                                       lower.includes('logo') || lower.includes('banner') || 
                                       lower.includes('1x1') || lower.includes('pixel') || 
-                                      lower.includes('icon') || lower.endsWith('.svg') ||
+                                      lower.includes('icon') || lower.endsWith('.svg') || 
                                       lower.includes('coming-soon') || lower.includes('stock-image') ||
                                       lower.includes('photo-coming');
 
@@ -242,7 +278,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 }
             }
 
-            // 4. TRUE PRICE EXTRACTION
+            // 4. PRICE EXTRACTION
             let price = null;
             const priceSelectors = [
                 '[class*="mosesPrice"]', '[class*="moses-price"]',
@@ -287,28 +323,6 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                                 break;
                             }
                         }
-                        if (i > 0) {
-                            const prevLine = lines[i - 1];
-                            const prevMatch = prevLine.match(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
-                            if (prevMatch) {
-                                const val = parseInt(prevMatch[1].replace(/,/g, ''));
-                                if (val >= 4000 && val <= 350000) {
-                                    price = val;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!price) {
-                const matches = Array.from(cardText.matchAll(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/g));
-                for (const m of matches) {
-                    const val = parseInt(m[1].replace(/,/g, ''));
-                    if (val >= 4000 && val <= 350000) {
-                        price = val;
-                        break;
                     }
                 }
             }
@@ -328,28 +342,41 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             }
             if (!exactLocation) exactLocation = "Dealership Lot";
 
-            // 6. YEAR, MAKE, MODEL, TRIM
-            const yearMatch = cardText.match(/\\b(20[0-2][0-9]|199[0-9])\\b/);
-            const year = yearMatch ? parseInt(yearMatch[1]) : 2026;
+            // 6. YEAR, MAKE, MODEL, TRIM EXTRACTION
+            const urlData = parseFromUrl(detailUrl);
+            let year = urlData ? urlData.year : null;
+            let detectedMake = urlData ? urlData.make : null;
+            let detectedModel = urlData ? urlData.model : null;
+            let detectedTrim = urlData ? urlData.trim : "";
 
-            const commonMakes = ['Toyota', 'Honda', 'Ford', 'Chevrolet', 'Chevy', 'GMC', 'Jeep', 'Subaru', 'Nissan', 'Hyundai', 'Kia', 'BMW', 'Mercedes-Benz', 'Audi', 'Lexus', 'Ram', 'Dodge', 'Chrysler', 'Mazda', 'Volkswagen', 'VW', 'Cadillac', 'Buick', 'Acura', 'Lincoln', 'Volvo', 'Infiniti', 'Porsche', 'Mitsubishi'];
-            let detectedMake = "Other";
-            let detectedModel = "Vehicle";
-            let detectedTrim = "";
+            if (!year) {
+                const yearMatch = cardText.match(/\\b(20[0-2][0-9]|199[0-9])\\b/);
+                year = yearMatch ? parseInt(yearMatch[1]) : 2026;
+            }
 
-            for (const m of commonMakes) {
-                const regex = new RegExp('\\\\b' + m + '\\\\b\\\\s+([A-Za-z0-9\\\\-\\s]{2,40})', 'i');
-                const mMatch = cardText.match(regex);
-                if (mMatch) {
-                    detectedMake = m;
-                    const words = mMatch[1].split('\\n')[0].trim().split(' ').filter(Boolean);
-                    detectedModel = words[0] || "Vehicle";
-                    if (words.length > 1) {
-                        detectedTrim = words.slice(1).join(' ').replace(/SE|LE|XLE|Sport|AWD|4WD|FWD/gi, '').trim();
+            // Title element search if URL parsing was not possible
+            if (!detectedMake || detectedMake === 'Other') {
+                const titleHeading = card.querySelector('h2, h3, h4, .vehicle-title, [class*="title"]');
+                const titleStr = titleHeading ? titleHeading.innerText.trim() : cardText;
+
+                for (const m of commonMakes) {
+                    const regex = new RegExp('\\\\b' + m + '\\\\b\\\\s+([A-Za-z0-9\\\\-\\s]{2,40})', 'i');
+                    const mMatch = titleStr.match(regex);
+                    if (mMatch) {
+                        detectedMake = m;
+                        const words = mMatch[1].split('\\n')[0].trim().split(' ').filter(Boolean);
+                        detectedModel = words[0] || "Vehicle";
+                        if (words.length > 1) {
+                            detectedTrim = words.slice(1).join(' ').replace(/SE|LE|XLE|Sport|AWD|4WD|FWD/gi, '').trim();
+                        }
+                        break;
                     }
-                    break;
                 }
             }
+
+            // Safety guards against generic defaults
+            if (!detectedMake) detectedMake = "Other";
+            if (!detectedModel || detectedModel.toUpperCase() === 'VIN') detectedModel = "Vehicle";
 
             // 7. MILEAGE
             const mileMatch = cardText.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})\\s*(?:miles|mi\\b)/i);
@@ -404,7 +431,6 @@ def push_batch_to_supabase(records: List[dict]) -> int:
         return 0
     unique_by_vin = {r["vin"]: r for r in records if r.get("vin")}
     try:
-        # Upsert partitioned by composite unique constraint: (vin, user_id)
         res = db.table("scraped_inventory").upsert(
             list(unique_by_vin.values()), 
             on_conflict="vin, user_id"
