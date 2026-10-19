@@ -1,17 +1,21 @@
 name: AutoLaunch Scraper Runner
 
 on:
+  schedule:
+    # Runs automatically every night at 06:00 UTC (2:00 AM EDT)
+    - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       user_id:
         description: 'User UUID to crawl for'
         required: true
+        default: '40a95557-504a-400f-a493-462bb2b4f25e'
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -28,5 +32,5 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          USER_ID: ${{ github.event.inputs.user_id }}
+          USER_ID: ${{ github.event.inputs.user_id || '40a95557-504a-400f-a493-462bb2b4f25e' }}
         run: python scraper.py
