@@ -1565,7 +1565,7 @@ function renderGrid(cars) {
             <span>•</span>
             <span><i class="fa-solid fa-gears text-gray-500 mr-1"></i>${car.transmission || 'Automatic'}</span>
           </div>
-          <p class="text-[11px] font-mono text-gray-500">VIN: ${car.vin || 'N/A'}</p>
+          <p class="text-[11px] font-mono text-gray-500">Stock: ${car.stock_num || car.stock_number || car.stock || 'N/A'} &bull; VIN: ${car.vin || 'N/A'}</p>
         </div>
       </div>
       <div class="p-4 pt-0 grid grid-cols-3 gap-2">
@@ -1766,7 +1766,7 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
 function findActualStockNumber(carRecord, feedItem) {
   if (!carRecord && !feedItem) return null;
 
-  const keys = ['stock_number', 'stock_no', 'stock', 'stockNumber', 'stock_id', 'dealer_stock'];
+  const keys = ['stock_num', 'stock_number', 'stock_no', 'stock', 'stockNumber', 'stock_id', 'dealer_stock'];
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
     if (carRecord && carRecord[k] && String(carRecord[k]).trim() !== "" && String(carRecord[k]).trim().toUpperCase() !== "N/A") {
@@ -1834,9 +1834,8 @@ function renderFbFeedEntries() {
     const stockFound = findActualStockNumber(matchedCar, item);
     const vinNumber = item.vin || matchedCar.vin || "N/A";
 
-    const stockHtml = stockFound 
-      ? '<span>•</span><span>Stock: <strong class="text-indigo-300 font-semibold">' + stockFound + '</strong></span>' 
-      : '';
+    const displayStock = stockFound || (matchedCar && (matchedCar.stock_num || matchedCar.stock_number || matchedCar.stock)) || 'N/A';
+    const stockHtml = '<span>•</span><span>Stock: <strong class="text-indigo-300 font-semibold">' + displayStock + '</strong></span>';
 
     html += `<div class="p-4 rounded-xl bg-gray-950/70 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-3 w-full sm:w-auto">
