@@ -1,5 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 0: HEAD & GLOBAL STYLES START ================ -->
+<!-- ============================================================================== -->
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,6 +19,10 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f19; 
 .glass-card:hover { transform: translateY(-4px); border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 12px 24px -10px rgba(99, 102, 241, 0.2); }
 </style>
 </head>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 0: HEAD & GLOBAL STYLES END ================== -->
+<!-- ============================================================================== -->
+
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
 <!-- ============================================================================== -->
@@ -1151,12 +1158,12 @@ async function saveDealershipProfile() {
   currentStore.cpoUrl = cpoUrl;
   currentStore.pageModifier = pageModifier;
 
-  // 2. Save directly to localStorage so it persists across hard refreshes
+  // 2. Save directly to localStorage
   try {
     localStorage.setItem("autolaunch_settings_" + currentUser.id, JSON.stringify(currentStore));
   } catch (e) {}
 
-  // 3. Save to Supabase using only valid columns
+  // 3. Save to Supabase
   try {
     const { error } = await supabaseClient.from("user_settings").upsert({
       user_id: currentUser.id,
@@ -1590,11 +1597,8 @@ function renderGrid(cars) {
 
 
 /* ============================================================================ */
-/* ======================= FUNCTION: SOCIAL / SMS GENERATORS START =========== */
+/* ======================= FUNCTION: FB FEED ACTIONS START ==================== */
 /* ============================================================================ */
-let customerWishlists = [];
-let currentNotifyData = { phone: "", body: "" };
-
 async function loadFbFeed() {
   if (!currentUser) return;
   try {
@@ -1659,22 +1663,21 @@ async function publishCarToFacebook(vin) {
   let photoUrl = car.image_url;
   if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
 
-  const fbCaption = "🚗 FRESH ON THE LOT: " + carTitle + " 🚗\n\n" +
-    "📍 Location: " + store + "\n" +
-    "🏷️ Stock #: " + (car.stock_num || car.stock_number || car.stock || "Inquire") + "\n" +
+  const fbCaption = "🔥 FRESH ARRIVAL: " + carTitle + " 🔥\n\n" +
+    "📍 Available at: " + store + "\n" +
     "💰 Price: " + priceClean + "\n" +
     "🛣️ Mileage: " + milesClean + " miles\n" +
     "⚙️ Transmission: " + (car.transmission || "Automatic") + "\n" +
-    "🎨 Color: " + (car.color || "Standard") + "\n" +
+    "🎨 Exterior: " + (car.color || "Standard") + "\n" +
+    "🏷️ Condition: " + (car.condition || "Inspected & Certified") + "\n" +
     "🆔 VIN: " + (car.vin || "Available upon request") + "\n\n" +
-    "VEHICLE HIGHLIGHTS:\n" +
-    "• Front-line ready & multi-point inspected\n" +
-    "• Clean vehicle history\n" +
-    "• All trades accepted — top dollar paid!\n" +
-    "• Guaranteed financing options available\n\n" +
-    (listingUrl ? "👉 View full details & photos: " + listingUrl + "\n\n" : "\n") +
-    "📩 Drop a comment or message us directly to schedule a test drive today!\n\n" +
-    "#carsforsale #dealership #fresharrival #usedcars #autolaunch";
+    "HIGHLIGHTS:\n" +
+    "✅ Fully inspected & front-line ready\n" +
+    "✅ Clean Title\n" +
+    "✅ All trades accepted\n" +
+    "✅ Financing available for all credit tiers\n" +
+    (listingUrl ? "✅ Full vehicle specs: " + listingUrl + "\n\n" : "\n") +
+    "💬 Send a direct message to check availability or schedule a test drive before it sells!";
 
   try {
     let fbEndpoint = "https://graph.facebook.com/v26.0/" + encodeURIComponent(currentStore.fbPageId);
@@ -1730,7 +1733,7 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
   const btn = document.getElementById("soldBtn_" + feedId);
   if (btn) {
     btn.disabled = true;
-    btn.innerText = "Updating FB Post...";
+    btn.innerText = "Updating...";
   }
 
   try {
@@ -1764,10 +1767,56 @@ async function markCarAsSoldOnFacebook(feedId, fbPostId, currentCaption) {
   }
 }
 
+async function deleteFacebookPost(feedId, fbPostId, carTitle) {
+  if (!confirm(`Permanently delete the Facebook post for:\n${carTitle}?\n\nThis will remove the post directly from Facebook and delete it from your feed.`)) return;
+
+  const btn = document.getElementById("delBtn_" + feedId);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  }
+
+  try {
+    if (currentStore.fbAccessToken && fbPostId) {
+      try {
+        await fetch(`https://graph.facebook.com/v26.0/${encodeURIComponent(fbPostId)}?access_token=${encodeURIComponent(currentStore.fbAccessToken)}`, {
+          method: "DELETE"
+        });
+      } catch (fbErr) {
+        console.warn("Facebook API delete warning:", fbErr);
+      }
+    }
+
+    const { error } = await supabaseClient
+      .from("facebook_ad_feed")
+      .delete()
+      .eq("id", feedId);
+
+    if (error) throw error;
+
+    alert("✓ Post deleted from Facebook and removed from feed.");
+    await loadFbFeed();
+    applyFilters();
+  } catch (err) {
+    console.error("Delete error:", err);
+    alert("Failed to delete post: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+    }
+  }
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: FB FEED ACTIONS END ====================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: FB FEED RENDERING START ================== */
+/* ============================================================================ */
 function findActualStockNumber(carRecord, feedItem) {
   const sources = [carRecord, feedItem].filter(Boolean);
 
-  // 1. Direct field checks
   const candidateKeys = ['stock_num', 'stock_number', 'stock_no', 'stock', 'stockNumber', 'stock_id', 'dealer_stock'];
   for (const src of sources) {
     for (const key of candidateKeys) {
@@ -1777,7 +1826,6 @@ function findActualStockNumber(carRecord, feedItem) {
     }
   }
 
-  // 2. Extract from detail URL parameters or path
   for (const src of sources) {
     const url = src.detail_url || src.listing_url || "";
     if (url) {
@@ -1792,7 +1840,6 @@ function findActualStockNumber(carRecord, feedItem) {
     }
   }
 
-  // 3. Fallback: Industry standard dealership lot identifier (Last 8 of VIN)
   const fullVin = (feedItem && feedItem.vin) || (carRecord && carRecord.vin) || "";
   if (fullVin && fullVin.length >= 8) {
     return fullVin.slice(-8).toUpperCase();
@@ -1860,8 +1907,11 @@ function renderFbFeedEntries() {
         </div>
       </div>
       <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-        <button id="soldBtn_${item.id}" onclick="markCarAsSoldOnFacebook('${item.id}', '${item.fb_post_id || ''}', '${carTitle}')" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer">
-          <i class="fa-solid fa-tag mr-1"></i> Mark as Sold
+        <button id="soldBtn_${item.id}" onclick="markCarAsSoldOnFacebook('${item.id}', '${item.fb_post_id || ''}', '${carTitle}')" class="flex-1 sm:flex-initial px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-tag"></i> <span>Mark Sold</span>
+        </button>
+        <button id="delBtn_${item.id}" onclick="deleteFacebookPost('${item.id}', '${item.fb_post_id || ''}', '${carTitle}')" title="Delete Post Completely" class="px-3 py-2 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white text-xs font-bold transition cursor-pointer flex items-center justify-center">
+          <i class="fa-solid fa-trash-can"></i>
         </button>
       </div>
     </div>`;
@@ -1869,6 +1919,16 @@ function renderFbFeedEntries() {
 
   container.innerHTML = html;
 }
+/* ============================================================================ */
+/* ======================= FUNCTION: FB FEED RENDERING END ==================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: CUSTOMER WISHLIST START ================== */
+/* ============================================================================ */
+let customerWishlists = [];
+let currentNotifyData = { phone: "", body: "" };
 
 function openWishlistModal() {
   cancelWishlistEdit();
@@ -2057,6 +2117,79 @@ function triggerDirectDeviceSms() {
   window.location.href = "sms:" + currentNotifyData.phone + separator + "body=" + encodeURIComponent(currentNotifyData.body);
 }
 
+function renderWishlistEntries() {
+  const container = document.getElementById("wishlistEntriesContainer");
+  if (!container) return;
+
+  if (!customerWishlists.length) {
+    container.innerHTML = '<p class="text-xs text-gray-500 text-center py-6">No customer wishlists saved yet. Add a customer above to track inventory matches automatically.</p>';
+    return;
+  }
+
+  let html = "";
+  customerWishlists.forEach(function(item) {
+    const matches = item._matches || [];
+    const hasMatches = matches.length > 0;
+
+    let matchSection = "";
+    if (hasMatches) {
+      matchSection = '<div class="mt-3 pt-3 border-t border-emerald-900/40">' +
+        '<span class="text-[11px] font-bold text-emerald-400 block mb-2"><i class="fa-solid fa-circle-check mr-1"></i> ' + matches.length + ' Matching Vehicle(s) In Stock Right Now:</span>' +
+        '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
+      matches.slice(0, 4).forEach(function(m) {
+        matchSection += `<div class="p-2.5 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-between text-xs">
+          <div>
+            <strong class="text-white block">${m.year || ''} ${m.make || ''} ${m.model || ''}</strong>
+            <span class="text-emerald-400 font-bold">${m.price ? '$' + m.price.toLocaleString() : 'Call'}</span> • 
+            <span class="text-gray-400">${(m.mileage || 0).toLocaleString()} mi</span>
+          </div>
+          <button onclick="notifyCustomerSms('${item.id}', '${m.vin}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm">
+            <i class="fa-solid fa-comment-sms text-[11px]"></i><span>Text</span>
+          </button>
+        </div>`;
+      });
+      matchSection += '</div></div>';
+    } else {
+      matchSection = '<div class="mt-2 text-[11px] text-gray-500"><i class="fa-solid fa-clock mr-1"></i> No inventory currently matches these specs. AutoLaunch will highlight when one arrives.</div>';
+    }
+
+    html += `<div class="p-4 rounded-xl ${hasMatches ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-gray-950/50 border-gray-800'} border space-y-2">
+      <div class="flex items-start justify-between">
+        <div>
+          <h5 class="text-sm font-bold text-white flex items-center gap-2">
+            ${item.customer_name}
+            ${hasMatches ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">${matches.length} MATCHES</span>` : ''}
+          </h5>
+          <div class="text-xs text-gray-400 flex flex-wrap gap-x-3 pt-0.5">
+            ${item.customer_phone ? `<span><i class="fa-solid fa-phone text-gray-500 mr-1"></i>${item.customer_phone}</span>` : ''}
+            ${item.customer_email ? `<span><i class="fa-solid fa-envelope text-gray-500 mr-1"></i>${item.customer_email}</span>` : ''}
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <button onclick="editWishlistEntry('${item.id}')" title="Edit Customer Request" class="text-gray-500 hover:text-indigo-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-pen-to-square text-xs"></i></button>
+          <button onclick="deleteWishlistEntry('${item.id}')" title="Delete Customer Request" class="text-gray-500 hover:text-rose-400 p-1.5 transition cursor-pointer"><i class="fa-solid fa-trash-can text-xs"></i></button>
+        </div>
+      </div>
+      <div class="text-xs text-indigo-300 bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 flex flex-wrap gap-x-3">
+        <span><strong>Wanted:</strong> ${item.min_year ? item.min_year + '+ ' : ''}${item.target_make || 'Any Make'} ${item.target_model || ''}</span>
+        ${item.max_miles ? `<span>• Under ${item.max_miles.toLocaleString()} mi</span>` : ''}
+        ${item.transmission ? `<span>• ${item.transmission}</span>` : ''}
+        ${item.notes ? `<span class="block text-gray-400 w-full mt-1"><em>Notes: ${item.notes}</em></span>` : ''}
+      </div>
+      ${matchSection}
+    </div>`;
+  });
+
+  container.innerHTML = html;
+}
+/* ============================================================================ */
+/* ======================= FUNCTION: CUSTOMER WISHLIST END ==================== */
+/* ============================================================================ */
+
+
+/* ============================================================================ */
+/* ======================= FUNCTION: QUICK SHARE MODAL START ================== */
+/* ============================================================================ */
 function openShareModalByVin(vin) {
   const car = rawInventory.find(function(c) { return c.vin === vin; });
   if (!car) return;
@@ -2074,9 +2207,13 @@ function openShareModalByVin(vin) {
   </div>`;
   document.getElementById("actionModal").classList.remove("hidden");
 }
+/* ============================================================================ */
+/* ======================= FUNCTION: QUICK SHARE MODAL END ==================== */
+/* ============================================================================ */
+
 
 /* ============================================================================ */
-/* ======================= FUNCTION: INSTANT 9:16 VIDEO RENDERER ============= */
+/* ======================= FUNCTION: 9:16 VIDEO RENDERER START ================ */
 /* ============================================================================ */
 function openTikTokModalByVin(vin) {
   const car = rawInventory.find(c => c.vin === vin);
@@ -2296,12 +2433,19 @@ async function renderVehicleVideoFile(vin) {
 
   drawFrame();
 }
+/* ============================================================================ */
+/* ======================= FUNCTION: 9:16 VIDEO RENDERER END ================== */
+/* ============================================================================ */
 
+
+/* ============================================================================ */
+/* ======================= FUNCTION: UI HELPERS START ========================= */
+/* ============================================================================ */
 function closeModal(id) {
   document.getElementById(id).classList.add("hidden");
 }
 /* ============================================================================ */
-/* ======================= FUNCTION: SOCIAL / SMS GENERATORS END ============= */
+/* ======================= FUNCTION: UI HELPERS END =========================== */
 /* ============================================================================ */
 
 
