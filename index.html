@@ -7,6 +7,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AutoLaunch | Dealership Sales Enablement</title>
+<link rel="icon" href="data:,">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <!-- Supabase JS Client -->
@@ -146,10 +147,17 @@ Send Recovery Link
     <span class="hidden sm:inline">Run Auto Poster</span>
   </button>
 
+  <!-- Dealership Settings Button -->
   <button onclick="openDealershipModal()" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center gap-2 transition border border-gray-700 shadow-sm cursor-pointer">
     <i class="fa-solid fa-building text-indigo-400"></i>
     <span id="headerStoreName">Dealership Inventory</span>
     <i class="fa-solid fa-gear text-[11px] text-gray-400"></i>
+  </button>
+
+  <!-- Help & Setup Playbook Button -->
+  <button onclick="openHelpModal()" class="px-3.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-sm">
+    <i class="fa-solid fa-circle-question text-amber-400 text-sm"></i>
+    <span>Help & Setup</span>
   </button>
 
   <!-- User Profile & Sign Out -->
@@ -500,6 +508,148 @@ Send Recovery Link
 </div>
 <!-- ============================================================================== -->
 <!-- ======================= SECTION: DEALERSHIP SETTINGS MODAL END ============= -->
+<!-- ============================================================================== -->
+
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION: DUMMY-PROOF HELP MODAL START ================ -->
+<!-- ============================================================================== -->
+<div id="helpModal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-panel w-full max-w-4xl rounded-3xl border border-amber-500/30 p-6 sm:p-8 space-y-6 max-h-[92vh] overflow-y-auto shadow-2xl">
+    
+    <!-- Modal Header -->
+    <div class="flex items-center justify-between border-b border-gray-800 pb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500/20 to-orange-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xl shadow-lg shadow-amber-500/10">
+          <i class="fa-solid fa-book-open"></i>
+        </div>
+        <div>
+          <h3 class="text-xl font-black text-white">AutoLaunch Playbook</h3>
+          <p class="text-xs text-gray-400">Simple, no-jargon guide to setting up and running your automotive tool.</p>
+        </div>
+      </div>
+      <button onclick="closeModal('helpModal')" class="w-9 h-9 rounded-xl bg-gray-900 border border-gray-800 text-gray-400 hover:text-white flex items-center justify-center transition cursor-pointer">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <!-- Quick Navigation Pills -->
+    <div class="flex flex-wrap gap-2 text-xs font-bold">
+      <a href="#help-setup" class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-indigo-300 border border-indigo-900/40">1. Initial Setup</a>
+      <a href="#help-marketplace" class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-blue-300 border border-blue-900/40">2. Facebook Marketplace Auto-Poster</a>
+      <a href="#help-fbfeed" class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-cyan-300 border border-cyan-900/40">3. Facebook Business Page Feed</a>
+      <a href="#help-wishlist" class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-rose-300 border border-rose-900/40">4. Customer Wishlist Radar</a>
+      <a href="#help-sync" class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-emerald-300 border border-emerald-900/40">5. Crawling & Syncing Inventory</a>
+    </div>
+
+    <div class="space-y-6 text-sm text-gray-300">
+
+      <!-- STEP 1: INITIAL COMPUTER SETUP -->
+      <div id="help-setup" class="p-5 rounded-2xl bg-gray-950/70 border border-gray-800 space-y-3">
+        <div class="flex items-center gap-2.5 text-indigo-400 font-bold text-base">
+          <div class="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs">1</div>
+          <h4>First Time Computer Setup (One-Time Only)</h4>
+        </div>
+        <p class="text-xs text-gray-400 leading-relaxed">
+          Think of this like plugging in a console before playing. You only have to do this once on your PC so the website can communicate with your computer.
+        </p>
+        <div class="space-y-2 text-xs bg-gray-900/80 p-4 rounded-xl border border-gray-800/80 font-mono">
+          <p class="text-gray-400 font-sans font-semibold mb-1">Open <strong>Command Prompt</strong> on Windows and run these 3 setup commands:</p>
+          <div class="bg-black/60 p-2.5 rounded border border-gray-800 text-amber-300 select-all">
+            pip install playwright requests python-dotenv supabase
+          </div>
+          <div class="bg-black/60 p-2.5 rounded border border-gray-800 text-amber-300 select-all">
+            playwright install chromium
+          </div>
+          <div class="bg-black/60 p-2.5 rounded border border-gray-800 text-amber-300 select-all">
+            reg import register_protocol.reg
+          </div>
+        </div>
+        <div class="p-3 rounded-lg bg-indigo-950/30 border border-indigo-800/40 text-xs text-indigo-200">
+          💡 <strong>What does that register file do?</strong> It registers the <code class="text-amber-300 font-bold">autolaunch://</code> link so when you click "Run Auto Poster" on the internet, your computer knows to launch your poster script automatically.
+        </div>
+      </div>
+
+      <!-- STEP 2: FACEBOOK MARKETPLACE AUTO-POSTER -->
+      <div id="help-marketplace" class="p-5 rounded-2xl bg-gray-950/70 border border-gray-800 space-y-3">
+        <div class="flex items-center gap-2.5 text-blue-400 font-bold text-base">
+          <div class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center text-xs">2</div>
+          <h4>How to Post Vehicles to Facebook Marketplace</h4>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-xs text-gray-300 leading-relaxed">
+          <li>Find the vehicle you want to sell on the main inventory screen.</li>
+          <li>Click the gray <strong>"+ Queue MP"</strong> button on that car's card. It will turn bright blue and say <strong>"Queued"</strong>.</li>
+          <li>Click the blue <strong>"Run Auto Poster"</strong> button in the very top header bar.</li>
+          <li>Chrome will ask: <em>"Open AutoLaunch?"</em> &rarr; Check <strong>"Always allow"</strong> and click <strong>Open</strong>.</li>
+          <li>A black window will open, download the real car photos, fill in price, mileage, transmission, colors, clean title, and description, click <strong>Next</strong>, and click <strong>Publish</strong>!</li>
+          <li>Temporary pictures are automatically erased from your computer hard drive when done.</li>
+        </ol>
+      </div>
+
+      <!-- STEP 3: FACEBOOK BUSINESS PAGE FEED -->
+      <div id="help-fbfeed" class="p-5 rounded-2xl bg-gray-950/70 border border-gray-800 space-y-3">
+        <div class="flex items-center gap-2.5 text-cyan-400 font-bold text-base">
+          <div class="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-xs">3</div>
+          <h4>Posting Directly to Your Facebook Business Page</h4>
+        </div>
+        <p class="text-xs text-gray-300 leading-relaxed">
+          This creates a public post on your dealership page with formatted emoji specs, photos, price, and financing details.
+        </p>
+        <ul class="list-disc list-inside space-y-1.5 text-xs text-gray-300">
+          <li>Click <strong>"+ FB Feed"</strong> directly on any car card.</li>
+          <li>It instantly posts using your Facebook Graph API credentials stored in settings.</li>
+          <li>Click the <strong>"FB Feed"</strong> header button anytime to view all live posts.</li>
+          <li>When a car sells, click <strong>"Mark Sold"</strong> in that modal. AutoLaunch edits the post on Facebook to say <em>"🔴 SOLD! CONGRATULATIONS!"</em> so buyers stop calling about sold cars.</li>
+        </ul>
+      </div>
+
+      <!-- STEP 4: CUSTOMER WISHLIST MATCHMAKER -->
+      <div id="help-wishlist" class="p-5 rounded-2xl bg-gray-950/70 border border-gray-800 space-y-3">
+        <div class="flex items-center gap-2.5 text-rose-400 font-bold text-base">
+          <div class="w-6 h-6 rounded-full bg-rose-500/20 flex items-center justify-center text-xs">4</div>
+          <h4>Customer Wishlist & Inventory Matchmaker</h4>
+        </div>
+        <p class="text-xs text-gray-300 leading-relaxed">
+          Never lose a customer because you didn't have their exact car today.
+        </p>
+        <ul class="list-disc list-inside space-y-1.5 text-xs text-gray-300">
+          <li>Click <strong>"Customer Wishlist"</strong> in the top header.</li>
+          <li>Enter your buyer's name, phone, and what they want (e.g., <em>"Tacoma, Under 50k miles, Automatic"</em>).</li>
+          <li>Whenever new trade-ins or inventory get scraped, AutoLaunch compares your stock against their wishlist.</li>
+          <li>If a car matches, you get an instant match badge with a <strong>1-click Text/SMS button</strong> that writes the message for you.</li>
+        </ul>
+      </div>
+
+      <!-- STEP 5: SYNCING LIVE LOT INVENTORY -->
+      <div id="help-sync" class="p-5 rounded-2xl bg-gray-950/70 border border-gray-800 space-y-3">
+        <div class="flex items-center gap-2.5 text-emerald-400 font-bold text-base">
+          <div class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-xs">5</div>
+          <h4>Updating Dealer Inventory ("Sync Dealer Site")</h4>
+        </div>
+        <p class="text-xs text-gray-300 leading-relaxed">
+          Keeps your local database completely aligned with the newest cars added to your dealership website.
+        </p>
+        <ul class="list-disc list-inside space-y-1.5 text-xs text-gray-300">
+          <li>Click <strong>"Sync Dealer Site"</strong> to signal your background crawler.</li>
+          <li>To run the crawl immediately on your computer, open Command Prompt and type: <code class="text-emerald-300 font-mono bg-black/50 px-2 py-0.5 rounded">python scraper.py</code>.</li>
+          <li>When finished, press <strong>Refresh</strong> on the dashboard to see all new units.</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="flex items-center justify-between pt-4 border-t border-gray-800">
+      <span class="text-xs text-gray-500 font-medium">AutoLaunch Intelligence Suite &bull; Ready for Showroom Floor</span>
+      <button onclick="closeModal('helpModal')" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer shadow-lg shadow-indigo-600/30">
+        Got It, Let's Sell
+      </button>
+    </div>
+
+  </div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION: DUMMY-PROOF HELP MODAL END ================== -->
 <!-- ============================================================================== -->
 
 
@@ -2132,14 +2282,7 @@ function renderWishlistEntries() {
 
   container.innerHTML = html;
 }
-/* ============================================================================ */
-/* ======================= FUNCTION: CUSTOMER WISHLIST END ==================== */
-/* ============================================================================ */
 
-
-/* ============================================================================ */
-/* ======================= FUNCTION: QUICK SHARE MODAL START ================== */
-/* ============================================================================ */
 function openShareModalByVin(vin) {
   const car = rawInventory.find(function(c) { return c.vin === vin; });
   if (!car) return;
@@ -2157,16 +2300,13 @@ function openShareModalByVin(vin) {
   </div>`;
   document.getElementById("actionModal").classList.remove("hidden");
 }
-/* ============================================================================ */
-/* ======================= FUNCTION: QUICK SHARE MODAL END ==================== */
-/* ============================================================================ */
 
-
-<!-- ============================================================================== -->
-<!-- ======================= FUNCTION: UI HELPERS START ========================= -->
-<!-- ============================================================================== -->
 function closeModal(id) {
   document.getElementById(id).classList.add("hidden");
+}
+
+function openHelpModal() {
+  document.getElementById("helpModal").classList.remove("hidden");
 }
 
 async function toggleMarketplaceQueue(vehicleVin, currentStatus) {
@@ -2205,14 +2345,7 @@ async function toggleMarketplaceQueue(vehicleVin, currentStatus) {
 function triggerMarketplacePosterRun() {
   window.location.href = "autolaunch://run";
 }
-<!-- ============================================================================== -->
-<!-- ======================= FUNCTION: UI HELPERS END =========================== -->
-<!-- ============================================================================== -->
 
-
-/* ============================================================================ */
-/* ======================= APP LIFECYCLE INITIALIZATION START ================= */
-/* ============================================================================ */
 document.addEventListener("DOMContentLoaded", async function() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session && session.user) {
@@ -2222,9 +2355,6 @@ document.addEventListener("DOMContentLoaded", async function() {
     document.getElementById("authOverlay").classList.remove("hidden");
   }
 });
-/* ============================================================================ */
-/* ======================= APP LIFECYCLE INITIALIZATION END =================== */
-/* ============================================================================ */
 </script>
 </body>
 </html>
