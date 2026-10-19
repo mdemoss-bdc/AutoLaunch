@@ -1659,21 +1659,22 @@ async function publishCarToFacebook(vin) {
   let photoUrl = car.image_url;
   if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
 
-  const fbCaption = "🔥 FRESH ARRIVAL: " + carTitle + " 🔥\n\n" +
-    "📍 Available at: " + store + "\n" +
+  const fbCaption = "🚗 FRESH ON THE LOT: " + carTitle + " 🚗\n\n" +
+    "📍 Location: " + store + "\n" +
+    "🏷️ Stock #: " + (car.stock_num || car.stock_number || car.stock || "Inquire") + "\n" +
     "💰 Price: " + priceClean + "\n" +
     "🛣️ Mileage: " + milesClean + " miles\n" +
     "⚙️ Transmission: " + (car.transmission || "Automatic") + "\n" +
-    "🎨 Exterior: " + (car.color || "Standard") + "\n" +
-    "🏷️ Condition: " + (car.condition || "Inspected & Certified") + "\n" +
+    "🎨 Color: " + (car.color || "Standard") + "\n" +
     "🆔 VIN: " + (car.vin || "Available upon request") + "\n\n" +
-    "HIGHLIGHTS:\n" +
-    "✅ Fully inspected & front-line ready\n" +
-    "✅ Clean Title\n" +
-    "✅ All trades accepted\n" +
-    "✅ Financing available for all credit tiers\n" +
-    (listingUrl ? "✅ Full vehicle specs: " + listingUrl + "\n\n" : "\n") +
-    "💬 Send a direct message to check availability or schedule a test drive before it sells!";
+    "VEHICLE HIGHLIGHTS:\n" +
+    "• Front-line ready & multi-point inspected\n" +
+    "• Clean vehicle history\n" +
+    "• All trades accepted — top dollar paid!\n" +
+    "• Guaranteed financing options available\n\n" +
+    (listingUrl ? "👉 View full details & photos: " + listingUrl + "\n\n" : "\n") +
+    "📩 Drop a comment or message us directly to schedule a test drive today!\n\n" +
+    "#carsforsale #dealership #fresharrival #usedcars #autolaunch";
 
   try {
     let fbEndpoint = "https://graph.facebook.com/v26.0/" + encodeURIComponent(currentStore.fbPageId);
