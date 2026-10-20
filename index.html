@@ -398,13 +398,13 @@ body {
     <!-- 6. Posting preferences -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-cyan-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
-        <span class="text-xs font-bold text-white flex items-center gap-1">
+        <span onclick="openPostingPreferencesModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-cyan-400 transition">
           Posting preferences <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
         </span>
       </div>
       <div>
         <p class="text-[10px] text-slate-400 truncate">Title, emoji, AI text</p>
-        <button onclick="openSettingsModal()" class="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
+        <button onclick="openPostingPreferencesModal()" class="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </button>
       </div>
@@ -879,6 +879,161 @@ body {
     </div>
   </div>
 </div>
+
+<!-- 11. Posting Preferences Configuration Modal -->
+<div id="postingPreferencesModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-700/80 relative text-slate-100 max-h-[90vh] overflow-y-auto">
+    
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+      <div>
+        <h3 class="text-base font-bold text-white">Posting</h3>
+        <p class="text-[11px] text-slate-400">The same settings as your extension. Change them here or there, they stay in sync.</p>
+      </div>
+      <button onclick="closeModal('postingPreferencesModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+      
+      <!-- Left Column: Listing Options -->
+      <div class="space-y-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+        <div>
+          <h4 class="font-bold text-white text-sm flex items-center gap-2 mb-1">
+            <i class="fa-solid fa-car text-blue-400"></i> Listing
+          </h4>
+          <p class="text-[11px] text-slate-400">What every Marketplace post starts with.</p>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1">Vehicle type</label>
+          <select id="prefVehicleType" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+            <option value="Car/Truck" selected>Car/Truck</option>
+            <option value="SUV">SUV</option>
+            <option value="Van">Van</option>
+            <option value="Motorcycle">Motorcycle</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1.5">Emoji at the start of your title</label>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="setPrefEmoji('None')" id="emojiBtn_None" class="px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold cursor-pointer text-xs">None</button>
+            <button type="button" onclick="setPrefEmoji('🔥')" id="emojiBtn_fire" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 cursor-pointer text-xs">🔥</button>
+            <button type="button" onclick="setPrefEmoji('⚡')" id="emojiBtn_bolt" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 cursor-pointer text-xs">⚡</button>
+            <button type="button" onclick="setPrefEmoji('⭐')" id="emojiBtn_star" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 cursor-pointer text-xs">⭐</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1.5">Distance</label>
+          <div class="grid grid-cols-2 gap-2 font-bold text-center">
+            <button type="button" id="distBtnMiles" onclick="setPrefDistance('Miles')" class="py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer">Miles</button>
+            <button type="button" id="distBtnKm" onclick="setPrefDistance('KM')" class="py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">KM</button>
+          </div>
+        </div>
+
+        <div class="space-y-3 pt-2 border-t border-slate-800">
+          <span class="block font-bold text-slate-400 uppercase tracking-wider text-[10px]">Put in every post</span>
+          
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-white block">Clean title</strong>
+              <span class="text-[11px] text-slate-400">Say the car has a clean title</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefCleanTitle" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-white block">New or used</strong>
+              <span class="text-[11px] text-slate-400">Say New or Used in the description</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefNewOrUsed" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-white block">Mileage in the title</strong>
+              <span class="text-[11px] text-slate-400">Include vehicle mileage in title</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefMileageTitle" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-white block">VIN in the description</strong>
+              <span class="text-[11px] text-slate-400">Display full vehicle VIN</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefVinDesc" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-white block">Stock number in the description</strong>
+              <span class="text-[11px] text-slate-400">Display dealership stock #</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefStockNum" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Description & AI -->
+      <div class="space-y-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+        <div class="flex items-center justify-between">
+          <div>
+            <h4 class="font-bold text-white text-sm flex items-center gap-2">
+              <i class="fa-solid fa-wand-magic-sparkles text-pink-400"></i> Description
+            </h4>
+            <p class="text-[11px] text-slate-400">What buyers read under the photos.</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="prefAiDescToggle" checked class="sr-only peer">
+            <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+          </label>
+        </div>
+
+        <div>
+          <strong class="text-white block mb-1">Write descriptions with AI</strong>
+          <span class="text-[11px] text-slate-400 block mb-2">Off = use one fixed description on every post.</span>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1">Tell the AI anything to always mention (optional)</label>
+          <textarea id="prefAiPromptCustom" rows="4" placeholder="e.g. Always mention our 90-day warranty and free delivery within 50 miles" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1.5">Length</label>
+          <div class="grid grid-cols-3 gap-2 font-bold text-center">
+            <button type="button" id="lenBtnShort" onclick="setPrefLength('Short')" class="py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">Short</button>
+            <button type="button" id="lenBtnMedium" onclick="setPrefLength('Medium')" class="py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer">Medium</button>
+            <button type="button" id="lenBtnLong" onclick="setPrefLength('Long')" class="py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">Long</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="flex items-center justify-between pt-3 border-t border-slate-800">
+      <button onclick="closeModal('postingPreferencesModal')" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs cursor-pointer">Cancel</button>
+      <button onclick="savePostingPreferences()" class="px-6 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-md cursor-pointer">Save preferences</button>
+    </div>
+  </div>
+</div>
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 4: MODALS & DROPDOWNS END ==================== -->
 <!-- ============================================================================== -->
@@ -896,6 +1051,9 @@ let authMode = "signin";
 let currentUser = null;
 let activePillFilter = "ACTIVE";
 let selectedPostingSpeed = "standard";
+let selectedPrefEmoji = "None";
+let selectedPrefDistance = "Miles";
+let selectedPrefLength = "Medium";
 
 let currentStore = {
   name: "Dealership Inventory",
@@ -1058,6 +1216,19 @@ async function loadUserStoreSettings() {
       if (data.posting_speed) {
         setPostingSpeed(data.posting_speed);
       }
+
+      if (data.vehicle_type) document.getElementById("prefVehicleType").value = data.vehicle_type;
+      if (data.pref_emoji) setPrefEmoji(data.pref_emoji);
+      if (data.pref_distance) setPrefDistance(data.pref_distance);
+      if (data.pref_length) setPrefLength(data.pref_length);
+      if (data.ai_prompt_custom) document.getElementById("prefAiPromptCustom").value = data.ai_prompt_custom;
+
+      if (data.include_clean_title !== undefined) document.getElementById("prefCleanTitle").checked = data.include_clean_title;
+      if (data.include_new_used !== undefined) document.getElementById("prefNewOrUsed").checked = data.include_new_used;
+      if (data.include_mileage_title !== undefined) document.getElementById("prefMileageTitle").checked = data.include_mileage_title;
+      if (data.include_vin !== undefined) document.getElementById("prefVinDesc").checked = data.include_vin;
+      if (data.include_stock !== undefined) document.getElementById("prefStockNum").checked = data.include_stock;
+      if (data.ai_desc_enabled !== undefined) document.getElementById("prefAiDescToggle").checked = data.ai_desc_enabled;
     }
   } catch (e) {}
 }
@@ -1537,6 +1708,7 @@ function openAutoPostModal() { document.getElementById("autoPostModal").classLis
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
 function openAutoPhotoEditsModal() { document.getElementById("autoPhotoEditsModal").classList.remove("hidden"); }
 function openPostingSafetyModal() { document.getElementById("postingSafetyModal").classList.remove("hidden"); }
+function openPostingPreferencesModal() { document.getElementById("postingPreferencesModal").classList.remove("hidden"); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
 function toggleRibbonSetting(k) {}
 function toggleSelectAllCars(master) {
@@ -1564,6 +1736,47 @@ function setPostingSpeed(speed) {
     btnStd.className = "p-3 rounded-xl border border-blue-600 bg-blue-600/20 text-left transition cursor-pointer";
     btnCaut.className = "p-3 rounded-xl border border-slate-800 bg-slate-900 text-left transition cursor-pointer";
   }
+}
+
+function setPrefEmoji(emoji) {
+  selectedPrefEmoji = emoji;
+  ['None', 'fire', 'bolt', 'star'].forEach(k => {
+    const btn = document.getElementById(`emojiBtn_${k}`);
+    if (btn) {
+      if ((k === 'None' && emoji === 'None') || (k !== 'None' && btn.innerText === emoji)) {
+        btn.className = "px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold cursor-pointer text-xs";
+      } else {
+        btn.className = "px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 cursor-pointer text-xs";
+      }
+    }
+  });
+}
+
+function setPrefDistance(dist) {
+  selectedPrefDistance = dist;
+  const bMiles = document.getElementById("distBtnMiles");
+  const bKm = document.getElementById("distBtnKm");
+  if (dist === 'Miles') {
+    bMiles.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer";
+    bKm.className = "py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer";
+  } else {
+    bKm.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer";
+    bMiles.className = "py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer";
+  }
+}
+
+function setPrefLength(len) {
+  selectedPrefLength = len;
+  ['Short', 'Medium', 'Long'].forEach(l => {
+    const btn = document.getElementById(`lenBtn${l}`);
+    if (btn) {
+      if (l === len) {
+        btn.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer font-bold";
+      } else {
+        btn.className = "py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer";
+      }
+    }
+  });
 }
 
 async function saveAutoPostPreferences() {
@@ -1679,12 +1892,50 @@ async function savePostingSafetyPreferences() {
   }
 }
 
+async function savePostingPreferences() {
+  if (!currentUser) return;
+  const vehicleType = document.getElementById("prefVehicleType").value;
+  const aiEnabled = document.getElementById("prefAiDescToggle").checked;
+  const aiPrompt = document.getElementById("prefAiPromptCustom").value.trim();
+
+  const cleanTitle = document.getElementById("prefCleanTitle").checked;
+  const newOrUsed = document.getElementById("prefNewOrUsed").checked;
+  const mileageTitle = document.getElementById("prefMileageTitle").checked;
+  const vinDesc = document.getElementById("prefVinDesc").checked;
+  const stockNum = document.getElementById("prefStockNum").checked;
+
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      vehicle_type: vehicleType,
+      pref_emoji: selectedPrefEmoji,
+      pref_distance: selectedPrefDistance,
+      pref_length: selectedPrefLength,
+      ai_desc_enabled: aiEnabled,
+      ai_prompt_custom: aiPrompt,
+      include_clean_title: cleanTitle,
+      include_new_used: newOrUsed,
+      include_mileage_title: mileageTitle,
+      include_vin: vinDesc,
+      include_stock: stockNum,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+
+    closeModal('postingPreferencesModal');
+    alert("✓ Posting preferences saved successfully!");
+  } catch (err) {
+    alert("Could not save posting preferences: " + err.message);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async function() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session && session.user) {
     await initAppSession(session.user);
   } else {
-    document.getElementById("authOverlay").classList.remove("hidden");
+    document.getElementById("authOverlay").classList.add("hidden");
   }
 });
 </script>
