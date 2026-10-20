@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "AutoLaunch Vehicle Assistant",
+  "version": "1.0.0",
+  "description": "Automated Facebook Marketplace helper for AutoLaunch users.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.supabase.co/*",
+    "https://*.facebook.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/marketplace/create/vehicle*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
