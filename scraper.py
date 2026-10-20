@@ -441,28 +441,25 @@ def push_batch_to_supabase(records: List[dict]) -> int:
         return 0
 
 async def run_scraper():
-    if not USER_ID:
-        print("[-] Fatal: No USER_ID provided. Exiting.")
+    # 1. Check if a single user ID was passed in via environment variable
+    target_uid = os.environ.get("USER_ID")
+
+    if target_uid and target_uid.strip():
+        # Crawl only this specific user
+        res = db.table("user_settings").select("*").eq("user_id", target_uid.strip()).execute()
+        users_to_scrape = res.data or []
+    else:
+        # Cloud/Scheduled run: Crawl ALL registered users who configured dealership URLs
+        res = db.table("user_settings").select("*").execute()
+        users_to_scrape = res.data or []
+
+    if not users_to_scrape:
+        print("[-] No user accounts with configured dealership settings found.")
         return
 
-    config = get_user_configuration(USER_ID)
-    page_modifier = config.get("page_modifier") or "?pt={page}"
+    print(f"[*] Found {len(users_to_scrape)} account(s) registered in database.")
 
-    feeds_to_crawl = []
-    if config.get("used_url") and config.get("used_url").strip():
-        feeds_to_crawl.append({"url": config["used_url"].strip(), "condition": "Used"})
-    if config.get("certified_url") and config.get("certified_url").strip():
-        feeds_to_crawl.append({"url": config["certified_url"].strip(), "condition": "Certified Pre-Owned"})
-    if config.get("new_url") and config.get("new_url").strip():
-        feeds_to_crawl.append({"url": config["new_url"].strip(), "condition": "New"})
-
-    if not feeds_to_crawl:
-        print(f"[-] No target URLs configured for user '{USER_ID}'.")
-        return
-
-    print(f"[*] Starting isolated crawl for User {USER_ID} with {len(feeds_to_crawl)} feed(s).")
-
-    total_synced = 0
+    total_synced_all = 0
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
@@ -474,43 +471,71 @@ async def run_scraper():
         )
         page = await context.new_page()
 
-        for feed in feeds_to_crawl:
-            base_url = feed["url"]
-            condition = feed["condition"]
-            print(f"\n[*] Crawling: {condition} -> {base_url}")
-            seen_vins = set()
+        for user_cfg in users_to_scrape:
+            active_uid = user_cfg.get("user_id")
+            if not active_uid:
+                continue
 
-            for pt in range(1, MAX_PAGES_PER_FEED + 1):
-                url = build_page_url(base_url, page_modifier, pt)
-                try:
-                    response = await page.goto(url, wait_until="commit", timeout=30000)
-                    if response and response.status == 404:
-                        print(f"[!] 404 Page Not Found: {url}")
+            store_name = user_cfg.get("dealership_name") or user_cfg.get("store_name") or "User Store"
+            page_modifier = user_cfg.get("page_modifier") or "?pt={page}"
+
+            feeds_to_crawl = []
+            if user_cfg.get("used_url") and user_cfg.get("used_url").strip():
+                feeds_to_crawl.append({"url": user_cfg["used_url"].strip(), "condition": "Used"})
+            if user_cfg.get("certified_url") and user_cfg.get("certified_url").strip():
+                feeds_to_crawl.append({"url": user_cfg["certified_url"].strip(), "condition": "Certified Pre-Owned"})
+            if user_cfg.get("new_url") and user_cfg.get("new_url").strip():
+                feeds_to_crawl.append({"url": user_cfg["new_url"].strip(), "condition": "New"})
+
+            if not feeds_to_crawl:
+                print(f"[-] Skipping User {active_uid[:8]} ({store_name}): No inventory URLs entered yet.")
+                continue
+
+            print(f"\n=======================================================")
+            print(f"[*] Crawling for User: {active_uid} | Store: {store_name}")
+            print(f"=======================================================")
+
+            user_units_synced = 0
+            for feed in feeds_to_crawl:
+                base_url = feed["url"]
+                condition = feed["condition"]
+                print(f"[*] Crawling feed: {condition} -> {base_url}")
+                seen_vins = set()
+
+                for pt in range(1, MAX_PAGES_PER_FEED + 1):
+                    url = build_page_url(base_url, page_modifier, pt)
+                    try:
+                        response = await page.goto(url, wait_until="commit", timeout=30000)
+                        if response and response.status == 404:
+                            print(f"[!] 404 Page Not Found: {url}")
+                            break
+                    except Exception as e:
+                        print(f"[!] Navigation error: {e}")
+
+                    await asyncio.sleep(2)
+                    cars = await extract_cards_from_page(page, default_condition=condition, active_uid=active_uid)
+                    if not cars:
+                        print(f"[-] No cards found on page {pt}. Finished {condition}.")
                         break
-                except Exception as e:
-                    print(f"[!] Navigation error: {e}")
 
-                await asyncio.sleep(2)
-                cars = await extract_cards_from_page(page, default_condition=condition, active_uid=USER_ID)
-                if not cars:
-                    print(f"[-] No vehicle cards found on page {pt}. Finished {condition}.")
-                    break
+                    vins = {c["vin"] for c in cars if c.get("vin")}
+                    if vins.issubset(seen_vins):
+                        print(f"[-] Duplicate batch on page {pt}. Finished {condition}.")
+                        break
+                    seen_vins.update(vins)
 
-                vins = {c["vin"] for c in cars if c.get("vin")}
-                if vins.issubset(seen_vins):
-                    print(f"[-] Duplicate VIN batch on page {pt}. Reached the final page.")
-                    break
-                seen_vins.update(vins)
+                    saved = push_batch_to_supabase(cars)
+                    user_units_synced += saved
+                    valid_photos = sum(1 for c in cars if c.get("image_url"))
+                    valid_prices = sum(1 for c in cars if c.get("price"))
+                    print(f"[+] [{store_name}] Page {pt}: Synced {saved} units | Prices: {valid_prices}/{len(cars)} | Photos: {valid_photos}/{len(cars)}")
+                    await asyncio.sleep(1)
 
-                saved = push_batch_to_supabase(cars)
-                total_synced += saved
-                valid_photos = sum(1 for c in cars if c.get("image_url"))
-                valid_prices = sum(1 for c in cars if c.get("price"))
-                print(f"[+] Page {pt}: Synced {saved} units | Real Prices: {valid_prices}/{len(cars)} | Real Photos: {valid_photos}/{len(cars)}")
-                await asyncio.sleep(1)
+            total_synced_all += user_units_synced
+            print(f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced.")
 
         await browser.close()
-    print(f"\n[✓] Crawl finished. Total units synced for user {USER_ID}: {total_synced}")
+    print(f"\n[✓] Global scraper run completed. Total units synced across all users: {total_synced_all}")
 
 if __name__ == "__main__":
     asyncio.run(run_scraper())
