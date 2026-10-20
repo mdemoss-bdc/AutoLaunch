@@ -1331,19 +1331,27 @@ async function loadUserStoreSettings() {
       .maybeSingle();
 
     if (error) throw error;
-    if (data) {
-      currentStore.name = data.dealership_name || data.store_name || "Dealership Inventory";
+
+    if (data && (data.dealership_name || data.store_name)) {
+      currentStore.name = data.dealership_name || data.store_name;
       currentStore.usedUrl = data.used_url || "";
       currentStore.newUrl = data.new_url || "";
       currentStore.cpoUrl = data.certified_url || "";
       currentStore.fbPageId = data.fb_page_id || "";
       currentStore.fbAccessToken = data.fb_access_token || "";
-
-      const headerName = document.getElementById("headerStoreName");
-      const bannerTitle = document.getElementById("bannerStoreTitle");
-      if (headerName && currentStore.name) headerName.innerText = currentStore.name;
-      if (bannerTitle && currentStore.name) bannerTitle.innerText = currentStore.name;
+    } else {
+      currentStore.name = "My Dealership";
+      currentStore.usedUrl = "";
+      currentStore.newUrl = "";
+      currentStore.cpoUrl = "";
+      currentStore.fbPageId = "";
+      currentStore.fbAccessToken = "";
     }
+
+    const headerName = document.getElementById("headerStoreName");
+    const bannerTitle = document.getElementById("bannerStoreTitle");
+    if (headerName) headerName.innerText = currentStore.name;
+    if (bannerTitle) bannerTitle.innerText = currentStore.name;
   } catch (err) {
     console.warn("Notice loading user settings:", err);
   }
@@ -1364,13 +1372,22 @@ async function openDealershipModal() {
     if (error) throw error;
     if (data) {
       document.getElementById("settingsDealershipName").value = data.dealership_name || data.store_name || "";
-      document.getElementById("key_supabase_url").value = data.supabase_project_url || "";
-      document.getElementById("key_supabase_anon").value = data.supabase_anon_key || "";
+      document.getElementById("key_supabase_url").value = data.supabase_project_url || SUPABASE_URL;
+      document.getElementById("key_supabase_anon").value = data.supabase_anon_key || SUPABASE_KEY;
       document.getElementById("key_fb_page_id").value = data.fb_page_id || "";
       document.getElementById("key_fb_token").value = data.fb_access_token || "";
       document.getElementById("settingsUsedUrl").value = data.used_url || "";
       document.getElementById("settingsNewUrl").value = data.new_url || "";
       document.getElementById("settingsCpoUrl").value = data.certified_url || "";
+    } else {
+      document.getElementById("settingsDealershipName").value = "";
+      document.getElementById("key_supabase_url").value = SUPABASE_URL;
+      document.getElementById("key_supabase_anon").value = SUPABASE_KEY;
+      document.getElementById("key_fb_page_id").value = "";
+      document.getElementById("key_fb_token").value = "";
+      document.getElementById("settingsUsedUrl").value = "";
+      document.getElementById("settingsNewUrl").value = "";
+      document.getElementById("settingsCpoUrl").value = "";
     }
   } catch (err) {
     console.error("Error loading user credentials:", err);
@@ -1383,18 +1400,22 @@ async function saveAllSettingsAndCredentials() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
 
-  const dealershipName = document.getElementById("settingsDealershipName").value.trim();
+  const chosenName = document.getElementById("settingsDealershipName").value.trim() || "My Dealership";
+  const usedUrlVal = document.getElementById("settingsUsedUrl").value.trim();
+  const newUrlVal = document.getElementById("settingsNewUrl").value.trim();
+  const cpoUrlVal = document.getElementById("settingsCpoUrl").value.trim();
+
   const payload = {
     user_id: currentUser.id,
-    dealership_name: dealershipName,
-    store_name: dealershipName,
-    supabase_project_url: document.getElementById("key_supabase_url").value.trim(),
-    supabase_anon_key: document.getElementById("key_supabase_anon").value.trim(),
+    dealership_name: chosenName,
+    store_name: chosenName,
+    supabase_project_url: SUPABASE_URL,
+    supabase_anon_key: SUPABASE_KEY,
     fb_page_id: document.getElementById("key_fb_page_id").value.trim(),
     fb_access_token: document.getElementById("key_fb_token").value.trim(),
-    used_url: document.getElementById("settingsUsedUrl").value.trim(),
-    new_url: document.getElementById("settingsNewUrl").value.trim(),
-    certified_url: document.getElementById("settingsCpoUrl").value.trim(),
+    used_url: usedUrlVal,
+    new_url: newUrlVal,
+    certified_url: cpoUrlVal,
     updated_at: new Date().toISOString()
   };
 
@@ -1405,14 +1426,20 @@ async function saveAllSettingsAndCredentials() {
 
     if (error) throw error;
 
-    currentStore.name = dealershipName;
+    currentStore.name = chosenName;
+    currentStore.usedUrl = usedUrlVal;
+    currentStore.newUrl = newUrlVal;
+    currentStore.cpoUrl = cpoUrlVal;
+
     const headerName = document.getElementById("headerStoreName");
     const bannerTitle = document.getElementById("bannerStoreTitle");
-    if (headerName && payload.dealership_name) headerName.innerText = payload.dealership_name;
-    if (bannerTitle && payload.dealership_name) bannerTitle.innerText = payload.dealership_name;
+    if (headerName) headerName.innerText = chosenName;
+    if (bannerTitle) bannerTitle.innerText = chosenName;
 
     closeModal("dealershipModal");
-    alert("✓ All credentials and settings successfully saved!");
+    alert("✓ Settings and dealership URLs saved successfully!");
+
+    await fetchLiveInventory(true);
   } catch (err) {
     console.error("Save settings error:", err);
     alert("Failed to save settings: " + err.message);
@@ -1441,13 +1468,13 @@ async function triggerLiveLotCrawl() {
     });
 
     if (!error) {
-      alert("✓ Live lot crawl launched for your account! The background worker is crawling your specific inventory.");
+      alert("✓ Sync requested! The background worker will crawl your inventory.");
     } else {
-      alert("✓ Crawl requested.");
+      alert("✓ Sync requested.");
     }
   } catch (err) {
     console.error("Trigger error:", err);
-    alert("✓ Crawl requested.");
+    alert("✓ Sync requested.");
   }
 
   setTimeout(() => {
@@ -1473,9 +1500,11 @@ async function fetchLiveInventory(isManual) {
     let keepFetching = true;
 
     while (keepFetching) {
+      // Query ONLY cars belonging to the currently logged in user
       const { data, error } = await supabaseClient
         .from("scraped_inventory")
         .select("*")
+        .eq("user_id", currentUser.id)
         .order("price", { ascending: true })
         .range(from, from + step - 1);
 
@@ -1504,6 +1533,8 @@ async function fetchLiveInventory(isManual) {
       const sum = validPrices.reduce(function(a, b) { return a + b; }, 0);
       const avg = Math.round(sum / validPrices.length);
       document.getElementById("avgPrice").innerText = "$" + avg.toLocaleString();
+    } else {
+      document.getElementById("avgPrice").innerText = "--";
     }
 
     populateLocations(rawInventory);
