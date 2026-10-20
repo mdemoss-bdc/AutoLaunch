@@ -341,6 +341,41 @@ body {
               Test Inventory
 
             </button>
+            <div
+    id="inventoryTestResults"
+    class="hidden mt-8 p-6 rounded-2xl bg-blue-50 border border-blue-200">
+
+    <h3 class="text-lg font-bold text-slate-900 mb-4">
+        ✅ Inventory Test Results
+    </h3>
+
+    <div class="space-y-2 text-sm">
+
+        <div>✅ Used Inventory Found</div>
+
+        <div>✅ New Inventory Found</div>
+
+        <div>✅ Photos Detected</div>
+
+        <div>✅ VIN Numbers Detected</div>
+
+        <div>✅ Pricing Detected</div>
+
+    </div>
+
+    <div class="mt-6">
+
+        <button
+            onclick="continueSetup()"
+            class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
+
+            Continue
+
+        </button>
+
+    </div>
+
+</div>
 
           </div>
 
@@ -1993,7 +2028,13 @@ async function triggerLiveLotCrawl() {
     alert("✓ Sync requested.");
   }
 }
+function continueSetup() {
 
+    alert(
+        "✅ Step 2 complete.\n\nSync screen coming next."
+    );
+
+}
 function populateOnboardingFields() {
 
     const storeField =
@@ -2065,16 +2106,16 @@ function populateOnboardingFields() {
 
     setTimeout(() => {
 
-        alert(
-            "✅ Validation Successful\n\nInventory Test is working."
-        );
+    document
+        .getElementById("inventoryTestResults")
+        .classList.remove("hidden");
 
-        btn.disabled = false;
+    btn.disabled = false;
 
-        btn.innerHTML =
-            "Test Inventory";
+    btn.innerHTML =
+        "Test Inventory";
 
-    }, 1500);
+}, 1500);
 
 }
 function showGetStartedPage() {
