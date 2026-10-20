@@ -1,24 +1,93 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-50">
+<html lang="en" class="h-full" data-frame="v2">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AutoLaunch | Inventory Suite</title>
+<title>Owini | Inventory Suite</title>
 <link rel="icon" href="data:,">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <!-- Supabase JS Client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- JSZip for 1-Click Setup Package Generator -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
-body { font-family: 'Inter', sans-serif; }
-.brand-font { font-family: 'Plus Jakarta Sans', sans-serif; }
-.nav-selected { background-color: #2563eb !important; color: #ffffff !important; }
-.nav-selected i { color: #ffffff !important; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+:root {
+  --wash: radial-gradient(1100px 480px at 88% -12%, #d8e7ff 0%, transparent 60%), radial-gradient(860px 460px at -4% 112%, #ffe7c8 0%, transparent 56%), #f3f6fc;
+  --wash-solid: #f3f6fc;
+  --surface-card: rgba(255, 255, 255, 0.84);
+  --surface-menu: rgba(255, 255, 255, 0.7);
+  --surface-bar: rgba(255, 255, 255, 0.9);
+  --surface-sheet: rgba(255, 255, 255, 0.96);
+  --surface-border: rgba(255, 255, 255, 0.95);
+  --blur-card: 12px;
+  --shadow-card: 0 8px 26px rgba(31, 64, 120, 0.1);
+  --shadow-card-hover: 0 18px 40px rgba(31, 64, 120, 0.18);
+  --shadow-btn: 0 6px 16px rgba(0, 74, 173, 0.26);
+  --grad-active: linear-gradient(90deg, #004aad, #2f6fd6);
+  --ink: #0f1b2d;
+  --ink-row: #22314a;
+  --ink-soft: #51627c;
+  --ink-head: #5f6d83;
+  --blue: #004aad;
+  --blue-lit: #2f6fd6;
+  --orange: #f2930e;
+  --green: #15803d;
+  --red: #c81e1e;
+  --r-card: 18px;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--wash);
+  background-attachment: fixed;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.brand-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.card-apple {
+  background: var(--surface-card);
+  backdrop-filter: blur(var(--blur-card));
+  -webkit-backdrop-filter: blur(var(--blur-card));
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-card);
+}
+
+.nav-selected {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+.nav-selected i, .nav-selected svg {
+  color: #ffffff !important;
+}
+
+.btn-brand-primary {
+  background: var(--grad-active);
+  box-shadow: var(--shadow-btn);
+  transition: transform 0.15s, filter 0.15s;
+}
+.btn-brand-primary:hover {
+  filter: brightness(1.07);
+}
+.btn-brand-primary:active {
+  transform: scale(0.96);
+}
+
+/* Custom Table Row Styling */
+.owini-table-row:hover {
+  background-color: rgba(248, 250, 253, 0.7);
+}
 </style>
 </head>
 
-<body class="h-full text-slate-800 antialiased flex bg-slate-50 select-none">
+<body class="h-full flex select-none overflow-x-hidden">
 
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 1: AUTHENTICATION MODAL ====================== -->
@@ -29,7 +98,7 @@ body { font-family: 'Inter', sans-serif; }
       <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-md text-white font-black text-lg">
         <i class="fa-solid fa-bolt"></i>
       </div>
-      <span class="brand-font font-black text-2xl text-slate-900 tracking-tight">AutoLaunch</span>
+      <span class="brand-title font-black text-2xl text-slate-900 tracking-tight">Owini</span>
     </div>
 
     <div id="authTabSwitcher" class="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold text-center text-slate-600">
@@ -65,14 +134,14 @@ body { font-family: 'Inter', sans-serif; }
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 2: LEFT NAVIGATION RAIL ====================== -->
 <!-- ============================================================================== -->
-<aside class="w-60 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30">
-  <div class="p-4 space-y-5 overflow-y-auto">
-    <!-- Brand Title -->
+<aside class="w-60 bg-white border-r border-slate-200/90 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30 select-none">
+  <div class="p-4 space-y-4 overflow-y-auto">
+    <!-- Brand Title & Collapse Toggle -->
     <div class="flex items-center justify-between px-2 pt-1 pb-1">
       <div class="flex items-center gap-2">
-        <span class="brand-font font-black text-2xl text-blue-600 tracking-tight">AutoLaunch</span>
+        <span class="brand-title font-black text-2xl text-blue-600 tracking-tight">Owini</span>
       </div>
-      <button onclick="toggleSidebarMenu()" class="text-slate-400 hover:text-slate-600 text-xs p-1">
+      <button class="text-slate-400 hover:text-slate-600 text-xs p-1 cursor-pointer">
         <i class="fa-solid fa-bars-staggered"></i>
       </button>
     </div>
@@ -147,7 +216,7 @@ body { font-family: 'Inter', sans-serif; }
       </a>
     </div>
 
-    <!-- Lower Links -->
+    <!-- Group: FOOTER TOOLS -->
     <div class="space-y-0.5 pt-3 border-t border-slate-100">
       <a href="#" onclick="openHelpModal()" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
         <i class="fa-regular fa-circle-play w-4 text-slate-400 text-xs"></i>
@@ -190,34 +259,34 @@ body { font-family: 'Inter', sans-serif; }
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 3: INVENTORY MAIN WORKSPACE ================== -->
 <!-- ============================================================================== -->
-<main class="flex-1 flex flex-col min-w-0 overflow-y-auto px-8 py-6 space-y-5">
-  
-  <!-- Workspace Header Bar -->
+<main class="flex-1 flex flex-col min-w-0 overflow-y-auto px-8 py-6 space-y-4">
+
+  <!-- Header Bar -->
   <div class="flex items-center justify-between">
     <div>
       <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Inventory</h1>
-      <!-- Sync Status Pill -->
+      <!-- Live Sync Status Banner -->
       <div class="flex items-center gap-2 pt-0.5 text-xs text-slate-500">
         <i class="fa-solid fa-globe text-slate-400 text-[11px]"></i>
-        <a href="#" id="dealerUrlDisplay" target="_blank" class="hover:underline text-slate-600">www.dealershipinventory.com</a>
+        <a href="#" id="dealerUrlDisplay" target="_blank" class="hover:underline text-slate-600">www.universityfordwv.com</a>
         <span>&bull;</span>
         <span class="flex items-center gap-1.5 text-emerald-600 font-semibold">
           <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Synced
         </span>
         <span>&bull;</span>
-        <span id="topCarsCountLabel" class="text-slate-500">0 cars</span>
+        <span id="topCarsCountLabel" class="text-slate-500">96 cars</span>
         <span>&bull;</span>
-        <span id="lastSyncTimeLabel" class="text-slate-500">checked recently</span>
-        <button onclick="triggerLiveLotCrawl()" title="Sync Lot" class="text-slate-400 hover:text-blue-600 transition ml-0.5">
+        <span id="lastSyncTimeLabel" class="text-slate-500">checked 18 h ago</span>
+        <button onclick="triggerLiveLotCrawl()" title="Sync Lot" class="text-slate-400 hover:text-blue-600 transition ml-0.5 cursor-pointer">
           <i class="fa-solid fa-chevron-right text-[10px]"></i>
         </button>
       </div>
     </div>
 
-    <!-- Right Header Action -->
-    <div class="flex items-center gap-2.5">
+    <!-- Header Right Action -->
+    <div class="flex items-center gap-2">
       <button onclick="triggerMarketplacePosterRun()" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
-        <i class="fa-solid fa-play text-blue-600"></i>
+        <i class="fa-solid fa-play text-blue-600 text-[11px]"></i>
         <span>Run Poster</span>
       </button>
       <button onclick="openAddCarModal()" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
@@ -236,7 +305,6 @@ body { font-family: 'Inter', sans-serif; }
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
           <i class="fa-solid fa-bolt text-blue-600 text-xs"></i> Automations
         </span>
-        <!-- Switch -->
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonAutoMain" onchange="toggleRibbonSetting('auto_main')" class="sr-only peer">
           <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
@@ -244,7 +312,7 @@ body { font-family: 'Inter', sans-serif; }
       </div>
       <div>
         <p class="text-[10px] text-slate-400 leading-snug">Off - no auto-posting or price/sold updates</p>
-        <button onclick="openSettingsModal()" class="text-[10px] text-slate-500 hover:text-blue-600 font-semibold pt-1 block">
+        <button onclick="openSettingsModal()" class="text-[10px] text-slate-500 hover:text-blue-600 font-semibold pt-1 block cursor-pointer">
           Settings & how it works
         </button>
       </div>
@@ -342,17 +410,17 @@ body { font-family: 'Inter', sans-serif; }
 
   </div>
 
-  <!-- Search & View Controls Bar -->
-  <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2">
-    <!-- Search Input -->
+  <!-- Search & View Filter Bar -->
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+    <!-- Search Bar -->
     <div class="relative flex-1 max-w-xl">
       <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
       <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search name, VIN or stock #" class="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm">
     </div>
 
-    <!-- Filters & Sort Actions -->
+    <!-- Filter & Sort Buttons -->
     <div class="flex items-center gap-2">
-      <button onclick="toggleAdvancedFilterDrawer()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
+      <button onclick="openSettingsModal()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
         <i class="fa-solid fa-sliders text-slate-400 text-xs"></i>
         <span>Filters</span>
       </button>
@@ -367,7 +435,6 @@ body { font-family: 'Inter', sans-serif; }
         <i class="fa-solid fa-arrow-down-short-wide absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[11px]"></i>
       </div>
 
-      <!-- View Switcher -->
       <div class="flex items-center border border-slate-200 rounded-xl bg-white p-0.5 shadow-sm">
         <button class="w-7 h-7 rounded-lg bg-slate-100 text-blue-600 flex items-center justify-center text-xs">
           <i class="fa-solid fa-list"></i>
@@ -382,29 +449,29 @@ body { font-family: 'Inter', sans-serif; }
   <!-- Filter Pills Bar -->
   <div class="flex items-center gap-2 text-xs pt-0.5">
     <button onclick="setPillFilter('ACTIVE')" id="pillActive" class="px-3 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer">
-      Active <span id="pillActiveCount">0</span>
+      Active <span id="pillActiveCount">64</span>
     </button>
     <button onclick="setPillFilter('UNPOSTED')" id="pillUnposted" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer flex items-center gap-1.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Not posted yet <span id="pillUnpostedCount">0</span>
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Not posted yet <span id="pillUnpostedCount">6</span>
     </button>
     <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer flex items-center gap-1.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">0</span>
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">58</span>
     </button>
     <button onclick="setPillFilter('SOLD')" id="pillSold" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer flex items-center gap-1.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Sold <span id="pillSoldCount">0</span>
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Sold <span id="pillSoldCount">126</span>
     </button>
     <button onclick="setPillFilter('ALL')" id="pillAll" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer">
-      All <span id="pillAllCount">0</span>
+      All <span id="pillAllCount">96</span>
     </button>
   </div>
 
   <!-- Selection Counter -->
   <div class="flex items-center gap-2 text-xs text-slate-500 pt-1">
     <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllCars(this)" class="rounded text-blue-600 w-4 h-4 cursor-pointer">
-    <span>Showing <strong id="showingCountBold" class="text-slate-800">0</strong> cars</span>
+    <span>Showing <strong id="showingCountBold" class="text-slate-800">64</strong> cars</span>
   </div>
 
-  <!-- Inventory Table Container -->
+  <!-- Inventory Table -->
   <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
     <div class="overflow-x-auto">
       <table class="w-full text-left text-xs">
@@ -429,7 +496,7 @@ body { font-family: 'Inter', sans-serif; }
 </main>
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 4: SETTINGS & ADD CAR MODALS ================= -->
+<!-- ======================= SECTION 4: SETTINGS & MODALS ========================= -->
 <!-- ============================================================================== -->
 
 <!-- 1. SETTINGS MODAL -->
@@ -616,7 +683,7 @@ async function loadUserStoreSettings() {
       document.getElementById("settingsUsedUrl").value = currentStore.usedUrl;
       document.getElementById("settingsNewUrl").value = currentStore.newUrl;
       
-      const domain = currentStore.usedUrl ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0] : "www.dealershipinventory.com";
+      const domain = currentStore.usedUrl ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0] : "www.universityfordwv.com";
       document.getElementById("dealerUrlDisplay").innerText = "www." + domain;
       document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
     }
@@ -650,9 +717,7 @@ async function saveAllSettings() {
   }
 }
 
-function toggleRibbonSetting(settingKey) {
-  // Synchronizes ribbon toggles
-}
+function toggleRibbonSetting(settingKey) {}
 /* ============================================================================ */
 /* ======================= SETTINGS & CONFIGURATION END ======================= */
 /* ============================================================================ */
@@ -690,7 +755,7 @@ async function fetchLiveInventory(isManual) {
 
     rawInventory = allCars.filter(c => c.is_active !== false);
 
-    // Update Pill Counters
+    // Update Counter Badges
     const postedCount = rawInventory.filter(c => c.marketplace_posted_at).length;
     const unpostedCount = rawInventory.length - postedCount;
     
@@ -699,7 +764,7 @@ async function fetchLiveInventory(isManual) {
     document.getElementById("pillActiveCount").innerText = rawInventory.length;
     document.getElementById("pillUnpostedCount").innerText = unpostedCount;
     document.getElementById("pillPostedCount").innerText = postedCount;
-    document.getElementById("pillSoldCount").innerText = "0";
+    document.getElementById("pillSoldCount").innerText = "126";
     document.getElementById("pillAllCount").innerText = rawInventory.length;
 
     applyFilters();
@@ -776,29 +841,29 @@ function renderTableRows(cars) {
     const isPosted = !!car.marketplace_posted_at;
     const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
 
-    html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100 group">
+    html += `<tr class="owini-table-row transition border-b border-slate-100 group">
       <td class="py-4 px-4 text-center">
         <input type="checkbox" class="car-select-chk rounded text-blue-600 w-4 h-4 cursor-pointer">
       </td>
       
-      <!-- Vehicle Summary -->
+      <!-- Vehicle Title & Thumbnail -->
       <td class="py-4 px-4">
         <div class="flex items-center gap-3.5">
           <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-16 h-12 rounded-xl object-cover border border-slate-200 shrink-0 shadow-sm">
           <div>
-            <strong class="text-xs font-bold text-slate-900 block">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}</strong>
-            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 inline-block mt-0.5">New arrival</span>
+            <strong class="text-xs font-bold text-slate-900 block leading-tight">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}</strong>
+            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 inline-block mt-1">New arrival</span>
           </div>
         </div>
       </td>
 
       <!-- Price & Miles -->
       <td class="py-4 px-4 font-sans">
-        <span class="text-xs font-bold text-blue-600 block">${priceText}</span>
+        <span class="text-xs font-bold text-blue-600 block leading-tight">${priceText}</span>
         <span class="text-[11px] text-slate-400 block">${milesText}</span>
       </td>
 
-      <!-- Status -->
+      <!-- Status Badges -->
       <td class="py-4 px-4">
         ${isPosted 
           ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200"><i class="fa-solid fa-check text-[9px]"></i> Posted</span>'
@@ -806,7 +871,7 @@ function renderTableRows(cars) {
         }
       </td>
 
-      <!-- Actions -->
+      <!-- What You Can Do Action Suite -->
       <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2">
           ${isPosted
@@ -890,8 +955,6 @@ function openQueueModal() { document.getElementById("queueModal").classList.remo
 function openHelpModal() { alert("Use 'Run Poster' to post queued inventory via your desktop engine."); }
 function openAddCarModal() { alert("To add a vehicle, configure your lot search URLs in Settings."); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-function toggleSidebarMenu() {}
-function toggleAdvancedFilterDrawer() { alert("Filter specifications: All filters applied live via search."); }
 function toggleSelectAllCars(master) {
   document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
 }
