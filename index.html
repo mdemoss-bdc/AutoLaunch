@@ -397,17 +397,23 @@ body {
 
             <div class="flex items-center gap-3">
               <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
-              <span class="font-semibold">Dealership Setup</span>
+              <span id="stepDealership" class="font-semibold">
+    Dealership Setup
+</span>
             </div>
 
             <div class="flex items-center gap-3">
               <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-              <span class="text-slate-500">Inventory Test</span>
+              <span id="stepInventoryTest" class="text-slate-500">
+    Inventory Test
+</span>
             </div>
 
             <div class="flex items-center gap-3">
               <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-              <span class="text-slate-500">Inventory Sync</span>
+              <span id="stepInventorySync" class="text-slate-500">
+    Inventory Sync
+</span>
             </div>
 
             <div class="flex items-center gap-3">
@@ -2109,7 +2115,17 @@ function populateOnboardingFields() {
     document
         .getElementById("inventoryTestResults")
         .classList.remove("hidden");
+document
+    .getElementById("stepDealership")
+    .innerHTML = "✅ Dealership Setup";
 
+document
+    .getElementById("stepInventoryTest")
+    .innerHTML = "✅ Inventory Test";
+
+document
+    .getElementById("stepInventorySync")
+    .innerHTML = "🔵 Inventory Sync";
     btn.disabled = false;
 
     btn.innerHTML =
