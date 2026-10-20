@@ -11,7 +11,7 @@
 <link rel="icon" href="data:,">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<!-- Supabase JS Client[cite: 17] -->
+<!-- Supabase JS Client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
@@ -320,7 +320,7 @@ body {
       </div>
     </div>
 
-    <!-- 2. Auto-post new arrivals (Triggers AutoPost Modal) -->
+    <!-- 2. Auto-post new arrivals -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-purple-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
         <span onclick="openAutoPostModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-blue-400 transition">
@@ -342,7 +342,7 @@ body {
     <!-- 3. Auto delete & repost -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-emerald-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
-        <span class="text-xs font-bold text-white flex items-center gap-1">
+        <span onclick="openAutoRepostModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-emerald-400 transition">
           Auto delete & repost <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
         </span>
         <label class="relative inline-flex items-center cursor-pointer">
@@ -351,8 +351,8 @@ body {
         </label>
       </div>
       <div>
-        <p class="text-[10px] text-slate-400">Every 3 days</p>
-        <button onclick="openSettingsModal()" class="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
+        <p id="repostFrequencyLabel" class="text-[10px] text-slate-400">Every 3 days</p>
+        <button onclick="openAutoRepostModal()" class="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </button>
       </div>
@@ -578,7 +578,7 @@ body {
 </div>
 
 <!-- 5. Settings Modal -->
-<div id="settingsModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div id="settingsModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
   <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
       <h3 class="text-base font-bold text-white flex items-center gap-2">
@@ -611,7 +611,7 @@ body {
 </div>
 
 <!-- 6. Queue Modal -->
-<div id="queueModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+<div id="queueModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
       <h3 class="text-base font-bold text-white flex items-center gap-2">
@@ -665,7 +665,44 @@ body {
     </div>
 
     <div class="pt-2">
-      <button onclick="closeModal('autoPostModal')" class="w-full py-3 rounded-2xl btn-gradient text-white font-bold text-xs shadow-lg cursor-pointer">
+      <button onclick="saveAutoPostPreferences()" class="w-full py-3 rounded-2xl btn-gradient text-white font-bold text-xs shadow-lg cursor-pointer">
+        Done
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 8. Auto Delete & Repost Configuration Modal -->
+<div id="autoRepostModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-700/80 relative text-slate-100">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+      <h3 class="text-base font-bold text-white">Auto delete & repost</h3>
+      <button onclick="closeModal('autoRepostModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <p class="text-xs text-slate-300 leading-relaxed">
+      Automatically deletes and reposts listings that have been up too long — fresh listings rank higher in Marketplace search.
+    </p>
+
+    <div class="space-y-4 text-xs">
+      <div>
+        <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">Repost each listing</label>
+        <select id="autoRepostFrequencySelect" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+          <option value="1">Every 1 day</option>
+          <option value="3" selected>Every 3 days</option>
+          <option value="7">Every 7 days</option>
+          <option value="14">Every 14 days</option>
+        </select>
+      </div>
+
+      <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+        <p><i class="fa-solid fa-circle-info text-blue-400 mr-1"></i> Runs from your browser — it must be on with Chrome open and the extension signed in. Posts respect your daily limit.</p>
+        <p>Cars that sell or leave your website are never reposted.</p>
+      </div>
+    </div>
+
+    <div class="pt-2">
+      <button onclick="saveAutoRepostPreferences()" class="w-full py-3 rounded-2xl btn-gradient text-white font-bold text-xs shadow-lg cursor-pointer">
         Done
       </button>
     </div>
@@ -809,6 +846,13 @@ async function loadUserStoreSettings() {
       const domain = currentStore.usedUrl ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0] : "www.dealershipinventory.com";
       document.getElementById("dealerUrlDisplay").innerText = "www." + domain;
       document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
+
+      if (data.repost_frequency_days) {
+        const freqLabel = document.getElementById("repostFrequencyLabel");
+        if (freqLabel) freqLabel.innerText = `Every ${data.repost_frequency_days} days`;
+        const selectEl = document.getElementById("autoRepostFrequencySelect");
+        if (selectEl) selectEl.value = String(data.repost_frequency_days);
+      }
     }
   } catch (e) {}
 }
@@ -1285,10 +1329,55 @@ async function triggerLiveLotCrawl() {
 function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); }
 function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
 function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
+function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
 function toggleRibbonSetting(k) {}
 function toggleSelectAllCars(master) {
   document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
+}
+
+async function saveAutoPostPreferences() {
+  if (!currentUser) return;
+  const isAllNew = document.querySelector('input[name="autoPostType"]:checked') !== null;
+  
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      auto_post_enabled: true,
+      auto_post_mode: isAllNew ? "all" : "filtered",
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+    closeModal('autoPostModal');
+    alert("✓ Auto-post new arrivals preferences saved and activated!");
+  } catch (err) {
+    alert("Could not save preferences: " + err.message);
+  }
+}
+
+async function saveAutoRepostPreferences() {
+  if (!currentUser) return;
+  const days = parseInt(document.getElementById("autoRepostFrequencySelect").value) || 3;
+
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      enable_auto_repost: true,
+      repost_frequency_days: days,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+    
+    const freqLabel = document.getElementById("repostFrequencyLabel");
+    if (freqLabel) freqLabel.innerText = `Every ${days} days`;
+
+    closeModal('autoRepostModal');
+    alert("✓ Auto delete & repost schedule saved successfully!");
+  } catch (err) {
+    alert("Could not save repost settings: " + err.message);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async function() {
