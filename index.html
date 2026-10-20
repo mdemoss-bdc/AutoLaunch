@@ -1842,7 +1842,9 @@ function openAutoPhotoEditsModal() { document.getElementById("autoPhotoEditsModa
 function openPostingSafetyModal() { document.getElementById("postingSafetyModal").classList.remove("hidden"); }
 function openPostingPreferencesModal() { document.getElementById("postingPreferencesModal").classList.remove("hidden"); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-function toggleRibbonSetting(k) {}
+function toggleRibbonSetting(k) {
+    console.log("clicked:", k);
+}
 function toggleSelectAllCars(master) {
   document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
 }
