@@ -362,6 +362,39 @@ body {
         <div>✅ Pricing Detected</div>
 
     </div>
+              <div
+    id="inventorySyncPage"
+    class="hidden mt-8 p-6 rounded-2xl bg-emerald-50 border border-emerald-200">
+
+    <h3 class="text-lg font-bold text-slate-900 mb-4">
+        🚀 Inventory Sync Started
+    </h3>
+
+    <div class="space-y-3 text-sm">
+
+        <div>✅ Inventory Connected</div>
+
+        <div>✅ URLs Saved</div>
+
+        <div>✅ Initial Sync Started</div>
+
+        <div>📦 Importing first vehicles...</div>
+
+    </div>
+
+    <div class="mt-6">
+
+        <button
+            onclick="finishSetup()"
+            class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
+
+            Complete Setup
+
+        </button>
+
+    </div>
+
+</div>
 
     <div class="mt-6">
 
@@ -2036,11 +2069,27 @@ async function triggerLiveLotCrawl() {
 }
 function continueSetup() {
 
+    document
+        .getElementById(
+            "inventoryTestResults"
+        )
+        .classList.add("hidden");
+
+    document
+        .getElementById(
+            "inventorySyncPage"
+        )
+        .classList.remove("hidden");
+
+}
+  function finishSetup() {
+
     alert(
-        "✅ Step 2 complete.\n\nSync screen coming next."
+        "🎉 Setup Complete"
     );
 
 }
+  
 function populateOnboardingFields() {
 
     const storeField =
@@ -2110,30 +2159,18 @@ function populateOnboardingFields() {
     btn.innerHTML =
         "Testing Inventory...";
 
-    setTimeout(() => {
+setTimeout(() => {
 
     document
         .getElementById("inventoryTestResults")
         .classList.remove("hidden");
-document
-    .getElementById("stepDealership")
-    .innerHTML = "✅ Dealership Setup";
 
-document
-    .getElementById("stepInventoryTest")
-    .innerHTML = "✅ Inventory Test";
-
-document
-    .getElementById("stepInventorySync")
-    .innerHTML = "🔵 Inventory Sync";
     btn.disabled = false;
 
     btn.innerHTML =
         "Test Inventory";
 
 }, 1500);
-
-}
 function showGetStartedPage() {
 
     populateOnboardingFields();
