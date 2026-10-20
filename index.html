@@ -1,4 +1,4 @@
-class="w-full border border-slate-300 rounded-xl px-4 py-3"><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" class="h-full bg-slate-100">
 
 <!-- ============================================================================== -->
@@ -1977,17 +1977,7 @@ async function enqueueMarketplaceCar(vin) {
     alert("Could not queue vehicle: " + err.message);
   }
 }
-
 async function triggerLiveLotCrawl() {
-  if (!currentUser) return;
-  try {
-    await supabaseClient.from("scrape_jobs").insert({ user_id: currentUser.id, status: "pending", triggered_by: currentUser.email });
-    alert("✓ Dealer site sync signal dispatched!");
-  } catch (e) {
-    alert("✓ Sync requested.");
-  }
-}
-  async function triggerLiveLotCrawl() {
   if (!currentUser) return;
   try {
     await supabaseClient.from("scrape_jobs").insert({
@@ -2001,8 +1991,6 @@ async function triggerLiveLotCrawl() {
     alert("✓ Sync requested.");
   }
 }
-
-
 
 function populateOnboardingFields() {
 
@@ -2031,9 +2019,6 @@ function populateOnboardingFields() {
         certField.value = currentStore.cpoUrl || "";
 
 }
-
-
-
 function showGetStartedPage() {
 
     populateOnboardingFields();
@@ -2045,18 +2030,6 @@ function showGetStartedPage() {
         .classList.remove("hidden");
 
 }
-function showGetStartedPage() {
-
-    populateOnboardingFields();
-
-    document.querySelector("main")
-        .classList.add("hidden");
-
-    document.getElementById("getStartedPage")
-        .classList.remove("hidden");
-
-}
-
 function showInventoryPage() {
 
     document
