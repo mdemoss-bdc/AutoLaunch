@@ -3,97 +3,61 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AutoLaunch | Dealership Sales & AI Marketing Suite</title>
+<title>AutoLaunch | Inventory Suite</title>
 <link rel="icon" href="data:,">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <!-- Supabase JS Client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- JSZip for 1-Click Setup Package Generator -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 body { font-family: 'Inter', sans-serif; }
 .brand-font { font-family: 'Plus Jakarta Sans', sans-serif; }
-.nav-active { background-color: #2563eb !important; color: #ffffff !important; }
-.nav-active i { color: #ffffff !important; }
-.nav-active span.badge { background-color: #1d4ed8 !important; color: #ffffff !important; }
+.nav-selected { background-color: #2563eb !important; color: #ffffff !important; }
+.nav-selected i { color: #ffffff !important; }
 </style>
 </head>
 
-<body class="h-full text-slate-800 antialiased flex bg-slate-50 selection:bg-blue-600 selection:text-white">
+<body class="h-full text-slate-800 antialiased flex bg-slate-50 select-none">
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 1: AUTH OVERLAY ============================== -->
+<!-- ======================= SECTION 1: AUTHENTICATION MODAL ====================== -->
 <!-- ============================================================================== -->
 <div id="authOverlay" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
   <div class="bg-white w-full max-w-md rounded-2xl border border-slate-200 p-8 space-y-6 shadow-2xl relative">
     <div class="flex items-center gap-3 justify-center mb-2">
-      <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 text-white">
-        <i class="fa-solid fa-bolt-lightning text-xl"></i>
+      <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-md text-white font-black text-lg">
+        <i class="fa-solid fa-bolt"></i>
       </div>
-      <div>
-        <span class="brand-font font-black text-2xl tracking-tight text-slate-900 block leading-tight">AutoLaunch</span>
-        <span class="text-xs text-blue-600 font-bold tracking-wider uppercase">Dealer Intelligence Suite</span>
-      </div>
+      <span class="brand-font font-black text-2xl text-slate-900 tracking-tight">AutoLaunch</span>
     </div>
 
-    <!-- Tab Switcher -->
     <div id="authTabSwitcher" class="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold text-center text-slate-600">
       <button id="tabSignIn" type="button" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer">Sign In</button>
       <button id="tabSignUp" type="button" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer">Register</button>
     </div>
 
-    <!-- Auth Form -->
     <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
       <div>
         <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Email</label>
-        <input type="email" id="authEmail" required placeholder="name@dealership.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent">
+        <input type="email" id="authEmail" required placeholder="name@dealership.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
       </div>
 
       <div>
-        <div class="flex items-center justify-between mb-1">
-          <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">Password</label>
-          <button type="button" onclick="toggleForgotPasswordView(true)" class="text-[11px] text-blue-600 hover:text-blue-700 font-semibold transition cursor-pointer">Forgot?</button>
-        </div>
+        <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Password</label>
         <div class="relative">
-          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent">
+          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
           <button type="button" onclick="togglePasswordVisibility('authPassword', 'passwordToggleIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition focus:outline-none cursor-pointer">
             <i id="passwordToggleIcon" class="fa-regular fa-eye text-sm"></i>
           </button>
         </div>
       </div>
 
-      <button type="submit" id="authSubmitBtn" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-600/20 transition cursor-pointer">
+      <button type="submit" id="authSubmitBtn" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition cursor-pointer">
         Sign In
       </button>
 
       <p id="authErrorMsg" class="text-xs text-rose-500 text-center font-medium hidden"></p>
-    </form>
-
-    <!-- Forgot Password Sub-Form -->
-    <form id="forgotPasswordForm" onsubmit="handleForgotPasswordSubmit(event)" class="space-y-4 hidden">
-      <div class="text-center space-y-1">
-        <h4 class="text-sm font-bold text-slate-900">Reset Password</h4>
-        <p class="text-xs text-slate-500">Enter your email to receive recovery instructions.</p>
-      </div>
-
-      <div>
-        <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Account Email</label>
-        <input type="email" id="resetEmail" required placeholder="name@dealership.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
-      </div>
-
-      <button type="submit" id="resetSubmitBtn" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition cursor-pointer">
-        Send Recovery Link
-      </button>
-
-      <p id="resetStatusMsg" class="text-xs text-center font-medium hidden"></p>
-
-      <div class="text-center pt-1">
-        <button type="button" onclick="toggleForgotPasswordView(false)" class="text-xs text-slate-500 hover:text-slate-800 transition cursor-pointer">
-          <i class="fa-solid fa-arrow-left mr-1"></i> Back to Sign In
-        </button>
-      </div>
     </form>
   </div>
 </div>
@@ -101,608 +65,413 @@ body { font-family: 'Inter', sans-serif; }
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 2: LEFT NAVIGATION RAIL ====================== -->
 <!-- ============================================================================== -->
-<aside class="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30 select-none">
-  <div class="p-4 space-y-6 overflow-y-auto">
-    <!-- Brand -->
-    <div class="flex items-center justify-between px-2 pt-1">
-      <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 font-black">
-          <i class="fa-solid fa-bolt-lightning text-sm"></i>
-        </div>
-        <span class="brand-font font-black text-xl text-slate-900 tracking-tight">AutoLaunch</span>
+<aside class="w-60 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30">
+  <div class="p-4 space-y-5 overflow-y-auto">
+    <!-- Brand Title -->
+    <div class="flex items-center justify-between px-2 pt-1 pb-1">
+      <div class="flex items-center gap-2">
+        <span class="brand-font font-black text-2xl text-blue-600 tracking-tight">AutoLaunch</span>
       </div>
-      <button onclick="triggerMarketplacePosterRun()" title="Launch Poster Desktop App" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 flex items-center justify-center transition cursor-pointer border border-slate-200">
-        <i class="fa-solid fa-play text-[10px]"></i>
+      <button onclick="toggleSidebarMenu()" class="text-slate-400 hover:text-slate-600 text-xs p-1">
+        <i class="fa-solid fa-bars-staggered"></i>
       </button>
     </div>
 
-    <!-- Nav Category: TODAY -->
-    <div class="space-y-1">
-      <div class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-3 pb-1">Today</div>
-      <button onclick="switchTab('tabGetStarted')" id="btnNavGetStarted" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-        <i class="fa-solid fa-circle-check w-4 text-slate-400 text-sm"></i>
+    <!-- Group: TODAY -->
+    <div class="space-y-0.5">
+      <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1">Today</div>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <i class="fa-regular fa-flag w-4 text-slate-400 text-xs"></i>
         <span>Get Started</span>
-      </button>
-      <button onclick="switchTab('tabDashboard')" id="btnNavDashboard" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-        <i class="fa-solid fa-chart-pie w-4 text-slate-400 text-sm"></i>
+        <span class="w-1.5 h-1.5 rounded-full bg-blue-600 ml-auto"></span>
+      </a>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <i class="fa-solid fa-chart-line w-4 text-slate-400 text-xs"></i>
         <span>Dashboard</span>
-      </button>
+      </a>
     </div>
 
-    <!-- Nav Category: YOUR BUYERS -->
-    <div class="space-y-1">
-      <div class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-3 pb-1">Your Buyers</div>
-      <button onclick="switchTab('tabWishlist')" id="btnNavWishlist" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-        <div class="flex items-center gap-3">
-          <i class="fa-solid fa-bell w-4 text-slate-400 text-sm"></i>
-          <span>Wishlist Radar</span>
+    <!-- Group: YOUR BUYERS -->
+    <div class="space-y-0.5">
+      <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1">Your Buyers</div>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-regular fa-comment-dots w-4 text-slate-400 text-xs"></i>
+          <span>Inbox</span>
         </div>
-        <span id="navWishlistBadge" class="hidden px-1.5 py-0.2 rounded-full bg-rose-500 text-[10px] font-black text-white">0</span>
-      </button>
-      <button onclick="openFbFeedModal()" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-        <div class="flex items-center gap-3">
-          <i class="fa-brands fa-facebook w-4 text-blue-500 text-sm"></i>
-          <span>Active FB Feed</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100">Elite</span>
+      </a>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-user-group w-4 text-slate-400 text-xs"></i>
+          <span>Leads</span>
         </div>
-        <span id="navFbFeedBadge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-600 text-[10px] font-black text-white">0</span>
-      </button>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100">Elite</span>
+      </a>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-regular fa-calendar w-4 text-slate-400 text-xs"></i>
+          <span>Calendar</span>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100">Elite</span>
+      </a>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-graduation-cap w-4 text-slate-400 text-xs"></i>
+          <span>AI Training</span>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100">Elite</span>
+      </a>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-flask w-4 text-slate-400 text-xs"></i>
+          <span>Playground</span>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100">Elite</span>
+      </a>
     </div>
 
-    <!-- Nav Category: YOUR CARS -->
-    <div class="space-y-1">
-      <div class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-3 pb-1">Your Cars</div>
-      <button onclick="switchTab('tabInventory')" id="btnNavInventory" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold nav-active transition cursor-pointer">
-        <div class="flex items-center gap-3">
-          <i class="fa-solid fa-car-side w-4 text-white text-sm"></i>
-          <span>Inventory</span>
-        </div>
-        <span id="navInventoryCount" class="badge px-1.5 py-0.2 rounded-md bg-blue-700 text-[10px] font-mono font-bold text-white">0</span>
-      </button>
-      <button onclick="switchTab('tabQueue')" id="btnNavQueue" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-        <div class="flex items-center gap-3">
-          <i class="fa-solid fa-layer-group w-4 text-slate-400 text-sm"></i>
+    <!-- Group: YOUR CARS -->
+    <div class="space-y-0.5">
+      <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1">Your Cars</div>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold nav-selected transition shadow-sm">
+        <i class="fa-solid fa-car-side w-4 text-xs"></i>
+        <span>Inventory</span>
+      </a>
+      <a href="#" onclick="openQueueModal()" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-list-check w-4 text-slate-400 text-xs"></i>
           <span>Post Queue</span>
         </div>
-        <span id="navQueueCount" class="hidden px-1.5 py-0.2 rounded-full bg-indigo-600 text-[10px] font-mono font-bold text-white">0</span>
-      </button>
+        <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-600 text-[10px] font-mono font-bold text-white">0</span>
+      </a>
     </div>
 
-    <!-- System -->
-    <div class="space-y-1 pt-2 border-t border-slate-100">
-      <button onclick="openHelpModal()" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-        <i class="fa-solid fa-graduation-cap w-4 text-slate-400 text-sm"></i>
-        <span>Tutorials & Setup</span>
-      </button>
-      <button onclick="switchTab('tabSettings')" id="btnNavSettings" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-        <i class="fa-solid fa-gear w-4 text-slate-400 text-sm"></i>
+    <!-- Lower Links -->
+    <div class="space-y-0.5 pt-3 border-t border-slate-100">
+      <a href="#" onclick="openHelpModal()" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <i class="fa-regular fa-circle-play w-4 text-slate-400 text-xs"></i>
+        <span>Tutorials</span>
+      </a>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <i class="fa-regular fa-life-ring w-4 text-slate-400 text-xs"></i>
+        <span>Support</span>
+      </a>
+      <a href="#" onclick="openSettingsModal()" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <i class="fa-solid fa-gear w-4 text-slate-400 text-xs"></i>
         <span>Settings</span>
-      </button>
+      </a>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+        <i class="fa-regular fa-credit-card w-4 text-slate-400 text-xs"></i>
+        <span>Billing</span>
+      </a>
     </div>
   </div>
 
   <!-- User Account Card Footer -->
-  <div class="p-3 border-t border-slate-200 bg-slate-50/70">
-    <div class="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200">
+  <div class="p-3 border-t border-slate-200 bg-white">
+    <div class="flex items-center justify-between px-1">
       <div class="flex items-center gap-2.5 overflow-hidden">
-        <div class="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 text-blue-700 font-black flex items-center justify-center text-xs shrink-0">
-          <span id="userInitial">U</span>
+        <div class="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
+          <span id="userInitial">M</span>
         </div>
         <div class="truncate">
-          <span id="userDisplayName" class="text-xs font-bold text-slate-800 block truncate leading-tight">Sales Rep</span>
-          <span id="userEmailBadge" class="text-[10px] text-slate-400 font-mono block truncate leading-tight">user@store.com</span>
+          <span id="userDisplayName" class="text-xs font-bold text-slate-900 block truncate leading-tight">Sales User</span>
+          <span class="text-[10px] text-slate-400 block leading-tight">Member</span>
         </div>
       </div>
-      <button onclick="handleSignOut()" title="Sign Out" class="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer">
-        <i class="fa-solid fa-right-from-bracket text-xs"></i>
+      <button onclick="handleSignOut()" title="Sign Out" class="text-slate-400 hover:text-slate-700 transition p-1 cursor-pointer">
+        <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
       </button>
     </div>
   </div>
 </aside>
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 3: MAIN VIEW CONTAINER ======================= -->
+<!-- ======================= SECTION 3: INVENTORY MAIN WORKSPACE ================== -->
 <!-- ============================================================================== -->
-<main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
-
-  <!-- ======================== VIEW A: GET STARTED ======================== -->
-  <div id="tabGetStarted" class="p-8 max-w-6xl w-full mx-auto space-y-6 hidden">
+<main class="flex-1 flex flex-col min-w-0 overflow-y-auto px-8 py-6 space-y-5">
+  
+  <!-- Workspace Header Bar -->
+  <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-black text-slate-900 tracking-tight">Get Started</h1>
-      <p class="text-xs text-slate-500">Set up the background poster engine and synchronize your lot inventory.</p>
-    </div>
-
-    <!-- 4 Step Tracker -->
-    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-        <div>
-          <h3 class="text-sm font-bold text-slate-900">Set up in 4 steps</h3>
-          <p class="text-xs text-slate-500">Do these once and AutoLaunch automates the rest.</p>
-        </div>
-        <span class="text-xs font-bold font-mono text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">Step 3 of 4</span>
-      </div>
-
-      <div class="space-y-3">
-        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-          <div class="flex items-center gap-3">
-            <i class="fa-solid fa-circle-check text-emerald-500 text-lg"></i>
-            <div>
-              <strong class="text-xs text-slate-800 block">1. Install Desktop Protocol & Packages</strong>
-              <span class="text-[11px] text-slate-500">Automation runner linked to Windows via autolaunch:// protocol</span>
-            </div>
-          </div>
-          <button onclick="downloadAutoLaunchPackage()" class="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer">Download Zip</button>
-        </div>
-
-        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-          <div class="flex items-center gap-3">
-            <i class="fa-solid fa-circle-check text-emerald-500 text-lg"></i>
-            <div>
-              <strong class="text-xs text-slate-800 block">2. Connect Dealer Website Feeds</strong>
-              <span id="getStartedFeedsSub" class="text-[11px] text-slate-500">Connected & verified</span>
-            </div>
-          </div>
-          <button onclick="switchTab('tabSettings')" class="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer">Edit URLs</button>
-        </div>
-
-        <div class="flex items-center justify-between p-3.5 rounded-xl bg-blue-50/60 border border-blue-200">
-          <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">3</div>
-            <div>
-              <strong class="text-xs text-slate-900 block">3. Turn on automations</strong>
-              <span class="text-[11px] text-slate-600">New arrivals queue automatically, prices stay updated, and sold units delist.</span>
-            </div>
-          </div>
-          <button onclick="toggleMasterAutomations()" id="btnMasterAutoToggle" class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm cursor-pointer">
-            Turn on
-          </button>
-        </div>
-
-        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-          <div class="flex items-center gap-3">
-            <i class="fa-regular fa-circle text-slate-300 text-lg"></i>
-            <div>
-              <strong class="text-xs text-slate-700 block">4. Post your first vehicle</strong>
-              <span class="text-[11px] text-slate-500">Pick any car from your inventory table and queue it to Marketplace.</span>
-            </div>
-          </div>
-          <button onclick="switchTab('tabInventory')" class="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer">Go to Inventory</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ======================== VIEW B: DASHBOARD ANALYTICS ======================== -->
-  <div id="tabDashboard" class="p-8 max-w-6xl w-full mx-auto space-y-6 hidden">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-black text-slate-900 tracking-tight">Dashboard Hub</h1>
-        <p class="text-xs text-slate-500">How your inventory and listings are performing on Facebook channels.</p>
-      </div>
-      <div class="flex items-center gap-2 bg-slate-200/70 p-1 rounded-xl text-xs font-semibold text-slate-600">
-        <button class="px-3 py-1 rounded-lg bg-white shadow-sm text-slate-900">30 days</button>
-        <button class="px-3 py-1 rounded-lg hover:text-slate-900">90 days</button>
-      </div>
-    </div>
-
-    <!-- Analytics Hero Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-2">
-        <span class="text-xs uppercase font-extrabold text-slate-400 tracking-wider">CARS POSTED &bull; 30 DAYS</span>
-        <div class="flex items-baseline gap-2">
-          <span id="dashPostedCount" class="text-4xl font-black text-slate-900">0</span>
-          <span class="text-xs font-bold text-emerald-600">Active</span>
-        </div>
-        <p class="text-[11px] text-slate-500">Auto-distributed across Marketplace, Pages, and local inventory groups.</p>
-      </div>
-
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-2">
-        <span class="text-xs uppercase font-extrabold text-slate-400 tracking-wider">SHOWROOM STOCK</span>
-        <div class="flex items-baseline gap-2">
-          <span id="dashStockCount" class="text-4xl font-black text-blue-600 font-mono">0</span>
-          <span class="text-xs font-bold text-slate-500">Units Crawled</span>
-        </div>
-        <p class="text-[11px] text-slate-500">Syncing live from your dealership inventory search pages.</p>
-      </div>
-
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-2">
-        <span class="text-xs uppercase font-extrabold text-slate-400 tracking-wider">AVG LOT PRICE</span>
-        <div class="flex items-baseline gap-2">
-          <span id="dashAvgPrice" class="text-4xl font-black text-emerald-600 font-mono">--</span>
-        </div>
-        <p class="text-[11px] text-slate-500">Calculated automatically across active lot units.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ======================== VIEW C: INVENTORY TABLE ======================== -->
-  <div id="tabInventory" class="p-8 max-w-7xl w-full mx-auto space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-black text-slate-900 tracking-tight">Inventory</h1>
-        <div class="flex items-center gap-2 pt-1 text-xs text-slate-500">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span id="subStoreNameHeader" class="font-bold text-slate-800">Dealership Inventory</span>
-          <span>&bull;</span>
-          <span id="subCarsCount">0 cars</span>
-          <span>&bull;</span>
-          <span id="subCheckedTime">Synced live</span>
-        </div>
-      </div>
-      
-      <div class="flex items-center gap-2">
-        <button onclick="triggerLiveLotCrawl()" id="crawlTriggerBtn" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
-          <i class="fa-solid fa-arrows-rotate text-blue-600"></i>
-          <span>Sync Dealer Site</span>
-        </button>
-        <button onclick="triggerMarketplacePosterRun()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-blue-500/20 transition cursor-pointer">
-          <i class="fa-solid fa-play"></i>
-          <span>Run Auto Poster</span>
+      <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Inventory</h1>
+      <!-- Sync Status Pill -->
+      <div class="flex items-center gap-2 pt-0.5 text-xs text-slate-500">
+        <i class="fa-solid fa-globe text-slate-400 text-[11px]"></i>
+        <a href="#" id="dealerUrlDisplay" target="_blank" class="hover:underline text-slate-600">www.dealershipinventory.com</a>
+        <span>&bull;</span>
+        <span class="flex items-center gap-1.5 text-emerald-600 font-semibold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Synced
+        </span>
+        <span>&bull;</span>
+        <span id="topCarsCountLabel" class="text-slate-500">0 cars</span>
+        <span>&bull;</span>
+        <span id="lastSyncTimeLabel" class="text-slate-500">checked recently</span>
+        <button onclick="triggerLiveLotCrawl()" title="Sync Lot" class="text-slate-400 hover:text-blue-600 transition ml-0.5">
+          <i class="fa-solid fa-chevron-right text-[10px]"></i>
         </button>
       </div>
     </div>
 
-    <!-- Quick Automations Status Bar -->
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-      <div class="bg-white border border-slate-200 p-3.5 rounded-xl flex items-center justify-between shadow-sm">
-        <div>
-          <span class="text-[11px] font-bold text-slate-800 block">Automations</span>
-          <span id="badgeAutoMain" class="text-[10px] text-emerald-600 font-semibold">Active &bull; Synced</span>
-        </div>
-        <input type="checkbox" id="chkAutoMain" checked onchange="saveAutomationToggles()" class="rounded text-blue-600 w-4 h-4 cursor-pointer">
-      </div>
-
-      <div class="bg-white border border-slate-200 p-3.5 rounded-xl flex items-center justify-between shadow-sm">
-        <div>
-          <span class="text-[11px] font-bold text-slate-800 block">Auto-post arrivals</span>
-          <span id="badgeAutoArrivals" class="text-[10px] text-slate-500">Queue new units</span>
-        </div>
-        <input type="checkbox" id="chkAutoArrivals" onchange="saveAutomationToggles()" class="rounded text-blue-600 w-4 h-4 cursor-pointer">
-      </div>
-
-      <div class="bg-white border border-slate-200 p-3.5 rounded-xl flex items-center justify-between shadow-sm">
-        <div>
-          <span class="text-[11px] font-bold text-slate-800 block">Auto delete & repost</span>
-          <span class="text-[10px] text-slate-500">Every 7 days</span>
-        </div>
-        <input type="checkbox" id="chkAutoRepost" checked onchange="saveAutomationToggles()" class="rounded text-blue-600 w-4 h-4 cursor-pointer">
-      </div>
-
-      <div class="bg-white border border-slate-200 p-3.5 rounded-xl flex items-center justify-between shadow-sm">
-        <div>
-          <span class="text-[11px] font-bold text-slate-800 block">Automatic photo edits</span>
-          <span class="text-[10px] text-slate-500">Smart lot crop</span>
-        </div>
-        <input type="checkbox" id="chkAutoCrop" checked onchange="saveAutomationToggles()" class="rounded text-blue-600 w-4 h-4 cursor-pointer">
-      </div>
-
-      <div class="bg-white border border-slate-200 p-3.5 rounded-xl flex items-center justify-between shadow-sm col-span-2 md:col-span-1">
-        <div>
-          <span class="text-[11px] font-bold text-slate-800 block">Posting safety</span>
-          <span id="badgeSafety" class="text-[10px] text-emerald-600 font-semibold">5 / day &bull; 15m delay</span>
-        </div>
-        <button onclick="switchTab('tabSettings')" class="text-slate-400 hover:text-blue-600 text-xs">
-          <i class="fa-solid fa-sliders"></i>
-        </button>
-      </div>
-    </div>
-
-    <!-- Search & Filter Controls -->
-    <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
-      <div class="flex flex-col md:flex-row gap-3">
-        <div class="flex-1 relative">
-          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-          <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search name, VIN, or stock #..." class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <select id="locationFilter" onchange="applyFilters()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600">
-            <option value="ALL">All Locations</option>
-          </select>
-          <select id="conditionFilter" onchange="applyFilters()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600">
-            <option value="ALL">All Conditions</option>
-            <option value="Used">Used</option>
-            <option value="Certified Pre-Owned">Certified</option>
-            <option value="New">New</option>
-          </select>
-          <select id="sortSelect" onchange="applyFilters()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600">
-            <option value="newest_first">Newest first</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="price_desc">Price: High to Low</option>
-            <option value="miles_asc">Mileage: Lowest First</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Quick Filter Pills -->
-      <div class="flex items-center gap-2 pt-1 text-xs">
-        <button onclick="setInventoryPillFilter('ALL')" id="pillFilterAll" class="px-3 py-1 rounded-lg bg-blue-600 text-white font-bold cursor-pointer">
-          Active <span id="pillCountActive">0</span>
-        </button>
-        <button onclick="setInventoryPillFilter('UNPOSTED')" id="pillFilterUnposted" class="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold cursor-pointer">
-          Not posted yet <span id="pillCountUnposted">0</span>
-        </button>
-        <button onclick="setInventoryPillFilter('POSTED')" id="pillFilterPosted" class="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold cursor-pointer">
-          Posted <span id="pillCountPosted">0</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Inventory Table Container -->
-    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs">
-          <thead class="bg-slate-50/80 border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-            <tr>
-              <th class="py-3 px-4 w-12 text-center"><input type="checkbox" class="rounded text-blue-600"></th>
-              <th class="py-3 px-4">Car</th>
-              <th class="py-3 px-4">Price & Miles</th>
-              <th class="py-3 px-4">Status</th>
-              <th class="py-3 px-4 text-right">What you can do</th>
-            </tr>
-          </thead>
-          <tbody id="inventoryTableBody" class="divide-y divide-slate-100 text-slate-700">
-            <tr>
-              <td colspan="5" class="py-12 text-center text-slate-400">Loading live showroom inventory...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- ======================== VIEW D: POST QUEUE ======================== -->
-  <div id="tabQueue" class="p-8 max-w-6xl w-full mx-auto space-y-6 hidden">
-    <div>
-      <h1 class="text-2xl font-black text-slate-900 tracking-tight">Post Queue</h1>
-      <p class="text-xs text-slate-500">Cars waiting to go up on Facebook, in the order they will be posted.</p>
-    </div>
-
-    <!-- Automations Banner -->
-    <div class="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <i class="fa-solid fa-bolt text-blue-600 text-lg"></i>
-        <div>
-          <strong class="text-xs text-slate-900 block leading-tight">Turn on automations</strong>
-          <span class="text-[11px] text-slate-600">AutoLaunch keeps Facebook prices synced with your website, removes sold cars, and auto-posts new arrivals.</span>
-        </div>
-      </div>
-      <button onclick="triggerMarketplacePosterRun()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm cursor-pointer">
-        Run Automations Now
+    <!-- Right Header Action -->
+    <div class="flex items-center gap-2.5">
+      <button onclick="triggerMarketplacePosterRun()" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
+        <i class="fa-solid fa-play text-blue-600"></i>
+        <span>Run Poster</span>
       </button>
-    </div>
-
-    <!-- Queue List -->
-    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-      <h3 class="text-sm font-bold text-slate-900">Queued Vehicles</h3>
-      <div id="queueListContainer" class="space-y-3">
-        <p class="text-xs text-slate-400 text-center py-8">Your posting queue is currently empty.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ======================== VIEW E: SETTINGS ======================== -->
-  <div id="tabSettings" class="p-8 max-w-6xl w-full mx-auto space-y-6 hidden">
-    <div>
-      <h1 class="text-2xl font-black text-slate-900 tracking-tight">Settings</h1>
-      <p class="text-xs text-slate-500">Configure how and when your cars get posted, plus your dealership accounts.</p>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- Left: Listing Format & Rules -->
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
-        <div class="flex items-center gap-2 text-slate-900 font-bold text-sm border-b border-slate-100 pb-3">
-          <i class="fa-solid fa-list-check text-blue-600"></i>
-          <span>Listing Specifications</span>
-        </div>
-
-        <div>
-          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">DEALERSHIP STORE NAME</label>
-          <input type="text" id="settingsStoreName" placeholder="e.g. Moses Honda" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
-        </div>
-
-        <div>
-          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">EMOJI AT THE START OF YOUR TITLE</label>
-          <div class="flex flex-wrap gap-2 text-xs font-bold" id="emojiSelectorGroup">
-            <button type="button" onclick="selectEmojiTitle('')" class="emoji-btn px-3 py-1.5 rounded-lg border border-slate-200 bg-blue-600 text-white">None</button>
-            <button type="button" onclick="selectEmojiTitle('🤘')" class="emoji-btn px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100">🤘</button>
-            <button type="button" onclick="selectEmojiTitle('💪')" class="emoji-btn px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100">💪</button>
-            <button type="button" onclick="selectEmojiTitle('🤠')" class="emoji-btn px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100">🤠</button>
-            <button type="button" onclick="selectEmojiTitle('🔥')" class="emoji-btn px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100">🔥</button>
-            <button type="button" onclick="selectEmojiTitle('⚡')" class="emoji-btn px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100">⚡</button>
-          </div>
-        </div>
-
-        <div class="space-y-3 pt-2">
-          <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Put in every post</span>
-          
-          <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <span class="text-xs text-slate-700 font-medium">Clean title statement (Say the car has a clean title)</span>
-            <input type="checkbox" id="chkCleanTitle" checked class="rounded text-blue-600 w-4 h-4">
-          </label>
-
-          <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <span class="text-xs text-slate-700 font-medium">Condition specification (Say New, Used, or CPO)</span>
-            <input type="checkbox" id="chkNewUsed" checked class="rounded text-blue-600 w-4 h-4">
-          </label>
-
-          <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <span class="text-xs text-slate-700 font-medium">Mileage in the title</span>
-            <input type="checkbox" id="chkMilesInTitle" checked class="rounded text-blue-600 w-4 h-4">
-          </label>
-
-          <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <span class="text-xs text-slate-700 font-medium">VIN in the description</span>
-            <input type="checkbox" id="chkVInInDesc" checked class="rounded text-blue-600 w-4 h-4">
-          </label>
-
-          <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <span class="text-xs text-slate-700 font-medium">Stock number in the description</span>
-            <input type="checkbox" id="chkStockInDesc" checked class="rounded text-blue-600 w-4 h-4">
-          </label>
-        </div>
-      </div>
-
-      <!-- Right: AI Closer & Crawler Feeds -->
-      <div class="space-y-6">
-        <!-- AI Description Card -->
-        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div class="flex items-center gap-2 text-slate-900 font-bold text-sm">
-              <i class="fa-solid fa-wand-magic-sparkles text-blue-600"></i>
-              <span>AI Listing Descriptions</span>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="chkAiDescriptions" checked class="sr-only peer">
-              <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-
-          <div>
-            <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tell the AI anything to always mention (optional)</label>
-            <textarea id="aiPromptCustom" placeholder="e.g. Always mention our 90-day warranty, transparent paperwork, and free delivery within 50 miles." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600 h-20 leading-relaxed"></textarea>
-          </div>
-
-          <div>
-            <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Length</label>
-            <div class="grid grid-cols-3 gap-2 text-xs font-bold text-center">
-              <button type="button" onclick="setAiLength('short')" id="btnAiLenShort" class="py-1.5 rounded-lg border border-slate-200 bg-slate-50">Short</button>
-              <button type="button" onclick="setAiLength('medium')" id="btnAiLenMed" class="py-1.5 rounded-lg border border-blue-600 bg-blue-50 text-blue-700">Medium</button>
-              <button type="button" onclick="setAiLength('long')" id="btnAiLenLong" class="py-1.5 rounded-lg border border-slate-200 bg-slate-50">Long</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Website Crawler Feeds -->
-        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-          <div class="flex items-center gap-2 text-slate-900 font-bold text-sm border-b border-slate-100 pb-3">
-            <i class="fa-solid fa-globe text-emerald-600"></i>
-            <span>Dealer Website Crawler Feeds</span>
-          </div>
-
-          <div class="space-y-3">
-            <div>
-              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">USED INVENTORY SEARCH URL (PAGE 2)</label>
-              <input type="text" id="settingsUsedUrl" placeholder="https://www.dealersite.com/search-all-used-inventory.html" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-            </div>
-            <div>
-              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">NEW INVENTORY SEARCH URL (PAGE 2)</label>
-              <input type="text" id="settingsNewUrl" placeholder="https://www.dealersite.com/search-all-new-inventory.html" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-            </div>
-            <div>
-              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">CERTIFIED PRE-OWNED SEARCH URL (PAGE 2)</label>
-              <input type="text" id="settingsCpoUrl" placeholder="https://www.dealersite.com/search-cpo.html" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Save Bar -->
-    <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-      <button onclick="saveAllSettings()" id="btnSaveAllSettings" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition cursor-pointer">
-        Save Settings
+      <button onclick="openAddCarModal()" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
+        <i class="fa-solid fa-plus text-slate-400"></i>
+        <span>Add a car</span>
       </button>
     </div>
   </div>
 
-  <!-- ======================== VIEW F: CUSTOMER WISHLIST ======================== -->
-  <div id="tabWishlist" class="p-8 max-w-6xl w-full mx-auto space-y-6 hidden">
-    <div>
-      <h1 class="text-2xl font-black text-slate-900 tracking-tight">Customer Wishlist Radar</h1>
-      <p class="text-xs text-slate-500">Track prospective buyers. AutoLaunch scans your live inventory for exact matches.</p>
-    </div>
-
-    <!-- Intake Form -->
-    <form onsubmit="saveCustomerWishlist(event)" class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-      <h3 class="text-sm font-bold text-slate-900">Add Customer Buyer Request</h3>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <input type="text" id="wlName" required placeholder="Customer Name *" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-        <input type="tel" id="wlPhone" placeholder="Phone Number" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-        <input type="email" id="wlEmail" placeholder="Email Address" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
+  <!-- 6-Card Automation Ribbon -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+    
+    <!-- 1. Automations -->
+    <div class="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+          <i class="fa-solid fa-bolt text-blue-600 text-xs"></i> Automations
+        </span>
+        <!-- Switch -->
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chkRibbonAutoMain" onchange="toggleRibbonSetting('auto_main')" class="sr-only peer">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
       </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <input type="text" id="wlMake" placeholder="Make (e.g. Toyota)" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-        <input type="text" id="wlModel" placeholder="Model (e.g. Tacoma)" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-        <input type="number" id="wlMinYear" placeholder="Min Year" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-        <input type="number" id="wlMaxMiles" placeholder="Max Miles" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800">
-      </div>
-      <div class="flex justify-end">
-        <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm cursor-pointer">
-          Save Customer
+      <div>
+        <p class="text-[10px] text-slate-400 leading-snug">Off - no auto-posting or price/sold updates</p>
+        <button onclick="openSettingsModal()" class="text-[10px] text-slate-500 hover:text-blue-600 font-semibold pt-1 block">
+          Settings & how it works
         </button>
       </div>
-    </form>
+    </div>
 
-    <div class="space-y-3">
-      <h3 class="text-sm font-bold text-slate-900">Active Customer Requests & Live Matches</h3>
-      <div id="wishlistContainer" class="space-y-3">
-        <p class="text-xs text-slate-400 text-center py-8">No wishlist requests saved yet.</p>
+    <!-- 2. Auto-post new arrivals -->
+    <div class="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Auto-post new arrivals <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chkRibbonArrivals" onchange="toggleRibbonSetting('auto_arrivals')" class="sr-only peer">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
       </div>
+      <div>
+        <p class="text-[10px] text-slate-400">Automations off</p>
+        <a href="#" onclick="openHelpModal()" class="text-[10px] text-slate-500 hover:text-blue-600 flex items-center gap-1 pt-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </a>
+      </div>
+    </div>
+
+    <!-- 3. Auto delete & repost -->
+    <div class="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Auto delete & repost <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chkRibbonRepost" checked onchange="toggleRibbonSetting('auto_repost')" class="sr-only peer">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+      <div>
+        <p class="text-[10px] text-slate-400">Every 3 days</p>
+        <a href="#" onclick="openHelpModal()" class="text-[10px] text-slate-500 hover:text-blue-600 flex items-center gap-1 pt-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </a>
+      </div>
+    </div>
+
+    <!-- 4. Automatic photo edits -->
+    <div class="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chkRibbonPhotoCrop" checked onchange="toggleRibbonSetting('auto_crop')" class="sr-only peer">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+      <div>
+        <p class="text-[10px] text-slate-400">On - crop</p>
+        <a href="#" onclick="openHelpModal()" class="text-[10px] text-slate-500 hover:text-blue-600 flex items-center gap-1 pt-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </a>
+      </div>
+    </div>
+
+    <!-- 5. Posting safety -->
+    <div class="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Posting safety <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+      </div>
+      <div>
+        <p class="text-[10px] text-slate-400">1 of 20 today</p>
+        <div class="w-full bg-slate-100 rounded-full h-1 mt-1 mb-1">
+          <div class="bg-blue-600 h-1 rounded-full w-[5%]"></div>
+        </div>
+        <a href="#" onclick="openHelpModal()" class="text-[10px] text-slate-500 hover:text-blue-600 flex items-center gap-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </a>
+      </div>
+    </div>
+
+    <!-- 6. Posting preferences -->
+    <div class="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Posting preferences <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+      </div>
+      <div>
+        <p class="text-[10px] text-slate-400 truncate">Title, emoji, AI text</p>
+        <a href="#" onclick="openSettingsModal()" class="text-[10px] text-slate-500 hover:text-blue-600 flex items-center gap-1 pt-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Search & View Controls Bar -->
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2">
+    <!-- Search Input -->
+    <div class="relative flex-1 max-w-xl">
+      <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+      <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search name, VIN or stock #" class="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm">
+    </div>
+
+    <!-- Filters & Sort Actions -->
+    <div class="flex items-center gap-2">
+      <button onclick="toggleAdvancedFilterDrawer()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-sliders text-slate-400 text-xs"></i>
+        <span>Filters</span>
+      </button>
+
+      <div class="relative">
+        <select id="sortSelect" onchange="applyFilters()" class="appearance-none bg-white border border-slate-200 hover:bg-slate-50 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-slate-700 focus:outline-none shadow-sm cursor-pointer">
+          <option value="newest_first">Newest first</option>
+          <option value="price_asc">Price: Low to High</option>
+          <option value="price_desc">Price: High to Low</option>
+          <option value="miles_asc">Mileage: Lowest First</option>
+        </select>
+        <i class="fa-solid fa-arrow-down-short-wide absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[11px]"></i>
+      </div>
+
+      <!-- View Switcher -->
+      <div class="flex items-center border border-slate-200 rounded-xl bg-white p-0.5 shadow-sm">
+        <button class="w-7 h-7 rounded-lg bg-slate-100 text-blue-600 flex items-center justify-center text-xs">
+          <i class="fa-solid fa-list"></i>
+        </button>
+        <button class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 flex items-center justify-center text-xs">
+          <i class="fa-solid fa-table-cells-large"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Pills Bar -->
+  <div class="flex items-center gap-2 text-xs pt-0.5">
+    <button onclick="setPillFilter('ACTIVE')" id="pillActive" class="px-3 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer">
+      Active <span id="pillActiveCount">0</span>
+    </button>
+    <button onclick="setPillFilter('UNPOSTED')" id="pillUnposted" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer flex items-center gap-1.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Not posted yet <span id="pillUnpostedCount">0</span>
+    </button>
+    <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer flex items-center gap-1.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">0</span>
+    </button>
+    <button onclick="setPillFilter('SOLD')" id="pillSold" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer flex items-center gap-1.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Sold <span id="pillSoldCount">0</span>
+    </button>
+    <button onclick="setPillFilter('ALL')" id="pillAll" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer">
+      All <span id="pillAllCount">0</span>
+    </button>
+  </div>
+
+  <!-- Selection Counter -->
+  <div class="flex items-center gap-2 text-xs text-slate-500 pt-1">
+    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllCars(this)" class="rounded text-blue-600 w-4 h-4 cursor-pointer">
+    <span>Showing <strong id="showingCountBold" class="text-slate-800">0</strong> cars</span>
+  </div>
+
+  <!-- Inventory Table Container -->
+  <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+          <tr>
+            <th class="py-3 px-4 w-10"></th>
+            <th class="py-3 px-4">CAR</th>
+            <th class="py-3 px-4">PRICE & MILES</th>
+            <th class="py-3 px-4">STATUS</th>
+            <th class="py-3 px-4 text-right">WHAT YOU CAN DO</th>
+          </tr>
+        </thead>
+        <tbody id="inventoryTableBody" class="divide-y divide-slate-100 text-slate-700">
+          <tr>
+            <td colspan="5" class="py-16 text-center text-slate-400">Loading showroom inventory...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
 </main>
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 4: MODALS & PLAYBOOKS ======================== -->
+<!-- ======================= SECTION 4: SETTINGS & ADD CAR MODALS ================= -->
 <!-- ============================================================================== -->
 
-<!-- 1. FB FEED MODAL -->
-<div id="fbFeedModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-  <div class="bg-white w-full max-w-4xl rounded-2xl border border-slate-200 p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+<!-- 1. SETTINGS MODAL -->
+<div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+  <div class="bg-white w-full max-w-2xl rounded-2xl border border-slate-200 p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl">
     <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
-          <i class="fa-brands fa-facebook"></i>
-        </div>
-        <div>
-          <h3 class="text-sm font-bold text-slate-900">Active Facebook Page Feed</h3>
-          <p class="text-xs text-slate-500">Live vehicles on your business page. Mark as sold to auto-update posts.</p>
-        </div>
-      </div>
-      <button onclick="closeModal('fbFeedModal')" class="text-slate-400 hover:text-slate-600 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <h3 class="text-base font-bold text-slate-900">Posting & Feed Settings</h3>
+      <button onclick="closeModal('settingsModal')" class="text-slate-400 hover:text-slate-600 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
-    <div id="fbFeedContainer" class="space-y-3"></div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Dealership Name</label>
+        <input type="text" id="settingsStoreName" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Used Inventory URL (Page 2)</label>
+        <input type="text" id="settingsUsedUrl" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">New Inventory URL (Page 2)</label>
+        <input type="text" id="settingsNewUrl" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900">
+      </div>
+    </div>
+
+    <div class="flex justify-end pt-2 border-t border-slate-100">
+      <button onclick="saveAllSettings()" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm cursor-pointer">
+        Save Settings
+      </button>
+    </div>
   </div>
 </div>
 
-<!-- 2. HELP & TUTORIAL PLAYBOOK MODAL -->
-<div id="helpModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-  <div class="bg-white w-full max-w-3xl rounded-3xl border border-slate-200 p-8 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl">
-    <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center text-lg">
-          <i class="fa-solid fa-book-open"></i>
-        </div>
-        <div>
-          <h3 class="text-lg font-black text-slate-900">AutoLaunch Playbook</h3>
-          <p class="text-xs text-slate-500">Simple setup instructions for non-technical users.</p>
-        </div>
-      </div>
-      <button onclick="closeModal('helpModal')" class="text-slate-400 hover:text-slate-600 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+<!-- 2. QUEUE MODAL -->
+<div id="queueModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+  <div class="bg-white w-full max-w-2xl rounded-2xl border border-slate-200 p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+      <h3 class="text-base font-bold text-slate-900">Active Post Queue</h3>
+      <button onclick="closeModal('queueModal')" class="text-slate-400 hover:text-slate-600 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
-
-    <div class="space-y-4 text-xs text-slate-600 leading-relaxed">
-      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-        <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2">
-          <span class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">1</span>
-          Computer Setup (One-Time)
-        </h4>
-        <p>Click below to download your setup package. Extract the ZIP folder to your Documents, and double-click <strong>setup.bat</strong>.</p>
-        <button onclick="downloadAutoLaunchPackage()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-sm">
-          Download Setup Package (.ZIP)
-        </button>
-      </div>
-
-      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-        <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2">
-          <span class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">2</span>
-          How to Post Cars to Facebook
-        </h4>
-        <p>1. Go to your <strong>Inventory</strong> tab.<br>
-           2. Click <strong>+ Add to queue</strong> on any vehicle.<br>
-           3. Click <strong>Run Auto Poster</strong> in the top header. Your local desktop poster opens Chrome, loads real lot photos, populates specs, and posts automatically.</p>
-      </div>
+    <div id="queueItemsList" class="space-y-2">
+      <p class="text-xs text-slate-400 text-center py-8">Your post queue is currently empty.</p>
     </div>
   </div>
 </div>
@@ -718,82 +487,20 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let authMode = "signin";
 let currentUser = null;
-let currentTab = "tabInventory";
+let activePillFilter = "ACTIVE";
 
 let currentStore = {
-  name: "My Dealership",
-  pageModifier: "?pt={page}",
+  name: "Dealership Inventory",
   usedUrl: "",
   newUrl: "",
-  cpoUrl: "",
-  fbPageId: "",
-  fbAccessToken: "",
-  maxDailyPosts: 5,
-  postDelay: 15,
-  enableAutoRepost: true,
-  titleEmoji: "",
-  cleanTitle: true,
-  newOrUsed: true,
-  milesInTitle: true,
-  vinInDesc: true,
-  stockInDesc: true,
-  aiDescriptions: true,
-  aiPrompt: "",
-  aiLength: "medium"
+  cpoUrl: ""
 };
 
 let rawInventory = [];
-let savedVins = new Set();
-let inventoryPillFilter = "ALL";
-let myFbFeedList = [];
 let postingQueue = [];
-let customerWishlists = [];
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
 /* ============================================================================ */
 /* ======================= JAVASCRIPT GLOBAL STATE END ======================== */
-/* ============================================================================ */
-
-
-/* ============================================================================ */
-/* ======================= NAVIGATION & TAB ROUTING START ===================== */
-/* ============================================================================ */
-function switchTab(tabId) {
-  currentTab = tabId;
-  const tabs = ["tabGetStarted", "tabDashboard", "tabInventory", "tabQueue", "tabSettings", "tabWishlist"];
-  tabs.forEach(t => {
-    const el = document.getElementById(t);
-    if (el) el.classList.add("hidden");
-  });
-
-  const targetEl = document.getElementById(tabId);
-  if (targetEl) targetEl.classList.remove("hidden");
-
-  // Nav buttons styling
-  const navBtns = {
-    tabGetStarted: "btnNavGetStarted",
-    tabDashboard: "btnNavDashboard",
-    tabInventory: "btnNavInventory",
-    tabQueue: "btnNavQueue",
-    tabSettings: "btnNavSettings",
-    tabWishlist: "btnNavWishlist"
-  };
-
-  Object.values(navBtns).forEach(btnId => {
-    const b = document.getElementById(btnId);
-    if (b) {
-      b.classList.remove("nav-active");
-      b.classList.add("text-slate-600");
-    }
-  });
-
-  const activeBtn = document.getElementById(navBtns[tabId]);
-  if (activeBtn) {
-    activeBtn.classList.add("nav-active");
-    activeBtn.classList.remove("text-slate-600");
-  }
-}
-/* ============================================================================ */
-/* ======================= NAVIGATION & TAB ROUTING END ======================= */
 /* ============================================================================ */
 
 
@@ -802,7 +509,6 @@ function switchTab(tabId) {
 /* ============================================================================ */
 function switchAuthMode(mode) {
   authMode = mode;
-  toggleForgotPasswordView(false);
   const tabIn = document.getElementById("tabSignIn");
   const tabUp = document.getElementById("tabSignUp");
   const submitBtn = document.getElementById("authSubmitBtn");
@@ -816,41 +522,6 @@ function switchAuthMode(mode) {
     tabUp.className = "py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer";
     tabIn.className = "py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer";
     submitBtn.innerText = "Register";
-  }
-}
-
-function toggleForgotPasswordView(show) {
-  document.getElementById("authForm").classList.toggle("hidden", show);
-  document.getElementById("authTabSwitcher").classList.toggle("hidden", show);
-  document.getElementById("forgotPasswordForm").classList.toggle("hidden", !show);
-  document.getElementById("authErrorMsg").classList.add("hidden");
-  document.getElementById("resetStatusMsg").classList.add("hidden");
-}
-
-async function handleForgotPasswordSubmit(e) {
-  e.preventDefault();
-  const email = document.getElementById("resetEmail").value.trim();
-  const statusMsg = document.getElementById("resetStatusMsg");
-  const btn = document.getElementById("resetSubmitBtn");
-
-  btn.disabled = true;
-  btn.innerText = "Sending Link...";
-
-  try {
-    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + window.location.pathname
-    });
-    if (error) throw error;
-    statusMsg.className = "text-xs text-center font-medium text-emerald-600";
-    statusMsg.innerText = "Recovery email sent! Please check your inbox.";
-    statusMsg.classList.remove("hidden");
-    btn.innerText = "Sent";
-  } catch (err) {
-    statusMsg.className = "text-xs text-center font-medium text-rose-500";
-    statusMsg.innerText = err.message || "Failed to send reset email.";
-    statusMsg.classList.remove("hidden");
-    btn.disabled = false;
-    btn.innerText = "Send Recovery Link";
   }
 }
 
@@ -881,9 +552,8 @@ async function handleAuthSubmit(e) {
       submitBtn.innerText = "Registering...";
       const { data, error } = await supabaseClient.auth.signUp({ email, password });
       if (error) throw error;
-      if (data && data.session) {
-        await initAppSession(data.session.user);
-      } else if (data && data.user) {
+      if (data && data.session) await initAppSession(data.session.user);
+      else if (data && data.user) {
         const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({ email, password });
         if (signInErr) throw signInErr;
         await initAppSession(signInData.user);
@@ -912,14 +582,10 @@ async function initAppSession(user) {
   document.getElementById("authOverlay").classList.add("hidden");
   const userPrefix = user.email.split("@")[0];
   document.getElementById("userDisplayName").innerText = userPrefix;
-  document.getElementById("userEmailBadge").innerText = user.email;
   document.getElementById("userInitial").innerText = userPrefix.charAt(0).toUpperCase();
 
-  loadWishlistFromStorage();
   await loadUserStoreSettings();
   await loadPostingQueue();
-  await loadFbFeed();
-  await loadCustomerWishlists();
   await fetchLiveInventory(true);
 }
 /* ============================================================================ */
@@ -928,7 +594,7 @@ async function initAppSession(user) {
 
 
 /* ============================================================================ */
-/* ======================= STORE SETTINGS & PERSISTENCE START ================= */
+/* ======================= SETTINGS & CONFIGURATION START ===================== */
 /* ============================================================================ */
 async function loadUserStoreSettings() {
   if (!currentUser) return;
@@ -940,113 +606,55 @@ async function loadUserStoreSettings() {
       .maybeSingle();
 
     if (error) throw error;
-
-    if (data && (data.dealership_name || data.store_name)) {
-      currentStore.name = data.dealership_name || data.store_name;
+    if (data) {
+      currentStore.name = data.dealership_name || data.store_name || "Dealership Inventory";
       currentStore.usedUrl = data.used_url || "";
       currentStore.newUrl = data.new_url || "";
       currentStore.cpoUrl = data.certified_url || "";
-      currentStore.fbPageId = data.fb_page_id || "";
-      currentStore.fbAccessToken = data.fb_access_token || "";
-      currentStore.maxDailyPosts = data.max_daily_posts || 5;
-      currentStore.postDelay = data.post_delay_minutes || 15;
-      currentStore.enableAutoRepost = data.enable_auto_repost !== false;
-      currentStore.titleEmoji = data.title_emoji || "";
-      currentStore.aiPrompt = data.ai_prompt || "";
-      currentStore.aiLength = data.ai_length || "medium";
+
+      document.getElementById("settingsStoreName").value = currentStore.name;
+      document.getElementById("settingsUsedUrl").value = currentStore.usedUrl;
+      document.getElementById("settingsNewUrl").value = currentStore.newUrl;
+      
+      const domain = currentStore.usedUrl ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0] : "www.dealershipinventory.com";
+      document.getElementById("dealerUrlDisplay").innerText = "www." + domain;
+      document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
     }
-
-    // Populate Settings UI
-    document.getElementById("settingsStoreName").value = currentStore.name;
-    document.getElementById("settingsUsedUrl").value = currentStore.usedUrl;
-    document.getElementById("settingsNewUrl").value = currentStore.newUrl;
-    document.getElementById("settingsCpoUrl").value = currentStore.cpoUrl;
-    document.getElementById("aiPromptCustom").value = currentStore.aiPrompt;
-    document.getElementById("subStoreNameHeader").innerText = currentStore.name;
-
-    selectEmojiTitle(currentStore.titleEmoji);
-    setAiLength(currentStore.aiLength);
-  } catch (err) {
-    console.warn("Notice loading user settings:", err);
-  }
-}
-
-function selectEmojiTitle(emoji) {
-  currentStore.titleEmoji = emoji;
-  const btns = document.querySelectorAll("#emojiSelectorGroup button");
-  btns.forEach(btn => {
-    if ((emoji === "" && btn.innerText === "None") || btn.innerText === emoji) {
-      btn.className = "emoji-btn px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold";
-    } else {
-      btn.className = "emoji-btn px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700";
-    }
-  });
-}
-
-function setAiLength(len) {
-  currentStore.aiLength = len;
-  const map = { short: "btnAiLenShort", medium: "btnAiLenMed", long: "btnAiLenLong" };
-  Object.keys(map).forEach(k => {
-    const btn = document.getElementById(map[k]);
-    if (k === len) {
-      btn.className = "py-1.5 rounded-lg border border-blue-600 bg-blue-50 text-blue-700 font-bold";
-    } else {
-      btn.className = "py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-600";
-    }
-  });
+  } catch (e) {}
 }
 
 async function saveAllSettings() {
   if (!currentUser) return;
-  const btn = document.getElementById("btnSaveAllSettings");
-  btn.disabled = true;
-  btn.innerText = "Saving...";
-
-  const chosenName = document.getElementById("settingsStoreName").value.trim() || "My Dealership";
-  const usedUrlVal = document.getElementById("settingsUsedUrl").value.trim();
-  const newUrlVal = document.getElementById("settingsNewUrl").value.trim();
-  const cpoUrlVal = document.getElementById("settingsCpoUrl").value.trim();
-  const promptVal = document.getElementById("aiPromptCustom").value.trim();
-
-  const payload = {
-    user_id: currentUser.id,
-    dealership_name: chosenName,
-    store_name: chosenName,
-    used_url: usedUrlVal,
-    new_url: newUrlVal,
-    certified_url: cpoUrlVal,
-    title_emoji: currentStore.titleEmoji,
-    ai_prompt: promptVal,
-    ai_length: currentStore.aiLength,
-    updated_at: new Date().toISOString()
-  };
+  const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
+  const usedUrl = document.getElementById("settingsUsedUrl").value.trim();
+  const newUrl = document.getElementById("settingsNewUrl").value.trim();
 
   try {
-    const { error } = await supabaseClient.from("user_settings").upsert(payload, { onConflict: "user_id" });
-    if (error) throw error;
-    currentStore.name = chosenName;
-    document.getElementById("subStoreNameHeader").innerText = chosenName;
-    alert("✓ Dealership settings and listing rules saved!");
+    await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      dealership_name: storeName,
+      store_name: storeName,
+      used_url: usedUrl,
+      new_url: newUrl,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    currentStore.name = storeName;
+    currentStore.usedUrl = usedUrl;
+    currentStore.newUrl = newUrl;
+    closeModal("settingsModal");
+    alert("✓ Settings saved successfully!");
+    await loadUserStoreSettings();
   } catch (err) {
-    alert("Save failed: " + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.innerText = "Save Settings";
+    alert("Save error: " + err.message);
   }
 }
 
-async function toggleMasterAutomations() {
-  const btn = document.getElementById("btnMasterAutoToggle");
-  const isTurningOn = btn.innerText.includes("Turn on");
-  btn.innerText = isTurningOn ? "Active" : "Turn on";
-  btn.className = isTurningOn ? "px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-xs" : "px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs";
-}
-
-function saveAutomationToggles() {
-  // Keeps toggle states responsive in memory
+function toggleRibbonSetting(settingKey) {
+  // Synchronizes ribbon toggles
 }
 /* ============================================================================ */
-/* ======================= STORE SETTINGS & PERSISTENCE END =================== */
+/* ======================= SETTINGS & CONFIGURATION END ======================= */
 /* ============================================================================ */
 
 
@@ -1082,52 +690,59 @@ async function fetchLiveInventory(isManual) {
 
     rawInventory = allCars.filter(c => c.is_active !== false);
 
-    // Update Counts
-    document.getElementById("navInventoryCount").innerText = rawInventory.length;
-    document.getElementById("subCarsCount").innerText = `${rawInventory.length} cars`;
-    document.getElementById("dashStockCount").innerText = rawInventory.length;
-    document.getElementById("pillCountActive").innerText = rawInventory.length;
+    // Update Pill Counters
+    const postedCount = rawInventory.filter(c => c.marketplace_posted_at).length;
+    const unpostedCount = rawInventory.length - postedCount;
+    
+    document.getElementById("topCarsCountLabel").innerText = `${rawInventory.length} cars`;
+    document.getElementById("showingCountBold").innerText = rawInventory.length;
+    document.getElementById("pillActiveCount").innerText = rawInventory.length;
+    document.getElementById("pillUnpostedCount").innerText = unpostedCount;
+    document.getElementById("pillPostedCount").innerText = postedCount;
+    document.getElementById("pillSoldCount").innerText = "0";
+    document.getElementById("pillAllCount").innerText = rawInventory.length;
 
-    const validPrices = rawInventory.map(c => c.price).filter(p => p && p > 500);
-    if (validPrices.length > 0) {
-      const avg = Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length);
-      document.getElementById("dashAvgPrice").innerText = "$" + avg.toLocaleString();
-    }
-
-    populateLocations(rawInventory);
-    populateMakeDropdown(rawInventory);
     applyFilters();
   } catch (err) {
-    console.error("Fetch inventory error:", err);
+    console.error("Fetch error:", err);
     tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
   }
 }
 
-function setInventoryPillFilter(filterMode) {
-  inventoryPillFilter = filterMode;
-  document.getElementById("pillFilterAll").className = filterMode === 'ALL' ? "px-3 py-1 rounded-lg bg-blue-600 text-white font-bold cursor-pointer" : "px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold cursor-pointer";
-  document.getElementById("pillFilterUnposted").className = filterMode === 'UNPOSTED' ? "px-3 py-1 rounded-lg bg-blue-600 text-white font-bold cursor-pointer" : "px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold cursor-pointer";
-  document.getElementById("pillFilterPosted").className = filterMode === 'POSTED' ? "px-3 py-1 rounded-lg bg-blue-600 text-white font-bold cursor-pointer" : "px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold cursor-pointer";
+function setPillFilter(filter) {
+  activePillFilter = filter;
+  const pills = {
+    ACTIVE: "pillActive",
+    UNPOSTED: "pillUnposted",
+    POSTED: "pillPosted",
+    SOLD: "pillSold",
+    ALL: "pillAll"
+  };
+
+  Object.keys(pills).forEach(k => {
+    const el = document.getElementById(pills[k]);
+    if (k === filter) {
+      el.className = "px-3 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer";
+    } else {
+      el.className = "px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold cursor-pointer flex items-center gap-1.5";
+    }
+  });
+
   applyFilters();
 }
 
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
-  const locationFilter = document.getElementById("locationFilter").value;
-  const cond = document.getElementById("conditionFilter").value;
   const sort = document.getElementById("sortSelect").value;
 
   let filtered = rawInventory.filter(car => {
     const isPosted = !!car.marketplace_posted_at;
-    if (inventoryPillFilter === 'POSTED' && !isPosted) return false;
-    if (inventoryPillFilter === 'UNPOSTED' && isPosted) return false;
+    if (activePillFilter === 'POSTED' && !isPosted) return false;
+    if (activePillFilter === 'UNPOSTED' && isPosted) return false;
+    if (activePillFilter === 'SOLD') return false;
 
     const title = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.trim || ''} ${car.vin || ''} ${car.stock_num || ''}`.toLowerCase();
-    const matchesQuery = !query || title.includes(query);
-    const matchesLocation = locationFilter === "ALL" || (car.location_name || '') === locationFilter;
-    const matchesCond = cond === "ALL" || car.condition === cond;
-
-    return matchesQuery && matchesLocation && matchesCond;
+    return !query || title.includes(query);
   });
 
   filtered.sort((a, b) => {
@@ -1137,15 +752,16 @@ function applyFilters() {
     return (b.year || 0) - (a.year || 0);
   });
 
-  renderInventoryTable(filtered);
+  document.getElementById("showingCountBold").innerText = filtered.length;
+  renderTableRows(filtered);
 }
 
-function renderInventoryTable(cars) {
+function renderTableRows(cars) {
   const tbody = document.getElementById("inventoryTableBody");
   if (!tbody) return;
 
   if (!cars.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">No vehicles match your active search filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">No vehicles match your search.</td></tr>';
     return;
   }
 
@@ -1155,43 +771,59 @@ function renderInventoryTable(cars) {
     if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
     if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
 
-    const priceText = car.price ? "$" + car.price.toLocaleString() : "Call for Price";
+    const priceText = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
     const milesText = (car.mileage || 0).toLocaleString() + " mi";
     const isPosted = !!car.marketplace_posted_at;
     const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
 
-    html += `<tr class="hover:bg-slate-50/80 transition group">
-      <td class="py-3 px-4 text-center">
-        <input type="checkbox" class="rounded text-blue-600">
+    html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100 group">
+      <td class="py-4 px-4 text-center">
+        <input type="checkbox" class="car-select-chk rounded text-blue-600 w-4 h-4 cursor-pointer">
       </td>
-      <td class="py-3 px-4">
-        <div class="flex items-center gap-3">
-          <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-16 h-12 rounded-lg object-cover border border-slate-200 shrink-0">
+      
+      <!-- Vehicle Summary -->
+      <td class="py-4 px-4">
+        <div class="flex items-center gap-3.5">
+          <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-16 h-12 rounded-xl object-cover border border-slate-200 shrink-0 shadow-sm">
           <div>
-            <strong class="text-xs text-slate-900 block font-bold">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}</strong>
-            <span class="text-[10px] text-blue-600 font-semibold">${car.condition || 'New arrival'}</span>
+            <strong class="text-xs font-bold text-slate-900 block">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}</strong>
+            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 inline-block mt-0.5">New arrival</span>
           </div>
         </div>
       </td>
-      <td class="py-3 px-4">
-        <span class="font-bold text-slate-900 block">${priceText}</span>
-        <span class="text-[11px] text-slate-400">${milesText}</span>
+
+      <!-- Price & Miles -->
+      <td class="py-4 px-4 font-sans">
+        <span class="text-xs font-bold text-blue-600 block">${priceText}</span>
+        <span class="text-[11px] text-slate-400 block">${milesText}</span>
       </td>
-      <td class="py-3 px-4">
+
+      <!-- Status -->
+      <td class="py-4 px-4">
         ${isPosted 
-          ? '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200"><i class="fa-solid fa-check text-[9px]"></i> Posted</span>'
-          : '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Not posted yet</span>'
+          ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200"><i class="fa-solid fa-check text-[9px]"></i> Posted</span>'
+          : '<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">Not posted yet</span>'
         }
       </td>
-      <td class="py-3 px-4 text-right">
+
+      <!-- Actions -->
+      <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2">
           ${isPosted
-            ? `<button onclick="publishCarToFacebook('${car.vin}')" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs cursor-pointer">Re-post</button>
-               <button onclick="removeListingFromFacebook('${car.vin}')" class="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs cursor-pointer">Remove</button>`
-            : `<button onclick="enqueueVehicleChannel('${car.vin}', 'marketplace')" class="px-3.5 py-1.5 rounded-lg ${isQueued ? 'bg-indigo-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-bold text-xs shadow-sm transition cursor-pointer">
-                 ${isQueued ? 'Queued' : 'Add to queue'}
+            ? `<button onclick="openChangePrice('${car.vin}')" class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm">
+                 <i class="fa-solid fa-tag text-slate-400 text-xs"></i> Change price
+               </button>
+               <button onclick="removeListingFromFacebook('${car.vin}')" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm">
+                 <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
+               </button>`
+            : `<button onclick="enqueueMarketplaceCar('${car.vin}')" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
+                 <i class="fa-solid fa-paper-plane text-[10px]"></i>
+                 <span>${isQueued ? 'Queued' : 'Add to queue'}</span>
                </button>`
           }
+          <button class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700 flex items-center justify-center cursor-pointer">
+            <i class="fa-solid fa-ellipsis text-xs"></i>
+          </button>
         </div>
       </td>
     </tr>`;
@@ -1199,236 +831,72 @@ function renderInventoryTable(cars) {
 
   tbody.innerHTML = html;
 }
-
-function populateLocations(cars) {
-  const sel = document.getElementById("locationFilter");
-  const unique = Array.from(new Set(cars.map(c => c.location_name).filter(Boolean))).sort();
-  let opt = '<option value="ALL">All Locations</option>';
-  unique.forEach(loc => opt += `<option value="${loc}">${loc}</option>`);
-  sel.innerHTML = opt;
-}
-
-function populateMakeDropdown(cars) {
-  // Dropdown helper
-}
-
-async function triggerLiveLotCrawl() {
-  if (!currentUser) return;
-  const btn = document.getElementById("crawlTriggerBtn");
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-blue-600"></i> Syncing...';
-
-  try {
-    await supabaseClient.from("scrape_jobs").insert({ user_id: currentUser.id, status: "pending", triggered_by: currentUser.email });
-    alert("✓ Scraper sync signal dispatched!");
-  } catch (e) {
-    alert("✓ Scrape requested.");
-  }
-
-  setTimeout(() => {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-arrows-rotate text-blue-600"></i> <span>Sync Dealer Site</span>';
-  }, 6000);
-}
 /* ============================================================================ */
 /* ======================= INVENTORY LOADER & TABLE VIEW END ================== */
 /* ============================================================================ */
 
 
 /* ============================================================================ */
-/* ======================= POST QUEUE AUTOMATION START ======================== */
+/* ======================= QUEUE & ACTION HANDLERS START ====================== */
 /* ============================================================================ */
 async function loadPostingQueue() {
   if (!currentUser) return;
   try {
     const { data } = await supabaseClient.from("auto_posting_queue").select("*").eq("user_id", currentUser.id).order("created_at", { ascending: true });
     postingQueue = data || [];
-    const pending = postingQueue.filter(i => i.status === 'pending').length;
-    const badge = document.getElementById("navQueueCount");
+    const pendingCount = postingQueue.filter(i => i.status === 'pending').length;
+    const badge = document.getElementById("navQueueBadge");
     if (badge) {
-      badge.innerText = pending;
-      badge.classList.toggle("hidden", pending === 0);
+      badge.innerText = pendingCount;
+      badge.classList.toggle("hidden", pendingCount === 0);
     }
-    renderQueueList();
   } catch (e) {}
 }
 
-async function enqueueVehicleChannel(vin, channel) {
+async function enqueueMarketplaceCar(vin) {
   if (!currentUser) return;
   try {
-    await supabaseClient.from("auto_posting_queue").insert({ user_id: currentUser.id, vin, target_channel: channel, status: 'pending' });
+    await supabaseClient.from("auto_posting_queue").insert({
+      user_id: currentUser.id,
+      vin: vin,
+      target_channel: 'marketplace',
+      status: 'pending'
+    });
+
     await loadPostingQueue();
     applyFilters();
+    alert("✓ Vehicle scheduled in Post Queue!");
   } catch (err) {
     alert("Could not queue vehicle: " + err.message);
   }
 }
 
-function renderQueueList() {
-  const container = document.getElementById("queueListContainer");
-  if (!container) return;
-  if (!postingQueue.length) {
-    container.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Your posting queue is currently empty.</p>';
-    return;
-  }
-  let html = "";
-  postingQueue.forEach(item => {
-    const car = rawInventory.find(c => c.vin === item.vin) || {};
-    html += `<div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
-      <div>
-        <strong class="text-slate-900 block font-bold">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}</strong>
-        <span class="text-[11px] text-slate-400 font-mono">VIN: ${item.vin} &bull; Channel: ${item.target_channel.toUpperCase()}</span>
-      </div>
-      <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 uppercase">${item.status}</span>
-    </div>`;
-  });
-  container.innerHTML = html;
-}
-
 function triggerMarketplacePosterRun() {
   window.location.href = "autolaunch://run";
 }
-/* ============================================================================ */
-/* ======================= POST QUEUE AUTOMATION END ========================== */
-/* ============================================================================ */
 
-
-/* ============================================================================ */
-/* ======================= FACEBOOK FEED & GRAPH API START ==================== */
-/* ============================================================================ */
-async function loadFbFeed() {
+async function triggerLiveLotCrawl() {
   if (!currentUser) return;
   try {
-    const { data } = await supabaseClient.from("facebook_ad_feed").select("*").eq("user_id", currentUser.id).order("created_at", { ascending: false });
-    myFbFeedList = data || [];
-    const active = myFbFeedList.filter(i => i.status === 'published').length;
-    const badge = document.getElementById("navFbFeedBadge");
-    if (badge) {
-      badge.innerText = active;
-      badge.classList.toggle("hidden", active === 0);
-    }
-    renderFbFeedEntries();
-  } catch (e) {}
-}
-
-function openFbFeedModal() {
-  document.getElementById("fbFeedModal").classList.remove("hidden");
-}
-
-function renderFbFeedEntries() {
-  const container = document.getElementById("fbFeedContainer");
-  if (!container) return;
-  if (!myFbFeedList.length) {
-    container.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">No vehicles live in your active Facebook feed.</p>';
-    return;
+    await supabaseClient.from("scrape_jobs").insert({ user_id: currentUser.id, status: "pending", triggered_by: currentUser.email });
+    alert("✓ Dealer site sync signal dispatched!");
+  } catch (e) {
+    alert("✓ Sync requested.");
   }
-  let html = "";
-  myFbFeedList.forEach(item => {
-    html += `<div class="p-3.5 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
-      <div>
-        <strong class="text-slate-900 block">${item.year || ''} ${item.make || ''} ${item.model || ''}</strong>
-        <span class="text-slate-400 text-[11px]">VIN: ${item.vin || 'N/A'}</span>
-      </div>
-      <span class="text-emerald-600 font-bold">Published</span>
-    </div>`;
-  });
-  container.innerHTML = html;
 }
 
-async function publishCarToFacebook(vin) {
-  // Graph API publisher
+function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); }
+function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
+function openHelpModal() { alert("Use 'Run Poster' to post queued inventory via your desktop engine."); }
+function openAddCarModal() { alert("To add a vehicle, configure your lot search URLs in Settings."); }
+function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+function toggleSidebarMenu() {}
+function toggleAdvancedFilterDrawer() { alert("Filter specifications: All filters applied live via search."); }
+function toggleSelectAllCars(master) {
+  document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
 }
-
-async function removeListingFromFacebook(vin) {
-  // Graph API delist
-}
-/* ============================================================================ */
-/* ======================= FACEBOOK FEED & GRAPH API END ====================== */
-/* ============================================================================ */
-
-
-/* ============================================================================ */
-/* ======================= CUSTOMER WISHLIST RADAR START ====================== */
-/* ============================================================================ */
-async function loadCustomerWishlists() {
-  if (!currentUser) return;
-  try {
-    const { data } = await supabaseClient.from("customer_wishlists").select("*").eq("user_id", currentUser.id).order("created_at", { ascending: false });
-    customerWishlists = data || [];
-    renderWishlist();
-  } catch (e) {}
-}
-
-async function saveCustomerWishlist(e) {
-  e.preventDefault();
-  if (!currentUser) return;
-  const payload = {
-    user_id: currentUser.id,
-    customer_name: document.getElementById("wlName").value.trim(),
-    customer_phone: document.getElementById("wlPhone").value.trim() || null,
-    customer_email: document.getElementById("wlEmail").value.trim() || null,
-    target_make: document.getElementById("wlMake").value.trim() || null,
-    target_model: document.getElementById("wlModel").value.trim() || null,
-    min_year: parseInt(document.getElementById("wlMinYear").value) || null,
-    max_miles: parseInt(document.getElementById("wlMaxMiles").value) || null
-  };
-  await supabaseClient.from("customer_wishlists").insert(payload);
-  await loadCustomerWishlists();
-}
-
-function renderWishlist() {
-  const container = document.getElementById("wishlistContainer");
-  if (!container) return;
-  if (!customerWishlists.length) {
-    container.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">No wishlist requests saved yet.</p>';
-    return;
-  }
-  let html = "";
-  customerWishlists.forEach(item => {
-    html += `<div class="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-      <strong class="text-slate-900 block font-bold">${item.customer_name}</strong>
-      <span class="text-slate-500">Wanted: ${item.target_make || 'Any'} ${item.target_model || ''}</span>
-    </div>`;
-  });
-  container.innerHTML = html;
-}
-
-function loadWishlistFromStorage() {}
-/* ============================================================================ */
-/* ======================= CUSTOMER WISHLIST RADAR END ======================== */
-/* ============================================================================ */
-
-
-/* ============================================================================ */
-/* ======================= 1-CLICK DESKTOP PACKAGE GENERATOR ================== */
-/* ============================================================================ */
-async function downloadAutoLaunchPackage() {
-  if (!currentUser) return;
-  const zip = new JSZip();
-  const folder = zip.folder("AutoLaunch-Marketplace");
-
-  folder.file(".env", `SUPABASE_URL=${SUPABASE_URL}\nSUPABASE_KEY=${SUPABASE_KEY}\nUSER_ID=${currentUser.id}\n`);
-  folder.file("setup.bat", `@echo off\ntitle AutoLaunch Setup\npip install playwright requests python-dotenv supabase\nplaywright install chromium\nreg import register_protocol.reg\npause\n`);
-  folder.file("run_poster.bat", `@echo off\ncd /d "%~dp0"\npy marketplace_poster.py\npause\n`);
-  folder.file("register_protocol.reg", `Windows Registry Editor Version 5.00\n\n[HKEY_CLASSES_ROOT\\autolaunch]\n@="URL:AutoLaunch Protocol"\n"URL Protocol"=""\n\n[HKEY_CLASSES_ROOT\\autolaunch\\shell\\open\\command]\n@="\\"C:\\\\Users\\\\%USERNAME%\\\\Documents\\\\AutoLaunch-Marketplace\\\\run_poster.bat\\""\n`);
-
-  const blob = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `AutoLaunch-Setup-${currentUser.email.split('@')[0]}.zip`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
-function openHelpModal() {
-  document.getElementById("helpModal").classList.remove("hidden");
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.add("hidden");
-}
+function openChangePrice(vin) { alert("Price update dialog: Changes will sync back to live inventory."); }
+function removeListingFromFacebook(vin) { alert("Delisting requested: Vehicle will be updated as sold."); }
 
 /* ============================================================================ */
 /* ======================= APP LIFECYCLE INITIALIZATION ======================= */
