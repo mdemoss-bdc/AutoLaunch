@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+class="w-full border border-slate-300 rounded-xl px-4 py-3"><!DOCTYPE html>
 <html lang="en" class="h-full bg-slate-100">
 
 <!-- ============================================================================== -->
@@ -792,7 +792,18 @@ body {
                 class="w-full border border-slate-300 rounded-xl px-4 py-3">
 
             </div>
+<div>
 
+    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+        Certified Inventory URL
+    </label>
+
+    <input
+        type="text"
+        id="settingsCertifiedUrl"
+        class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+</div>
             <div>
 
               <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
@@ -1440,7 +1451,11 @@ async function loadUserStoreSettings() {
       document.getElementById("settingsStoreName").value = currentStore.name;
       document.getElementById("settingsUsedUrl").value = currentStore.usedUrl;
       document.getElementById("settingsNewUrl").value = currentStore.newUrl;
-      
+      const certField =
+    document.getElementById("settingsCertifiedUrl");
+
+if (certField)
+    certField.value = currentStore.cpoUrl || "";
       const domain = currentStore.usedUrl ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0] : "www.dealershipinventory.com";
       document.getElementById("dealerUrlDisplay").innerText = "www." + domain;
       document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
@@ -1506,20 +1521,23 @@ async function saveAllSettings() {
   const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
   const usedUrl = document.getElementById("settingsUsedUrl").value.trim();
   const newUrl = document.getElementById("settingsNewUrl").value.trim();
-
+const certifiedUrl =
+    document.getElementById("settingsCertifiedUrl").value.trim();
   try {
     await supabaseClient.from("user_settings").upsert({
-      user_id: currentUser.id,
-      dealership_name: storeName,
-      store_name: storeName,
-      used_url: usedUrl,
-      new_url: newUrl,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "user_id" });
+  user_id: currentUser.id,
+  dealership_name: storeName,
+  store_name: storeName,
+  used_url: usedUrl,
+  new_url: newUrl,
+  certified_url: certifiedUrl,
+  updated_at: new Date().toISOString()
+}, { onConflict: "user_id" });
 
     currentStore.name = storeName;
-    currentStore.usedUrl = usedUrl;
-    currentStore.newUrl = newUrl;
+currentStore.usedUrl = usedUrl;
+currentStore.newUrl = newUrl;
+currentStore.cpoUrl = certifiedUrl;
     closeModal("settingsModal");
     alert("✓ Settings saved successfully!");
     await loadUserStoreSettings();
