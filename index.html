@@ -1969,12 +1969,72 @@ async function triggerLiveLotCrawl() {
     alert("✓ Sync requested.");
   }
 }
+  async function triggerLiveLotCrawl() {
+  if (!currentUser) return;
+  try {
+    await supabaseClient.from("scrape_jobs").insert({
+      user_id: currentUser.id,
+      status: "pending",
+      triggered_by: currentUser.email
+    });
+
+    alert("✓ Dealer site sync signal dispatched!");
+  } catch (e) {
+    alert("✓ Sync requested.");
+  }
+}
+
+
+
+function populateOnboardingFields() {
+
+    const storeField =
+        document.getElementById("onboardingDealershipName");
+
+    const usedField =
+        document.getElementById("onboardingUsedUrl");
+
+    const newField =
+        document.getElementById("onboardingNewUrl");
+
+    const certField =
+        document.getElementById("onboardingCertifiedUrl");
+
+    if (storeField)
+        storeField.value = currentStore.name || "";
+
+    if (usedField)
+        usedField.value = currentStore.usedUrl || "";
+
+    if (newField)
+        newField.value = currentStore.newUrl || "";
+
+    if (certField)
+        certField.value = currentStore.cpoUrl || "";
+
+}
+
+
+
 function showGetStartedPage() {
 
-    document.querySelector("main").classList.add("hidden");
+    populateOnboardingFields();
 
-    document
-        .getElementById("getStartedPage")
+    document.querySelector("main")
+        .classList.add("hidden");
+
+    document.getElementById("getStartedPage")
+        .classList.remove("hidden");
+
+}
+function showGetStartedPage() {
+
+    populateOnboardingFields();
+
+    document.querySelector("main")
+        .classList.add("hidden");
+
+    document.getElementById("getStartedPage")
         .classList.remove("hidden");
 
 }
