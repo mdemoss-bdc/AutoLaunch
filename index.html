@@ -544,7 +544,80 @@ body {
     </div>
   </div>
 </div>
+<!-- Floating Actions Dropdown Menu -->
+<div id="vehicleActionDropdown" class="fixed hidden z-50 w-64 glass-card rounded-2xl border border-slate-700/80 p-1.5 shadow-2xl text-xs space-y-0.5 backdrop-blur-xl">
+  <button onclick="handleDropdownAction('view_details')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800/80 hover:text-white transition cursor-pointer text-left font-medium">
+    <i class="fa-regular fa-eye w-4 text-slate-400"></i>
+    <span>View details & photos</span>
+  </button>
+  <button onclick="handleDropdownAction('change_price')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800/80 hover:text-white transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-tag w-4 text-slate-400"></i>
+    <span>Change price</span>
+  </button>
+  <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800/80 hover:text-white transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-link w-4 text-slate-400"></i>
+    <span>Already on Facebook? Add its link</span>
+  </button>
+  <div class="h-px bg-slate-800/80 my-1"></div>
+  <button onclick="handleDropdownAction('remove_inventory')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-950/60 hover:text-rose-300 transition cursor-pointer text-left font-semibold">
+    <i class="fa-regular fa-trash-can w-4 text-rose-400"></i>
+    <span>Remove from inventory</span>
+  </button>
+</div>
 
+<!-- Change Price Dialog Modal -->
+<div id="changePriceModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-700 p-6 space-y-4 shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <h3 class="text-sm font-bold text-white flex items-center gap-2">
+        <i class="fa-solid fa-tag text-blue-400"></i> Change Price
+      </h3>
+      <button onclick="closeModal('changePriceModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <div>
+      <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">New Selling Price ($)</label>
+      <input type="number" id="inputNewVehiclePrice" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-bold">
+    </div>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+      <button onclick="closeModal('changePriceModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer">Cancel</button>
+      <button onclick="saveVehicleNewPrice()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Save Price</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Facebook Link Modal -->
+<div id="addFbLinkModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-md rounded-2xl border border-slate-700 p-6 space-y-4 shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <h3 class="text-sm font-bold text-white flex items-center gap-2">
+        <i class="fa-brands fa-facebook text-blue-400"></i> Link Facebook Listing
+      </h3>
+      <button onclick="closeModal('addFbLinkModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <div>
+      <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Paste Facebook Marketplace or Post URL</label>
+      <input type="text" id="inputFbListingUrl" placeholder="https://www.facebook.com/marketplace/item/..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+      <button onclick="closeModal('addFbLinkModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer">Cancel</button>
+      <button onclick="saveExistingFbLink()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Link as Posted</button>
+    </div>
+  </div>
+</div>
+
+<!-- View Details & Photos Modal -->
+<div id="vehicleDetailsModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-2xl rounded-2xl border border-slate-700 p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div>
+        <h3 id="detailsModalTitle" class="text-base font-bold text-white">Vehicle Details</h3>
+        <span id="detailsModalVin" class="text-[11px] font-mono text-slate-400"></span>
+      </div>
+      <button onclick="closeModal('vehicleDetailsModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-base"></i></button>
+    </div>
+    <div id="detailsModalContent" class="space-y-4"></div>
+  </div>
+</div>
 <script>
 /* ============================================================================ */
 /* ======================= JAVASCRIPT GLOBAL STATE START ====================== */
