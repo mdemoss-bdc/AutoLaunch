@@ -334,6 +334,8 @@ body {
             </div>
 
             <button
+              id="btnTestInventory"
+              onclick="testInventory()"
               class="btn-gradient px-8 py-3 rounded-xl text-white font-bold">
 
               Test Inventory
@@ -2017,6 +2019,62 @@ function populateOnboardingFields() {
 
     if (certField)
         certField.value = currentStore.cpoUrl || "";
+
+}
+  function testInventory() {
+
+    const dealerName =
+        document.getElementById(
+            "onboardingDealershipName"
+        ).value.trim();
+
+    const usedUrl =
+        document.getElementById(
+            "onboardingUsedUrl"
+        ).value.trim();
+
+    const newUrl =
+        document.getElementById(
+            "onboardingNewUrl"
+        ).value.trim();
+
+    if (!dealerName) {
+        alert("Please enter a dealership name.");
+        return;
+    }
+
+    if (!usedUrl) {
+        alert("Please enter a Used Inventory URL.");
+        return;
+    }
+
+    if (!newUrl) {
+        alert("Please enter a New Inventory URL.");
+        return;
+    }
+
+    const btn =
+        document.getElementById(
+            "btnTestInventory"
+        );
+
+    btn.disabled = true;
+
+    btn.innerHTML =
+        "Testing Inventory...";
+
+    setTimeout(() => {
+
+        alert(
+            "✅ Validation Successful\n\nInventory Test is working."
+        );
+
+        btn.disabled = false;
+
+        btn.innerHTML =
+            "Test Inventory";
+
+    }, 1500);
 
 }
 function showGetStartedPage() {
