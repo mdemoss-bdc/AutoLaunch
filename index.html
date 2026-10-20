@@ -573,6 +573,14 @@ body {
 </div>
 
 <!-- 5. Settings Modal -->
+<div id="settingsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+  <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-sliders text-blue-600"></i> Dealership & Crawler Settings
+      </h3>
+      <button onclick="closeModal('settingsModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
 
     <div class="space-y-4 text-xs">
       <div>
@@ -1689,14 +1697,7 @@ async function triggerLiveLotCrawl() {
   }
 }
 
-function openSettingsModal() {
-
-  document.getElementById("settingsModal").classList.remove("hidden");
-
-  document.getElementById("settingsModal").querySelector(".glass-card").className =
-  "glass-card w-full max-w-6xl rounded-3xl p-8 shadow-2xl border border-slate-200 bg-white text-slate-900";
-
-}
+function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); }
 function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
 function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
