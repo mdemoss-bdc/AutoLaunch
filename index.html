@@ -2,7 +2,7 @@
 <html lang="en" class="h-full bg-slate-950">
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 0: HEAD & GLOBAL STYLES START ================ -->
+<!-- ======================= SECTION 0: HEAD & STYLES START ======================= -->
 <!-- ============================================================================== -->
 <head>
 <meta charset="UTF-8">
@@ -84,7 +84,7 @@ body {
 </style>
 </head>
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 0: HEAD & GLOBAL STYLES END ================== -->
+<!-- ======================= SECTION 0: HEAD & STYLES END ========================= -->
 <!-- ============================================================================== -->
 
 <body class="h-full flex select-none overflow-x-hidden text-slate-100">
@@ -361,7 +361,7 @@ body {
     <!-- 4. Automatic photo edits -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-pink-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
-        <span class="text-xs font-bold text-white flex items-center gap-1">
+        <span onclick="openAutoPhotoEditsModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-pink-400 transition">
           Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
         </span>
         <label class="relative inline-flex items-center cursor-pointer">
@@ -370,8 +370,8 @@ body {
         </label>
       </div>
       <div>
-        <p class="text-[10px] text-slate-400">On - smart crop</p>
-        <button onclick="openSettingsModal()" class="text-[10px] text-pink-400 hover:text-pink-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
+        <p id="photoEditStatusLabel" class="text-[10px] text-slate-400">On - smart crop</p>
+        <button onclick="openAutoPhotoEditsModal()" class="text-[10px] text-pink-400 hover:text-pink-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </button>
       </div>
@@ -708,6 +708,103 @@ body {
     </div>
   </div>
 </div>
+
+<!-- 9. Automatic Photo Edits Configuration Modal -->
+<div id="autoPhotoEditsModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-700/80 relative text-slate-100 max-h-[90vh] overflow-y-auto">
+    
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-pink-500/20 text-pink-400 flex items-center justify-center text-sm font-bold">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+        </div>
+        <h3 class="text-base font-bold text-white">Automatic photo edits</h3>
+      </div>
+      <button onclick="closeModal('autoPhotoEditsModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <p class="text-xs text-slate-300 leading-relaxed">
+      Set it once — every vehicle you post gets these edits automatically. Included in your plan.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1.5">AI background</label>
+          <p class="text-[11px] text-slate-500 mb-2">Pick a background on the right — the vehicle is cut out and placed on it automatically.</p>
+          <select id="selectAiBgMode" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+            <option value="first_only">First photo only</option>
+            <option value="all_photos">All photos</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-white">Auto-crop</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkAutoCrop" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-snug">Use Adjust crop above the photo to drag it — future posts get exactly that crop.</p>
+          <select id="selectAutoCropFreq" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none cursor-pointer">
+            <option value="every">Every photo</option>
+            <option value="first">First photo only</option>
+          </select>
+        </div>
+
+        <div class="pt-2 flex items-center gap-3">
+          <button onclick="saveAutoPhotoEdits()" class="flex-1 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-md cursor-pointer">
+            Save settings
+          </button>
+          <button onclick="closeModal('autoPhotoEditsModal')" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-semibold cursor-pointer">
+            Cancel
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400 font-semibold">Previewing on <strong class="text-white">2018 Toyota Tacoma</strong></span>
+          <button class="text-blue-400 hover:underline text-[11px] font-medium cursor-pointer">Try another vehicle</button>
+        </div>
+
+        <div class="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl w-fit text-xs font-bold">
+          <button class="px-3 py-1 rounded-lg bg-slate-800 text-white shadow-sm">Background</button>
+          <button class="px-3 py-1 rounded-lg text-slate-400 hover:text-white transition">Adjust crop</button>
+        </div>
+
+        <div class="h-48 rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 relative shadow-inner">
+          <img id="previewPhotoEditImg" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80" class="w-full h-full object-cover">
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 to-transparent p-2 text-center">
+            <span class="text-[10px] text-slate-300 font-medium">Showroom Style Preview</span>
+          </div>
+        </div>
+
+        <div class="space-y-2 pt-1">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Showroom Backgrounds</span>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400')" class="p-1 rounded-xl border border-blue-600 bg-slate-900 hover:border-indigo-500 transition cursor-pointer text-left">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-800"><img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-white font-semibold block mt-1 text-center">Bright</span>
+            </button>
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=400')" class="p-1 rounded-xl border border-slate-800 bg-slate-900 hover:border-indigo-500 transition cursor-pointer text-left">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-800"><img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-slate-400 font-semibold block mt-1 text-center">Dark</span>
+            </button>
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=400')" class="p-1 rounded-xl border border-slate-800 bg-slate-900 hover:border-indigo-500 transition cursor-pointer text-left">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-800"><img src="https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-slate-400 font-semibold block mt-1 text-center">Warm wood</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 4: MODALS & DROPDOWNS END ==================== -->
 <!-- ============================================================================== -->
@@ -852,6 +949,18 @@ async function loadUserStoreSettings() {
         if (freqLabel) freqLabel.innerText = `Every ${data.repost_frequency_days} days`;
         const selectEl = document.getElementById("autoRepostFrequencySelect");
         if (selectEl) selectEl.value = String(data.repost_frequency_days);
+      }
+
+      if (data.auto_crop_enabled !== undefined) {
+        const statusLbl = document.getElementById("photoEditStatusLabel");
+        if (statusLbl) statusLbl.innerText = data.auto_crop_enabled ? "On - smart crop" : "Off";
+        const chkCrop = document.getElementById("chkAutoCrop");
+        if (chkCrop) chkCrop.checked = data.auto_crop_enabled;
+      }
+
+      if (data.ai_background_mode) {
+        const aiSel = document.getElementById("selectAiBgMode");
+        if (aiSel) aiSel.value = data.ai_background_mode;
       }
     }
   } catch (e) {}
@@ -1330,10 +1439,16 @@ function openSettingsModal() { document.getElementById("settingsModal").classLis
 function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
 function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
+function openAutoPhotoEditsModal() { document.getElementById("autoPhotoEditsModal").classList.remove("hidden"); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
 function toggleRibbonSetting(k) {}
 function toggleSelectAllCars(master) {
   document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
+}
+
+function setPreviewBg(url) {
+  const img = document.getElementById("previewPhotoEditImg");
+  if (img) img.src = url;
 }
 
 async function saveAutoPostPreferences() {
@@ -1377,6 +1492,31 @@ async function saveAutoRepostPreferences() {
     alert("✓ Auto delete & repost schedule saved successfully!");
   } catch (err) {
     alert("Could not save repost settings: " + err.message);
+  }
+}
+
+async function saveAutoPhotoEdits() {
+  if (!currentUser) return;
+  const aiMode = document.getElementById("selectAiBgMode").value;
+  const autoCrop = document.getElementById("chkAutoCrop").checked;
+
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      ai_background_mode: aiMode,
+      auto_crop_enabled: autoCrop,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+    
+    const statusLbl = document.getElementById("photoEditStatusLabel");
+    if (statusLbl) statusLbl.innerText = autoCrop ? "On - smart crop" : "Off";
+
+    closeModal('autoPhotoEditsModal');
+    alert("✓ Automatic photo edits settings saved successfully!");
+  } catch (err) {
+    alert("Could not save photo edit preferences: " + err.message);
   }
 }
 
