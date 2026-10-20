@@ -573,36 +573,173 @@ body {
 </div>
 
 <!-- 5. Settings Modal -->
+
 <div id="settingsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-  <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
-    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
-      <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-        <i class="fa-solid fa-sliders text-blue-600"></i> Dealership & Crawler Settings
-      </h3>
-      <button onclick="closeModal('settingsModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
-    </div>
 
-    <div class="space-y-4 text-xs">
-      <div>
-        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Dealership Name</label>
-        <input type="text" id="settingsStoreName" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900">
-      </div>
-      <div>
-        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Used Inventory Search URL (Page 2)</label>
-        <input type="text" id="settingsUsedUrl" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900">
-      </div>
-      <div>
-        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">New Inventory Search URL (Page 2)</label>
-        <input type="text" id="settingsNewUrl" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900">
-      </div>
-    </div>
+  <div class="glass-card w-full max-w-6xl rounded-3xl p-8 space-y-6 max-h-[95vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
 
-    <div class="flex justify-end pt-2 border-t border-slate-200">
-      <button onclick="saveAllSettings()" class="px-5 py-2 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">
-        Save Settings
+    <!-- HEADER -->
+
+    <div class="flex items-center justify-between border-b border-slate-200 pb-5">
+
+      <div>
+        <h2 class="text-2xl font-black text-slate-900">
+          Settings
+        </h2>
+
+        <p class="text-sm text-slate-500 mt-1">
+          Manage dealership settings and automation preferences.
+        </p>
+      </div>
+
+      <button
+        onclick="closeModal('settingsModal')"
+        class="text-slate-400 hover:text-slate-700">
+
+        <i class="fa-solid fa-xmark text-2xl"></i>
+
       </button>
+
     </div>
+
+    <div class="grid grid-cols-12 gap-8">
+
+      <!-- LEFT MENU -->
+
+      <div class="col-span-3">
+
+        <div class="space-y-2">
+
+          <button class="w-full text-left px-4 py-3 rounded-xl bg-blue-600 text-white font-bold">
+            Dealership
+          </button>
+
+          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+            Facebook
+          </button>
+
+          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+            Automation
+          </button>
+
+          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+            AI Settings
+          </button>
+
+        </div>
+
+      </div>
+
+      <!-- RIGHT CONTENT -->
+
+      <div class="col-span-9 space-y-6">
+
+        <!-- DEALERSHIP CARD -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <h3 class="font-bold text-lg mb-5">
+            Dealership Configuration
+          </h3>
+
+          <div class="space-y-4">
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Dealership Name
+              </label>
+
+              <input
+                type="text"
+                id="settingsStoreName"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+            </div>
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Used Inventory URL
+              </label>
+
+              <input
+                type="text"
+                id="settingsUsedUrl"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+            </div>
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                New Inventory URL
+              </label>
+
+              <input
+                type="text"
+                id="settingsNewUrl"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- AUTOMATION CARD -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Auto Posting
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                Automatically post inventory to Facebook Marketplace.
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkRibbonAutoMain"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
+        <!-- SAVE -->
+
+        <div class="flex justify-end">
+
+          <button
+            onclick="saveAllSettings()"
+            class="px-8 py-3 rounded-xl btn-gradient text-white font-bold">
+
+            Save Settings
+
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
   </div>
+
 </div>
 
 <!-- 6. Queue Modal -->
