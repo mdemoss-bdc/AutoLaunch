@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950">
+<html lang="en" class="h-full bg-slate-100">
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 0: HEAD & STYLES START ======================= -->
+<!-- ======================= SECTION 0: HEAD & LIGHT STYLES START ================= -->
 <!-- ============================================================================== -->
 <head>
 <meta charset="UTF-8">
@@ -18,24 +18,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  --ink: #f8fafc;
-  --ink-row: #e2e8f0;
-  --ink-soft: #94a3b8;
-  --blue: #3b82f6;
-  --violet: #8b5cf6;
-  --cyan: #06b6d4;
-  --emerald: #10b981;
-  --amber: #f59e0b;
-  --rose: #f43f5e;
+  --ink: #0f172a;
+  --ink-row: #cbd5e1;
+  --ink-soft: #64748b;
+  --blue: #2563eb;
+  --violet: #7c3aed;
+  --cyan: #0891b2;
+  --emerald: #059669;
+  --amber: #d97706;
+  --rose: #e11d48;
 }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: radial-gradient(circle at 15% 15%, rgba(59, 130, 246, 0.15), transparent 45%),
-              radial-gradient(circle at 85% 20%, rgba(139, 92, 246, 0.15), transparent 40%),
-              radial-gradient(circle at 50% 85%, rgba(6, 182, 212, 0.12), transparent 50%),
-              #090d16;
-  background-attachment: fixed;
+  background: #f0f4f8;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
@@ -45,33 +41,32 @@ body {
 }
 
 .glass-card {
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
 }
 
 .glass-card:hover {
-  border-color: rgba(99, 102, 241, 0.35);
-  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.15);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 .nav-selected {
-  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
+  background: #2563eb !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
 }
 .nav-selected i {
   color: #ffffff !important;
 }
 
 .btn-gradient {
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .btn-gradient:hover {
-  filter: brightness(1.1);
+  filter: brightness(1.05);
   transform: translateY(-1px);
 }
 .btn-gradient:active {
@@ -79,47 +74,47 @@ body {
 }
 
 .table-row-vibrant:hover {
-  background-color: rgba(30, 41, 59, 0.5) !important;
+  background-color: #f8fafc !important;
 }
 </style>
 </head>
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 0: HEAD & STYLES END ========================= -->
+<!-- ======================= SECTION 0: HEAD & LIGHT STYLES END =================== -->
 <!-- ============================================================================== -->
 
-<body class="h-full flex select-none overflow-x-hidden text-slate-100">
+<body class="h-full flex select-none overflow-x-hidden text-slate-800">
 
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 1: AUTHENTICATION MODAL START =============== -->
 <!-- ============================================================================== -->
-<div id="authOverlay" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-md rounded-2xl p-8 space-y-6 shadow-2xl relative border border-slate-700/60">
+<div id="authOverlay" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-md rounded-2xl p-8 space-y-6 shadow-2xl relative border border-slate-200 bg-white">
     <div class="flex items-center gap-3 justify-center mb-2">
-      <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30 text-white font-black text-xl">
+      <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25 text-white font-black text-xl">
         <i class="fa-solid fa-bolt"></i>
       </div>
       <div>
-        <span class="brand-title font-extrabold text-2xl tracking-tight bg-gradient-to-r from-blue-400 via-indigo-300 to-violet-400 bg-clip-text text-transparent block">AutoLaunch</span>
-        <span class="text-[10px] font-bold tracking-widest text-indigo-400 uppercase">Dealer Intelligence Suite</span>
+        <span class="brand-title font-extrabold text-2xl tracking-tight text-slate-900 block">AutoLaunch</span>
+        <span class="text-[10px] font-bold tracking-widest text-blue-600 uppercase">Dealer Intelligence Suite</span>
       </div>
     </div>
 
-    <div id="authTabSwitcher" class="grid grid-cols-2 p-1 bg-slate-900/80 rounded-xl text-xs font-bold text-center text-slate-400 border border-slate-800">
-      <button id="tabSignIn" type="button" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer">Sign In</button>
-      <button id="tabSignUp" type="button" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg hover:text-white transition cursor-pointer">Register</button>
+    <div id="authTabSwitcher" class="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold text-center text-slate-500 border border-slate-200">
+      <button id="tabSignIn" type="button" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm">Sign In</button>
+      <button id="tabSignUp" type="button" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer">Register</button>
     </div>
 
     <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
       <div>
-        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Email</label>
-        <input type="email" id="authEmail" required placeholder="name@dealership.com" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Email</label>
+        <input type="email" id="authEmail" required placeholder="name@dealership.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
       </div>
 
       <div>
-        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Password</label>
+        <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Password</label>
         <div class="relative">
-          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl pl-4 pr-11 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <button type="button" onclick="togglePasswordVisibility('authPassword', 'passwordToggleIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition focus:outline-none cursor-pointer">
+          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          <button type="button" onclick="togglePasswordVisibility('authPassword', 'passwordToggleIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition focus:outline-none cursor-pointer">
             <i id="passwordToggleIcon" class="fa-regular fa-eye text-sm"></i>
           </button>
         </div>
@@ -129,7 +124,7 @@ body {
         Sign In
       </button>
 
-      <p id="authErrorMsg" class="text-xs text-rose-400 text-center font-medium hidden"></p>
+      <p id="authErrorMsg" class="text-xs text-rose-600 text-center font-medium hidden"></p>
     </form>
   </div>
 </div>
@@ -140,16 +135,16 @@ body {
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 2: LEFT NAVIGATION RAIL START ============== -->
 <!-- ============================================================================== -->
-<aside class="w-60 bg-slate-900/60 backdrop-blur-xl border-r border-slate-800/80 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30 select-none">
+<aside class="w-60 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30 select-none shadow-sm">
   <div class="p-4 space-y-4 overflow-y-auto">
     <div class="flex items-center justify-between px-2 pt-1 pb-1">
       <div class="flex items-center gap-2.5">
-        <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs shadow-md shadow-indigo-500/30 font-black">
+        <div class="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs shadow-md shadow-blue-500/20 font-black">
           <i class="fa-solid fa-bolt"></i>
         </div>
-        <span class="brand-title font-black text-xl bg-gradient-to-r from-blue-400 via-indigo-300 to-violet-400 bg-clip-text text-transparent tracking-tight">AutoLaunch</span>
+        <span class="brand-title font-black text-xl text-slate-900 tracking-tight">AutoLaunch</span>
       </div>
-      <button class="text-slate-400 hover:text-white text-xs p-1 cursor-pointer">
+      <button class="text-slate-400 hover:text-slate-700 text-xs p-1 cursor-pointer">
         <i class="fa-solid fa-bars-staggered"></i>
       </button>
     </div>
@@ -157,13 +152,13 @@ body {
     <!-- TODAY -->
     <div class="space-y-0.5">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Today</div>
-      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
-        <i class="fa-regular fa-flag w-4 text-amber-400 text-xs"></i>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+        <i class="fa-regular fa-flag w-4 text-amber-500 text-xs"></i>
         <span>Get Started</span>
-        <span class="w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-400 ml-auto"></span>
+        <span class="w-2 h-2 rounded-full bg-blue-600 shadow-sm shadow-blue-400 ml-auto"></span>
       </a>
-      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
-        <i class="fa-solid fa-chart-line w-4 text-cyan-400 text-xs"></i>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+        <i class="fa-solid fa-chart-line w-4 text-cyan-600 text-xs"></i>
         <span>Dashboard</span>
       </a>
     </div>
@@ -171,40 +166,40 @@ body {
     <!-- YOUR BUYERS -->
     <div class="space-y-0.5">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Your Buyers</div>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
-          <i class="fa-regular fa-comment-dots w-4 text-blue-400 text-xs"></i>
+          <i class="fa-regular fa-comment-dots w-4 text-blue-600 text-xs"></i>
           <span>Inbox</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-950/80 text-blue-400 border border-blue-800/60">Elite</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-200">Elite</span>
       </a>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-user-group w-4 text-purple-400 text-xs"></i>
+          <i class="fa-solid fa-user-group w-4 text-purple-600 text-xs"></i>
           <span>Leads</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-950/80 text-purple-400 border border-purple-800/60">Elite</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-600 border border-purple-200">Elite</span>
       </a>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
-          <i class="fa-regular fa-calendar w-4 text-emerald-400 text-xs"></i>
+          <i class="fa-regular fa-calendar w-4 text-emerald-600 text-xs"></i>
           <span>Calendar</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">Elite</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">Elite</span>
       </a>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-wand-magic-sparkles w-4 text-pink-400 text-xs"></i>
+          <i class="fa-solid fa-wand-magic-sparkles w-4 text-pink-600 text-xs"></i>
           <span>AI Training</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pink-950/80 text-pink-400 border border-pink-800/60">Elite</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pink-50 text-pink-600 border border-pink-200">Elite</span>
       </a>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-flask w-4 text-amber-400 text-xs"></i>
+          <i class="fa-solid fa-flask w-4 text-amber-600 text-xs"></i>
           <span>Playground</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950/80 text-amber-400 border border-amber-800/60">Elite</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200">Elite</span>
       </a>
     </div>
 
@@ -215,41 +210,41 @@ body {
         <i class="fa-solid fa-car-side w-4 text-xs"></i>
         <span>Inventory</span>
       </a>
-      <a href="#" onclick="openQueueModal()" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition cursor-pointer">
+      <a href="#" onclick="openQueueModal()" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-list-check w-4 text-cyan-400 text-xs"></i>
+          <i class="fa-solid fa-list-check w-4 text-cyan-600 text-xs"></i>
           <span>Post Queue</span>
         </div>
-        <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-cyan-500 text-[10px] font-mono font-bold text-slate-950">0</span>
+        <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-cyan-500 text-[10px] font-mono font-bold text-white">0</span>
       </a>
     </div>
 
     <!-- FOOTER TOOLS -->
-    <div class="space-y-0.5 pt-3 border-t border-slate-800/80">
-      <a href="https://chromewebstore.google.com" target="_blank" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition cursor-pointer">
-        <i class="fa-brands fa-chrome w-4 text-blue-400 text-xs"></i>
+    <div class="space-y-0.5 pt-3 border-t border-slate-200">
+      <a href="https://chromewebstore.google.com" target="_blank" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <i class="fa-brands fa-chrome w-4 text-blue-600 text-xs"></i>
         <span>Chrome Extension</span>
       </a>
-      <a href="#" onclick="openSettingsModal()" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition cursor-pointer">
-        <i class="fa-solid fa-gear w-4 text-slate-400 text-xs"></i>
+      <a href="#" onclick="openSettingsModal()" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <i class="fa-solid fa-gear w-4 text-slate-500 text-xs"></i>
         <span>Settings</span>
       </a>
     </div>
   </div>
 
   <!-- User Account Card Footer -->
-  <div class="p-3 border-t border-slate-800/80 bg-slate-900/80">
+  <div class="p-3 border-t border-slate-200 bg-slate-50">
     <div class="flex items-center justify-between px-1">
       <div class="flex items-center gap-2.5 overflow-hidden">
-        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-md">
+        <div class="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm">
           <span id="userInitial">M</span>
         </div>
         <div class="truncate">
-          <span id="userDisplayName" class="text-xs font-bold text-white block truncate leading-tight">Sales User</span>
-          <span class="text-[10px] text-slate-400 block leading-tight">Member</span>
+          <span id="userDisplayName" class="text-xs font-bold text-slate-900 block truncate leading-tight">Sales User</span>
+          <span class="text-[10px] text-slate-500 block leading-tight">Member</span>
         </div>
       </div>
-      <button onclick="handleSignOut()" title="Sign Out" class="text-slate-400 hover:text-rose-400 transition p-1 cursor-pointer">
+      <button onclick="handleSignOut()" title="Sign Out" class="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer">
         <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
       </button>
     </div>
@@ -267,19 +262,19 @@ body {
   <!-- Header Bar -->
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-black text-white tracking-tight">Inventory</h1>
-      <div class="flex items-center gap-2 pt-0.5 text-xs text-slate-400">
-        <i class="fa-solid fa-globe text-indigo-400 text-[11px]"></i>
-        <a href="#" id="dealerUrlDisplay" target="_blank" class="hover:underline text-indigo-300 font-medium">www.dealershipinventory.com</a>
+      <h1 class="text-2xl font-black text-slate-900 tracking-tight">Inventory</h1>
+      <div class="flex items-center gap-2 pt-0.5 text-xs text-slate-500">
+        <i class="fa-solid fa-globe text-blue-600 text-[11px]"></i>
+        <a href="#" id="dealerUrlDisplay" target="_blank" class="hover:underline text-blue-600 font-medium">www.dealershipinventory.com</a>
         <span>&bull;</span>
-        <span class="flex items-center gap-1.5 text-emerald-400 font-semibold">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400 animate-pulse"></span> Synced
+        <span class="flex items-center gap-1.5 text-emerald-600 font-semibold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span> Synced
         </span>
         <span>&bull;</span>
-        <span id="topCarsCountLabel" class="text-slate-300 font-medium">0 cars</span>
+        <span id="topCarsCountLabel" class="text-slate-700 font-medium">0 cars</span>
         <span>&bull;</span>
-        <span id="lastSyncTimeLabel" class="text-slate-400">checked live</span>
-        <button onclick="triggerLiveLotCrawl()" title="Sync Lot" class="text-indigo-400 hover:text-indigo-300 transition ml-0.5 cursor-pointer">
+        <span id="lastSyncTimeLabel" class="text-slate-500">checked live</span>
+        <button onclick="triggerLiveLotCrawl()" title="Sync Lot" class="text-blue-600 hover:text-blue-700 transition ml-0.5 cursor-pointer">
           <i class="fa-solid fa-chevron-right text-[10px]"></i>
         </button>
       </div>
@@ -287,12 +282,12 @@ body {
 
     <!-- Header Actions -->
     <div class="flex items-center gap-2.5">
-      <button onclick="triggerMarketplacePosterRun()" class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-lg cursor-pointer">
+      <button onclick="triggerMarketplacePosterRun()" class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
         <i class="fa-solid fa-play text-[10px]"></i>
         <span>Run Auto Poster</span>
       </button>
-      <button onclick="openSettingsModal()" class="px-4 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/80 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm">
-        <i class="fa-solid fa-gear text-slate-400"></i>
+      <button onclick="openSettingsModal()" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm">
+        <i class="fa-solid fa-gear text-slate-500"></i>
         <span>Configure URLs</span>
       </button>
     </div>
@@ -302,111 +297,111 @@ body {
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
     
     <!-- 1. Automations -->
-    <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-blue-500 shadow-sm space-y-2">
-      <div class="flex items-start justify-between">
-        <span class="text-xs font-bold text-white flex items-center gap-1.5">
-          <i class="fa-solid fa-bolt text-blue-400 text-xs"></i> Automations
+    <div onclick="openSettingsModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-blue-600 shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
+      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+          <i class="fa-solid fa-bolt text-blue-600 text-xs"></i> Automations
         </span>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonAutoMain" onchange="toggleRibbonSetting('auto_main')" class="sr-only peer">
-          <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
       <div>
-        <p class="text-[10px] text-slate-400 leading-snug">Off - no auto-posting or price/sold updates</p>
-        <button onclick="openSettingsModal()" class="text-[10px] text-blue-400 hover:text-blue-300 font-semibold pt-1 block cursor-pointer">
+        <p class="text-[10px] text-slate-500 leading-snug">Off - no auto-posting or price/sold updates</p>
+        <span class="text-[10px] text-blue-600 font-semibold pt-1 block">
           Settings & how it works
-        </button>
+        </span>
       </div>
     </div>
 
     <!-- 2. Auto-post new arrivals -->
-    <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-purple-500 shadow-sm space-y-2">
-      <div class="flex items-start justify-between">
-        <span onclick="openAutoPostModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-blue-400 transition">
-          Auto-post new arrivals <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
+    <div onclick="openAutoPostModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-purple-600 shadow-sm space-y-2 cursor-pointer transition hover:border-purple-300">
+      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Auto-post new arrivals <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonArrivals" onchange="toggleRibbonSetting('auto_arrivals')" class="sr-only peer">
-          <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-purple-500"></div>
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-purple-600"></div>
         </label>
       </div>
       <div>
-        <p class="text-[10px] text-slate-400">Automations off</p>
-        <button onclick="openAutoPostModal()" class="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
+        <p class="text-[10px] text-slate-500">Automations off</p>
+        <span class="text-[10px] text-purple-600 flex items-center gap-1 pt-1 font-semibold">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
-        </button>
+        </span>
       </div>
     </div>
 
     <!-- 3. Auto delete & repost -->
-    <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-emerald-500 shadow-sm space-y-2">
-      <div class="flex items-start justify-between">
-        <span onclick="openAutoRepostModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-emerald-400 transition">
-          Auto delete & repost <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
+    <div onclick="openAutoRepostModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-emerald-600 shadow-sm space-y-2 cursor-pointer transition hover:border-emerald-300">
+      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Auto delete & repost <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonRepost" checked onchange="toggleRibbonSetting('auto_repost')" class="sr-only peer">
-          <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
         </label>
       </div>
       <div>
-        <p id="repostFrequencyLabel" class="text-[10px] text-slate-400">Every 3 days</p>
-        <button onclick="openAutoRepostModal()" class="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
+        <p id="repostFrequencyLabel" class="text-[10px] text-slate-500">Every 3 days</p>
+        <span class="text-[10px] text-emerald-600 flex items-center gap-1 pt-1 font-semibold">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
-        </button>
+        </span>
       </div>
     </div>
 
     <!-- 4. Automatic photo edits -->
-    <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-pink-500 shadow-sm space-y-2">
-      <div class="flex items-start justify-between">
-        <span onclick="openAutoPhotoEditsModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-pink-400 transition">
-          Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
+    <div onclick="openAutoPhotoEditsModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-pink-600 shadow-sm space-y-2 cursor-pointer transition hover:border-pink-300">
+      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonPhotoCrop" checked onchange="toggleRibbonSetting('auto_crop')" class="sr-only peer">
-          <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-pink-500"></div>
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-pink-600"></div>
         </label>
       </div>
       <div>
-        <p id="photoEditStatusLabel" class="text-[10px] text-slate-400">On - smart crop</p>
-        <button onclick="openAutoPhotoEditsModal()" class="text-[10px] text-pink-400 hover:text-pink-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
+        <p id="photoEditStatusLabel" class="text-[10px] text-slate-500">On - smart crop</p>
+        <span class="text-[10px] text-pink-600 flex items-center gap-1 pt-1 font-semibold">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
-        </button>
+        </span>
       </div>
     </div>
 
     <!-- 5. Posting safety -->
-    <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-amber-500 shadow-sm space-y-2">
+    <div onclick="openPostingSafetyModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-amber-600 shadow-sm space-y-2 cursor-pointer transition hover:border-amber-300">
       <div class="flex items-start justify-between">
-        <span onclick="openPostingSafetyModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-amber-400 transition">
-          Posting safety <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Posting safety <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
       </div>
       <div>
-        <p id="ribbonSafetyLimitLabel" class="text-[10px] text-slate-400">1 of 10 today</p>
-        <div class="w-full bg-slate-800 rounded-full h-1 mt-1.5 mb-1.5">
-          <div class="bg-gradient-to-r from-amber-500 to-orange-500 h-1 rounded-full w-[20%]"></div>
+        <p id="ribbonSafetyLimitLabel" class="text-[10px] text-slate-500">1 of 10 today</p>
+        <div class="w-full bg-slate-200 rounded-full h-1 mt-1.5 mb-1.5">
+          <div class="bg-amber-500 h-1 rounded-full w-[20%]"></div>
         </div>
-        <button onclick="openPostingSafetyModal()" class="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold cursor-pointer">
+        <span class="text-[10px] text-amber-600 flex items-center gap-1 font-semibold">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
-        </button>
+        </span>
       </div>
     </div>
 
     <!-- 6. Posting preferences -->
-    <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-cyan-500 shadow-sm space-y-2">
+    <div onclick="openPostingPreferencesModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-cyan-600 shadow-sm space-y-2 cursor-pointer transition hover:border-cyan-300">
       <div class="flex items-start justify-between">
-        <span onclick="openPostingPreferencesModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-cyan-400 transition">
-          Posting preferences <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Posting preferences <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
       </div>
       <div>
-        <p class="text-[10px] text-slate-400 truncate">Title, emoji, AI text</p>
-        <button onclick="openPostingPreferencesModal()" class="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
+        <p class="text-[10px] text-slate-500 truncate">Title, emoji, AI text</p>
+        <span class="text-[10px] text-cyan-600 flex items-center gap-1 pt-1 font-semibold">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
-        </button>
+        </span>
       </div>
     </div>
 
@@ -416,17 +411,17 @@ body {
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
     <div class="relative flex-1 max-w-xl">
       <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-      <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search name, VIN or stock #" class="w-full bg-slate-900/80 border border-slate-700/80 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+      <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search name, VIN or stock #" class="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm">
     </div>
 
     <div class="flex items-center gap-2">
-      <button onclick="openSettingsModal()" class="px-3.5 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 hover:bg-slate-800 text-slate-200 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
-        <i class="fa-solid fa-sliders text-indigo-400 text-xs"></i>
+      <button onclick="openSettingsModal()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-sliders text-blue-600 text-xs"></i>
         <span>Filters</span>
       </button>
 
       <div class="relative">
-        <select id="sortSelect" onchange="applyFilters()" class="appearance-none bg-slate-900/80 border border-slate-700/80 hover:bg-slate-800 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-slate-200 focus:outline-none shadow-sm cursor-pointer">
+        <select id="sortSelect" onchange="applyFilters()" class="appearance-none bg-white border border-slate-300 hover:bg-slate-50 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-slate-700 focus:outline-none shadow-sm cursor-pointer">
           <option value="newest_first">Newest first</option>
           <option value="price_asc">Price: Low to High</option>
           <option value="price_desc">Price: High to Low</option>
@@ -435,11 +430,11 @@ body {
         <i class="fa-solid fa-arrow-down-short-wide absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[11px]"></i>
       </div>
 
-      <div class="flex items-center border border-slate-700/80 rounded-xl bg-slate-900/80 p-0.5 shadow-sm">
-        <button class="w-7 h-7 rounded-lg bg-indigo-600/30 text-indigo-400 flex items-center justify-center text-xs">
+      <div class="flex items-center border border-slate-300 rounded-xl bg-white p-0.5 shadow-sm">
+        <button class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs">
           <i class="fa-solid fa-list"></i>
         </button>
-        <button class="w-7 h-7 rounded-lg text-slate-500 hover:text-slate-300 flex items-center justify-center text-xs">
+        <button class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs">
           <i class="fa-solid fa-table-cells-large"></i>
         </button>
       </div>
@@ -448,34 +443,34 @@ body {
 
   <!-- Filter Pills Bar -->
   <div class="flex items-center gap-2 text-xs pt-0.5">
-    <button onclick="setPillFilter('ACTIVE')" id="pillActive" class="px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20 cursor-pointer">
+    <button onclick="setPillFilter('ACTIVE')" id="pillActive" class="px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer">
       Active <span id="pillActiveCount">0</span>
     </button>
-    <button onclick="setPillFilter('UNPOSTED')" id="pillUnposted" class="px-3.5 py-1 rounded-full bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700 font-semibold cursor-pointer flex items-center gap-1.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Not posted yet <span id="pillUnpostedCount">0</span>
+    <button onclick="setPillFilter('UNPOSTED')" id="pillUnposted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
+      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Not posted yet <span id="pillUnpostedCount">0</span>
     </button>
-    <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3.5 py-1 rounded-full bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700 font-semibold cursor-pointer flex items-center gap-1.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Posted <span id="pillPostedCount">0</span>
+    <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">0</span>
     </button>
-    <button onclick="setPillFilter('SOLD')" id="pillSold" class="px-3.5 py-1 rounded-full bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700 font-semibold cursor-pointer flex items-center gap-1.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Sold <span id="pillSoldCount">0</span>
+    <button onclick="setPillFilter('SOLD')" id="pillSold" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
+      <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Sold <span id="pillSoldCount">0</span>
     </button>
-    <button onclick="setPillFilter('ALL')" id="pillAll" class="px-3.5 py-1 rounded-full bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700 font-semibold cursor-pointer">
+    <button onclick="setPillFilter('ALL')" id="pillAll" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer shadow-sm">
       All <span id="pillAllCount">0</span>
     </button>
   </div>
 
   <!-- Selection Counter -->
-  <div class="flex items-center gap-2 text-xs text-slate-400 pt-1">
-    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllCars(this)" class="rounded text-indigo-600 w-4 h-4 cursor-pointer bg-slate-900 border-slate-700">
-    <span>Showing <strong id="showingCountBold" class="text-white">0</strong> cars</span>
+  <div class="flex items-center gap-2 text-xs text-slate-500 pt-1">
+    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllCars(this)" class="rounded text-blue-600 w-4 h-4 cursor-pointer bg-white border-slate-300">
+    <span>Showing <strong id="showingCountBold" class="text-slate-900">0</strong> cars</span>
   </div>
 
   <!-- Table View -->
-  <div class="glass-card rounded-2xl shadow-xl overflow-hidden border border-slate-800">
+  <div class="glass-card rounded-2xl shadow-sm overflow-hidden border border-slate-200 bg-white">
     <div class="overflow-x-auto">
       <table class="w-full text-left text-xs">
-        <thead class="border-b border-slate-800/80 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-900/50">
+        <thead class="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px] bg-slate-50/80">
           <tr>
             <th class="py-3.5 px-4 w-10"></th>
             <th class="py-3.5 px-4">CAR</th>
@@ -484,9 +479,9 @@ body {
             <th class="py-3.5 px-4 text-right">WHAT YOU CAN DO</th>
           </tr>
         </thead>
-        <tbody id="inventoryTableBody" class="divide-y divide-slate-800/60 text-slate-200">
+        <tbody id="inventoryTableBody" class="divide-y divide-slate-100 text-slate-700">
           <tr>
-            <td colspan="5" class="py-16 text-center text-slate-500">Loading showroom inventory...</td>
+            <td colspan="5" class="py-16 text-center text-slate-400">Loading showroom inventory...</td>
           </tr>
         </tbody>
       </table>
@@ -503,106 +498,106 @@ body {
 <!-- ============================================================================== -->
 
 <!-- 1. Floating Actions Dropdown Menu -->
-<div id="vehicleActionDropdown" class="fixed hidden z-50 w-64 glass-card rounded-2xl border border-slate-700/80 p-1.5 shadow-2xl text-xs space-y-0.5 backdrop-blur-xl">
-  <button onclick="handleDropdownAction('view_details')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800/80 hover:text-white transition cursor-pointer text-left font-medium">
+<div id="vehicleActionDropdown" class="fixed hidden z-50 w-64 glass-card rounded-2xl border border-slate-200 p-1.5 shadow-xl text-xs space-y-0.5 bg-white backdrop-blur-xl">
+  <button onclick="handleDropdownAction('view_details')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-regular fa-eye w-4 text-slate-400"></i>
     <span>View details & photos</span>
   </button>
-  <button onclick="handleDropdownAction('change_price')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800/80 hover:text-white transition cursor-pointer text-left font-medium">
+  <button onclick="handleDropdownAction('change_price')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-solid fa-tag w-4 text-slate-400"></i>
     <span>Change price</span>
   </button>
-  <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800/80 hover:text-white transition cursor-pointer text-left font-medium">
+  <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-solid fa-link w-4 text-slate-400"></i>
     <span>Already on Facebook? Add its link</span>
   </button>
-  <div class="h-px bg-slate-800/80 my-1"></div>
-  <button onclick="handleDropdownAction('remove_inventory')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-950/60 hover:text-rose-300 transition cursor-pointer text-left font-semibold">
-    <i class="fa-regular fa-trash-can w-4 text-rose-400"></i>
+  <div class="h-px bg-slate-200 my-1"></div>
+  <button onclick="handleDropdownAction('remove_inventory')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer text-left font-semibold">
+    <i class="fa-regular fa-trash-can w-4 text-rose-500"></i>
     <span>Remove from inventory</span>
   </button>
 </div>
 
 <!-- 2. Change Price Dialog Modal -->
-<div id="changePriceModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-700 p-6 space-y-4 shadow-2xl">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-      <h3 class="text-sm font-bold text-white flex items-center gap-2">
-        <i class="fa-solid fa-tag text-blue-400"></i> Change Price
+<div id="changePriceModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-tag text-blue-600"></i> Change Price
       </h3>
-      <button onclick="closeModal('changePriceModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+      <button onclick="closeModal('changePriceModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
     </div>
     <div>
-      <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">New Selling Price ($)</label>
-      <input type="number" id="inputNewVehiclePrice" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-bold">
+      <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">New Selling Price ($)</label>
+      <input type="number" id="inputNewVehiclePrice" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono font-bold">
     </div>
-    <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
-      <button onclick="closeModal('changePriceModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer">Cancel</button>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+      <button onclick="closeModal('changePriceModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
       <button onclick="saveVehicleNewPrice()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Save Price</button>
     </div>
   </div>
 </div>
 
 <!-- 3. Add Facebook Link Modal -->
-<div id="addFbLinkModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-md rounded-2xl border border-slate-700 p-6 space-y-4 shadow-2xl">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-      <h3 class="text-sm font-bold text-white flex items-center gap-2">
-        <i class="fa-brands fa-facebook text-blue-400"></i> Link Facebook Listing
+<div id="addFbLinkModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-md rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-brands fa-facebook text-blue-600"></i> Link Facebook Listing
       </h3>
-      <button onclick="closeModal('addFbLinkModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+      <button onclick="closeModal('addFbLinkModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
     </div>
     <div>
-      <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Paste Facebook Marketplace or Post URL</label>
-      <input type="text" id="inputFbListingUrl" placeholder="https://www.facebook.com/marketplace/item/..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Paste Facebook Marketplace or Post URL</label>
+      <input type="text" id="inputFbListingUrl" placeholder="https://www.facebook.com/marketplace/item/..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
     </div>
-    <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
-      <button onclick="closeModal('addFbLinkModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer">Cancel</button>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+      <button onclick="closeModal('addFbLinkModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
       <button onclick="saveExistingFbLink()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Link as Posted</button>
     </div>
   </div>
 </div>
 
 <!-- 4. View Details & Photos Modal -->
-<div id="vehicleDetailsModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-2xl rounded-2xl border border-slate-700 p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+<div id="vehicleDetailsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-2xl rounded-2xl border border-slate-200 p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
       <div>
-        <h3 id="detailsModalTitle" class="text-base font-bold text-white">Vehicle Details</h3>
-        <span id="detailsModalVin" class="text-[11px] font-mono text-slate-400"></span>
+        <h3 id="detailsModalTitle" class="text-base font-bold text-slate-900">Vehicle Details</h3>
+        <span id="detailsModalVin" class="text-[11px] font-mono text-slate-500"></span>
       </div>
-      <button onclick="closeModal('vehicleDetailsModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-base"></i></button>
+      <button onclick="closeModal('vehicleDetailsModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-base"></i></button>
     </div>
     <div id="detailsModalContent" class="space-y-4"></div>
   </div>
 </div>
 
 <!-- 5. Settings Modal -->
-<div id="settingsModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-  <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-      <h3 class="text-base font-bold text-white flex items-center gap-2">
-        <i class="fa-solid fa-sliders text-indigo-400"></i> Dealership & Crawler Settings
+<div id="settingsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+  <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-sliders text-blue-600"></i> Dealership & Crawler Settings
       </h3>
-      <button onclick="closeModal('settingsModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <button onclick="closeModal('settingsModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
 
     <div class="space-y-4 text-xs">
       <div>
-        <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Dealership Name</label>
-        <input type="text" id="settingsStoreName" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-white">
+        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Dealership Name</label>
+        <input type="text" id="settingsStoreName" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900">
       </div>
       <div>
-        <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Used Inventory Search URL (Page 2)</label>
-        <input type="text" id="settingsUsedUrl" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-white">
+        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Used Inventory Search URL (Page 2)</label>
+        <input type="text" id="settingsUsedUrl" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900">
       </div>
       <div>
-        <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">New Inventory Search URL (Page 2)</label>
-        <input type="text" id="settingsNewUrl" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-white">
+        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">New Inventory Search URL (Page 2)</label>
+        <input type="text" id="settingsNewUrl" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900">
       </div>
     </div>
 
-    <div class="flex justify-end pt-2 border-t border-slate-800">
+    <div class="flex justify-end pt-2 border-t border-slate-200">
       <button onclick="saveAllSettings()" class="px-5 py-2 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">
         Save Settings
       </button>
@@ -611,54 +606,54 @@ body {
 </div>
 
 <!-- 6. Queue Modal -->
-<div id="queueModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-      <h3 class="text-base font-bold text-white flex items-center gap-2">
-        <i class="fa-solid fa-list-check text-cyan-400"></i> Active Post Queue
+<div id="queueModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-list-check text-cyan-600"></i> Active Post Queue
       </h3>
-      <button onclick="closeModal('queueModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <button onclick="closeModal('queueModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
     <div id="queueItemsList" class="space-y-2">
-      <p class="text-xs text-slate-500 text-center py-8">Your post queue is currently empty.</p>
+      <p class="text-xs text-slate-400 text-center py-8">Your post queue is currently empty.</p>
     </div>
   </div>
 </div>
 
 <!-- 7. Auto-Post New Arrivals Configuration Modal -->
-<div id="autoPostModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-700/80 relative text-slate-100">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
-      <h3 class="text-base font-bold text-white">Auto-post new arrivals</h3>
-      <button onclick="closeModal('autoPostModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+<div id="autoPostModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 relative text-slate-900 bg-white">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <h3 class="text-base font-bold text-slate-900">Auto-post new arrivals</h3>
+      <button onclick="closeModal('autoPostModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
 
-    <p class="text-xs text-slate-300 leading-relaxed">
+    <p class="text-xs text-slate-600 leading-relaxed">
       ALL new arrivals from your website get queued automatically — no review before they post. Save a filter with Auto-post on to limit which ones.
     </p>
 
     <div class="space-y-4 text-xs">
       <div>
-        <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">What should it post?</label>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">What should it post?</label>
         <div class="space-y-2">
-          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-900 border border-blue-600 cursor-pointer">
+          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-blue-600 cursor-pointer">
             <input type="radio" name="autoPostType" checked class="text-blue-600">
-            <span class="font-bold text-white">All new cars</span>
+            <span class="font-bold text-slate-900">All new cars</span>
           </label>
-          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer">
+          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
             <input type="radio" name="autoPostType" class="text-blue-600">
-            <span class="text-slate-300">Only cars in these saved filters</span>
+            <span class="text-slate-700">Only cars in these saved filters</span>
           </label>
         </div>
       </div>
 
       <div>
-        <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">Only post cars with at least</label>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Only post cars with at least</label>
         <div class="grid grid-cols-4 gap-2 text-center font-bold">
-          <button type="button" class="py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer">1 photo</button>
-          <button type="button" class="py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">3 photos</button>
-          <button type="button" class="py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">5 photos</button>
-          <button type="button" class="py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">10 photos</button>
+          <button type="button" class="py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">1 photo</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">3 photos</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">5 photos</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">10 photos</button>
         </div>
         <p class="text-[11px] text-slate-500 mt-2">Logos and "photo coming soon" pictures don't count. A car still waiting for photos posts by itself once they're on your website.</p>
       </div>
@@ -673,21 +668,21 @@ body {
 </div>
 
 <!-- 8. Auto Delete & Repost Configuration Modal -->
-<div id="autoRepostModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-700/80 relative text-slate-100">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
-      <h3 class="text-base font-bold text-white">Auto delete & repost</h3>
-      <button onclick="closeModal('autoRepostModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+<div id="autoRepostModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 relative text-slate-900 bg-white">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <h3 class="text-base font-bold text-slate-900">Auto delete & repost</h3>
+      <button onclick="closeModal('autoRepostModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
 
-    <p class="text-xs text-slate-300 leading-relaxed">
+    <p class="text-xs text-slate-600 leading-relaxed">
       Automatically deletes and reposts listings that have been up too long — fresh listings rank higher in Marketplace search.
     </p>
 
     <div class="space-y-4 text-xs">
       <div>
-        <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">Repost each listing</label>
-        <select id="autoRepostFrequencySelect" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Repost each listing</label>
+        <select id="autoRepostFrequencySelect" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
           <option value="1">Every 1 day</option>
           <option value="3" selected>Every 3 days</option>
           <option value="7">Every 7 days</option>
@@ -695,8 +690,8 @@ body {
         </select>
       </div>
 
-      <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400 space-y-1">
-        <p><i class="fa-solid fa-circle-info text-blue-400 mr-1"></i> Runs from your browser — it must be on with Chrome open and the extension signed in. Posts respect your daily limit.</p>
+      <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 space-y-1">
+        <p><i class="fa-solid fa-circle-info text-blue-600 mr-1"></i> Runs from your browser — it must be on with Chrome open and the extension signed in. Posts respect your daily limit.</p>
         <p>Cars that sell or leave your website are never reposted.</p>
       </div>
     </div>
@@ -710,20 +705,20 @@ body {
 </div>
 
 <!-- 9. Automatic Photo Edits Configuration Modal -->
-<div id="autoPhotoEditsModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-700/80 relative text-slate-100 max-h-[90vh] overflow-y-auto">
+<div id="autoPhotoEditsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 relative text-slate-900 bg-white max-h-[90vh] overflow-y-auto">
     
-    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
       <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-xl bg-pink-500/20 text-pink-400 flex items-center justify-center text-sm font-bold">
+        <div class="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center text-sm font-bold border border-pink-200">
           <i class="fa-solid fa-wand-magic-sparkles"></i>
         </div>
-        <h3 class="text-base font-bold text-white">Automatic photo edits</h3>
+        <h3 class="text-base font-bold text-slate-900">Automatic photo edits</h3>
       </div>
-      <button onclick="closeModal('autoPhotoEditsModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <button onclick="closeModal('autoPhotoEditsModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
 
-    <p class="text-xs text-slate-300 leading-relaxed">
+    <p class="text-xs text-slate-600 leading-relaxed">
       Set it once — every vehicle you post gets these edits automatically. Included in your plan.
     </p>
 
@@ -731,35 +726,35 @@ body {
       
       <div class="space-y-4 text-xs">
         <div>
-          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1.5">AI background</label>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">AI background</label>
           <p class="text-[11px] text-slate-500 mb-2">Pick a background on the right — the vehicle is cut out and placed on it automatically.</p>
-          <select id="selectAiBgMode" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+          <select id="selectAiBgMode" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
             <option value="first_only">First photo only</option>
             <option value="all_photos">All photos</option>
             <option value="disabled">Disabled</option>
           </select>
         </div>
 
-        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-white">Auto-crop</span>
+            <span class="font-bold text-slate-900">Auto-crop</span>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="chkAutoCrop" checked class="sr-only peer">
-              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
-          <p class="text-[11px] text-slate-400 leading-snug">Use Adjust crop above the photo to drag it — future posts get exactly that crop.</p>
-          <select id="selectAutoCropFreq" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none cursor-pointer">
+          <p class="text-[11px] text-slate-500 leading-snug">Use Adjust crop above the photo to drag it — future posts get exactly that crop.</p>
+          <select id="selectAutoCropFreq" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none cursor-pointer">
             <option value="every">Every photo</option>
             <option value="first">First photo only</option>
           </select>
         </div>
 
         <div class="pt-2 flex items-center gap-3">
-          <button onclick="saveAutoPhotoEdits()" class="flex-1 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-md cursor-pointer">
+          <button onclick="saveAutoPhotoEdits()" class="flex-1 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">
             Save settings
           </button>
-          <button onclick="closeModal('autoPhotoEditsModal')" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-semibold cursor-pointer">
+          <button onclick="closeModal('autoPhotoEditsModal')" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-semibold cursor-pointer">
             Cancel
           </button>
         </div>
@@ -767,36 +762,36 @@ body {
 
       <div class="space-y-3">
         <div class="flex items-center justify-between text-xs">
-          <span class="text-slate-400 font-semibold">Previewing on <strong class="text-white">2018 Toyota Tacoma</strong></span>
-          <button class="text-blue-400 hover:underline text-[11px] font-medium cursor-pointer">Try another vehicle</button>
+          <span class="text-slate-500 font-semibold">Previewing on <strong class="text-slate-900">2018 Toyota Tacoma</strong></span>
+          <button class="text-blue-600 hover:underline text-[11px] font-medium cursor-pointer">Try another vehicle</button>
         </div>
 
-        <div class="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl w-fit text-xs font-bold">
-          <button class="px-3 py-1 rounded-lg bg-slate-800 text-white shadow-sm">Background</button>
-          <button class="px-3 py-1 rounded-lg text-slate-400 hover:text-white transition">Adjust crop</button>
+        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200">
+          <button class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm">Background</button>
+          <button class="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition">Adjust crop</button>
         </div>
 
-        <div class="h-48 rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 relative shadow-inner">
+        <div class="h-48 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
           <img id="previewPhotoEditImg" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80" class="w-full h-full object-cover">
-          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 to-transparent p-2 text-center">
-            <span class="text-[10px] text-slate-300 font-medium">Showroom Style Preview</span>
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/60 to-transparent p-2 text-center">
+            <span class="text-[10px] text-white font-medium">Showroom Style Preview</span>
           </div>
         </div>
 
         <div class="space-y-2 pt-1">
-          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Showroom Backgrounds</span>
+          <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Showroom Backgrounds</span>
           <div class="grid grid-cols-3 gap-2">
-            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400')" class="p-1 rounded-xl border border-blue-600 bg-slate-900 hover:border-indigo-500 transition cursor-pointer text-left">
-              <div class="h-10 rounded-lg overflow-hidden bg-slate-800"><img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=100" class="w-full h-full object-cover"></div>
-              <span class="text-[10px] text-white font-semibold block mt-1 text-center">Bright</span>
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400')" class="p-1 rounded-xl border border-blue-600 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-slate-900 font-semibold block mt-1 text-center">Bright</span>
             </button>
-            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=400')" class="p-1 rounded-xl border border-slate-800 bg-slate-900 hover:border-indigo-500 transition cursor-pointer text-left">
-              <div class="h-10 rounded-lg overflow-hidden bg-slate-800"><img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=100" class="w-full h-full object-cover"></div>
-              <span class="text-[10px] text-slate-400 font-semibold block mt-1 text-center">Dark</span>
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=400')" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Dark</span>
             </button>
-            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=400')" class="p-1 rounded-xl border border-slate-800 bg-slate-900 hover:border-indigo-500 transition cursor-pointer text-left">
-              <div class="h-10 rounded-lg overflow-hidden bg-slate-800"><img src="https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=100" class="w-full h-full object-cover"></div>
-              <span class="text-[10px] text-slate-400 font-semibold block mt-1 text-center">Warm wood</span>
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=400')" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Warm wood</span>
             </button>
           </div>
         </div>
@@ -807,105 +802,105 @@ body {
 </div>
 
 <!-- 10. Posting Safety Configuration Modal -->
-<div id="postingSafetyModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl border border-slate-700/80 relative text-slate-100 max-h-[90vh] overflow-y-auto">
+<div id="postingSafetyModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl border border-slate-200 relative text-slate-900 bg-white max-h-[90vh] overflow-y-auto">
     
-    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
       <div>
-        <h3 class="text-base font-bold text-white">Posting safety</h3>
-        <p class="text-[11px] text-slate-400">Limits and pacing that keep your Facebook account out of trouble.</p>
+        <h3 class="text-base font-bold text-slate-900">Posting safety</h3>
+        <p class="text-[11px] text-slate-500">Limits and pacing that keep your Facebook account out of trouble.</p>
       </div>
-      <button onclick="closeModal('postingSafetyModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <button onclick="closeModal('postingSafetyModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
 
     <!-- Live Counter Bar -->
-    <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2 text-xs">
+    <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
       <div class="flex items-center justify-between font-semibold">
-        <span class="text-slate-300">Last 24 hours</span>
-        <span id="safetyCounterText" class="text-indigo-400 font-mono">1/10</span>
+        <span class="text-slate-600">Last 24 hours</span>
+        <span id="safetyCounterText" class="text-blue-600 font-mono">1/10</span>
       </div>
-      <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-        <div id="safetyCounterBar" class="bg-indigo-500 h-full rounded-full w-[10%] transition-all"></div>
+      <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+        <div id="safetyCounterBar" class="bg-blue-600 h-full rounded-full w-[10%] transition-all"></div>
       </div>
     </div>
 
     <div class="space-y-4 text-xs">
       <div>
-        <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">Daily post limit</label>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Daily post limit</label>
         <div class="space-y-2">
-          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-900 border border-blue-600 cursor-pointer">
+          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-blue-600 cursor-pointer shadow-sm">
             <input type="radio" name="dailyLimitRadio" value="10" checked onchange="toggleCustomLimitInput(false)" class="mt-0.5 text-blue-600">
             <div>
-              <strong class="text-white block">10 a day — recommended</strong>
-              <span class="text-[11px] text-slate-400">The limit we consider safe for Facebook Marketplace.</span>
+              <strong class="text-slate-900 block">10 a day — recommended</strong>
+              <span class="text-[11px] text-slate-500">The limit we consider safe for Facebook Marketplace.</span>
             </div>
           </label>
-          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer">
+          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
             <input type="radio" name="dailyLimitRadio" value="custom" onchange="toggleCustomLimitInput(true)" class="mt-0.5 text-blue-600">
             <div class="w-full space-y-2">
-              <strong class="text-white block">Custom limit</strong>
-              <span class="text-[11px] text-slate-400 block">More than 10 needs a one-time risk confirmation.</span>
-              <input type="number" id="inputCustomDailyLimit" value="20" min="1" max="50" class="w-28 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <strong class="text-slate-900 block">Custom limit</strong>
+              <span class="text-[11px] text-slate-500 block">More than 10 needs a one-time risk confirmation.</span>
+              <input type="number" id="inputCustomDailyLimit" value="20" min="1" max="50" class="w-28 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
             </div>
           </label>
-          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer">
+          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
             <input type="radio" name="dailyLimitRadio" value="unlimited" onchange="toggleCustomLimitInput(false)" class="mt-0.5 text-blue-600">
             <div>
-              <strong class="text-white block">Unlimited</strong>
-              <span class="text-[11px] text-slate-400">No daily cap. Highest risk of a Facebook restriction.</span>
+              <strong class="text-slate-900 block">Unlimited</strong>
+              <span class="text-[11px] text-slate-500">No daily cap. Highest risk of a Facebook restriction.</span>
             </div>
           </label>
         </div>
       </div>
 
       <div>
-        <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">Posting speed</label>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Posting speed</label>
         <div class="grid grid-cols-2 gap-3">
-          <button type="button" id="speedBtnStandard" onclick="setPostingSpeed('standard')" class="p-3 rounded-xl border border-blue-600 bg-blue-600/20 text-left transition cursor-pointer">
-            <strong class="text-white block text-xs"><i class="fa-solid fa-gauge text-blue-400 mr-1.5"></i> Standard</strong>
-            <span class="text-[10px] text-slate-300 block mt-1">Human-like gaps, slows down at volume.</span>
+          <button type="button" id="speedBtnStandard" onclick="setPostingSpeed('standard')" class="p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer shadow-sm">
+            <strong class="text-slate-900 block text-xs"><i class="fa-solid fa-gauge text-blue-600 mr-1.5"></i> Standard</strong>
+            <span class="text-[10px] text-slate-600 block mt-1">Human-like gaps, slows down at volume.</span>
           </button>
-          <button type="button" id="speedBtnCautious" onclick="setPostingSpeed('cautious')" class="p-3 rounded-xl border border-slate-800 bg-slate-900 text-left transition cursor-pointer">
-            <strong class="text-white block text-xs"><i class="fa-solid fa-shield-halved text-emerald-400 mr-1.5"></i> Cautious</strong>
-            <span class="text-[10px] text-slate-400 block mt-1">Twice the spacing. Safest choice.</span>
+          <button type="button" id="speedBtnCautious" onclick="setPostingSpeed('cautious')" class="p-3 rounded-xl border border-slate-200 bg-slate-50 text-left transition cursor-pointer">
+            <strong class="text-slate-900 block text-xs"><i class="fa-solid fa-shield-halved text-emerald-600 mr-1.5"></i> Cautious</strong>
+            <span class="text-[10px] text-slate-500 block mt-1">Twice the spacing. Safest choice.</span>
           </button>
         </div>
       </div>
     </div>
 
-    <div class="flex items-center justify-between pt-2 border-t border-slate-800">
-      <button onclick="closeModal('postingSafetyModal')" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs cursor-pointer">Cancel</button>
+    <div class="flex items-center justify-between pt-2 border-t border-slate-200">
+      <button onclick="closeModal('postingSafetyModal')" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer">Cancel</button>
       <button onclick="savePostingSafetyPreferences()" class="px-6 py-2 rounded-xl btn-gradient text-white font-bold text-xs shadow-md cursor-pointer">Save</button>
     </div>
   </div>
 </div>
 
 <!-- 11. Posting Preferences Configuration Modal -->
-<div id="postingPreferencesModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-700/80 relative text-slate-100 max-h-[90vh] overflow-y-auto">
+<div id="postingPreferencesModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 relative text-slate-900 bg-white max-h-[90vh] overflow-y-auto">
     
-    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
       <div>
-        <h3 class="text-base font-bold text-white">Posting</h3>
-        <p class="text-[11px] text-slate-400">The same settings as your extension. Change them here or there, they stay in sync.</p>
+        <h3 class="text-base font-bold text-slate-900">Posting</h3>
+        <p class="text-[11px] text-slate-500">The same settings as your extension. Change them here or there, they stay in sync.</p>
       </div>
-      <button onclick="closeModal('postingPreferencesModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <button onclick="closeModal('postingPreferencesModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
       
       <!-- Left Column: Listing Options -->
-      <div class="space-y-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+      <div class="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
         <div>
-          <h4 class="font-bold text-white text-sm flex items-center gap-2 mb-1">
-            <i class="fa-solid fa-car text-blue-400"></i> Listing
+          <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2 mb-1">
+            <i class="fa-solid fa-car text-blue-600"></i> Listing
           </h4>
-          <p class="text-[11px] text-slate-400">What every Marketplace post starts with.</p>
+          <p class="text-[11px] text-slate-500">What every Marketplace post starts with.</p>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1">Vehicle type</label>
-          <select id="prefVehicleType" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1">Vehicle type</label>
+          <select id="prefVehicleType" class="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
             <option value="Car/Truck" selected>Car/Truck</option>
             <option value="SUV">SUV</option>
             <option value="Van">Van</option>
@@ -914,122 +909,122 @@ body {
         </div>
 
         <div>
-          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1.5">Emoji at the start of your title</label>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Emoji at the start of your title</label>
           <div class="flex items-center gap-2">
-            <button type="button" onclick="setPrefEmoji('None')" id="emojiBtn_None" class="px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold cursor-pointer text-xs">None</button>
-            <button type="button" onclick="setPrefEmoji('🔥')" id="emojiBtn_fire" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 cursor-pointer text-xs">🔥</button>
-            <button type="button" onclick="setPrefEmoji('⚡')" id="emojiBtn_bolt" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 cursor-pointer text-xs">⚡</button>
-            <button type="button" onclick="setPrefEmoji('⭐')" id="emojiBtn_star" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 cursor-pointer text-xs">⭐</button>
+            <button type="button" onclick="setPrefEmoji('None')" id="emojiBtn_None" class="px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold cursor-pointer text-xs shadow-sm">None</button>
+            <button type="button" onclick="setPrefEmoji('🔥')" id="emojiBtn_fire" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer text-xs">🔥</button>
+            <button type="button" onclick="setPrefEmoji('⚡')" id="emojiBtn_bolt" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer text-xs">⚡</button>
+            <button type="button" onclick="setPrefEmoji('⭐')" id="emojiBtn_star" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer text-xs">⭐</button>
           </div>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1.5">Distance</label>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Distance</label>
           <div class="grid grid-cols-2 gap-2 font-bold text-center">
-            <button type="button" id="distBtnMiles" onclick="setPrefDistance('Miles')" class="py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer">Miles</button>
-            <button type="button" id="distBtnKm" onclick="setPrefDistance('KM')" class="py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">KM</button>
+            <button type="button" id="distBtnMiles" onclick="setPrefDistance('Miles')" class="py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">Miles</button>
+            <button type="button" id="distBtnKm" onclick="setPrefDistance('KM')" class="py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer">KM</button>
           </div>
         </div>
 
-        <div class="space-y-3 pt-2 border-t border-slate-800">
-          <span class="block font-bold text-slate-400 uppercase tracking-wider text-[10px]">Put in every post</span>
+        <div class="space-y-3 pt-2 border-t border-slate-200">
+          <span class="block font-bold text-slate-600 uppercase tracking-wider text-[10px]">Put in every post</span>
           
           <div class="flex items-center justify-between">
             <div>
-              <strong class="text-white block">Clean title</strong>
-              <span class="text-[11px] text-slate-400">Say the car has a clean title</span>
+              <strong class="text-slate-900 block">Clean title</strong>
+              <span class="text-[11px] text-slate-500">Say the car has a clean title</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="prefCleanTitle" checked class="sr-only peer">
-              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
 
           <div class="flex items-center justify-between">
             <div>
-              <strong class="text-white block">New or used</strong>
-              <span class="text-[11px] text-slate-400">Say New or Used in the description</span>
+              <strong class="text-slate-900 block">New or used</strong>
+              <span class="text-[11px] text-slate-500">Say New or Used in the description</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="prefNewOrUsed" checked class="sr-only peer">
-              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
 
           <div class="flex items-center justify-between">
             <div>
-              <strong class="text-white block">Mileage in the title</strong>
-              <span class="text-[11px] text-slate-400">Include vehicle mileage in title</span>
+              <strong class="text-slate-900 block">Mileage in the title</strong>
+              <span class="text-[11px] text-slate-500">Include vehicle mileage in title</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="prefMileageTitle" checked class="sr-only peer">
-              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
 
           <div class="flex items-center justify-between">
             <div>
-              <strong class="text-white block">VIN in the description</strong>
-              <span class="text-[11px] text-slate-400">Display full vehicle VIN</span>
+              <strong class="text-slate-900 block">VIN in the description</strong>
+              <span class="text-[11px] text-slate-500">Display full vehicle VIN</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="prefVinDesc" checked class="sr-only peer">
-              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
 
           <div class="flex items-center justify-between">
             <div>
-              <strong class="text-white block">Stock number in the description</strong>
-              <span class="text-[11px] text-slate-400">Display dealership stock #</span>
+              <strong class="text-slate-900 block">Stock number in the description</strong>
+              <span class="text-[11px] text-slate-500">Display dealership stock #</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="prefStockNum" checked class="sr-only peer">
-              <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
         </div>
       </div>
 
       <!-- Right Column: Description & AI -->
-      <div class="space-y-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+      <div class="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
         <div class="flex items-center justify-between">
           <div>
-            <h4 class="font-bold text-white text-sm flex items-center gap-2">
-              <i class="fa-solid fa-wand-magic-sparkles text-pink-400"></i> Description
+            <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-wand-magic-sparkles text-pink-600"></i> Description
             </h4>
-            <p class="text-[11px] text-slate-400">What buyers read under the photos.</p>
+            <p class="text-[11px] text-slate-500">What buyers read under the photos.</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
             <input type="checkbox" id="prefAiDescToggle" checked class="sr-only peer">
-            <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+            <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
           </label>
         </div>
 
         <div>
-          <strong class="text-white block mb-1">Write descriptions with AI</strong>
-          <span class="text-[11px] text-slate-400 block mb-2">Off = use one fixed description on every post.</span>
+          <strong class="text-slate-900 block mb-1">Write descriptions with AI</strong>
+          <span class="text-[11px] text-slate-500 block mb-2">Off = use one fixed description on every post.</span>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1">Tell the AI anything to always mention (optional)</label>
-          <textarea id="prefAiPromptCustom" rows="4" placeholder="e.g. Always mention our 90-day warranty and free delivery within 50 miles" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1">Tell the AI anything to always mention (optional)</label>
+          <textarea id="prefAiPromptCustom" rows="4" placeholder="e.g. Always mention our 90-day warranty and free delivery within 50 miles" class="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm"></textarea>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-1.5">Length</label>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Length</label>
           <div class="grid grid-cols-3 gap-2 font-bold text-center">
-            <button type="button" id="lenBtnShort" onclick="setPrefLength('Short')" class="py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">Short</button>
-            <button type="button" id="lenBtnMedium" onclick="setPrefLength('Medium')" class="py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer">Medium</button>
-            <button type="button" id="lenBtnLong" onclick="setPrefLength('Long')" class="py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">Long</button>
+            <button type="button" id="lenBtnShort" onclick="setPrefLength('Short')" class="py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer">Short</button>
+            <button type="button" id="lenBtnMedium" onclick="setPrefLength('Medium')" class="py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">Medium</button>
+            <button type="button" id="lenBtnLong" onclick="setPrefLength('Long')" class="py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer">Long</button>
           </div>
         </div>
       </div>
 
     </div>
 
-    <div class="flex items-center justify-between pt-3 border-t border-slate-800">
-      <button onclick="closeModal('postingPreferencesModal')" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs cursor-pointer">Cancel</button>
+    <div class="flex items-center justify-between pt-3 border-t border-slate-200">
+      <button onclick="closeModal('postingPreferencesModal')" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer">Cancel</button>
       <button onclick="savePostingPreferences()" class="px-6 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-md cursor-pointer">Save preferences</button>
     </div>
   </div>
@@ -1075,12 +1070,12 @@ function switchAuthMode(mode) {
   document.getElementById("authErrorMsg").classList.add("hidden");
 
   if (mode === 'signin') {
-    tabIn.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
-    tabUp.className = "py-2.5 rounded-lg hover:text-white transition cursor-pointer";
+    tabIn.className = "py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm";
+    tabUp.className = "py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer";
     submitBtn.innerText = "Sign In";
   } else {
-    tabUp.className = "py-2.5 rounded-lg bg-indigo-600 text-white transition cursor-pointer";
-    tabIn.className = "py-2.5 rounded-lg hover:text-white transition cursor-pointer";
+    tabUp.className = "py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm";
+    tabIn.className = "py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer";
     submitBtn.innerText = "Register";
   }
 }
@@ -1303,7 +1298,7 @@ async function fetchLiveInventory(isManual) {
     applyFilters();
   } catch (err) {
     console.error("Fetch error:", err);
-    tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-500">Failed to load inventory.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
   }
 }
 
@@ -1320,9 +1315,9 @@ function setPillFilter(filter) {
   Object.keys(pills).forEach(k => {
     const el = document.getElementById(pills[k]);
     if (k === filter) {
-      el.className = "px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20 cursor-pointer";
+      el.className = "px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer";
     } else {
-      el.className = "px-3.5 py-1 rounded-full bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700 font-semibold cursor-pointer flex items-center gap-1.5";
+      el.className = "px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm";
     }
   });
 
@@ -1359,7 +1354,7 @@ function renderTableRows(cars) {
   if (!tbody) return;
 
   if (!cars.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="py-16 text-center text-slate-500 text-xs">No vehicles match your search.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">No vehicles match your search.</td></tr>';
     return;
   }
 
@@ -1374,48 +1369,48 @@ function renderTableRows(cars) {
     const isPosted = !!car.marketplace_posted_at;
     const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
 
-    html += `<tr class="table-row-vibrant transition border-b border-slate-800/60 group">
+    html += `<tr class="table-row-vibrant transition border-b border-slate-100 group">
       <td class="py-4 px-4 text-center">
-        <input type="checkbox" class="car-select-chk rounded text-indigo-500 bg-slate-900 border-slate-700 w-4 h-4 cursor-pointer">
+        <input type="checkbox" class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
       </td>
       
       <td class="py-4 px-4">
         <div class="flex items-center gap-3.5">
-          <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-16 h-12 rounded-xl object-cover border border-slate-700/80 shrink-0 shadow-md">
+          <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-16 h-12 rounded-xl object-cover border border-slate-200 shrink-0 shadow-sm">
           <div>
-            <strong class="text-xs font-bold text-white block leading-tight">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}</strong>
-            <span class="text-[10px] font-bold text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded-full border border-cyan-800/60 inline-block mt-1">New arrival</span>
+            <strong class="text-xs font-bold text-slate-950 block leading-tight">${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}</strong>
+            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 inline-block mt-1">New arrival</span>
           </div>
         </div>
       </td>
 
       <td class="py-4 px-4 font-sans">
-        <span class="text-xs font-bold text-blue-400 block leading-tight">${priceText}</span>
-        <span class="text-[11px] text-slate-400 block">${milesText}</span>
+        <span class="text-xs font-bold text-blue-600 block leading-tight">${priceText}</span>
+        <span class="text-[11px] text-slate-500 block">${milesText}</span>
       </td>
 
       <td class="py-4 px-4">
         ${isPosted 
-          ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/80 text-emerald-400 text-[10px] font-bold border border-emerald-800/80 shadow-sm"><i class="fa-solid fa-check text-[9px]"></i> Posted</span>'
-          : '<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700/60 text-[10px] font-medium">Not posted yet</span>'
+          ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 shadow-sm"><i class="fa-solid fa-check text-[9px]"></i> Posted</span>'
+          : '<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-medium">Not posted yet</span>'
         }
       </td>
 
       <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2 relative">
           ${isPosted
-            ? `<button onclick="openChangePriceModal('${car.vin}', ${car.price || 0})" class="px-3.5 py-1.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm">
+            ? `<button onclick="openChangePriceModal('${car.vin}', ${car.price || 0})" class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm">
                  <i class="fa-solid fa-tag text-slate-400 text-xs"></i> Change price
                </button>
-               <button onclick="removeVehicleFromFacebook('${car.vin}')" id="btnRemoveFb_${car.vin}" class="px-3.5 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-800/60 shadow-sm transition">
+               <button onclick="removeVehicleFromFacebook('${car.vin}')" id="btnRemoveFb_${car.vin}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
                  <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
                </button>`
-            : `<button onclick="enqueueMarketplaceCar('${car.vin}')" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-md transition cursor-pointer">
+            : `<button onclick="enqueueMarketplaceCar('${car.vin}')" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
                  <i class="fa-solid fa-paper-plane text-[10px]"></i>
                  <span>${isQueued ? 'Queued' : 'Add to queue'}</span>
                </button>`
           }
-          <button onclick="toggleRowDropdown(event, '${car.vin}')" class="w-8 h-8 rounded-xl border border-slate-700/80 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer transition">
+          <button onclick="toggleRowDropdown(event, '${car.vin}')" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
             <i class="fa-solid fa-ellipsis text-xs"></i>
           </button>
         </div>
@@ -1606,25 +1601,25 @@ function openVehicleDetailsModal(car) {
   if (!photoUrl) photoUrl = FALLBACK_IMAGE;
 
   document.getElementById("detailsModalContent").innerHTML = `
-    <div class="h-64 rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
+    <div class="h-64 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
       <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-full h-full object-cover">
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
-      <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-800">
-        <span class="text-slate-400 block text-[10px] uppercase font-bold">Price</span>
-        <strong class="text-white text-sm">${car.price ? '$' + car.price.toLocaleString() : 'Call'}</strong>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <span class="text-slate-500 block text-[10px] uppercase font-bold">Price</span>
+        <strong class="text-slate-900 text-sm">${car.price ? '$' + car.price.toLocaleString() : 'Call'}</strong>
       </div>
-      <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-800">
-        <span class="text-slate-400 block text-[10px] uppercase font-bold">Mileage</span>
-        <strong class="text-white text-sm">${(car.mileage || 0).toLocaleString()} mi</strong>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <span class="text-slate-500 block text-[10px] uppercase font-bold">Mileage</span>
+        <strong class="text-slate-900 text-sm">${(car.mileage || 0).toLocaleString()} mi</strong>
       </div>
-      <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-800">
-        <span class="text-slate-400 block text-[10px] uppercase font-bold">Exterior</span>
-        <strong class="text-white text-sm">${car.color || 'Standard'}</strong>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <span class="text-slate-500 block text-[10px] uppercase font-bold">Exterior</span>
+        <strong class="text-slate-900 text-sm">${car.color || 'Standard'}</strong>
       </div>
-      <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-800">
-        <span class="text-slate-400 block text-[10px] uppercase font-bold">Condition</span>
-        <strong class="text-white text-sm">${car.condition || 'Used'}</strong>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <span class="text-slate-500 block text-[10px] uppercase font-bold">Condition</span>
+        <strong class="text-slate-900 text-sm">${car.condition || 'Used'}</strong>
       </div>
     </div>
     <div class="pt-2 flex justify-end">
@@ -1730,11 +1725,11 @@ function setPostingSpeed(speed) {
   const btnStd = document.getElementById("speedBtnStandard");
   const btnCaut = document.getElementById("speedBtnCautious");
   if (speed === "cautious") {
-    btnCaut.className = "p-3 rounded-xl border border-blue-600 bg-blue-600/20 text-left transition cursor-pointer";
-    btnStd.className = "p-3 rounded-xl border border-slate-800 bg-slate-900 text-left transition cursor-pointer";
+    btnCaut.className = "p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer shadow-sm";
+    btnStd.className = "p-3 rounded-xl border border-slate-200 bg-slate-50 text-left transition cursor-pointer";
   } else {
-    btnStd.className = "p-3 rounded-xl border border-blue-600 bg-blue-600/20 text-left transition cursor-pointer";
-    btnCaut.className = "p-3 rounded-xl border border-slate-800 bg-slate-900 text-left transition cursor-pointer";
+    btnStd.className = "p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer";
+    btnCaut.className = "p-3 rounded-xl border border-slate-200 bg-slate-50 text-left transition cursor-pointer";
   }
 }
 
@@ -1744,9 +1739,9 @@ function setPrefEmoji(emoji) {
     const btn = document.getElementById(`emojiBtn_${k}`);
     if (btn) {
       if ((k === 'None' && emoji === 'None') || (k !== 'None' && btn.innerText === emoji)) {
-        btn.className = "px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold cursor-pointer text-xs";
+        btn.className = "px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold cursor-pointer text-xs shadow-sm";
       } else {
-        btn.className = "px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 cursor-pointer text-xs";
+        btn.className = "px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer text-xs";
       }
     }
   });
@@ -1757,11 +1752,11 @@ function setPrefDistance(dist) {
   const bMiles = document.getElementById("distBtnMiles");
   const bKm = document.getElementById("distBtnKm");
   if (dist === 'Miles') {
-    bMiles.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer";
-    bKm.className = "py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer";
+    bMiles.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm";
+    bKm.className = "py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer";
   } else {
-    bKm.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer";
-    bMiles.className = "py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer";
+    bKm.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm";
+    bMiles.className = "py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer";
   }
 }
 
@@ -1771,9 +1766,9 @@ function setPrefLength(len) {
     const btn = document.getElementById(`lenBtn${l}`);
     if (btn) {
       if (l === len) {
-        btn.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer font-bold";
+        btn.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer font-bold shadow-sm";
       } else {
-        btn.className = "py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer";
+        btn.className = "py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer";
       }
     }
   });
@@ -1935,7 +1930,7 @@ document.addEventListener("DOMContentLoaded", async function() {
   if (session && session.user) {
     await initAppSession(session.user);
   } else {
-    document.getElementById("authOverlay").classList.add("hidden");
+    document.getElementById("authOverlay").classList.remove("hidden");
   }
 });
 </script>
