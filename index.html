@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full bg-slate-950">
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 0: HEAD & GLOBAL STYLES START ================ -->
+<!-- ============================================================================== -->
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AutoLaunch | Showroom Inventory & Automation Suite</title>
+<title>AutoLaunch | Dealer Intelligence & Automation Suite</title>
 <link rel="icon" href="data:,">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<!-- Supabase JS Client -->
+<!-- Supabase JS Client[cite: 17] -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
@@ -79,11 +83,14 @@ body {
 }
 </style>
 </head>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 0: HEAD & GLOBAL STYLES END ================== -->
+<!-- ============================================================================== -->
 
 <body class="h-full flex select-none overflow-x-hidden text-slate-100">
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 1: AUTHENTICATION MODAL ====================== -->
+<!-- ======================= SECTION 1: AUTHENTICATION MODAL START =============== -->
 <!-- ============================================================================== -->
 <div id="authOverlay" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-md rounded-2xl p-8 space-y-6 shadow-2xl relative border border-slate-700/60">
@@ -126,13 +133,15 @@ body {
     </form>
   </div>
 </div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 1: AUTHENTICATION MODAL END ================== -->
+<!-- ============================================================================== -->
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 2: LEFT NAVIGATION RAIL ====================== -->
+<!-- ======================= SECTION 2: LEFT NAVIGATION RAIL START ============== -->
 <!-- ============================================================================== -->
 <aside class="w-60 bg-slate-900/60 backdrop-blur-xl border-r border-slate-800/80 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30 select-none">
   <div class="p-4 space-y-4 overflow-y-auto">
-    <!-- Brand Title -->
     <div class="flex items-center justify-between px-2 pt-1 pb-1">
       <div class="flex items-center gap-2.5">
         <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs shadow-md shadow-indigo-500/30 font-black">
@@ -145,7 +154,7 @@ body {
       </button>
     </div>
 
-    <!-- Group: TODAY -->
+    <!-- TODAY -->
     <div class="space-y-0.5">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Today</div>
       <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
@@ -159,7 +168,7 @@ body {
       </a>
     </div>
 
-    <!-- Group: YOUR BUYERS -->
+    <!-- YOUR BUYERS -->
     <div class="space-y-0.5">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Your Buyers</div>
       <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
@@ -199,7 +208,7 @@ body {
       </a>
     </div>
 
-    <!-- Group: YOUR CARS -->
+    <!-- YOUR CARS -->
     <div class="space-y-0.5">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Your Cars</div>
       <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold nav-selected transition">
@@ -215,7 +224,7 @@ body {
       </a>
     </div>
 
-    <!-- Group: FOOTER TOOLS -->
+    <!-- FOOTER TOOLS -->
     <div class="space-y-0.5 pt-3 border-t border-slate-800/80">
       <a href="https://chromewebstore.google.com" target="_blank" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition cursor-pointer">
         <i class="fa-brands fa-chrome w-4 text-blue-400 text-xs"></i>
@@ -246,9 +255,12 @@ body {
     </div>
   </div>
 </aside>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 2: LEFT NAVIGATION RAIL END ================ -->
+<!-- ============================================================================== -->
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 3: INVENTORY WORKSPACE ======================= -->
+<!-- ======================= SECTION 3: INVENTORY WORKSPACE START =============== -->
 <!-- ============================================================================== -->
 <main class="flex-1 flex flex-col min-w-0 overflow-y-auto px-8 py-6 space-y-5">
 
@@ -289,6 +301,7 @@ body {
   <!-- 6-Card Vibrant Automation Ribbon -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
     
+    <!-- 1. Automations -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-blue-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-white flex items-center gap-1.5">
@@ -307,9 +320,10 @@ body {
       </div>
     </div>
 
+    <!-- 2. Auto-post new arrivals (Triggers AutoPost Modal) -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-purple-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
-        <span class="text-xs font-bold text-white flex items-center gap-1">
+        <span onclick="openAutoPostModal()" class="text-xs font-bold text-white flex items-center gap-1 cursor-pointer hover:text-blue-400 transition">
           Auto-post new arrivals <i class="fa-solid fa-chevron-right text-[9px] text-slate-500"></i>
         </span>
         <label class="relative inline-flex items-center cursor-pointer">
@@ -319,12 +333,13 @@ body {
       </div>
       <div>
         <p class="text-[10px] text-slate-400">Automations off</p>
-        <button onclick="openSettingsModal()" class="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
+        <button onclick="openAutoPostModal()" class="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 pt-1 font-semibold cursor-pointer">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </button>
       </div>
     </div>
 
+    <!-- 3. Auto delete & repost -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-emerald-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-white flex items-center gap-1">
@@ -343,6 +358,7 @@ body {
       </div>
     </div>
 
+    <!-- 4. Automatic photo edits -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-pink-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-white flex items-center gap-1">
@@ -361,6 +377,7 @@ body {
       </div>
     </div>
 
+    <!-- 5. Posting safety -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-amber-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-white flex items-center gap-1">
@@ -378,6 +395,7 @@ body {
       </div>
     </div>
 
+    <!-- 6. Posting preferences -->
     <div class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-cyan-500 shadow-sm space-y-2">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-white flex items-center gap-1">
@@ -476,9 +494,12 @@ body {
   </div>
 
 </main>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 3: INVENTORY WORKSPACE END =================== -->
+<!-- ============================================================================== -->
 
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 4: DIALOGS & ACTION MODALS =================== -->
+<!-- ======================= SECTION 4: MODALS & DROPDOWNS START ================== -->
 <!-- ============================================================================== -->
 
 <!-- 1. Floating Actions Dropdown Menu -->
@@ -604,8 +625,58 @@ body {
   </div>
 </div>
 
+<!-- 7. Auto-Post New Arrivals Configuration Modal -->
+<div id="autoPostModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-700/80 relative text-slate-100">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+      <h3 class="text-base font-bold text-white">Auto-post new arrivals</h3>
+      <button onclick="closeModal('autoPostModal')" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <p class="text-xs text-slate-300 leading-relaxed">
+      ALL new arrivals from your website get queued automatically — no review before they post. Save a filter with Auto-post on to limit which ones.
+    </p>
+
+    <div class="space-y-4 text-xs">
+      <div>
+        <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">What should it post?</label>
+        <div class="space-y-2">
+          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-900 border border-blue-600 cursor-pointer">
+            <input type="radio" name="autoPostType" checked class="text-blue-600">
+            <span class="font-bold text-white">All new cars</span>
+          </label>
+          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer">
+            <input type="radio" name="autoPostType" class="text-blue-600">
+            <span class="text-slate-300">Only cars in these saved filters</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">Only post cars with at least</label>
+        <div class="grid grid-cols-4 gap-2 text-center font-bold">
+          <button type="button" class="py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer">1 photo</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">3 photos</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">5 photos</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer">10 photos</button>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-2">Logos and "photo coming soon" pictures don't count. A car still waiting for photos posts by itself once they're on your website.</p>
+      </div>
+    </div>
+
+    <div class="pt-2">
+      <button onclick="closeModal('autoPostModal')" class="w-full py-3 rounded-2xl btn-gradient text-white font-bold text-xs shadow-lg cursor-pointer">
+        Done
+      </button>
+    </div>
+  </div>
+</div>
 <!-- ============================================================================== -->
-<!-- ======================= SECTION 5: JAVASCRIPT LOGIC ========================== -->
+<!-- ======================= SECTION 4: MODALS & DROPDOWNS END ==================== -->
+<!-- ============================================================================== -->
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 5: JAVASCRIPT LOGIC START ==================== -->
 <!-- ============================================================================== -->
 <script>
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
@@ -706,7 +777,6 @@ async function initAppSession(user) {
   document.getElementById("userDisplayName").innerText = userPrefix;
   document.getElementById("userInitial").innerText = userPrefix.charAt(0).toUpperCase();
 
-  // Inform extension of current user session ID
   try {
     window.postMessage({ type: "AUTOLAUNCH_EXT_LOGIN", userId: user.id }, "*");
   } catch (e) {}
@@ -1214,6 +1284,7 @@ async function triggerLiveLotCrawl() {
 
 function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); }
 function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
+function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
 function toggleRibbonSetting(k) {}
 function toggleSelectAllCars(master) {
@@ -1229,5 +1300,8 @@ document.addEventListener("DOMContentLoaded", async function() {
   }
 });
 </script>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 5: JAVASCRIPT LOGIC END ====================== -->
+<!-- ============================================================================== -->
 </body>
 </html>
