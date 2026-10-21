@@ -1934,7 +1934,70 @@ function setPillFilter(filter) {
 
   applyFilters();
 }
+function populateFilterDropdowns() {
 
+    const locations = [...new Set(
+        rawInventory
+            .map(c => c.location_name)
+            .filter(Boolean)
+    )].sort();
+
+    const years = [...new Set(
+        rawInventory
+            .map(c => c.year)
+            .filter(Boolean)
+    )].sort((a, b) => b - a);
+
+    const makes = [...new Set(
+        rawInventory
+            .map(c => c.make)
+            .filter(Boolean)
+    )].sort();
+
+    const models = [...new Set(
+        rawInventory
+            .map(c => c.model)
+            .filter(Boolean)
+    )].sort();
+
+    const locationSelect =
+        document.getElementById("filterLocation");
+
+    const yearSelect =
+        document.getElementById("filterYear");
+
+    const makeSelect =
+        document.getElementById("filterMake");
+
+    const modelSelect =
+        document.getElementById("filterModel");
+
+    if (!locationSelect) return;
+
+    locationSelect.innerHTML =
+        '<option value="">All Locations</option>' +
+        locations.map(v =>
+            `<option value="${v}">${v}</option>`
+        ).join("");
+
+    yearSelect.innerHTML =
+        '<option value="">All Years</option>' +
+        years.map(v =>
+            `<option value="${v}">${v}</option>`
+        ).join("");
+
+    makeSelect.innerHTML =
+        '<option value="">All Makes</option>' +
+        makes.map(v =>
+            `<option value="${v}">${v}</option>`
+        ).join("");
+
+    modelSelect.innerHTML =
+        '<option value="">All Models</option>' +
+        models.map(v =>
+            `<option value="${v}">${v}</option>`
+        ).join("");
+}
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
   const sort = document.getElementById("sortSelect").value;
