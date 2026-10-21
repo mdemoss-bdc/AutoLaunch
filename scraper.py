@@ -440,7 +440,6 @@ def push_batch_to_supabase(records: List[dict]) -> int:
     except Exception as e:
         print(f"[!] Batch upsert error: {e}")
         return 0
-
 # ==============================================================================
 # ====================== SCRAPER ENTRYPOINT START ==============================
 # ==============================================================================
@@ -450,26 +449,30 @@ async def run_scraper():
     active_job_id = None
 
     target_uid = os.environ.get("USER_ID")
-        print(f"USER_ID => {target_uid}")
+
+    print(f"USER_ID => {target_uid}")
+
     if target_uid and target_uid.strip():
 
         pending_job = (
-    db.table("scrape_jobs")
-    .select("*")
-    .eq("user_id", target_uid.strip())
-    .eq("status", "pending")
-    .execute()
-)
+            db.table("scrape_jobs")
+            .select("*")
+            .eq("user_id", target_uid.strip())
+            .eq("status", "pending")
+            .execute()
+        )
 
-print(f"PENDING JOBS FOUND: {len(pending_job.data or [])}")
-
-if pending_job.data:
-    active_job_id = pending_job.data[0]["id"]
+        print(
+            f"PENDING JOBS FOUND => {len(pending_job.data or [])}"
+        )
 
         if pending_job.data:
+
             active_job_id = pending_job.data[0]["id"]
-        print(f"ACTIVE_JOB_ID => {active_job_id}")
-        print(f"PENDING_JOB_DATA => {pending_job.data}")
+
+        print(
+            f"ACTIVE_JOB_ID => {active_job_id}"
+        )
 
         res = (
             db.table("user_settings")
@@ -491,83 +494,175 @@ if pending_job.data:
         users_to_scrape = res.data or []
 
     if not users_to_scrape:
-        print("[-] No user accounts with configured dealership settings found.")
+
+        print(
+            "[-] No user accounts with configured dealership settings found."
+        )
+
         return
-    print(f"[*] Found {len(users_to_scrape)} account(s) registered in database.")
+
+    print(
+        f"[*] Found {len(users_to_scrape)} account(s) registered in database."
+    )
 
     total_synced_all = 0
+
     async with async_playwright() as p:
+
         browser = await p.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage"
+            ]
         )
+
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080}
         )
+
         page = await context.new_page()
 
         for user_cfg in users_to_scrape:
+
             active_uid = user_cfg.get("user_id")
+
             if not active_uid:
                 continue
 
-            store_name = user_cfg.get("dealership_name") or user_cfg.get("store_name") or "User Store"
-            page_modifier = user_cfg.get("page_modifier") or "?pt={page}"
+            store_name = (
+                user_cfg.get("dealership_name")
+                or user_cfg.get("store_name")
+                or "User Store"
+            )
+
+            page_modifier = (
+                user_cfg.get("page_modifier")
+                or "?pt={page}"
+            )
 
             feeds_to_crawl = []
+
             if user_cfg.get("used_url") and user_cfg.get("used_url").strip():
-                feeds_to_crawl.append({"url": user_cfg["used_url"].strip(), "condition": "Used"})
+                feeds_to_crawl.append({
+                    "url": user_cfg["used_url"].strip(),
+                    "condition": "Used"
+                })
+
             if user_cfg.get("certified_url") and user_cfg.get("certified_url").strip():
-                feeds_to_crawl.append({"url": user_cfg["certified_url"].strip(), "condition": "Certified Pre-Owned"})
+                feeds_to_crawl.append({
+                    "url": user_cfg["certified_url"].strip(),
+                    "condition": "Certified Pre-Owned"
+                })
+
             if user_cfg.get("new_url") and user_cfg.get("new_url").strip():
-                feeds_to_crawl.append({"url": user_cfg["new_url"].strip(), "condition": "New"})
+                feeds_to_crawl.append({
+                    "url": user_cfg["new_url"].strip(),
+                    "condition": "New"
+                })
 
             if not feeds_to_crawl:
-                print(f"[-] Skipping User {active_uid[:8]} ({store_name}): No inventory URLs entered yet.")
+
+                print(
+                    f"[-] Skipping User {active_uid[:8]} ({store_name}): No inventory URLs entered yet."
+                )
+
                 continue
 
-            print(f"\n=======================================================")
-            print(f"[*] Crawling for User: {active_uid} | Store: {store_name}")
-            print(f"=======================================================")
+            print("\n=======================================================")
+            print(f"[*] Crawling for User: {active_uid}")
+            print(f"[*] Store: {store_name}")
+            print("=======================================================")
 
             user_units_synced = 0
+
             for feed in feeds_to_crawl:
+
                 base_url = feed["url"]
                 condition = feed["condition"]
-                print(f"[*] Crawling feed: {condition} -> {base_url}")
+
+                print(
+                    f"[*] Crawling feed: {condition} -> {base_url}"
+                )
+
                 seen_vins = set()
 
                 for pt in range(1, MAX_PAGES_PER_FEED + 1):
-                    url = build_page_url(base_url, page_modifier, pt)
+
+                    url = build_page_url(
+                        base_url,
+                        page_modifier,
+                        pt
+                    )
+
                     try:
-                        response = await page.goto(url, wait_until="commit", timeout=30000)
+
+                        response = await page.goto(
+                            url,
+                            wait_until="commit",
+                            timeout=30000
+                        )
+
                         if response and response.status == 404:
-                            print(f"[!] 404 Page Not Found: {url}")
+
+                            print(
+                                f"[!] 404 Page Not Found: {url}"
+                            )
+
                             break
+
                     except Exception as e:
-                        print(f"[!] Navigation error: {e}")
+
+                        print(
+                            f"[!] Navigation error: {e}"
+                        )
 
                     await asyncio.sleep(2)
-                    cars = await extract_cards_from_page(page, default_condition=condition, active_uid=active_uid)
+
+                    cars = await extract_cards_from_page(
+                        page,
+                        default_condition=condition,
+                        active_uid=active_uid
+                    )
+
                     if not cars:
-                        print(f"[-] No cards found on page {pt}. Finished {condition}.")
+
+                        print(
+                            f"[-] No cards found on page {pt}. Finished {condition}."
+                        )
+
                         break
 
-                    vins = {c["vin"] for c in cars if c.get("vin")}
+                    vins = {
+                        c["vin"]
+                        for c in cars
+                        if c.get("vin")
+                    }
+
                     if vins.issubset(seen_vins):
-                        print(f"[-] Duplicate batch on page {pt}. Finished {condition}.")
+
+                        print(
+                            f"[-] Duplicate batch on page {pt}. Finished {condition}."
+                        )
+
                         break
+
                     seen_vins.update(vins)
 
                     saved = push_batch_to_supabase(cars)
+
                     user_units_synced += saved
-                    valid_photos = sum(1 for c in cars if c.get("image_url"))
-                    valid_prices = sum(1 for c in cars if c.get("price"))
-                    print(f"[+] [{store_name}] Page {pt}: Synced {saved} units | Prices: {valid_prices}/{len(cars)} | Photos: {valid_photos}/{len(cars)}")
+
+                    print(
+                        f"[+] [{store_name}] Page {pt}: Synced {saved} units"
+                    )
+
                     await asyncio.sleep(1)
 
             total_synced_all += user_units_synced
+
             print(
                 f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced."
             )
@@ -578,14 +673,16 @@ if pending_job.data:
 
         try:
 
-            db.table("scrape_jobs") \
-                .update({
-                    "status": "completed",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "cars_synced": total_synced_all
-                }) \
-                .eq("id", active_job_id) \
-                .execute()
+            db.table("scrape_jobs").update({
+                "status": "completed",
+                "completed_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+                "cars_synced": total_synced_all
+            }).eq(
+                "id",
+                active_job_id
+            ).execute()
 
             print(
                 f"[✓] Job {active_job_id} marked completed."
