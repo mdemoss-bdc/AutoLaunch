@@ -1926,6 +1926,19 @@ async function savePostingPreferences() {
 }
 
 document.addEventListener("DOMContentLoaded", async function() {
+  if (
+    localStorage.getItem(
+        "setupComplete"
+    ) === "true"
+) {
+
+    document
+        .getElementById(
+            "getStartedPage"
+        )
+        .classList.add("hidden");
+
+}
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session && session.user) {
     await initAppSession(session.user);
