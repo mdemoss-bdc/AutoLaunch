@@ -1506,6 +1506,12 @@ async function loadUserStoreSettings() {
 
     if (error) throw error;
     if (data) {
+
+      if (data.onboarding_complete === true) {
+
+    showInventoryPage();
+
+}
       currentStore.name = data.dealership_name || data.store_name || "Dealership Inventory";
       currentStore.usedUrl = data.used_url || "";
       currentStore.newUrl = data.new_url || "";
@@ -2103,6 +2109,17 @@ function continueSetup() {
 }
 
 function finishSetup() {
+
+  if (currentUser) {
+
+    supabaseClient
+        .from("user_settings")
+        .update({
+            onboarding_complete: true
+        })
+        .eq("user_id", currentUser.id);
+
+}
 
     const syncStep =
         document.getElementById(
