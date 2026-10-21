@@ -2236,7 +2236,7 @@ function renderTableRows(cars) {
 
     <div>
   <strong class="text-xs font-bold text-slate-950 block leading-tight">
-    ${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}
+    ${item.year || ''} ${item.make || ''} ${item.model || ''}
   </strong>
 
   <div class="text-[10px] text-slate-500 mt-1">
@@ -2601,11 +2601,6 @@ async function loadPostingQueue() {
         queueList.innerHTML = postingQueue.map(item => {
 
 console.log("QUEUE VIN =", JSON.stringify(item.vin));
-
-const inventoryMatch = rawInventory.find(
-    c => String(c.vin).trim() === String(item.vin).trim()
-);
-
 console.log("rawInventory count:", rawInventory.length);
 console.log("queue vin:", item.vin);
 console.log("inventory match:", inventoryMatch);
@@ -2640,7 +2635,7 @@ console.log(
                     </div>
 
                     <div class="text-xs text-slate-500 mt-1">
-                        Stock: ${car?.stock_num || 'N/A'}
+                        Stock: ${item.stock_num || 'N/A'}
                     </div>
 
                     <div class="text-xs text-slate-500">
@@ -2725,6 +2720,10 @@ const rows = selectedVehicles
     .map(car => ({
         user_id: currentUser.id,
         vin: car.vin,
+        year: car.year,
+        make: car.make,
+        model: car.model,
+        stock_num: car.stock_num,
         status: "pending",
         target_channel: "marketplace",
         created_at: new Date().toISOString()
