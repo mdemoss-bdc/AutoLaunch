@@ -1021,76 +1021,87 @@ body {
       </button>
     </div>
 
-    <div class="grid grid-cols-2 gap-4">
+   <div class="grid grid-cols-2 gap-4">
 
-      <div>
+    <div>
         <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-          Location
+            Location
         </label>
-
         <select id="filterLocation" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
-          <option value="">All Locations</option>
+            <option value="">All Locations</option>
         </select>
-      </div>
+    </div>
 
-      <div>
+    <div>
         <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-          Year
+            Year
         </label>
-
         <select id="filterYear" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
-          <option value="">All Years</option>
+            <option value="">All Years</option>
         </select>
-      </div>
+    </div>
 
-      <div>
+    <div>
         <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-          Make
+            Make
         </label>
-
         <select id="filterMake" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
-          <option value="">All Makes</option>
+            <option value="">All Makes</option>
         </select>
-      </div>
+    </div>
 
-      <div>
+    <div>
         <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-          Model
+            Model
         </label>
-
         <select id="filterModel" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
-          <option value="">All Models</option>
+            <option value="">All Models</option>
         </select>
-      </div>
+    </div>
 
-      <div>
+    <div>
         <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-          Condition
+            Condition
         </label>
-
         <select id="filterCondition" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
-          <option value="">All Conditions</option>
-          <option value="New">New</option>
-          <option value="Used">Used</option>
-          <option value="Certified Pre-Owned">Certified Pre-Owned</option>
+            <option value="">All Conditions</option>
+            <option value="New">New</option>
+            <option value="Used">Used</option>
+            <option value="Certified Pre-Owned">Certified Pre-Owned</option>
         </select>
-      </div>
-<div>
-    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-        Color
-    </label>
-
-    <select id="filterColor" onchange="applyFilters()"
-            class="w-full border border-slate-300 rounded-xl px-3 py-2">
-        <option value="">All Colors</option>
-    </select>
-</div>
     </div>
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Color
+        </label>
+        <select id="filterColor" onchange="applyFilters()"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+            <option value="">All Colors</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Price
+        </label>
+        <select id="filterPriceRange" onchange="applyFilters()"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+            <option value="">Any Price</option>
+            <option value="0-10000">Under $10,000</option>
+            <option value="10000-20000">$10,000 - $20,000</option>
+            <option value="20000-30000">$20,000 - $30,000</option>
+            <option value="30000-50000">$30,000 - $50,000</option>
+            <option value="50000+">$50,000+</option>
+        </select>
+    </div>
+
+</div>
     <div class="flex justify-end gap-3 pt-3 border-t border-slate-200">
 
       <button
