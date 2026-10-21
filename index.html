@@ -1080,7 +1080,16 @@ body {
           <option value="Certified Pre-Owned">Certified Pre-Owned</option>
         </select>
       </div>
+<div>
+    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+        Color
+    </label>
 
+    <select id="filterColor" onchange="applyFilters()"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2">
+        <option value="">All Colors</option>
+    </select>
+</div>
     </div>
 
     <div class="flex justify-end gap-3 pt-3 border-t border-slate-200">
@@ -1971,6 +1980,13 @@ function populateFilterDropdowns() {
 
     const modelSelect =
         document.getElementById("filterModel");
+    const colors = [...new Set(
+    rawInventory
+        .map(c => c.color)
+        .filter(Boolean)
+)].sort();
+    const colorSelect =
+    document.getElementById("filterColor");
 
     if (!locationSelect) return;
 
@@ -1997,6 +2013,11 @@ function populateFilterDropdowns() {
         models.map(v =>
             `<option value="${v}">${v}</option>`
         ).join("");
+    colorSelect.innerHTML =
+    '<option value="">All Colors</option>' +
+    colors.map(v =>
+        `<option value="${v}">${v}</option>`
+    ).join("");
 }
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
@@ -2013,6 +2034,8 @@ function applyFilters() {
         document.getElementById("filterModel")?.value || "";
     const filterCondition =
         document.getElementById("filterCondition")?.value || "";
+    const filterColor =
+    document.getElementById("filterColor")?.value || "";
     if (
         filterLocation &&
         car.location_name !== filterLocation
@@ -2033,6 +2056,10 @@ function applyFilters() {
         filterCondition &&
         car.condition !== filterCondition
     ) return false;
+    if (
+    filterColor &&
+    car.color !== filterColor
+) return false;
     const isPosted = !!car.marketplace_posted_at;
     if (activePillFilter === 'POSTED' && !isPosted) return false;
     if (activePillFilter === 'UNPOSTED' && isPosted) return false;
