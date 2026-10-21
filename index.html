@@ -1091,14 +1091,46 @@ body {
             Price
         </label>
         <select id="filterPriceRange" onchange="applyFilters()"
-                class="w-full border border-slate-300 rounded-xl px-3 py-2">
-            <option value="">Any Price</option>
-            <option value="0-10000">Under $10,000</option>
-            <option value="10000-20000">$10,000 - $20,000</option>
-            <option value="20000-30000">$20,000 - $30,000</option>
-            <option value="30000-50000">$30,000 - $50,000</option>
-            <option value="50000+">$50,000+</option>
-        </select>
+        class="w-full border border-slate-300 rounded-xl px-3 py-2">
+    <option value="">Any Price</option>
+    <option value="0-10000">Under $10,000</option>
+    <option value="10000-20000">$10,000 - $20,000</option>
+    <option value="20000-30000">$20,000 - $30,000</option>
+    <option value="30000-50000">$30,000 - $50,000</option>
+    <option value="50000+">$50,000+</option>
+</select>
+</div>
+
+<div>
+    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+        Mileage
+    </label>
+
+    <select id="filterMileageRange" onchange="applyFilters()"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2">
+
+        <option value="">Any Mileage</option>
+        <option value="0-10000">Under 10,000</option>
+        <option value="10000-30000">10,000 - 30,000</option>
+        <option value="30000-60000">30,000 - 60,000</option>
+        <option value="60000-100000">60,000 - 100,000</option>
+        <option value="100000+">100,000+</option>
+
+    </select>
+</div>
+
+    <select id="filterMileageRange" onchange="applyFilters()"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2">
+
+        <option value="">Any Mileage</option>
+        <option value="0-10000">Under 10,000</option>
+        <option value="10000-30000">10,000 - 30,000</option>
+        <option value="30000-60000">30,000 - 60,000</option>
+        <option value="60000-100000">60,000 - 100,000</option>
+        <option value="100000+">100,000+</option>
+
+    </select>
+</div>
     </div>
 
 </div>
@@ -2048,6 +2080,9 @@ const filterColor =
     document.getElementById("filterColor")?.value || "";
 const filterPriceRange =
     document.getElementById("filterPriceRange")?.value || "";
+const filterMileageRange =
+    document.getElementById("filterMileageRange")?.value || "";
+
     if (
         filterLocation &&
         car.location_name !== filterLocation
@@ -2098,11 +2133,33 @@ if (filterPriceRange) {
     ) return false;
 
     if (
-        filterPriceRange === "50000+" &&
-        price < 50000
+    filterPriceRange === "50000+" &&
+    price < 50000
+) return false;
+}
+if (filterMileageRange) {
+    const mileage = car.mileage || 0;
+    if (
+        filterMileageRange === "0-10000" &&
+        mileage >= 10000
+    ) return false;
+    if (
+        filterMileageRange === "10000-30000" &&
+        (mileage < 10000 || mileage > 30000)
+    ) return false;
+    if (
+        filterMileageRange === "30000-60000" &&
+        (mileage < 30000 || mileage > 60000)
+    ) return false;
+    if (
+        filterMileageRange === "60000-100000" &&
+        (mileage < 60000 || mileage > 100000)
+    ) return false;
+    if (
+        filterMileageRange === "100000+" &&
+        mileage < 100000
     ) return false;
 }
-
 const isPosted = !!car.marketplace_posted_at;
     if (activePillFilter === 'POSTED' && !isPosted) return false;
     if (activePillFilter === 'UNPOSTED' && isPosted) return false;
