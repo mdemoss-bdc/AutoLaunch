@@ -1560,6 +1560,11 @@ let currentStore = {
 };
 
 let rawInventory = [];
+let activeLocationFilter = "";
+let activeYearFilter = "";
+let activeMakeFilter = "";
+let activeModelFilter = "";
+let activeConditionFilter = "";
 let postingQueue = [];
 let activeDropdownVin = null;
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
@@ -1889,7 +1894,7 @@ async function fetchLiveInventory(isManual) {
     }
 
     rawInventory = allCars.filter(c => c.is_active !== false);
-
+    populateFilterDropdowns();
     const postedCount = rawInventory.filter(c => c.marketplace_posted_at).length;
     const unpostedCount = rawInventory.length - postedCount;
     
