@@ -258,10 +258,9 @@ body {
 
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 3: INVENTORY WORKSPACE START =============== -->
-<!-- ============================================================================== -->
-<!-- ============================================================================== -->
-<!-- ======================= SECTION 3A: GET STARTED PAGE START ==================== -->
-<!-- ============================================================================== -->
+<!-- ============================================================================== --><!-- ============================================================================= -->
+<!-- ======================= SECTION 3A: GET STARTED PAGE START ================== -->
+<!-- ============================================================================= -->
 
 <div id="getStartedPage" class="hidden flex-1 overflow-y-auto p-8">
 
@@ -289,7 +288,6 @@ body {
               <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
                 Dealership Name
               </label>
-
               <input
                 type="text"
                 id="onboardingDealershipName"
@@ -301,7 +299,6 @@ body {
               <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
                 Used Inventory URL
               </label>
-
               <input
                 type="text"
                 id="onboardingUsedUrl"
@@ -313,7 +310,6 @@ body {
               <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
                 New Inventory URL
               </label>
-
               <input
                 type="text"
                 id="onboardingNewUrl"
@@ -325,7 +321,6 @@ body {
               <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
                 Certified Inventory URL (Optional)
               </label>
-
               <input
                 type="text"
                 id="onboardingCertifiedUrl"
@@ -341,74 +336,65 @@ body {
               Test Inventory
 
             </button>
+
+            <!-- TEST RESULTS -->
+
             <div
-    id="inventoryTestResults"
-    class="hidden mt-8 p-6 rounded-2xl bg-blue-50 border border-blue-200">
+              id="inventoryTestResults"
+              class="hidden mt-8 p-6 rounded-2xl bg-blue-50 border border-blue-200">
 
-    <h3 class="text-lg font-bold text-slate-900 mb-4">
-        ✅ Inventory Test Results
-    </h3>
+              <h3 class="text-lg font-bold text-slate-900 mb-4">
+                ✅ Inventory Test Results
+              </h3>
 
-    <div class="space-y-2 text-sm">
+              <div class="space-y-2 text-sm">
+                <div>✅ Used Inventory Found</div>
+                <div>✅ New Inventory Found</div>
+                <div>✅ Photos Detected</div>
+                <div>✅ VIN Numbers Detected</div>
+                <div>✅ Pricing Detected</div>
+              </div>
 
-        <div>✅ Used Inventory Found</div>
+              <div class="mt-6">
+                <button
+                  onclick="continueSetup()"
+                  class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
 
-        <div>✅ New Inventory Found</div>
+                  Continue
 
-        <div>✅ Photos Detected</div>
+                </button>
+              </div>
 
-        <div>✅ VIN Numbers Detected</div>
+            </div>
 
-        <div>✅ Pricing Detected</div>
+            <!-- SYNC PAGE -->
 
-    </div>
-              <div
-    id="inventorySyncPage"
-    class="hidden mt-8 p-6 rounded-2xl bg-emerald-50 border border-emerald-200">
+            <div
+              id="inventorySyncPage"
+              class="hidden mt-8 p-6 rounded-2xl bg-emerald-50 border border-emerald-200">
 
-    <h3 class="text-lg font-bold text-slate-900 mb-4">
-        🚀 Inventory Sync Started
-    </h3>
+              <h3 class="text-lg font-bold text-slate-900 mb-4">
+                🚀 Inventory Sync Started
+              </h3>
 
-    <div class="space-y-3 text-sm">
+              <div class="space-y-3 text-sm">
+                <div>✅ Inventory Connected</div>
+                <div>✅ URLs Saved</div>
+                <div>✅ Initial Sync Started</div>
+                <div>📦 Importing first vehicles...</div>
+              </div>
 
-        <div>✅ Inventory Connected</div>
+              <div class="mt-6">
+                <button
+                  onclick="finishSetup()"
+                  class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
 
-        <div>✅ URLs Saved</div>
+                  Complete Setup
 
-        <div>✅ Initial Sync Started</div>
+                </button>
+              </div>
 
-        <div>📦 Importing first vehicles...</div>
-
-    </div>
-
-    <div class="mt-6">
-
-        <button
-            onclick="finishSetup()"
-            class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
-
-            Complete Setup
-
-        </button>
-
-    </div>
-
-</div>
-
-    <div class="mt-6">
-
-        <button
-            onclick="continueSetup()"
-            class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
-
-            Continue
-
-        </button>
-
-    </div>
-
-</div>
+            </div>
 
           </div>
 
@@ -431,27 +417,29 @@ body {
             <div class="flex items-center gap-3">
               <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
               <span id="stepDealership" class="font-semibold">
-    Dealership Setup
-</span>
+                Dealership Setup
+              </span>
             </div>
 
             <div class="flex items-center gap-3">
               <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
               <span id="stepInventoryTest" class="text-slate-500">
-    Inventory Test
-</span>
+                Inventory Test
+              </span>
             </div>
 
             <div class="flex items-center gap-3">
               <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
               <span id="stepInventorySync" class="text-slate-500">
-    Inventory Sync
-</span>
+                Inventory Sync
+              </span>
             </div>
 
             <div class="flex items-center gap-3">
               <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-              <span class="text-slate-500">Complete</span>
+              <span class="text-slate-500">
+                Complete
+              </span>
             </div>
 
           </div>
@@ -466,9 +454,9 @@ body {
 
 </div>
 
-<!-- ============================================================================== -->
-<!-- ======================= SECTION 3A: GET STARTED PAGE END ====================== -->
-<!-- ============================================================================== -->
+<!-- ============================================================================= -->
+<!-- ======================= SECTION 3A: GET STARTED PAGE END ==================== -->
+<!-- ============================================================================= -->
   <main class="flex-1 flex flex-col min-w-0 overflow-y-auto px-8 py-6 space-y-5">
 
   <!-- Header Bar -->
@@ -2171,8 +2159,10 @@ setTimeout(() => {
         "Test Inventory";
 
 }, 1500);
-function showGetStartedPage() {
 
+}   //
+
+function showGetStartedPage() {
     populateOnboardingFields();
 
     document.querySelector("main")
