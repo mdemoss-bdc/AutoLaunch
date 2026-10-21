@@ -1572,9 +1572,14 @@ async function loadUserStoreSettings() {
 
 if (certField)
     certField.value = currentStore.cpoUrl || "";
-      const domain = currentStore.usedUrl ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0] : "www.dealershipinventory.com";
-      document.getElementById("dealerUrlDisplay").innerText = "www." + domain;
-      document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
+      const domain = currentStore.usedUrl
+    ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0]
+    : "www.dealershipinventory.com";
+
+document.getElementById("dealerUrlDisplay").innerText = "www." + domain;
+document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
+
+updateLastSyncDisplay();
 
       if (data.repost_frequency_days) {
         const freqLabel = document.getElementById("repostFrequencyLabel");
@@ -1631,7 +1636,66 @@ if (certField)
     }
   } catch (e) {}
 }
+// ==============================================================================
+// ====================== LAST SYNC DISPLAY START ===============================
+// ==============================================================================
 
+async function updateLastSyncDisplay() {
+
+    if (!currentUser) return;
+
+    try {
+
+        const { data } = await supabaseClient
+            .from("scraped_inventory")
+            .select("last_updated")
+            .eq("user_id", currentUser.id)
+            .order("last_updated", { ascending: false })
+            .limit(1);
+
+        const label =
+            document.getElementById(
+                "lastSyncTimeLabel"
+            );
+
+        if (!label) return;
+
+        if (
+            !data ||
+            !data.length ||
+            !data[0].last_updated
+        ) {
+
+            label.innerText =
+                "Never Synced";
+
+            return;
+
+        }
+
+        const syncTime =
+            new Date(
+                data[0].last_updated
+            );
+
+        label.innerText =
+            "Last Sync: " +
+            syncTime.toLocaleString();
+
+    } catch (err) {
+
+        console.error(
+            "Last Sync error:",
+            err
+        );
+
+    }
+
+}
+
+// ==============================================================================
+// ====================== LAST SYNC DISPLAY END =================================
+// ==============================================================================
 async function saveAllSettings() {
   if (!currentUser) return;
   const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
@@ -2093,11 +2157,16 @@ async function enqueueMarketplaceCar(vin) {
     alert("Could not queue vehicle: " + err.message);
   }
 }
+// ==============================================================================
+// ====================== SYNC INVENTORY START ==================================
+// ==============================================================================
+
 async function triggerLiveLotCrawl(event) {
 
     if (!currentUser) return;
 
-    const btn = event.currentTarget;
+    const btn =
+        event.currentTarget;
 
     btn.disabled = true;
 
@@ -2114,11 +2183,21 @@ async function triggerLiveLotCrawl(event) {
                 triggered_by: currentUser.email
             });
 
-        alert("✓ Dealer site sync signal dispatched!");
+        alert(
+            "✓ Dealer site sync signal dispatched!"
+        );
+
+        setTimeout(() => {
+
+            updateLastSyncDisplay();
+
+        }, 3000);
 
     } catch (e) {
 
-        alert("Sync request failed.");
+        alert(
+            "Sync request failed."
+        );
 
     } finally {
 
@@ -2130,7 +2209,12 @@ async function triggerLiveLotCrawl(event) {
     }
 
 }
-function continueSetup() {
+
+// ==============================================================================
+// ====================== SYNC INVENTORY END ====================================
+// ==============================================================================
+  
+  function continueSetup() {
 
     document
         .getElementById(
