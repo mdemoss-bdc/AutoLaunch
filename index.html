@@ -1646,56 +1646,81 @@ async function updateLastSyncDisplay() {
 
     try {
 
-        const { data } = await supabaseClient
-            .from("scraped_inventory")
-            .select("last_updated")
-            .eq("user_id", currentUser.id)
-            .order("last_updated", { ascending: false })
-            .limit(1);
-
-        const label =
+        const syncLabel =
             document.getElementById(
                 "lastSyncTimeLabel"
             );
 
-        if (!label) return;
+        if (!syncLabel) return;
+
+        const { data: jobs } =
+            await supabaseClient
+                .from("scrape_jobs")
+                .select("*")
+                .eq("user_id", *urrentUser.id)
+*               .order("started_at"* {
+                    ascending: *alse
+                })
+          *     .limit(1);
 
         if (
-            !data ||
-            !data.length ||
-            !data[0].last_updated
+    *       jobs &&
+            jobs.le*gth &&
+            jobs[0].status *== "pending"
         ) {
 
-            label.innerText =
-                "Never Synced";
+        *   syncLabel.innerText =
+*               "Sync Status: Sync*ng...";
 
             return;
 
+    *   }
+
+        const*{ data } =
+            await supab*seClient
+                .from("sc*aped_inventory")
+                .*elect("last_updated")
+            *   .eq("user*id", currentUser.id)
+             *  .order("last_updated", {
+       *            ascending: false
+     *         *})
+                .limit(1);
+
+   *    if (
+            !data ||
+    *       !data.length ||
+*           !data[0].last_updated
+ *      ) {
+
+            syncLabel.i*nerText =
+                "*ever Synced";
+
+            return;*
         }
 
-        const syncTime =
-            new Date(
-                data[0].last_updated
+       *const syncTime =
+            new D*te(
+                data*0].last_updated
             );
 
-        label.innerText =
-            "Last Sync: " +
-            syncTime.toLocaleString();
+  *     sync*abel.innerText =
+            "Last*Sync: "*+
+            syncTime.toLocaleStr*ng();
 
     } catch (err) {
 
-        console.error(
-            "Last Sync error:",
+      * console.error(
+            "Last *ync error:",
             err
-        );
+     *  );
 
     }
 
 }
 
-// ==============================================================================
-// ====================== LAST SYNC DISPLAY END =================================
-// ==============================================================================
+// ===============*==================================*===========================
+// ===*================== LAST SYNC DISPL*Y END ============================*====
+// ==========================*==================================*================
 async function saveAllSettings() {
   if (!currentUser) return;
   const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
@@ -2697,12 +2722,32 @@ async function savePostingPreferences() {
 }
 
 document.addEventListener("DOMContentLoaded", async function() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
+
+  const { data: { session } } =
+      await supabaseClient.auth.getSession();
+
   if (session && session.user) {
-    await initAppSession(session.user);
+
+    await initAppSession(
+        session.user
+    );
+
+    setInterval(() => {
+
+        updateLastSyncDisplay();
+
+    }, 10000);
+
   } else {
-    document.getElementById("authOverlay").classList.remove("hidden");
+
+    document
+        .getElementById(
+            "authOverlay"
+        )
+        .classList.remove("hidden");
+
   }
+
 });
 </script>
 <!-- ============================================================================== -->
