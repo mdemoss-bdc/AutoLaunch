@@ -3,6 +3,7 @@ import os
 import re
 import sys
 from typing import List
+from datetime import datetime, timezone
 from playwright.async_api import async_playwright
 from supabase import create_client
 
@@ -440,17 +441,42 @@ def push_batch_to_supabase(records: List[dict]) -> int:
         print(f"[!] Batch upsert error: {e}")
         return 0
 
+# ==============================================================================
+# ====================== SCRAPER ENTRYPOINT START ==============================
+# ==============================================================================
+
 async def run_scraper():
+
+    active_job_id = None
     # 1. Check if a single user ID was passed in via environment variable
-    target_uid = os.environ.get("USER_ID")
+        target_uid = os.environ.get("USER_ID")
 
     if target_uid and target_uid.strip():
-        # Crawl only this specific user
-        res = db.table("user_settings").select("*").eq("user_id", target_uid.strip()).execute()
+
+        pending_job = db.table("scrape_jobs") \
+            .select("*") \
+            .eq("user_id", target_uid.strip()) \
+            .eq("status", "pending") \
+            .order("started_at", desc=True) \
+            .limit(1) \
+            .execute()
+
+        if pending_job.data:
+            active_job_id = pending_job.data[0]["id"]
+
+        res = db.table("user_settings") \
+            .select("*") \
+            .eq("user_id", target_uid.strip()) \
+            .execute()
+
         users_to_scrape = res.data or []
+
     else:
-        # Cloud/Scheduled run: Crawl ALL registered users who configured dealership URLs
-        res = db.table("user_settings").select("*").execute()
+
+        res = db.table("user_settings") \
+            .select("*") \
+            .execute()
+
         users_to_scrape = res.data or []
 
     if not users_to_scrape:
@@ -535,7 +561,32 @@ async def run_scraper():
             print(f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced.")
 
         await browser.close()
-    print(f"\n[✓] Global scraper run completed. Total units synced across all users: {total_synced_all}")
+        if active_job_id:
+
+        try:
+
+            db.table("scrape_jobs") \
+                .update({
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "cars_synced": total_synced_all
+                }) \
+                .eq("id", active_job_id) \
+                .execute()
+
+            print(
+                f"[✓] Job {active_job_id} marked completed."
+            )
+
+        except Exception as e:
+
+            print(
+                f"[!] Could not update scrape job: {e}"
+            )
+
+    print(
+        f"\n[✓] Global scraper run completed. Total units synced across all users: {total_synced_all}"
+    )
 
 if __name__ == "__main__":
     asyncio.run(run_scraper())
