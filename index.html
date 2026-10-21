@@ -485,19 +485,19 @@ body {
 
       <span class="flex items-center gap-1.5 text-emerald-600 font-semibold">
         <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
-        Synced
+        Inventory Connected
       </span>
 
       <span>&bull;</span>
 
-      <span id="topCarsCountLabel" class="text-slate-700 font-medium">
-        0 cars
+      <span id="topCarsCountLabel" class="text-slate-900 font-semibold">
+        0 Vehicles
       </span>
 
       <span>&bull;</span>
 
       <span id="lastSyncTimeLabel" class="text-slate-500">
-        Last Sync: Just Now
+          Last Refresh: Never
       </span>
 
     </div>
@@ -522,7 +522,7 @@ body {
         class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
 
         <i class="fa-solid fa-play text-[10px]"></i>
-        <span>Run Auto Poster</span>
+        <span>Add to queue</span>
 
     </button>
 
@@ -1670,7 +1670,7 @@ async function updateLastSyncDisplay() {
         ) {
 
             syncLabel.innerText =
-                "Sync Status: Syncing...";
+                "Refresh In Progress...";
 
             return;
 
@@ -1905,7 +1905,7 @@ function renderTableRows(cars) {
                </button>`
             : `<button onclick="enqueueMarketplaceCar('${car.vin}')" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
                  <i class="fa-solid fa-paper-plane text-[10px]"></i>
-                 <span>${isQueued ? 'Queued' : 'Add to queue'}</span>
+                 <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
                </button>`
           }
           <button onclick="toggleRowDropdown(event, '${car.vin}')" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
@@ -2196,9 +2196,10 @@ async function triggerLiveLotCrawl(event) {
         event.currentTarget;
 
     btn.disabled = true;
+    btn.classList.add("opacity-60");
 
     btn.innerHTML =
-        '<i class="fa-solid fa-spinner fa-spin"></i><span>Syncing...</span>';
+    '<i class="fa-solid fa-arrows-rotate fa-spin"></i><span>Refreshing...</span>';
 
     try {
 
@@ -2211,27 +2212,28 @@ async function triggerLiveLotCrawl(event) {
             });
 
         alert(
-            "✓ Dealer site sync signal dispatched!"
+            "✓ Inventory refresh started. Inventory will begin updating shortly!"
         );
 
         setTimeout(() => {
 
             updateLastSyncDisplay();
 
-        }, 3000);
+        }, 1000);
 
     } catch (e) {
 
         alert(
-            "Sync request failed."
+            "Inventory refresh failed."
         );
 
     } finally {
 
         btn.disabled = false;
+        btn.classList.remove("opacity-60");
 
         btn.innerHTML =
-            '<i class="fa-solid fa-rotate"></i><span>Sync Inventory</span>';
+            '<i class="fa-solid fa-rotate"></i><span>Refresh Inventory</span>';
 
     }
 
