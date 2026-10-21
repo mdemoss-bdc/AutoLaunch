@@ -1981,6 +1981,20 @@ function setPillFilter(filter) {
 }
 function populateFilterDropdowns() {
 
+    const locationSelect = document.getElementById("filterLocation");
+    const yearSelect = document.getElementById("filterYear");
+    const makeSelect = document.getElementById("filterMake");
+    const modelSelect = document.getElementById("filterModel");
+    const colorSelect = document.getElementById("filterColor");
+
+    if (!locationSelect || !yearSelect || !makeSelect || !modelSelect) return;
+
+    const currentLocation = locationSelect.value;
+    const currentYear = yearSelect.value;
+    const currentMake = makeSelect.value;
+    const currentModel = modelSelect.value;
+    const currentColor = colorSelect ? colorSelect.value : "";
+
     const locations = [...new Set(
         rawInventory
             .map(c => c.location_name)
@@ -1999,78 +2013,70 @@ function populateFilterDropdowns() {
             .filter(Boolean)
     )].sort();
 
-   const selectedMake =
-    document.getElementById("filterMake")?.value || "";
+    const modelSource = currentMake
+        ? rawInventory.filter(c => c.make === currentMake)
+        : rawInventory;
 
-const modelSource = selectedMake
-    ? rawInventory.filter(
-          c => c.make === selectedMake
-      )
-    : rawInventory;
+    const models = [...new Set(
+        modelSource
+            .map(c => c.model)
+            .filter(m =>
+                m &&
+                m.length > 2 &&
+                m.toLowerCase() !== "vin"
+            )
+    )].sort();
 
-const models = [...new Set(
-    modelSource
-        .map(c => c.model)
-        .filter(Boolean)
-)].sort();
-
-    const locationSelect =
-        document.getElementById("filterLocation");
-
-    const yearSelect =
-        document.getElementById("filterYear");
-
-    const makeSelect =
-        document.getElementById("filterMake");
-
-    const modelSelect =
-        document.getElementById("filterModel");
     const colors = [...new Set(
-    rawInventory
-        .map(c => c.color)
-        .filter(Boolean)
-)].sort();
-    const colorSelect =
-    document.getElementById("filterColor");
-
-    if (!locationSelect) return;
+        rawInventory
+            .map(c => c.color)
+            .filter(Boolean)
+    )].sort();
 
     locationSelect.innerHTML =
         '<option value="">All Locations</option>' +
-        locations.map(v =>
-            `<option value="${v}">${v}</option>`
-        ).join("");
+        locations.map(v => `<option value="${v}">${v}</option>`).join("");
 
     yearSelect.innerHTML =
         '<option value="">All Years</option>' +
-        years.map(v =>
-            `<option value="${v}">${v}</option>`
-        ).join("");
+        years.map(v => `<option value="${v}">${v}</option>`).join("");
 
     makeSelect.innerHTML =
         '<option value="">All Makes</option>' +
-        makes.map(v =>
-            `<option value="${v}">${v}</option>`
-        ).join("");
+        makes.map(v => `<option value="${v}">${v}</option>`).join("");
 
-    const currentModel = modelSelect.value;
+    modelSelect.innerHTML =
+        '<option value="">All Models</option>' +
+        models.map(v => `<option value="${v}">${v}</option>`).join("");
 
-modelSelect.innerHTML =
-    '<option value="">All Models</option>' +
-    models.map(v =>
-        `<option value="${v}">${v}</option>`
-    ).join("");
+    if (colorSelect) {
+        colorSelect.innerHTML =
+            '<option value="">All Colors</option>' +
+            colors.map(v => `<option value="${v}">${v}</option>`).join("");
+    }
 
-if (models.includes(currentModel)) {
-    modelSelect.value = currentModel;
-} else {
-    modelSelect.value = "";
-}
-    colorSelect.innerHTML =
-    '<option value="">All Colors</option>' +
-    colors.map(v =>
-        `<option value="${v}">${v}</option>`
-    ).join("");
+    if (locations.includes(currentLocation)) {
+        locationSelect.value = currentLocation;
+    }
+
+    if (years.map(String).includes(String(currentYear))) {
+        yearSelect.value = currentYear;
+    }
+
+    if (makes.includes(currentMake)) {
+        makeSelect.value = currentMake;
+    }
+
+    if (models.includes(currentModel)) {
+        modelSelect.value = currentModel;
+    } else {
+        modelSelect.value = "";
+    }
+
+    if (colorSelect && colors.includes(currentColor)) {
+        colorSelect.value = currentColor;
+    }
+
 }
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
