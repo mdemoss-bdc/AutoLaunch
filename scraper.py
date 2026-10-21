@@ -466,9 +466,14 @@ async def run_scraper():
             f"PENDING JOBS FOUND => {len(pending_job.data or [])}"
         )
 
-        if pending_job.data:
+if pending_job.data:
 
-            active_job_id = pending_job.data[0]["id"]
+    latest_job = max(
+        pending_job.data,
+        key=lambda x: x["started_at"]
+    )
+
+    active_job_id = latest_job["id"]
 
         print(
             f"ACTIVE_JOB_ID => {active_job_id}"
