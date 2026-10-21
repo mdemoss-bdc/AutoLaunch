@@ -2108,16 +2108,21 @@ function continueSetup() {
 
 }
 
-function finishSetup() {
+async function finishSetup() {
 
   if (currentUser) {
 
-    supabaseClient
+    const { error } = await supabaseClient
         .from("user_settings")
-        .update({
-            onboarding_complete: true
-        })
-        .eq("user_id", currentUser.id);
+        .upsert({
+            user_id: currentUser.id,
+            onboarding_complete: true,
+            updated_at: new Date().toISOString()
+        });
+
+    if (error) {
+        console.error("Onboarding save failed:", error);
+    }
 
 }
 
