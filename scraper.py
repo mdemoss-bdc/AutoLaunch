@@ -450,21 +450,26 @@ async def run_scraper():
     active_job_id = None
 
     target_uid = os.environ.get("USER_ID")
-
+        print(f"USER_ID => {target_uid}")
     if target_uid and target_uid.strip():
 
         pending_job = (
-            db.table("scrape_jobs")
-            .select("*")
-            .eq("user_id", target_uid.strip())
-            .eq("status", "pending")
-            .order("started_at", desc=True)
-            .limit(1)
-            .execute()
-        )
+    db.table("scrape_jobs")
+    .select("*")
+    .eq("user_id", target_uid.strip())
+    .eq("status", "pending")
+    .execute()
+)
+
+print(f"PENDING JOBS FOUND: {len(pending_job.data or [])}")
+
+if pending_job.data:
+    active_job_id = pending_job.data[0]["id"]
 
         if pending_job.data:
             active_job_id = pending_job.data[0]["id"]
+        print(f"ACTIVE_JOB_ID => {active_job_id}")
+        print(f"PENDING_JOB_DATA => {pending_job.data}")
 
         res = (
             db.table("user_settings")
