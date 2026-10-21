@@ -1028,7 +1028,7 @@ body {
           Location
         </label>
 
-        <select id="filterLocation"
+        <select id="filterLocation" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
           <option value="">All Locations</option>
         </select>
@@ -1039,7 +1039,7 @@ body {
           Year
         </label>
 
-        <select id="filterYear"
+        <select id="filterYear" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
           <option value="">All Years</option>
         </select>
@@ -1050,7 +1050,7 @@ body {
           Make
         </label>
 
-        <select id="filterMake"
+        <select id="filterMake" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
           <option value="">All Makes</option>
         </select>
@@ -1061,7 +1061,7 @@ body {
           Model
         </label>
 
-        <select id="filterModel"
+        <select id="filterModel" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
           <option value="">All Models</option>
         </select>
@@ -1072,7 +1072,7 @@ body {
           Condition
         </label>
 
-        <select id="filterCondition"
+        <select id="filterCondition" onchange="applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
           <option value="">All Conditions</option>
           <option value="New">New</option>
@@ -2003,6 +2003,36 @@ function applyFilters() {
   const sort = document.getElementById("sortSelect").value;
 
   let filtered = rawInventory.filter(car => {
+        const filterLocation =
+        document.getElementById("filterLocation")?.value || "";
+    const filterYear =
+        document.getElementById("filterYear")?.value || "";
+    const filterMake =
+        document.getElementById("filterMake")?.value || "";
+    const filterModel =
+        document.getElementById("filterModel")?.value || "";
+    const filterCondition =
+        document.getElementById("filterCondition")?.value || "";
+    if (
+        filterLocation &&
+        car.location_name !== filterLocation
+    ) return false;
+    if (
+        filterYear &&
+        String(car.year) !== filterYear
+    ) return false;
+    if (
+        filterMake &&
+        car.make !== filterMake
+    ) return false;
+    if (
+        filterModel &&
+        car.model !== filterModel
+    ) return false;
+    if (
+        filterCondition &&
+        car.condition !== filterCondition
+    ) return false;
     const isPosted = !!car.marketplace_posted_at;
     if (activePillFilter === 'POSTED' && !isPosted) return false;
     if (activePillFilter === 'UNPOSTED' && isPosted) return false;
@@ -2011,18 +2041,15 @@ function applyFilters() {
     const title = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.trim || ''} ${car.vin || ''} ${car.stock_num || ''}`.toLowerCase();
     return !query || title.includes(query);
   });
-
   filtered.sort((a, b) => {
     if (sort === "price_asc") return (a.price || 999999) - (b.price || 999999);
     if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
     if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
     return (b.year || 0) - (a.year || 0);
   });
-
   document.getElementById("showingCountBold").innerText = filtered.length;
   renderTableRows(filtered);
 }
-
 function renderTableRows(cars) {
   const tbody = document.getElementById("inventoryTableBody");
   if (!tbody) return;
