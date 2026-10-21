@@ -2112,16 +2112,32 @@ async function finishSetup() {
 
   if (currentUser) {
 
+    const dealershipName =
+        document.getElementById("onboardingDealershipName").value.trim();
+
+    const usedUrl =
+        document.getElementById("onboardingUsedUrl").value.trim();
+
+    const newUrl =
+        document.getElementById("onboardingNewUrl").value.trim();
+
+    const certifiedUrl =
+        document.getElementById("onboardingCertifiedUrl").value.trim();
+
     const { error } = await supabaseClient
         .from("user_settings")
         .upsert({
             user_id: currentUser.id,
+            store_name: dealershipName,
+            used_url: usedUrl,
+            new_url: newUrl,
+            certified_url: certifiedUrl,
             onboarding_complete: true,
             updated_at: new Date().toISOString()
         });
 
     if (error) {
-        console.error("Onboarding save failed:", error);
+        console.error(error);
     }
 
 }
