@@ -518,11 +518,11 @@ body {
     </button>
 
     <button
-        onclick="triggerMarketplacePosterRun()"
+        onclick="bulkQueueSelectedVehicles()"
         class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
 
         <i class="fa-solid fa-play text-[10px]"></i>
-        <span>Add to queue</span>
+        <span>Post Selected</span>
 
     </button>
 
@@ -2532,6 +2532,63 @@ async function loadPostingQueue() {
       badge.classList.toggle("hidden", pendingCount === 0);
     }
   } catch (e) {}
+}
+  async function bulkQueueSelectedVehicles() {
+
+    if (!currentUser) return;
+
+    const selectedVehicles = [];
+
+    document.querySelectorAll(".car-select-chk").forEach((chk, index) => {
+
+        if (
+            chk.checked &&
+            window.currentFilteredInventory?.[index]
+        ) {
+            selectedVehicles.push(
+                window.currentFilteredInventory[index]
+            );
+        }
+
+    });
+
+    if (!selectedVehicles.length) {
+        alert("Please select at least one vehicle.");
+        return;
+    }
+
+    try {
+
+        const rows = selectedVehicles.map(car => ({
+            user_id: currentUser.id,
+            vin: car.vin,
+            status: "pending",
+            created_at: new Date().toISOString()
+        }));
+
+        const { error } = await supabaseClient
+            .from("auto_posting_queue")
+            .insert(rows);
+
+        if (error) throw error;
+
+        await loadPostingQueue();
+
+        applyFilters();
+
+        alert(`${selectedVehicles.length} vehicle(s) queued.`);
+
+    } catch (err) {
+
+        console.error(err);
+
+        alert(
+            "Queue error: " +
+            (err.message || "Unknown error")
+        );
+
+    }
+
 }
 
 async function enqueueMarketplaceCar(vin) {
