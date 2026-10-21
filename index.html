@@ -1657,71 +1657,73 @@ async function updateLastSyncDisplay() {
             await supabaseClient
                 .from("scrape_jobs")
                 .select("*")
-                .eq("user_id", *urrentUser.id)
-*               .order("started_at"* {
-                    ascending: *alse
+                .eq("user_id", currentUser.id)
+                .order("started_at", {
+                    ascending: false
                 })
-          *     .limit(1);
+                .limit(1);
 
         if (
-    *       jobs &&
-            jobs.le*gth &&
-            jobs[0].status *== "pending"
+            jobs &&
+            jobs.length &&
+            jobs[0].status === "pending"
         ) {
 
-        *   syncLabel.innerText =
-*               "Sync Status: Sync*ng...";
+            syncLabel.innerText =
+                "Sync Status: Syncing...";
 
             return;
 
-    *   }
-
-        const*{ data } =
-            await supab*seClient
-                .from("sc*aped_inventory")
-                .*elect("last_updated")
-            *   .eq("user*id", currentUser.id)
-             *  .order("last_updated", {
-       *            ascending: false
-     *         *})
-                .limit(1);
-
-   *    if (
-            !data ||
-    *       !data.length ||
-*           !data[0].last_updated
- *      ) {
-
-            syncLabel.i*nerText =
-                "*ever Synced";
-
-            return;*
         }
 
-       *const syncTime =
-            new D*te(
-                data*0].last_updated
+        const { data } =
+            await supabaseClient
+                .from("scraped_inventory")
+                .select("last_updated")
+                .eq("user_id", currentUser.id)
+                .order("last_updated", {
+                    ascending: false
+                })
+                .limit(1);
+
+        if (
+            !data ||
+            !data.length ||
+            !data[0].last_updated
+        ) {
+
+            syncLabel.innerText =
+                "Never Synced";
+
+            return;
+
+        }
+
+        const syncTime =
+            new Date(
+                data[0].last_updated
             );
 
-  *     sync*abel.innerText =
-            "Last*Sync: "*+
-            syncTime.toLocaleStr*ng();
+        syncLabel.innerText =
+            "Last Sync: " +
+            syncTime.toLocaleString();
 
     } catch (err) {
 
-      * console.error(
-            "Last *ync error:",
+        console.error(
+            "Last Sync error:",
             err
-     *  );
+        );
 
     }
 
 }
 
-// ===============*==================================*===========================
-// ===*================== LAST SYNC DISPL*Y END ============================*====
-// ==========================*==================================*================
-async function saveAllSettings() {
+// ==============================================================================
+// ====================== LAST SYNC DISPLAY END =================================
+// ==============================================================================
+  
+  async function saveAllSettings() {
   if (!currentUser) return;
   const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
   const usedUrl = document.getElementById("settingsUsedUrl").value.trim();
