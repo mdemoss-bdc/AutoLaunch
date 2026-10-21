@@ -2627,12 +2627,30 @@ async function loadPostingQueue() {
 
     try {
 
-        const rows = selectedVehicles.map(car => ({
-            user_id: currentUser.id,
-            vin: car.vin,
-            status: "pending",
-            created_at: new Date().toISOString()
-        }));
+        const existingVins = new Set(
+    postingQueue
+        .filter(i => i.status === "pending")
+        .map(i => i.vin)
+);
+
+const rows = selectedVehicles
+    .filter(car => !existingVins.has(car.vin))
+    .map(car => ({
+        user_id: currentUser.id,
+        vin: car.vin,
+        status: "pending",
+        target_channel: "marketplace",
+        created_at: new Date().toISOString()
+    }));
+
+if (!rows.length) {
+
+    alert(
+        "Selected vehicles are already queued."
+    );
+
+    return;
+}
 
         const { error } = await supabaseClient
             .from("auto_posting_queue")
