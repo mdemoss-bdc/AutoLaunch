@@ -2600,9 +2600,13 @@ async function loadPostingQueue() {
 
         queueList.innerHTML = postingQueue.map(item => {
 
-    const car = rawInventory.find(
+console.log("QUEUE VIN =", JSON.stringify(item.vin));
+
+const car = rawInventory.find(
     c => String(c.vin).trim() === String(item.vin).trim()
 );
+
+console.log("FOUND =", car);
 
 console.log("ITEM", item);
 console.log("CAR", car);
