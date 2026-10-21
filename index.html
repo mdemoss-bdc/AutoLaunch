@@ -2237,12 +2237,28 @@ ${car.location_name ? `
       </td>
 
       <td class="py-4 px-4">
-        ${isPosted 
-          ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 shadow-sm"><i class="fa-solid fa-check text-[9px]"></i> Posted</span>'
-          : '<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-medium">Not posted yet</span>'
-        }
-      </td>
 
+  ${
+    isPosted
+      ? `
+        <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+          Posted
+        </span>
+      `
+      : isQueued
+      ? `
+        <span class="px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">
+          Queued
+        </span>
+      `
+      : `
+        <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold">
+          Not Posted
+        </span>
+      `
+  }
+
+</td>
       <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2 relative">
           ${isPosted
