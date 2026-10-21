@@ -2069,11 +2069,61 @@ function continueSetup() {
         )
         .classList.remove("hidden");
 
+    const testStep =
+        document.getElementById(
+            "stepInventoryTest"
+        );
+
+    if (testStep) {
+        testStep.classList.remove(
+            "text-slate-500"
+        );
+
+        testStep.classList.add(
+            "text-emerald-600",
+            "font-semibold"
+        );
+    }
+
+    const syncStep =
+        document.getElementById(
+            "stepInventorySync"
+        );
+
+    if (syncStep) {
+        syncStep.classList.remove(
+            "text-slate-500"
+        );
+
+        syncStep.classList.add(
+            "text-blue-600",
+            "font-semibold"
+        );
+    }
+
 }
-  function finishSetup() {
+
+function finishSetup() {
+
+    const syncStep =
+        document.getElementById(
+            "stepInventorySync"
+        );
+
+    if (syncStep) {
+        syncStep.classList.remove(
+            "text-blue-600"
+        );
+
+        syncStep.classList.add(
+            "text-emerald-600"
+        );
+    }
 
     document
-        .getElementById("getStartedPage")
+        .getElementById(
+            "getStartedPage"
+        )
         .classList.add("hidden");
 
     document
@@ -2083,7 +2133,7 @@ function continueSetup() {
     alert("🎉 Setup Complete");
 
 }
-  
+
 function populateOnboardingFields() {
 
     const storeField =
@@ -2156,8 +2206,28 @@ function populateOnboardingFields() {
 setTimeout(() => {
 
     document
-        .getElementById("inventoryTestResults")
+        .getElementById(
+            "inventoryTestResults"
+        )
         .classList.remove("hidden");
+
+    const testStep =
+        document.getElementById(
+            "stepInventoryTest"
+        );
+
+    if (testStep) {
+
+        testStep.classList.remove(
+            "text-slate-500"
+        );
+
+        testStep.classList.add(
+            "text-blue-600",
+            "font-semibold"
+        );
+
+    }
 
     btn.disabled = false;
 
