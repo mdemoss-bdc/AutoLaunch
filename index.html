@@ -2601,8 +2601,15 @@ async function loadPostingQueue() {
         queueList.innerHTML = postingQueue.map(item => {
 
     const car = rawInventory.find(
-        c => String(c.vin).trim() === String(item.vin).trim()
-    );
+    c => String(c.vin).trim() === String(item.vin).trim()
+);
+
+console.log(
+    "QUEUE VIN:",
+    item.vin,
+    "MATCH:",
+    car
+);
 
     return `
 
