@@ -1047,7 +1047,8 @@ body {
         <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
             Make
         </label>
-        <select id="filterMake" onchange="applyFilters()"
+        <select id="filterMake"
+        onchange="populateFilterDropdowns(); applyFilters()"
                 class="w-full border border-slate-300 rounded-xl px-3 py-2">
             <option value="">All Makes</option>
         </select>
@@ -1998,11 +1999,20 @@ function populateFilterDropdowns() {
             .filter(Boolean)
     )].sort();
 
-    const models = [...new Set(
-        rawInventory
-            .map(c => c.model)
-            .filter(Boolean)
-    )].sort();
+   const selectedMake =
+    document.getElementById("filterMake")?.value || "";
+
+const modelSource = selectedMake
+    ? rawInventory.filter(
+          c => c.make === selectedMake
+      )
+    : rawInventory;
+
+const models = [...new Set(
+    modelSource
+        .map(c => c.model)
+        .filter(Boolean)
+)].sort();
 
     const locationSelect =
         document.getElementById("filterLocation");
@@ -2043,11 +2053,19 @@ function populateFilterDropdowns() {
             `<option value="${v}">${v}</option>`
         ).join("");
 
-    modelSelect.innerHTML =
-        '<option value="">All Models</option>' +
-        models.map(v =>
-            `<option value="${v}">${v}</option>`
-        ).join("");
+    const currentModel = modelSelect.value;
+
+modelSelect.innerHTML =
+    '<option value="">All Models</option>' +
+    models.map(v =>
+        `<option value="${v}">${v}</option>`
+    ).join("");
+
+if (models.includes(currentModel)) {
+    modelSelect.value = currentModel;
+} else {
+    modelSelect.value = "";
+}
     colorSelect.innerHTML =
     '<option value="">All Colors</option>' +
     colors.map(v =>
