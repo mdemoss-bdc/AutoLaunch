@@ -2072,9 +2072,15 @@ function continueSetup() {
 }
   function finishSetup() {
 
-    alert(
-        "🎉 Setup Complete"
-    );
+    document
+        .getElementById("getStartedPage")
+        .classList.add("hidden");
+
+    document
+        .querySelector("main")
+        .classList.remove("hidden");
+
+    alert("🎉 Setup Complete");
 
 }
   
