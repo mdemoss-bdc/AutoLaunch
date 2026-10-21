@@ -2521,17 +2521,85 @@ async function removeVehicleFromInventory(vin) {
 }
 
 async function loadPostingQueue() {
-  if (!currentUser) return;
-  try {
-    const { data } = await supabaseClient.from("auto_posting_queue").select("*").eq("user_id", currentUser.id).order("created_at", { ascending: true });
-    postingQueue = data || [];
-    const pendingCount = postingQueue.filter(i => i.status === 'pending').length;
-    const badge = document.getElementById("navQueueBadge");
-    if (badge) {
-      badge.innerText = pendingCount;
-      badge.classList.toggle("hidden", pendingCount === 0);
+
+    if (!currentUser) return;
+
+    try {
+
+        const { data } = await supabaseClient
+            .from("auto_posting_queue")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("created_at", { ascending: true });
+
+        postingQueue = data || [];
+
+        const pendingCount = postingQueue.filter(
+            i => i.status === "pending"
+        ).length;
+
+        const badge =
+            document.getElementById("navQueueBadge");
+
+        if (badge) {
+
+            badge.innerText = pendingCount;
+
+            badge.classList.toggle(
+                "hidden",
+                pendingCount === 0
+            );
+
+        }
+
+        const queueList =
+            document.getElementById("queueItemsList");
+
+        if (!queueList) return;
+
+        if (!postingQueue.length) {
+
+            queueList.innerHTML = `
+                <p class="text-xs text-slate-400 text-center py-8">
+                    Your post queue is currently empty.
+                </p>
+            `;
+
+            return;
+        }
+
+        queueList.innerHTML = postingQueue.map(item => `
+
+            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+
+                <div class="flex items-center justify-between">
+
+                    <div>
+                        <div class="text-xs font-bold text-slate-900">
+                            ${item.vin}
+                        </div>
+
+                        <div class="text-[11px] text-slate-500">
+                            ${item.target_channel || "marketplace"}
+                        </div>
+                    </div>
+
+                    <span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">
+                        ${item.status}
+                    </span>
+
+                </div>
+
+            </div>
+
+        `).join("");
+
+    } catch (e) {
+
+        console.error(e);
+
     }
-  } catch (e) {}
+
 }
   async function bulkQueueSelectedVehicles() {
 
