@@ -448,41 +448,46 @@ def push_batch_to_supabase(records: List[dict]) -> int:
 async def run_scraper():
 
     active_job_id = None
-    # 1. Check if a single user ID was passed in via environment variable
-        target_uid = os.environ.get("USER_ID")
+
+    target_uid = os.environ.get("USER_ID")
 
     if target_uid and target_uid.strip():
 
-        pending_job = db.table("scrape_jobs") \
-            .select("*") \
-            .eq("user_id", target_uid.strip()) \
-            .eq("status", "pending") \
-            .order("started_at", desc=True) \
-            .limit(1) \
+        pending_job = (
+            db.table("scrape_jobs")
+            .select("*")
+            .eq("user_id", target_uid.strip())
+            .eq("status", "pending")
+            .order("started_at", desc=True)
+            .limit(1)
             .execute()
+        )
 
         if pending_job.data:
             active_job_id = pending_job.data[0]["id"]
 
-        res = db.table("user_settings") \
-            .select("*") \
-            .eq("user_id", target_uid.strip()) \
+        res = (
+            db.table("user_settings")
+            .select("*")
+            .eq("user_id", target_uid.strip())
             .execute()
+        )
 
         users_to_scrape = res.data or []
 
     else:
 
-        res = db.table("user_settings") \
-            .select("*") \
+        res = (
+            db.table("user_settings")
+            .select("*")
             .execute()
+        )
 
         users_to_scrape = res.data or []
 
     if not users_to_scrape:
         print("[-] No user accounts with configured dealership settings found.")
         return
-
     print(f"[*] Found {len(users_to_scrape)} account(s) registered in database.")
 
     total_synced_all = 0
@@ -558,10 +563,13 @@ async def run_scraper():
                     await asyncio.sleep(1)
 
             total_synced_all += user_units_synced
-            print(f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced.")
+            print(
+                f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced."
+            )
 
         await browser.close()
-        if active_job_id:
+
+    if active_job_id:
 
         try:
 
@@ -587,6 +595,10 @@ async def run_scraper():
     print(
         f"\n[✓] Global scraper run completed. Total units synced across all users: {total_synced_all}"
     )
+
+# ==============================================================================
+# ====================== SCRAPER ENTRYPOINT END ================================
+# ==============================================================================
 
 if __name__ == "__main__":
     asyncio.run(run_scraper())
