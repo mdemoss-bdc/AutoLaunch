@@ -466,14 +466,14 @@ async def run_scraper():
             f"PENDING JOBS FOUND => {len(pending_job.data or [])}"
         )
 
-if pending_job.data:
+        if pending_job.data:
 
-    latest_job = max(
-        pending_job.data,
-        key=lambda x: x["started_at"]
-    )
+            latest_job = max(
+                pending_job.data,
+                key=lambda x: x["started_at"]
+            )
 
-    active_job_id = latest_job["id"]
+            active_job_id = latest_job["id"]
 
         print(
             f"ACTIVE_JOB_ID => {active_job_id}"
@@ -580,7 +580,6 @@ if pending_job.data:
             print(f"[*] Crawling for User: {active_uid}")
             print(f"[*] Store: {store_name}")
             print("=======================================================")
-
             user_units_synced = 0
 
             for feed in feeds_to_crawl:
