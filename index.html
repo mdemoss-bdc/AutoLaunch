@@ -473,9 +473,14 @@ body {
         <span id="topCarsCountLabel" class="text-slate-700 font-medium">0 cars</span>
         <span>&bull;</span>
         <span id="lastSyncTimeLabel" class="text-slate-500">🔄 Sync Inventory</span>
-        <button onclick="triggerLiveLotCrawl()" title="Sync Lot" class="text-blue-600 hover:text-blue-700 transition ml-0.5 cursor-pointer">
-          <i class="fa-solid fa-chevron-right text-[10px]"></i>
-        </button>
+        <button
+    onclick="triggerLiveLotCrawl(event)"
+    class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+
+    <i class="fa-solid fa-rotate text-[10px]"></i>
+    <span>Sync Inventory</span>
+
+</button>
       </div>
     </div>
 
@@ -2046,19 +2051,42 @@ async function enqueueMarketplaceCar(vin) {
     alert("Could not queue vehicle: " + err.message);
   }
 }
-async function triggerLiveLotCrawl() {
-  if (!currentUser) return;
-  try {
-    await supabaseClient.from("scrape_jobs").insert({
-      user_id: currentUser.id,
-      status: "pending",
-      triggered_by: currentUser.email
-    });
+async function triggerLiveLotCrawl(event) {
 
-    alert("✓ Dealer site sync signal dispatched!");
-  } catch (e) {
-    alert("✓ Sync requested.");
-  }
+    if (!currentUser) return;
+
+    const btn = event.currentTarget;
+
+    btn.disabled = true;
+
+    btn.innerHTML =
+        '<i class="fa-solid fa-spinner fa-spin"></i><span>Syncing...</span>';
+
+    try {
+
+        await supabaseClient
+            .from("scrape_jobs")
+            .insert({
+                user_id: currentUser.id,
+                status: "pending",
+                triggered_by: currentUser.email
+            });
+
+        alert("✓ Dealer site sync signal dispatched!");
+
+    } catch (e) {
+
+        alert("Sync request failed.");
+
+    } finally {
+
+        btn.disabled = false;
+
+        btn.innerHTML =
+            '<i class="fa-solid fa-rotate"></i><span>Sync Inventory</span>';
+
+    }
+
 }
 function continueSetup() {
 
