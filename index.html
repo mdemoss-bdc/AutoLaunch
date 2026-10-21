@@ -1091,7 +1091,6 @@ body {
     </select>
 </div>
     </div>
-
     <div class="flex justify-end gap-3 pt-3 border-t border-slate-200">
 
       <button
@@ -2024,18 +2023,20 @@ function applyFilters() {
   const sort = document.getElementById("sortSelect").value;
 
   let filtered = rawInventory.filter(car => {
-        const filterLocation =
-        document.getElementById("filterLocation")?.value || "";
-    const filterYear =
-        document.getElementById("filterYear")?.value || "";
-    const filterMake =
-        document.getElementById("filterMake")?.value || "";
-    const filterModel =
-        document.getElementById("filterModel")?.value || "";
-    const filterCondition =
-        document.getElementById("filterCondition")?.value || "";
-    const filterColor =
+const filterLocation =
+    document.getElementById("filterLocation")?.value || "";
+const filterYear =
+    document.getElementById("filterYear")?.value || "";
+const filterMake =
+    document.getElementById("filterMake")?.value || "";
+const filterModel =
+    document.getElementById("filterModel")?.value || "";
+const filterCondition =
+    document.getElementById("filterCondition")?.value || "";
+const filterColor =
     document.getElementById("filterColor")?.value || "";
+const filterPriceRange =
+    document.getElementById("filterPriceRange")?.value || "";
     if (
         filterLocation &&
         car.location_name !== filterLocation
@@ -2060,7 +2061,38 @@ function applyFilters() {
     filterColor &&
     car.color !== filterColor
 ) return false;
-    const isPosted = !!car.marketplace_posted_at;
+
+if (filterPriceRange) {
+
+    const price = car.price || 0;
+
+    if (
+        filterPriceRange === "0-10000" &&
+        price >= 10000
+    ) return false;
+
+    if (
+        filterPriceRange === "10000-20000" &&
+        (price < 10000 || price > 20000)
+    ) return false;
+
+    if (
+        filterPriceRange === "20000-30000" &&
+        (price < 20000 || price > 30000)
+    ) return false;
+
+    if (
+        filterPriceRange === "30000-50000" &&
+        (price < 30000 || price > 50000)
+    ) return false;
+
+    if (
+        filterPriceRange === "50000+" &&
+        price < 50000
+    ) return false;
+}
+
+const isPosted = !!car.marketplace_posted_at;
     if (activePillFilter === 'POSTED' && !isPosted) return false;
     if (activePillFilter === 'UNPOSTED' && isPosted) return false;
     if (activePillFilter === 'SOLD') return false;
