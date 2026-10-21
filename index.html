@@ -661,7 +661,7 @@ body {
     </div>
 
     <div class="flex items-center gap-2">
-      <button onclick="openSettingsModal()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
+      <button onclick="openFiltersModal()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
         <i class="fa-solid fa-sliders text-blue-600 text-xs"></i>
         <span>Filters</span>
       </button>
@@ -999,6 +999,114 @@ body {
 
 </div>
 
+  <!-- Inventory Filters Modal -->
+<div id="filtersModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+
+  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 bg-white">
+
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div>
+        <h3 class="text-xl font-black text-slate-900">
+          Inventory Filters
+        </h3>
+
+        <p class="text-sm text-slate-500">
+          Narrow down your inventory.
+        </p>
+      </div>
+
+      <button onclick="closeModal('filtersModal')"
+              class="text-slate-400 hover:text-slate-700">
+        <i class="fa-solid fa-xmark text-xl"></i>
+      </button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+          Location
+        </label>
+
+        <select id="filterLocation"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+          <option value="">All Locations</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+          Year
+        </label>
+
+        <select id="filterYear"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+          <option value="">All Years</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+          Make
+        </label>
+
+        <select id="filterMake"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+          <option value="">All Makes</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+          Model
+        </label>
+
+        <select id="filterModel"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+          <option value="">All Models</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+          Condition
+        </label>
+
+        <select id="filterCondition"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+          <option value="">All Conditions</option>
+          <option value="New">New</option>
+          <option value="Used">Used</option>
+          <option value="Certified Pre-Owned">Certified Pre-Owned</option>
+        </select>
+      </div>
+
+    </div>
+
+    <div class="flex justify-end gap-3 pt-3 border-t border-slate-200">
+
+      <button
+        onclick="closeModal('filtersModal')"
+        class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold">
+
+        Cancel
+
+      </button>
+
+      <button
+        onclick="applyFilters()"
+        class="px-6 py-2 rounded-xl btn-gradient text-white font-bold">
+
+        Apply Filters
+
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+  
 <!-- 6. Queue Modal -->
 <div id="queueModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
@@ -2505,6 +2613,7 @@ function showInventoryPage() {
         .classList.remove("hidden");
 
 }
+function openFiltersModal() {document.getElementById("filtersModal").classList.remove("hidden"); }
 function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); }
 function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
 function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
