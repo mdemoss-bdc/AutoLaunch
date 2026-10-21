@@ -292,7 +292,7 @@ body {
                 type="text"
                 id="onboardingDealershipName"
                 class="w-full border border-slate-300 rounded-xl px-4 py-3"
-                placeholder="Moses Auto Group">
+                placeholder="Enter dealership name"
             </div>
 
             <div>
@@ -471,31 +471,98 @@ body {
         </span>
         <span>&bull;</span>
         <span id="topCarsCountLabel" class="text-slate-700 font-medium">0 cars</span>
-        <span>&bull;</span>
-        <span id="lastSyncTimeLabel" class="text-slate-500">🔄 Sync Inventory</span>
-        <button
-    onclick="triggerLiveLotCrawl(event)"
-    class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+       <span>•</span>
+<span id="lastSyncTimeLabel" class="text-slate-500">
+    Last Sync: Just Now
+</span>
 
-    <i class="fa-solid fa-rotate text-[10px]"></i>
-    <span>Sync Inventory</span>
 
-</button>
       </div>
     </div>
 
-    <!-- Header Actions -->
-    <div class="flex items-center gap-2.5">
-      <button onclick="triggerMarketplacePosterRun()" class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+    <!-- Header Bar -->
+
+<div class="flex items-center justify-between">
+
+  <div>
+
+    <h1 class="text-2xl font-black text-slate-900 tracking-tight">
+      Inventory
+    </h1>
+
+    <div class="flex items-center gap-2 pt-0.5 text-xs text-slate-500">
+
+      <i class="fa-solid fa-globe text-blue-600 text-[11px]"></i>
+
+      <a href="#"
+         id="dealerUrlDisplay"
+         target="_blank"
+         class="hover:underline text-blue-600 font-medium">
+
+        www.dealershipinventory.com
+
+      </a>
+
+      <span>&bull;</span>
+
+      <span class="flex items-center gap-1.5 text-emerald-600 font-semibold">
+
+        <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
+
+        Synced
+
+      </span>
+
+      <span>&bull;</span>
+
+      <span id="topCarsCountLabel" class="text-slate-700 font-medium">
+        0 cars
+      </span>
+
+      <span>&bull;</span>
+
+      <span id="lastSyncTimeLabel" class="text-slate-500">
+        Last Sync: Just Now
+      </span>
+
+    </div>
+
+  </div>
+
+  <!-- Header Actions -->
+
+  <div class="flex items-center gap-2.5">
+
+    <button
+        onclick="triggerLiveLotCrawl(event)"
+        class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+
+        <i class="fa-solid fa-rotate text-[10px]"></i>
+        <span>Sync Inventory</span>
+
+    </button>
+
+    <button
+        onclick="triggerMarketplacePosterRun()"
+        class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+
         <i class="fa-solid fa-play text-[10px]"></i>
         <span>Run Auto Poster</span>
-      </button>
-      <button onclick="openSettingsModal()" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm">
+
+    </button>
+
+    <button
+        onclick="openSettingsModal()"
+        class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm">
+
         <i class="fa-solid fa-gear text-slate-500"></i>
         <span>Configure URLs</span>
-      </button>
-    </div>
+
+    </button>
+
   </div>
+
+</div>
 
   <!-- 6-Card Vibrant Automation Ribbon -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
