@@ -2604,6 +2604,9 @@ async function loadPostingQueue() {
     c => String(c.vin).trim() === String(item.vin).trim()
 );
 
+console.log("ITEM", item);
+console.log("CAR", car);
+
 console.log(
     "QUEUE VIN:",
     item.vin,
@@ -2621,10 +2624,10 @@ console.log(
 
                     <div class="text-sm font-bold text-slate-900">
                         ${
-                            car
-                            ? `${car.year || ''} ${car.make || ''} ${car.model || ''}`
-                            : item.vin
-                        }
+    car
+    ? `FOUND ${car.year} ${car.make} ${car.model}`
+    : `NOT FOUND ${item.vin}`
+}
                     </div>
 
                     <div class="text-xs text-slate-500 mt-1">
