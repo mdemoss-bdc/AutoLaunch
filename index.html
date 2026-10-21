@@ -2601,7 +2601,7 @@ async function loadPostingQueue() {
         queueList.innerHTML = postingQueue.map(item => {
 
     const car = rawInventory.find(
-        c => c.vin === item.vin
+        c => String(c.vin).trim() === String(item.vin).trim()
     );
 
     return `
