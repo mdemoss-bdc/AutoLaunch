@@ -2018,14 +2018,20 @@ function populateFilterDropdowns() {
         : rawInventory;
 
     const models = [...new Set(
-        modelSource
-            .map(c => c.model)
-            .filter(m =>
-                m &&
-                m.length > 2 &&
-                m.toLowerCase() !== "vin"
-            )
-    )].sort();
+    modelSource
+        .map(c => {
+
+            if (c.model === "Hr") return "HR-V";
+            if (c.model === "Cr") return "CR-V";
+
+            return c.model;
+
+        })
+        .filter(m =>
+            m &&
+            m.toLowerCase() !== "vin"
+        )
+)].sort();
 
     const colors = [...new Set(
         rawInventory
