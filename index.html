@@ -402,52 +402,51 @@ body {
 
       </div>
 
-      <!-- PROGRESS CARD -->
+    <!-- PROGRESS CARD -->
 
-      <div>
+<div>
 
-        <div class="glass-card rounded-3xl p-6">
+  <div class="glass-card rounded-3xl p-6">
 
-          <div class="text-xs font-bold uppercase text-slate-400 mb-4">
-            Setup Progress
-          </div>
+    <div class="text-xs font-bold uppercase text-slate-400 mb-4">
+      Setup Progress
+    </div>
 
-          <div class="space-y-5">
+    <div class="space-y-5">
 
-            <div class="flex items-center gap-3">
-              <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
-              <span id="stepDealership" class="font-semibold">
-                Dealership Setup
-              </span>
-            </div>
-
-            <div class="flex items-center gap-3">
-              <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-              <span id="stepInventoryTest" class="text-slate-500">
-                Inventory Test
-              </span>
-            </div>
-
-            <div class="flex items-center gap-3">
-              <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-              <span id="stepInventorySync" class="text-slate-500">
-                Inventory Sync
-              </span>
-            </div>
-
-            <div class="flex items-center gap-3">
-              <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-              <span class="text-slate-500">
-                Complete
-              </span>
-            </div>
-
-          </div>
-
-        </div>
-
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
+        <span id="stepDealership" class="font-semibold">
+          Dealership Setup
+        </span>
       </div>
 
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
+        <span id="stepInventoryTest" class="text-slate-500">
+          Inventory Test
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
+        <span id="stepInventorySync" class="text-slate-500">
+          Inventory Sync
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
+        <span id="stepComplete" class="text-slate-500">
+          Complete
+        </span>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
     </div>
 
   </div>
@@ -2119,7 +2118,23 @@ function finishSetup() {
             "text-emerald-600"
         );
     }
+const completeStep =
+    document.getElementById(
+        "stepComplete"
+    );
 
+if (completeStep) {
+
+    completeStep.classList.remove(
+        "text-slate-500"
+    );
+
+    completeStep.classList.add(
+        "text-emerald-600",
+        "font-semibold"
+    );
+
+}
     document
         .getElementById(
             "getStartedPage"
