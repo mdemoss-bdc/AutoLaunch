@@ -2602,10 +2602,15 @@ async function loadPostingQueue() {
 
 console.log("QUEUE VIN =", JSON.stringify(item.vin));
 
-const car = rawInventory.find(
+const inventoryMatch = rawInventory.find(
     c => String(c.vin).trim() === String(item.vin).trim()
 );
 
+console.log("rawInventory count:", rawInventory.length);
+console.log("queue vin:", item.vin);
+console.log("inventory match:", inventoryMatch);
+
+const car = inventoryMatch;
 console.log("FOUND =", car);
 
 console.log("ITEM", item);
