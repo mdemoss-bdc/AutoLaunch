@@ -2167,8 +2167,10 @@ const isPosted = !!car.marketplace_posted_at;
     if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
     return (b.year || 0) - (a.year || 0);
   });
-  document.getElementById("showingCountBold").innerText = filtered.length;
-  renderTableRows(filtered);
+  window.currentFilteredInventory = filtered;
+
+document.getElementById("showingCountBold").innerText = filtered.length;
+renderTableRows(filtered);
 }
 function renderTableRows(cars) {
   const tbody = document.getElementById("inventoryTableBody");
