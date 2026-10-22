@@ -19,20 +19,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <!-- Supabase JS Client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- AI background cut-out engine (see PHOTO_ENGINE.md): @imgly/background-removal
-     dynamically imports its "onnxruntime-web" peer by bare specifier, so this
-     import map pins it to the exact peer version (1.21.0) on jsDelivr. The
-     engine module itself is lazy-loaded at runtime — nothing downloads until
-     the Automatic Photo Edits modal is opened. -->
-<script type="importmap">
-{
-  "imports": {
-    "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.bundle.min.mjs",
-    "onnxruntime-web/webgpu": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.webgpu.bundle.min.mjs"
-  }
-}
-</script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -803,15 +789,6 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
     </button>
 
     <button
-        onclick="bulkQueueSelectedVehicles()"
-        class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
-
-        <i class="fa-solid fa-play text-[10px]"></i>
-        <span>Post Selected</span>
-
-    </button>
-
-    <button
         onclick="openSettingsModal()"
         class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm">
 
@@ -1053,10 +1030,20 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
     </button>
   </div>
 
-  <!-- Selection Counter -->
-  <div class="flex items-center gap-2 text-xs text-slate-500 pt-1">
-    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllCars(this)" class="rounded text-blue-600 w-4 h-4 cursor-pointer bg-white border-slate-300">
-    <span>Showing <strong id="showingCountBold" class="text-slate-900">0</strong> cars</span>
+  <!-- Selection Counter + Post Selected (moved here from the page header:
+       it acts on the selection, so it lives with the selection, above the
+       table's LAUNCH IT column) -->
+  <div class="flex items-center justify-between gap-2 text-xs text-slate-500 pt-1">
+    <div class="flex items-center gap-2">
+      <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllCars(this)" class="rounded text-blue-600 w-4 h-4 cursor-pointer bg-white border-slate-300">
+      <span>Showing <strong id="showingCountBold" class="text-slate-900">0</strong> cars</span>
+    </div>
+    <button
+        onclick="bulkQueueSelectedVehicles()"
+        class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-play text-[10px]"></i>
+        <span>Post Selected</span>
+    </button>
   </div>
 
   <!-- Table View -->
@@ -1582,13 +1569,14 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
       <div id="settingsPanelAi" class="space-y-6 hidden">
 
         <div class="glass-card rounded-2xl p-6 space-y-4">
-          <h3 class="font-bold text-lg">AI Photo Tools</h3>
+          <h3 class="font-bold text-lg">Photo Tools</h3>
           <p class="text-sm text-slate-500">
-            Background treatment and photo preferences for your listings live in the
-            photo editor settings.
+            Photo preferences for your listings — the branding frame and
+            auto-crop — live in the photo editor settings. Your photos
+            themselves post exactly as they come from your dealer's website.
           </p>
           <button onclick="closeModal('settingsModal'); openAutoPhotoEditsModal()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
-            Open Photo AI Settings
+            Open Photo Settings
           </button>
         </div>
 
@@ -1727,22 +1715,12 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
     </div>
 
     <p class="text-xs text-slate-600 leading-relaxed">
-      Set it up once. From then on, every vehicle you post gets the same polished treatment — background, branding and crop handled automatically.
+      Set it up once. Your vehicles post with their real photos, exactly as they come from your dealer's website — the only touches available here are an optional branding frame and auto-crop.
     </p>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       
       <div class="space-y-4 text-xs">
-        <div>
-          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">AI background</label>
-          <p class="text-[11px] text-slate-500 mb-2">Pick a background on the right — your choice is saved and used as the posting background. The preview cuts the vehicle out and places it on the background right here on your device (first preview downloads the AI model once).</p>
-          <select id="selectAiBgMode" onchange="refreshCutoutPreview()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
-            <option value="first_only">First photo only</option>
-            <option value="all_photos">All photos</option>
-            <option value="disabled">Disabled</option>
-          </select>
-        </div>
-
         <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
           <div class="flex items-center justify-between">
             <span class="font-bold text-slate-900">Auto-crop</span>
@@ -1775,60 +1753,23 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
         </div>
 
         <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200">
-          <button id="photoTabBackground" onclick="switchPhotoEditTab('background')" class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm cursor-pointer">Background</button>
+          <button id="photoTabPhoto" onclick="switchPhotoEditTab('photo')" class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm cursor-pointer">Photo</button>
           <button id="photoTabCrop" onclick="switchPhotoEditTab('crop')" class="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">Adjust crop</button>
           <button id="photoTabBranding" onclick="switchPhotoEditTab('branding')" class="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">Branding</button>
         </div>
 
         <div id="previewPhotoWrap" class="w-full aspect-[4/3] rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
-          <img id="previewPhotoEditImg" src="assets/backgrounds/bg-bright.jpg" class="w-full h-full object-cover" draggable="false">
+          <img id="previewPhotoEditImg" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80" class="w-full h-full object-cover" draggable="false">
           <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/60 to-transparent p-2 text-center">
-            <span id="previewCaptionText" class="text-[10px] text-white font-medium">Background Preview</span>
-          </div>
-          <div id="previewEngineOverlay" class="absolute inset-0 z-10 hidden items-center justify-center bg-slate-900/55">
-            <div class="text-center text-white px-4">
-              <i class="fa-solid fa-circle-notch fa-spin text-xl"></i>
-              <p id="previewEngineStatus" class="text-[11px] mt-2 font-semibold">Loading the AI engine…</p>
-              <p class="text-[10px] mt-1 text-slate-300">First time downloads the AI model once — after that it runs entirely on this device.</p>
-            </div>
+            <span id="previewCaptionText" class="text-[10px] text-white font-medium">Original photo</span>
           </div>
         </div>
 
         <div class="flex items-start justify-between gap-3">
           <span id="previewStatusText" class="text-[10px] text-slate-500 leading-snug"></span>
-          <button id="btnDownloadPreview" onclick="downloadCompositePreview()" disabled class="shrink-0 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-semibold opacity-40 cursor-not-allowed">
+          <button id="btnDownloadPreview" onclick="downloadPhotoPreview()" disabled class="shrink-0 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-semibold opacity-40 cursor-not-allowed">
             <i class="fa-solid fa-download mr-1"></i>Download preview
           </button>
-        </div>
-
-        <div id="photoBgPanel" class="space-y-2 pt-1">
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Showroom Backgrounds</span>
-            <button type="button" id="customBgReplaceBtn" onclick="document.getElementById('customBgInput').click()" class="hidden text-[10px] text-blue-600 hover:underline font-semibold cursor-pointer">Replace your photo</button>
-          </div>
-          <div class="grid grid-cols-4 gap-2">
-            <button data-bg-btn data-bg-url="assets/backgrounds/bg-bright.jpg" onclick="setPreviewBg('assets/backgrounds/bg-bright.jpg', this)" class="p-1 rounded-xl border border-blue-600 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
-              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-bright.jpg" class="w-full h-full object-cover"></div>
-              <span data-bg-label class="text-[10px] text-slate-900 font-semibold block mt-1 text-center">Bright</span>
-            </button>
-            <button data-bg-btn data-bg-url="assets/backgrounds/bg-dark.jpg" onclick="setPreviewBg('assets/backgrounds/bg-dark.jpg', this)" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
-              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-dark.jpg" class="w-full h-full object-cover"></div>
-              <span data-bg-label class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Dark</span>
-            </button>
-            <button data-bg-btn data-bg-url="assets/backgrounds/bg-lot.jpg" onclick="setPreviewBg('assets/backgrounds/bg-lot.jpg', this)" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
-              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-lot.jpg" class="w-full h-full object-cover"></div>
-              <span data-bg-label class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Clean lot</span>
-            </button>
-            <button data-bg-btn id="customBgBtn" data-bg-url="" onclick="onCustomBgTileClick()" class="p-1 rounded-xl border border-dashed border-slate-300 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
-              <div class="h-10 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center">
-                <img id="customBgThumb" src="" alt="" class="w-full h-full object-cover hidden">
-                <i id="customBgIcon" class="fa-solid fa-cloud-arrow-up text-slate-400 text-sm"></i>
-              </div>
-              <span data-bg-label class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Your photo</span>
-            </button>
-          </div>
-          <input type="file" id="customBgInput" accept="image/*" class="hidden" onchange="onCustomBgFileChosen(this)">
-          <p id="customBgStatus" class="text-[10px] text-slate-400 leading-snug"></p>
         </div>
 
         <div id="photoCropPanel" class="hidden space-y-2 pt-1">
@@ -2229,7 +2170,7 @@ let selectedPostingSpeed = "standard";
 let selectedMinPhotos = 1;
 let previewVehicleIndex = -1;
 let photoCropPos = { x: 50, y: 50 };
-let photoEditTab = "background";
+let photoEditTab = "photo";
 let selectedPrefEmoji = "None";
 let selectedPrefDistance = "Miles";
 let selectedPrefLength = "Medium";
@@ -2589,18 +2530,13 @@ updateLastSyncDisplay();
       const chkFb = document.getElementById("chkChannelFacebookPage");
       if (chkFb) chkFb.checked = userChannels.facebook_page;
 
-      if (data.ai_background_mode) {
-        const aiSel = document.getElementById("selectAiBgMode");
-        if (aiSel) aiSel.value = data.ai_background_mode;
-      }
-
       // Location groups: restore the merge layer before inventory renders.
       locationGroups = Array.isArray(data.location_groups) ? data.location_groups : [];
       renderLocationGroupsSettings();
 
-      // Photo pipeline v1.1: branding frame + custom background restore.
-      // Runs BEFORE the ai_background_choice restore below so the custom
-      // tile carries its URL when the selection ring is matched.
+      // Branding frame restore. (The retired background feature also saved
+      // mode/choice/custom-background values to this table — they are
+      // simply no longer read.)
       if (data.dealership_address !== undefined && data.dealership_address !== null) {
         brandingState.address = data.dealership_address || "";
         const addrField = document.getElementById("settingsAddress");
@@ -2609,18 +2545,7 @@ updateLastSyncDisplay();
       brandingState.name = data.dealership_name || brandingState.name || "";
       brandingState.logoUrl = data.dealer_logo_url || "";
       brandingState.enabled = !!data.branding_frame_enabled;
-      if (data.custom_bg_url) {
-        customBgUrl = data.custom_bg_url;
-        syncCustomBgTile();
-      }
       syncBrandingPanelFromState();
-
-      if (data.ai_background_choice) {
-        applyPhotoBgSelection(data.ai_background_choice);
-        const pimg = document.getElementById("previewPhotoEditImg");
-        if (pimg) pimg.src = data.ai_background_choice;
-      }
-
       if (data.daily_post_limit !== undefined && data.daily_post_limit !== null) {
         userDailyPostLimit = data.daily_post_limit;
         // Real count, not the old hardcoded "1 of X"
@@ -3082,6 +3007,40 @@ function setViewMode(mode) {
   applyFilters();
 }
 
+// ==============================================================================
+// ==================== NO-PHOTO RULE ===========================================
+// ==============================================================================
+// HARD RULE: a vehicle with NO real photos is never posted. "Real" uses the
+// exact test the inventory renderers already apply when they swap a photo
+// for the placeholder: the URL must exist, be http(s) after normalising a
+// leading "//", must not contain the dealer's "/static/" placeholder path,
+// and must not be our own FALLBACK_IMAGE. A car's custom_photo_urls (when
+// present) count too — any one usable URL is enough. Enforced at the only
+// two places queue rows are created (enqueueMarketplaceCar and
+// bulkQueueSelectedVehicles), surfaced in the inventory rows ("No photo —
+// can't post") and in the Post Queue ("No photos — won't post"), and
+// mirrored in the extension so a queued car whose photos vanish is never
+// handed to the poster.
+function isUsablePhotoUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  let u = url.trim();
+  if (!u) return false;
+  if (u.startsWith('//')) u = 'https:' + u;
+  if (!/^https?:\/\//i.test(u)) return false;
+  if (u.includes('/static/')) return false;
+  if (u === FALLBACK_IMAGE) return false;
+  return true;
+}
+
+function hasRealPhoto(car) {
+  if (!car) return false;
+  if (isUsablePhotoUrl(car.image_url)) return true;
+  if (Array.isArray(car.custom_photo_urls)) {
+    return car.custom_photo_urls.some(isUsablePhotoUrl);
+  }
+  return false;
+}
+
 function renderGridRows(cars) {
   const grid = document.getElementById("inventoryGridView");
   const tbody = document.getElementById("inventoryTableBody");
@@ -3119,6 +3078,11 @@ function renderGridRows(cars) {
          <button data-action="remove-fb" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
            <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
          </button>`
+      : !hasRealPhoto(car)
+      ? `<span class="flex-1 px-4 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 cursor-not-allowed">
+           <i class="fa-solid fa-ban text-[10px]"></i>
+           <span>No photo — can't post</span>
+         </span>`
       : `<button data-action="enqueue" data-vin="${vinAttr}" class="flex-1 px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
            <i class="fa-solid fa-paper-plane text-[10px]"></i>
            <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
@@ -3261,6 +3225,11 @@ ${car.location_name ? `
                <button data-action="remove-fb" data-vin="${vinAttr}" id="btnRemoveFb_${vinAttr}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
                  <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
                </button>`
+            : !hasRealPhoto(car)
+            ? `<span class="px-4 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 font-bold text-xs inline-flex items-center gap-2 cursor-not-allowed">
+                 <i class="fa-solid fa-ban text-[10px]"></i>
+                 <span>No photo — can't post</span>
+               </span>`
             : `<button data-action="enqueue" data-vin="${vinAttr}" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
                  <i class="fa-solid fa-paper-plane text-[10px]"></i>
                  <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
@@ -3576,6 +3545,14 @@ async function loadPostingQueue() {
 
 const car = rawInventory.find(c => c.vin === item.vin) || null;
 
+// NO-PHOTO RULE: a pending item whose car has no real photos left is
+// blocked — it renders as "No photos — won't post" and the extension
+// fails it rather than handing it to the poster.
+const blockedNoPhoto = item.status === "pending" && !!car && !hasRealPhoto(car);
+const statusChip = blockedNoPhoto
+    ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No photos — won't post</span>`
+    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
+
     return `
 
         <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
@@ -3608,19 +3585,7 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 
                 <div class="flex flex-col items-end gap-2">
 
-                    <span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">
-                        ${
-                            item.status === "pending"
-                                ? "🟡 Pending"
-                                : item.status === "processing"
-                                ? "🔵 Processing"
-                                : item.status === "posted"
-                                ? "🟢 Posted"
-                                : item.status === "failed"
-                                ? "🔴 Failed"
-                                : escapeHtml(item.status)
-                        }
-                    </span>
+                    ${statusChip}
 
                     <button
                         data-action="queue-remove" data-id="${escapeHtml(item.id)}"
@@ -3671,6 +3636,15 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
         return;
     }
 
+    // NO-PHOTO RULE: photo-less cars are skipped, never queued — and the
+    // user is told how many were skipped, in the messages below.
+    const skippedNoPhoto = selectedVehicles.filter(car => !hasRealPhoto(car)).length;
+    const vehiclesToQueue = selectedVehicles.filter(car => hasRealPhoto(car));
+    if (!vehiclesToQueue.length) {
+        alert(`Nothing was queued: ${skippedNoPhoto} selected vehicle(s) have no photos.\n\nVehicles without real photos are never posted.`);
+        return;
+    }
+
     try {
 
         // Phase 6 fan-out: dedupe per (vin, channel), one row per channel
@@ -3682,7 +3656,7 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 
 const enabledChannels = getEnabledChannels();
 const rows = [];
-selectedVehicles.forEach(car => {
+vehiclesToQueue.forEach(car => {
     enabledChannels.forEach(channel => {
         if (existingKeys.has(`${car.vin}|${channel}`)) return;
         rows.push({
@@ -3701,9 +3675,9 @@ selectedVehicles.forEach(car => {
 
 if (!rows.length) {
 
-    alert(
-        "Selected vehicles are already queued."
-    );
+    alert(skippedNoPhoto
+        ? `Nothing new was queued: the rest are already queued, and ${skippedNoPhoto} vehicle(s) were skipped — no photos. Vehicles without real photos are never posted.`
+        : "Selected vehicles are already queued.");
 
     return;
 }
@@ -3723,9 +3697,10 @@ if (!rows.length) {
 
         refreshSafetyCounter();
 
-        alert(enabledChannels.length > 1
+        alert((enabledChannels.length > 1
             ? `${marketplaceRows} vehicle(s) queued across ${enabledChannels.length} channels (${rows.length} posts total).`
-            : `${rows.length} vehicle(s) queued.`);
+            : `${rows.length} vehicle(s) queued.`)
+            + (skippedNoPhoto ? `\n\n${skippedNoPhoto} vehicle(s) were skipped — no photos. Vehicles without real photos are never posted.` : ""));
 
     } catch (err) {
 
@@ -3773,6 +3748,12 @@ async function removeQueueItem(id) {
   
 async function enqueueMarketplaceCar(vin) {
   if (!currentUser) return;
+  // NO-PHOTO RULE: never queue a car with no real photos.
+  const carForQueue = rawInventory.find(c => c.vin === vin);
+  if (carForQueue && !hasRealPhoto(carForQueue)) {
+    alert("That vehicle has no photos, so it can't be posted.\n\nVehicles without real photos are never posted — the car needs real photos on the dealer's site first.");
+    return;
+  }
   try {
     if (!(await checkDailyLimit(1))) return;
 
@@ -4636,11 +4617,9 @@ function openAutoPhotoEditsModal() {
   // Branding panel reflects the latest account state (name may have been
   // edited in Settings since the modal last opened).
   syncBrandingPanelFromState();
-  syncCustomBgTile();
-  // Cut-out engine: (re)build the live composite preview for the current
-  // vehicle + selected background. Lazy — the engine module and AI model
-  // only download the first time this runs.
-  refreshCutoutPreview();
+  // Preview: the current vehicle's ORIGINAL photo (with the branding
+  // frame baked in when the frame is on).
+  refreshPhotoPreview();
 }
 function openPostingSafetyModal() { document.getElementById("postingSafetyModal").classList.remove("hidden"); }
 function openPostingPreferencesModal() { document.getElementById("postingPreferencesModal").classList.remove("hidden"); }
@@ -4795,7 +4774,7 @@ const GUIDES = {
     what: "This is the master switch for the three automations next to it: auto-posting new arrivals, auto delete & repost, and automatic photo edits. Flip it and all three flip with it.",
     steps: [
       "Flip the Automations switch on — the three cards beside it turn on with it.",
-      "Set each one up on its own card (frequency, background, limits). The master switch never changes their settings.",
+      "Set each one up on its own card (frequency, photo edits, limits). The master switch never changes their settings.",
       "Turn a single card off anytime without touching the others.",
       "The same Auto Posting switch also lives in Settings, under the Automation tab."
     ],
@@ -4847,18 +4826,17 @@ const GUIDES = {
     icon: "fa-solid fa-wand-magic-sparkles",
     iconClasses: "bg-pink-50 text-pink-600 border-pink-200",
     modal: "autoPhotoEditsModal",
-    what: "Pick a showroom background once, and your vehicle photos get the same treatment every time: the car is cut out of its dealer photo and placed on your background, and auto-crop keeps the part of the photo you choose in frame.",
+    what: "Your vehicles post with their real photos, exactly as they come from your dealer's website — nothing is replaced or generated. The only touches available here are an optional branding frame (your logo plus a strip with your dealership name, address and email) and auto-crop, which keeps the part of the photo you choose in frame.",
     steps: [
-      "Open this card and pick a background: Bright, Dark or Clean lot — or upload a photo of your own lot with the 'Your photo' tile.",
-      "Choose 'First photo only' (fastest), 'All photos', or 'Disabled'.",
+      "Open this card — the preview shows the selected vehicle's actual first photo, full size, exactly as it will post.",
+      "Optional: open the 'Branding' tab, flip on the frame, upload your store logo and check the name and address — the preview updates with the frame on it.",
       "Turn Auto-crop on, open the 'Adjust crop' tab and drag the photo to set what stays in frame, then pick 'Every photo' or 'First photo only' underneath.",
-      "Press Save settings — the background you picked saves to your account too."
+      "Press Save settings."
     ],
     notes: [
-      "The 'Branding' tab stamps your store logo plus a strip with your dealership name, address and email onto every edited photo — upload the logo once and it saves to your account.",
-      "The cut-out runs on your own device, right in the preview — your photos are not uploaded for it. It uses the full-quality AI model and your photos' full-size originals, so the first preview downloads the model once (about 176 MB); your browser keeps it for next time.",
-      "In this popup only the preview vehicle's first photo is processed. Using the edited photos automatically when a car posts is the next wiring step — for now you can download the finished preview from the popup.",
-      "If a photo cannot be processed, you see the original photo with a note — never a broken image."
+      "No real photos, no post: a vehicle with no photos on the dealer's site is never posted. Queueing skips it (and tells you how many were skipped), its row in Inventory says 'No photo — can't post', and if its photos disappear while it sits in the Post Queue it is marked 'No photos — won't post'.",
+      "The branding frame is drawn over your real photo — upload the logo once and it saves to your account.",
+      "The Download button saves the full-size photo on screen, frame included when the frame is on."
     ]
   },
   safety: {
@@ -4985,11 +4963,10 @@ function renderRibbonStatuses() {
 
   const peLbl = document.getElementById("photoEditStatusLabel");
   if (peLbl) {
-    const aiSel = document.getElementById("selectAiBgMode");
-    const aiMode = aiSel ? aiSel.value : "first_only";
+    // Photos post as the originals now (the AI background feature was
+    // retired) — this card's truth is just: branding frame? smart crop?
     const parts = [];
-    if (aiMode === "all_photos") parts.push("all photos");
-    else if (aiMode !== "disabled") parts.push("first photo");
+    if (brandingState.enabled) parts.push("branding frame");
     if (cropOn) parts.push("smart crop");
     peLbl.innerText = parts.length ? "On — " + parts.join(" · ") : "Off";
   }
@@ -5080,44 +5057,14 @@ function toggleSelectAllCars(master) {
   document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
 }
 
-let selectedPhotoBg = "assets/backgrounds/bg-bright.jpg";
-// Photo pipeline v1.1 state: the user's own uploaded background and the
-// branding frame (logo + contact strip). Both restore from user_settings
-// in loadUserStoreSettings and persist via best-effort upserts.
-let customBgUrl = "";
+// Branding frame state (logo + contact strip): restores from user_settings
+// in loadUserStoreSettings and persists via best-effort upserts.
 const brandingState = { enabled: false, logoUrl: "", name: "", address: "" };
-function setPreviewBg(url, btn) {
-  selectedPhotoBg = url;
-  applyPhotoBgSelection(url);
-  // Cut-out engine: recomposite onto the new background. If this vehicle's
-  // cut-out is already cached this is instant (no re-run of the AI removal).
-  refreshCutoutPreview();
-}
-function applyPhotoBgSelection(url) {
-  selectedPhotoBg = url;
-  document.querySelectorAll("[data-bg-btn]").forEach(b => {
-    const label = b.querySelector("[data-bg-label]");
-    // Built-ins match by their data-bg-url (falling back to the URL inside
-    // the onclick attribute); the custom tile only matches by data-bg-url,
-    // which is set when the user has uploaded their own background.
-    const btnUrl = b.getAttribute("data-bg-url") || "";
-    const onclickAttr = b.getAttribute("onclick") || "";
-    const active = (btnUrl && btnUrl === url) || (!!url && onclickAttr.includes(url));
-    b.classList.toggle("border-blue-600", active);
-    b.classList.toggle("border-slate-200", !active && !b.classList.contains("border-dashed"));
-    b.classList.toggle("border-slate-300", !active && b.classList.contains("border-dashed"));
-    if (label) {
-      label.classList.toggle("text-slate-900", active);
-      label.classList.toggle("text-slate-600", !active);
-    }
-  });
-}
 
-// ---------- Branding frame + custom background (v1.1) ----------
-// Assets live in the public "branding" Storage bucket under the user's own
-// folder (<user_id>/logo.<ext>, <user_id>/background.<ext>); the URLs are
-// kept on user_settings (dealer_logo_url / custom_bg_url) so they follow
-// the account across devices.
+// ---------- Branding frame ----------
+// The logo lives in the public "branding" Storage bucket under the user's
+// own folder (<user_id>/logo.<ext>); its URL is kept on user_settings
+// (dealer_logo_url) so it follows the account across devices.
 
 function syncBrandingPanelFromState() {
   const chk = document.getElementById("chkBrandingFrame");
@@ -5137,20 +5084,6 @@ function syncBrandingPanelFromState() {
   }
   if (empty) empty.classList.toggle("hidden", !!brandingState.logoUrl);
   if (removeBtn) removeBtn.classList.toggle("hidden", !brandingState.logoUrl);
-}
-
-function syncCustomBgTile() {
-  const thumb = document.getElementById("customBgThumb");
-  const icon = document.getElementById("customBgIcon");
-  const btn = document.getElementById("customBgBtn");
-  const replaceBtn = document.getElementById("customBgReplaceBtn");
-  if (thumb) {
-    thumb.src = customBgUrl || "";
-    thumb.classList.toggle("hidden", !customBgUrl);
-  }
-  if (icon) icon.classList.toggle("hidden", !!customBgUrl);
-  if (btn) btn.setAttribute("data-bg-url", customBgUrl || "");
-  if (replaceBtn) replaceBtn.classList.toggle("hidden", !customBgUrl);
 }
 
 // Best-effort persist of the branding fields (same pattern as the other
@@ -5174,7 +5107,7 @@ function onBrandingFrameToggle() {
   brandingState.enabled = !!(chk && chk.checked);
   persistBrandingSettings();
   // Re-render the preview so the frame appears/disappears immediately.
-  refreshCutoutPreview();
+  refreshPhotoPreview();
 }
 
 function readBrandingFieldsIntoState() {
@@ -5197,11 +5130,11 @@ function readBrandingFieldsIntoState() {
 function onBrandingFieldChange() {
   readBrandingFieldsIntoState();
   persistBrandingSettings();
-  if (brandingState.enabled) refreshCutoutPreview();
+  if (brandingState.enabled) refreshPhotoPreview();
 }
 
-// Upload one branding asset (logo or background) into the user's folder
-// and return its public URL.
+// Upload the branding logo into the user's folder and return its
+// public URL.
 async function uploadBrandingAsset(file, baseName) {
   const extMatch = (file.name || "").match(/\.([a-z0-9]+)$/i);
   const ext = extMatch ? extMatch[1].toLowerCase() : "png";
@@ -5226,7 +5159,7 @@ async function onBrandingLogoChosen(input) {
     syncBrandingPanelFromState();
     await persistBrandingSettings();
     if (status) status.innerText = "Logo saved to your account.";
-    if (brandingState.enabled) refreshCutoutPreview();
+    if (brandingState.enabled) refreshPhotoPreview();
   } catch (err) {
     console.error("[PhotoEngine] Logo upload failed:", err);
     if (status) status.innerText = "Upload failed: " + (err.message || "please try again");
@@ -5245,90 +5178,27 @@ async function removeBrandingLogo() {
   await persistBrandingSettings();
   const status = document.getElementById("brandingLogoStatus");
   if (status) status.innerText = "Logo removed. Your dealership name will be printed instead.";
-  if (brandingState.enabled) refreshCutoutPreview();
-}
-
-function onCustomBgTileClick() {
-  if (customBgUrl) {
-    setPreviewBg(customBgUrl);
-  } else {
-    const input = document.getElementById("customBgInput");
-    if (input) input.click();
-  }
-}
-
-async function onCustomBgFileChosen(input) {
-  const file = input.files && input.files[0];
-  input.value = "";
-  if (!file || !currentUser) return;
-  const status = document.getElementById("customBgStatus");
-  if (status) status.innerText = "Uploading your background…";
-  try {
-    const up = await uploadBrandingAsset(file, "background");
-    customBgUrl = up.url;
-    syncCustomBgTile();
-    try {
-      const { error } = await supabaseClient.from("user_settings").upsert({
-        user_id: currentUser.id,
-        custom_bg_url: customBgUrl,
-        updated_at: new Date().toISOString()
-      }, { onConflict: "user_id" });
-      if (error) console.warn("Custom background not persisted yet:", error.message);
-    } catch (e) { /* non-fatal: applies for this session */ }
-    if (status) status.innerText = "Your background is saved to your account.";
-    setPreviewBg(customBgUrl);
-  } catch (err) {
-    console.error("[PhotoEngine] Custom background upload failed:", err);
-    if (status) status.innerText = "Upload failed: " + (err.message || "please try again");
-  }
+  if (brandingState.enabled) refreshPhotoPreview();
 }
 
 // ==============================================================================
-// ==================== AI BACKGROUND CUT-OUT ENGINE (v1.1) ===================
-// v1.1: realism pass (defocused/graded background, tone harmonisation,
-// two-layer ground shadow, full-bleed 4:3 frame), Moses-style branding
-// frame (dealer logo + name/address/email strip), and user-uploaded custom
-// backgrounds. See PHOTO_ENGINE.md.
-// Client-side vehicle background removal + composite preview for the photo-
-// edits modal, powered by @imgly/background-removal (ISNet model running on
-// onnxruntime-web). Everything happens on the user's device: no API keys, no
-// server, no uploads — matching the app's local-first principle.
-//
-// Loading strategy (see PHOTO_ENGINE.md for the full story):
-//  - The library's raw dist/index.mjs is dynamic-import()ed lazily, only when
-//    the photo-edits modal first needs a cut-out. Never at app startup.
-//  - We deliberately do NOT use jsDelivr's "+esm" build of the library: it
-//    rewrites the onnxruntime-web peer import to an origin-relative
-//    "/npm/onnxruntime-web@..." path that 404s on any origin but jsDelivr's.
-//    The raw dist imports the bare specifier "onnxruntime-web", which the
-//    import map in <head> pins to the exact peer version (1.21.0).
-//  - The AI model + ONNX WASM binaries download once from the library's
-//    default publicPath (staticimgly.com/@imgly/background-removal-data/
-//    1.7.0/dist/resources.json — verified reachable, CORS open) and are
-//    cached by the browser afterwards.
-//
-// Scope guard: only the single preview vehicle's FIRST photo is ever
-// processed. Background switches recomposite from the cached cut-out and
-// never re-run the removal.
+// ==================== PHOTO PREVIEW — ORIGINALS ONLY ==========================
 // ==============================================================================
-const BG_ENGINE_MODULE_URL = "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/dist/index.mjs";
-let bgEngineModule = null;
-let bgEngineLoadPromise = null;
-let bgEngineModelReady = false;   // true after the first successful removal
-const cutoutCache = new Map();    // photoUrl -> { blobUrl, img, width, height, bbox }
-const cutoutInFlight = new Map(); // photoUrl -> Promise<cache entry>
-let currentCompositeDataUrl = null; // JPEG data URL of the on-screen composite
-let bgEngineSeq = 0;              // race guard: only the newest request may paint
+// RETIRED 2026-10-22 (Matthew's decision): the AI background cut-out engine
+// (@imgly/background-removal) is gone. Its composites looked fake, so
+// vehicles now post with their real photos, exactly as they come from the
+// dealer's website — nothing is cut out, replaced or generated. What
+// remains here is only what the photo-edits modal still needs:
+//   - a full-size preview of the vehicle's ORIGINAL photo (hi-res source),
+//   - the optional branding frame (dealer logo + name/address/email strip)
+//     baked over that original — applyBrandingFrame below,
+//   - the Adjust-crop focal point and the preview Download button.
+// Whether a vehicle may be posted at all is the no-photo rule's job —
+// see hasRealPhoto() with the inventory renderers.
+// ==============================================================================
 
-async function loadBgEngine() {
-  if (bgEngineModule) return bgEngineModule;
-  if (!bgEngineLoadPromise) {
-    bgEngineLoadPromise = import(BG_ENGINE_MODULE_URL)
-      .then(mod => { bgEngineModule = mod; return mod; })
-      .catch(err => { bgEngineLoadPromise = null; throw err; });
-  }
-  return bgEngineLoadPromise;
-}
+let currentPreviewDataUrl = null; // JPEG data URL of the rendered preview (framed or plain), once rendered
+let previewRenderSeq = 0;         // race guard: only the newest render may paint
 
 function loadEngineImage(src) {
   return new Promise((resolve, reject) => {
@@ -5351,18 +5221,6 @@ function setPreviewNote(text, isError) {
   el.className = "text-[10px] leading-snug " + (isError ? "text-red-500 font-semibold" : "text-slate-500");
 }
 
-function showPreviewEngineOverlay(statusText) {
-  const ov = document.getElementById("previewEngineOverlay");
-  if (ov) { ov.classList.remove("hidden"); ov.classList.add("flex"); }
-  const st = document.getElementById("previewEngineStatus");
-  if (st && statusText) st.innerText = statusText;
-}
-
-function hidePreviewEngineOverlay() {
-  const ov = document.getElementById("previewEngineOverlay");
-  if (ov) { ov.classList.add("hidden"); ov.classList.remove("flex"); }
-}
-
 function setDownloadPreviewEnabled(enabled) {
   const btn = document.getElementById("btnDownloadPreview");
   if (!btn) return;
@@ -5372,46 +5230,12 @@ function setDownloadPreviewEnabled(enabled) {
   btn.classList.toggle("cursor-pointer", enabled);
 }
 
-// Find the bounding box of non-transparent pixels in a cut-out PNG so the
-// vehicle can be placed by its actual silhouette (wheels on the ground line)
-// instead of by the edges of the original photo frame.
-function computeAlphaBBox(img) {
-  const w = img.naturalWidth, h = img.naturalHeight;
-  const full = { x: 0, y: 0, w: w, h: h };
-  try {
-    const c = document.createElement("canvas");
-    c.width = w; c.height = h;
-    const cx = c.getContext("2d", { willReadFrequently: true });
-    cx.drawImage(img, 0, 0);
-    const data = cx.getImageData(0, 0, w, h).data;
-    let minX = w, minY = h, maxX = -1, maxY = -1;
-    const step = 2; // sample every 2nd pixel — plenty for a bounding box
-    for (let y = 0; y < h; y += step) {
-      for (let x = 0; x < w; x += step) {
-        if (data[(y * w + x) * 4 + 3] > 12) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-    if (maxX < 0) return full;
-    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
-  } catch (e) {
-    console.warn("[PhotoEngine] Alpha bbox failed, using full frame:", e);
-    return full;
-  }
-}
-
 // DealerOn-style image services serve the size named in the URL, and the
-// inventory URLs ask for width=500 — a 500x375 thumbnail. The cut-out
-// engine composites onto a 1600x1200 canvas, so a thumbnail car stretched
-// 3.2x reads as pasted-on no matter how good the shadow is. Rewrite any
-// small numeric width / w sizing param to 1600 (the service's own cap:
-// width=2048 still returns 1600x1200) so the engine always works from
-// the full-size original. The cache key stays the ORIGINAL photo URL —
-// this only changes which bytes get fetched, never a photo's identity.
+// inventory URLs ask for width=500 — a 500x375 thumbnail. The preview and
+// the branding frame render at 1600x1200, so rewrite any small numeric
+// width / w sizing param to 1600 (the service's own cap: width=2048 still
+// returns 1600x1200) and always work from the full-size original. This
+// only changes which bytes get fetched, never a photo's identity.
 function hiResPhotoUrl(photoUrl) {
   try {
     const u = new URL(photoUrl);
@@ -5429,10 +5253,10 @@ function hiResPhotoUrl(photoUrl) {
   }
 }
 
-// Fetch a photo's bytes as a Blob for the engine. Order: hi-res direct,
-// hi-res via the photo-proxy Edge Function, then the original URL the
-// same two ways as a last resort. Display <img> tags elsewhere in the
-// app keep using the normal (thumbnail) URL — only the engine fetches
+// Fetch a photo's bytes as a Blob for the preview renders. Order: hi-res
+// direct, hi-res via the photo-proxy Edge Function, then the original URL
+// the same two ways as a last resort. Display <img> tags elsewhere in the
+// app keep using the normal (thumbnail) URL — only the preview fetches
 // hi-res. Returns null when every route fails.
 async function fetchPhotoBlob(photoUrl) {
   const hiRes = hiResPhotoUrl(photoUrl);
@@ -5458,49 +5282,6 @@ async function fetchPhotoBlob(photoUrl) {
   return null;
 }
 
-// Average luminance + saturation of an image, sampled tiny. For a cut-out
-// (alphaOnly=true) only near-opaque pixels count, so the transparent
-// surround doesn't drag the car's tone toward black.
-function sampleImageTone(img, alphaOnly) {
-  try {
-    const S = 24;
-    const c = document.createElement("canvas");
-    c.width = S; c.height = S;
-    const cx = c.getContext("2d", { willReadFrequently: true });
-    cx.drawImage(img, 0, 0, S, S);
-    const d = cx.getImageData(0, 0, S, S).data;
-    let lum = 0, sat = 0, n = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      if (alphaOnly && d[i + 3] < 200) continue;
-      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
-      lum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-      sat += mx === 0 ? 0 : (mx - mn) / mx;
-      n++;
-    }
-    if (!n) return null;
-    return { lum: lum / n, sat: sat / n };
-  } catch (e) {
-    return null;
-  }
-}
-
-// One elliptical shadow layer: a radial gradient squashed vertically.
-// Two of these (wide faint AO + tight dark contact patch) anchor the car
-// far better than one diffuse blob.
-function drawGroundShadow(ctx, cx, cy, radiusX, squash, alpha) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(1, squash);
-  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radiusX);
-  grad.addColorStop(0, "rgba(0,0,0," + alpha + ")");
-  grad.addColorStop(0.6, "rgba(0,0,0," + (alpha * 0.5) + ")");
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(0, 0, radiusX, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-}
-
 const brandingLogoCache = new Map(); // logoUrl -> Promise<img>
 function loadBrandingLogoImage(url) {
   if (!brandingLogoCache.has(url)) {
@@ -5516,7 +5297,7 @@ function currentUserEmail() {
   return (currentUser && currentUser.email) || "";
 }
 
-// The Moses-style frame, drawn LAST over a finished render: dealer logo
+// The Moses-style frame, drawn LAST over the original photo: dealer logo
 // top-left (or the dealership name in bold type when no logo is uploaded),
 // and a dark bottom strip with "Name • Address • email".
 async function applyBrandingFrame(ctx, W, H) {
@@ -5572,12 +5353,6 @@ async function applyBrandingFrame(ctx, W, H) {
   }
 }
 
-// Render the ORIGINAL photo (cover-fit, 1600x1200) with the branding frame
-// baked in — used when the preview is showing the original (AI disabled or
-// the cut-out failed) but the frame is on. Bytes come through
-// fetchPhotoBlob, so the framed render uses the hi-res source too, not
-// the 500px thumbnail. Returns a JPEG data URL, or null when the photo
-// bytes can't be read (caller keeps the plain photo).
 async function renderOriginalFramed(photoUrl) {
   const blob = await fetchPhotoBlob(photoUrl);
   if (!blob) return null;
@@ -5598,372 +5373,102 @@ async function renderOriginalFramed(photoUrl) {
   }
 }
 
-// Refine a raw cut-out's alpha matte before compositing. The model's edge
-// pixels carry a faint halo of the original background (light fringe on
-// bright paint, dark fringe on dark paint) that screams "pasted on". Three
-// cheap, deterministic passes on the alpha channel only:
-//   1. Erode ~1px (3x3 min filter) — chokes the fringe inward.
-//   2. Levels (black point 12, white point 243) — leftover halo alpha goes
-//      to 0, the true silhouette firms up.
-//   3. Feather ~1px (3x3 box blur) — so the choked edge isn't crunchy.
-// Runs once per photo at native resolution; the alpha bbox is computed
-// AFTER refinement, so placement uses the cleaned silhouette. Returns a
-// canvas, or null when anything fails (caller keeps the raw cut-out).
-function refineCutoutMatte(img) {
-  const w = img.naturalWidth, h = img.naturalHeight;
-  if (!w || !h) return null;
+// The same render WITHOUT the branding frame — used so the Download
+// button always saves the full-size original that is on screen, even when
+// the frame is off. Returns a JPEG data URL, or null when the photo bytes
+// can't be read (the plain photo simply stays on screen).
+async function renderOriginalPlain(photoUrl) {
+  const blob = await fetchPhotoBlob(photoUrl);
+  if (!blob) return null;
+  const objUrl = URL.createObjectURL(blob);
   try {
-    const c = document.createElement("canvas");
-    c.width = w; c.height = h;
-    const cx = c.getContext("2d", { willReadFrequently: true });
-    cx.drawImage(img, 0, 0);
-    const imageData = cx.getImageData(0, 0, w, h);
-    const data = imageData.data;
-    const n = w * h;
-    const src = new Uint8Array(n);
-    for (let i = 0, j = 3; i < n; i++, j += 4) src[i] = data[j];
-
-    // Pass 1 — erode (min over the 3x3 neighbourhood).
-    const eroded = new Uint8Array(n);
-    for (let y = 0; y < h; y++) {
-      const y0 = y > 0 ? y - 1 : 0, y1 = y < h - 1 ? y + 1 : h - 1;
-      for (let x = 0; x < w; x++) {
-        const x0 = x > 0 ? x - 1 : 0, x1 = x < w - 1 ? x + 1 : w - 1;
-        let m = 255;
-        for (let yy = y0; yy <= y1 && m > 0; yy++) {
-          const row = yy * w;
-          for (let xx = x0; xx <= x1; xx++) {
-            const v = src[row + xx];
-            if (v < m) m = v;
-          }
-        }
-        eroded[y * w + x] = m;
-      }
-    }
-
-    // Pass 2 — levels.
-    const leveled = new Uint8Array(n);
-    for (let i = 0; i < n; i++) {
-      const v = eroded[i];
-      leveled[i] = v <= 12 ? 0 : v >= 243 ? 255 : Math.round((v - 12) * 255 / 231);
-    }
-
-    // Pass 3 — feather (3x3 box blur).
-    const out = new Uint8Array(n);
-    for (let y = 0; y < h; y++) {
-      const y0 = y > 0 ? y - 1 : 0, y1 = y < h - 1 ? y + 1 : h - 1;
-      for (let x = 0; x < w; x++) {
-        const x0 = x > 0 ? x - 1 : 0, x1 = x < w - 1 ? x + 1 : w - 1;
-        let sum = 0, cnt = 0;
-        for (let yy = y0; yy <= y1; yy++) {
-          const row = yy * w;
-          for (let xx = x0; xx <= x1; xx++) { sum += leveled[row + xx]; cnt++; }
-        }
-        out[y * w + x] = Math.round(sum / cnt);
-      }
-    }
-
-    for (let i = 0, j = 3; i < n; i++, j += 4) data[j] = out[i];
-    cx.putImageData(imageData, 0, 0);
-    return c;
-  } catch (e) {
-    console.warn("[PhotoEngine] Matte refinement failed, using raw cut-out:", e);
-    return null;
+    const img = await loadEngineImage(objUrl);
+    const W = 1600, H = 1200;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+    const w = img.naturalWidth * s, h = img.naturalHeight * s;
+    ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } finally {
+    URL.revokeObjectURL(objUrl);
   }
 }
 
-// Run background removal for one photo URL (or reuse the cached / in-flight
-// result). Returns the cutout cache entry.
-async function getOrCreateCutout(photoUrl, onProgress) {
-  const cached = cutoutCache.get(photoUrl);
-  if (cached) return cached;
-  if (cutoutInFlight.has(photoUrl)) return cutoutInFlight.get(photoUrl);
-  const job = (async () => {
-    const mod = await loadBgEngine();
-    if (typeof mod.removeBackground !== "function") {
-      throw new Error("Background engine module loaded without removeBackground()");
-    }
-    // Photo bytes via fetchPhotoBlob: the HI-RES variant of the photo
-    // first (see hiResPhotoUrl — inventory URLs are 500px thumbnails),
-    // direct fetch (works when the dealer's photo server sends CORS
-    // headers), then our photo-proxy Edge Function (servers like
-    // mosescars.com send NO CORS headers, so the browser blocks direct
-    // reads — the proxy relays the bytes back with permission headers),
-    // then the original URL the same two ways. If every fetch fails,
-    // hand the library the URL as a last resort and let it fetch its
-    // own way.
-    let source = await fetchPhotoBlob(photoUrl);
-    if (!source) {
-      console.warn("[PhotoEngine] fetch->blob failed for photo; passing URL to engine instead");
-      source = photoUrl;
-    }
-    const cutoutBlob = await mod.removeBackground(source, {
-      // "large" = the full-precision ISNet model in @imgly/background-
-      // removal 1.7.0 (schema maps large->isnet, medium->isnet_fp16,
-      // small->isnet_quint8; manifest sizes 176 MB / 88 MB / 44 MB).
-      // Matte quality is the whole product here, so we pay the bigger
-      // one-time download; the browser caches it like before.
-      model: "large",
-      output: { format: "image/png", quality: 1 },
-      progress: (key, current, total) => { if (onProgress) onProgress(key, current, total); }
-    });
-    let blobUrl = URL.createObjectURL(cutoutBlob);
-    let img = await loadEngineImage(blobUrl);
-    // Edge cleanup: choke/feather the matte so no fringe of the original
-    // background survives around the silhouette. Best-effort — on any
-    // failure the raw cut-out is used.
-    const refined = refineCutoutMatte(img);
-    if (refined) {
-      const refinedBlob = await new Promise(res => refined.toBlob(res, "image/png"));
-      if (refinedBlob) {
-        blobUrl = URL.createObjectURL(refinedBlob);
-        img = await loadEngineImage(blobUrl);
-      }
-    }
-    const entry = {
-      blobUrl: blobUrl,
-      img: img,
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      bbox: computeAlphaBBox(img)
-    };
-    cutoutCache.set(photoUrl, entry);
-    bgEngineModelReady = true;
-    return entry;
-  })();
-  cutoutInFlight.set(photoUrl, job);
-  try { return await job; }
-  finally { cutoutInFlight.delete(photoUrl); }
-}
-
-// Draw background (cover-fit) + soft ground shadow + the cut-out vehicle,
-// bottom-aligned on the ground line, and export as a JPEG data URL.
-//
-// v1.1 realism pass: the background is defocused + lightly graded (a blurred
-// backdrop hides the perspective mismatch between the car's original photo
-// and the scene — the standard dealer-photo trick), the car's brightness /
-// saturation is nudged toward the scene's tone, and the ground shadow is
-// two layers (wide faint ambient occlusion + a tight dark contact patch at
-// the wheels) so the car sits ON the ground instead of floating over it.
-// The branding frame, when enabled, is drawn last over everything.
-async function renderComposite(cutout, bgUrl) {
-  const W = 1600, H = 1200; // 4:3 — matches the modal preview frame exactly
-  const canvas = document.createElement("canvas");
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext("2d");
-  const bgImg = await loadEngineImage(bgUrl);
-
-  // --- Background: cover-fit onto an offscreen canvas, then drawn through
-  // a blur/grade filter (guarded — browsers without ctx.filter just get the
-  // sharp background). Drawn slightly oversized so the blur can't feather
-  // the frame edges into transparency.
-  const bgCanvas = document.createElement("canvas");
-  bgCanvas.width = W; bgCanvas.height = H;
-  const bctx = bgCanvas.getContext("2d");
-  const bs = Math.max(W / bgImg.naturalWidth, H / bgImg.naturalHeight);
-  const bw = bgImg.naturalWidth * bs, bh = bgImg.naturalHeight * bs;
-  bctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh);
-  let filterApplied = false;
-  try {
-    ctx.filter = "blur(6px) brightness(1.02) contrast(0.98) saturate(0.96)";
-    filterApplied = ctx.filter !== "none" && ctx.filter !== "";
-  } catch (e) { filterApplied = false; }
-  if (filterApplied) {
-    ctx.drawImage(bgCanvas, -14, -14, W + 28, H + 28);
-    ctx.filter = "none";
-  } else {
-    ctx.drawImage(bgCanvas, 0, 0);
-  }
-
-  // --- Placement (alpha-trimmed silhouette, wheels on the ground line).
-  const bb = cutout.bbox || { x: 0, y: 0, w: cutout.width, h: cutout.height };
-  const groundY = H * 0.90;
-  const vs = Math.min((W * 0.95) / bb.w, (H * 0.85) / bb.h);
-  const vw = bb.w * vs, vh = bb.h * vs;
-  const vx = (W - vw) / 2, vy = groundY - vh;
-
-  // --- Ground shadow: wide, faint ambient occlusion first, then the tight
-  // dark contact patch centred a hair above the car's bottom edge so the
-  // tyres read as touching the floor.
-  drawGroundShadow(ctx, W / 2, groundY + vh * 0.012, vw * 0.58, 0.18, 0.18);
-  drawGroundShadow(ctx, W / 2, groundY - vh * 0.006, vw * 0.46, 0.10, 0.45);
-
-  // --- Vehicle, tone-harmonised toward the scene: compare average
-  // luminance/saturation of background vs cut-out and apply a gentle,
-  // clamped brightness()/saturate() to the car layer only.
-  const bgTone = sampleImageTone(bgImg, false);
-  const carTone = sampleImageTone(cutout.img, true);
-  let carFilter = "";
-  if (bgTone && carTone && carTone.lum > 0.02) {
-    const bF = Math.min(1.08, Math.max(0.92, Math.pow(bgTone.lum / carTone.lum, 0.35)));
-    const sF = Math.min(1.06, Math.max(0.94, 1 + (bgTone.sat - carTone.sat) * 0.3));
-    if (Math.abs(bF - 1) > 0.005 || Math.abs(sF - 1) > 0.005) {
-      carFilter = "brightness(" + bF.toFixed(3) + ") saturate(" + sF.toFixed(3) + ")";
-    }
-  }
-  if (carFilter) {
-    const carCanvas = document.createElement("canvas");
-    carCanvas.width = Math.max(2, Math.round(vw));
-    carCanvas.height = Math.max(2, Math.round(vh));
-    const cctx = carCanvas.getContext("2d");
-    let ok = false;
-    try {
-      cctx.filter = carFilter;
-      ok = cctx.filter !== "none" && cctx.filter !== "";
-    } catch (e) { ok = false; }
-    if (ok) {
-      cctx.drawImage(cutout.img, bb.x, bb.y, bb.w, bb.h, 0, 0, carCanvas.width, carCanvas.height);
-      cctx.filter = "none";
-      ctx.drawImage(carCanvas, vx, vy, vw, vh);
-    } else {
-      ctx.drawImage(cutout.img, bb.x, bb.y, bb.w, bb.h, vx, vy, vw, vh);
-    }
-  } else {
-    ctx.drawImage(cutout.img, bb.x, bb.y, bb.w, bb.h, vx, vy, vw, vh);
-  }
-
-  // --- Branding frame last, so it sits over scene + car alike.
-  if (brandingState.enabled) {
-    await applyBrandingFrame(ctx, W, H);
-  }
-  return canvas.toDataURL("image/jpeg", 0.9);
-}
-
-function paintComposite(img, dataUrl) {
-  lastOriginalPhotoUrl = null; // a composite supersedes any framed-original job
-  currentCompositeDataUrl = dataUrl;
-  // The preview frame is exactly 4:3 like the canvas, so "cover" fills it
-  // edge-to-edge with no letterbox bars and no distortion.
-  img.style.objectFit = "cover";
-  img.style.objectPosition = "50% 50%";
-  img.src = dataUrl;
-  setPreviewCaption("Live cut-out preview");
-  setPreviewNote("Cut out and composited on this device. Preview only for now — posting with edited photos arrives with the next wiring step.", false);
-  setDownloadPreviewEnabled(true);
-}
-
-// Which original photo the fallback path most recently painted — a framed
-// render that finishes late only swaps in if this still matches.
-let lastOriginalPhotoUrl = null;
-
-function paintOriginalFallback(img, photoUrl, note) {
-  lastOriginalPhotoUrl = photoUrl;
-  currentCompositeDataUrl = null;
-  img.style.objectFit = "cover";
-  img.src = photoUrl;
-  setPreviewCaption("Original Photo");
-  setPreviewNote(note || "Couldn't process this photo — showing the original.", true);
-  setDownloadPreviewEnabled(false);
-  // Branding frame still applies over the original when it's enabled:
-  // render the photo with the frame baked in and swap it in when ready.
-  // If the photo bytes can't be read, the plain photo simply stays.
-  if (brandingState.enabled) {
-    renderOriginalFramed(photoUrl).then(framedUrl => {
-      if (!framedUrl) return;
-      if (lastOriginalPhotoUrl !== photoUrl || !brandingState.enabled) return;
-      currentCompositeDataUrl = framedUrl;
-      img.src = framedUrl;
-      setDownloadPreviewEnabled(true);
-    }).catch(err => console.warn("[PhotoEngine] Framed-original render failed:", err));
-  }
-}
-
-// The conductor: called when the modal opens, when the vehicle cycles, when
-// the background changes, and when the AI mode select changes. Cached
-// cut-outs recomposite instantly; uncached ones run the removal exactly once.
-async function refreshCutoutPreview() {
+// The conductor: called when the modal opens, when the vehicle cycles and
+// when the branding frame changes. Always shows the vehicle's ORIGINAL
+// photo at full size — with the frame baked in when the frame is on —
+// and never a generated composite.
+async function refreshPhotoPreview() {
   const img = document.getElementById("previewPhotoEditImg");
   if (!img) return;
-  const seq = ++bgEngineSeq;
-  const isCurrent = () => seq === bgEngineSeq;
+  const seq = ++previewRenderSeq;
+  const isCurrent = () => seq === previewRenderSeq;
 
   const car = getCurrentPreviewCar();
   if (car) updatePreviewVehicleLabel(car);
 
   if (!car) {
-    // No inventory yet — keep the previous behaviour (background only).
-    lastOriginalPhotoUrl = null;
+    // No inventory yet — neutral placeholder, nothing to preview.
+    currentPreviewDataUrl = null;
     img.style.objectFit = "cover";
-    img.src = selectedPhotoBg;
-    currentCompositeDataUrl = null;
+    img.src = FALLBACK_IMAGE;
+    setPreviewCaption("Original photo");
+    setPreviewNote("Load your inventory to preview a vehicle's photo here.", false);
     setDownloadPreviewEnabled(false);
-    setPreviewCaption("Background Preview");
-    setPreviewNote("Load your inventory to preview a vehicle cut-out here.", false);
-    hidePreviewEngineOverlay();
-    return;
-  }
-
-  const modeSel = document.getElementById("selectAiBgMode");
-  if (modeSel && modeSel.value === "disabled") {
-    hidePreviewEngineOverlay();
-    paintOriginalFallback(img, normalizePhotoUrl(car.image_url), "");
-    setPreviewNote("AI background is set to Disabled — showing the original photo.", false);
     return;
   }
 
   const photoUrl = normalizePhotoUrl(car.image_url);
+  // Paint the full-size original immediately...
+  currentPreviewDataUrl = null;
+  setDownloadPreviewEnabled(false);
+  img.style.objectFit = "cover";
+  img.src = hiResPhotoUrl(photoUrl);
+  setPreviewCaption("Original photo — posts exactly as shown");
 
-  // Fast path: cut-out already cached → recomposite only.
-  const cached = cutoutCache.get(photoUrl);
-  if (cached) {
-    try {
-      const dataUrl = await renderComposite(cached, selectedPhotoBg);
-      if (!isCurrent()) return;
-      hidePreviewEngineOverlay();
-      paintComposite(img, dataUrl);
-    } catch (err) {
-      if (!isCurrent()) return;
-      console.error("[PhotoEngine] Composite failed:", err);
-      paintOriginalFallback(img, photoUrl);
-    }
+  if (!hasRealPhoto(car)) {
+    setPreviewNote("This vehicle has no photos on the dealer's site, so it can't be posted — vehicles without real photos are never posted.", true);
     return;
   }
 
-  // Slow path: run the removal for this photo (once — then it's cached).
-  showPreviewEngineOverlay(bgEngineModelReady
-    ? "Removing background…"
-    : "Loading the AI engine — first time downloads the model once…");
-  setPreviewNote("", false);
+  setPreviewNote(brandingState.enabled
+    ? "Your real photo with your branding frame on it — this is what posts."
+    : "Your real photo, exactly as it comes from your dealer's site — this is what posts.", false);
+
+  // ...then render the downloadable full-size version in the background:
+  // framed when the frame is on, plain when it's off. If the photo bytes
+  // can't be read, the plain photo above simply stays and Download stays
+  // off — never a broken image.
   try {
-    const entry = await getOrCreateCutout(photoUrl, (key, current, total) => {
-      if (!isCurrent()) return;
-      const st = document.getElementById("previewEngineStatus");
-      if (!st) return;
-      const pct = total ? Math.round((current / total) * 100) : null;
-      if (String(key).indexOf("fetch") === 0) {
-        st.innerText = "Downloading AI model" + (pct !== null ? " — " + pct + "%" : "…");
-      } else {
-        st.innerText = "Removing background" + (pct !== null ? " — " + pct + "%" : "…");
-      }
-    });
-    if (!isCurrent()) return;
-    const dataUrl = await renderComposite(entry, selectedPhotoBg);
-    if (!isCurrent()) return;
-    hidePreviewEngineOverlay();
-    paintComposite(img, dataUrl);
+    const dataUrl = brandingState.enabled
+      ? await renderOriginalFramed(photoUrl)
+      : await renderOriginalPlain(photoUrl);
+    if (!isCurrent() || !dataUrl) return;
+    currentPreviewDataUrl = dataUrl;
+    img.src = dataUrl;
+    setDownloadPreviewEnabled(true);
   } catch (err) {
-    if (!isCurrent()) return;
-    hidePreviewEngineOverlay();
-    console.error("[PhotoEngine] Background removal failed for " + photoUrl + ":", err);
-    paintOriginalFallback(img, photoUrl);
+    console.warn("[PhotoPreview] Full-size render failed; plain photo stays:", err);
   }
 }
 
-function downloadCompositePreview() {
-  if (!currentCompositeDataUrl) return;
+function downloadPhotoPreview() {
+  if (!currentPreviewDataUrl) return;
   const nameEl = document.getElementById("previewVehicleName");
   const label = ((nameEl && nameEl.innerText) || "vehicle").trim()
     .replace(/[^\w\- ]+/g, "").replace(/\s+/g, "-");
   const a = document.createElement("a");
-  a.href = currentCompositeDataUrl;
-  a.download = (label || "vehicle") + "-autolaunch-preview.jpg";
+  a.href = currentPreviewDataUrl;
+  a.download = (label || "vehicle") + "-autolaunch-photo.jpg";
   document.body.appendChild(a);
   a.click();
   a.remove();
 }
 
-// Button Audit: the photo-edits modal had three dead controls — "Try another
-// vehicle", and the Background / Adjust crop tabs. All three are wired now.
+// The renderers' own photo test, reused as the normaliser for the preview:
+// anything that is not a usable http(s) photo becomes the fallback image.
 function normalizePhotoUrl(url) {
   let u = url;
   if (u && u.startsWith('//')) u = 'https:' + u;
@@ -5997,25 +5502,22 @@ function cyclePreviewVehicle() {
   }
   previewVehicleIndex = (previewVehicleIndex + 1) % cars.length;
   updatePreviewVehicleLabel(cars[previewVehicleIndex]);
-  // Cut-out engine: build the composite for the newly selected vehicle
-  // (cached cut-outs recomposite instantly; new vehicles run removal once).
-  refreshCutoutPreview();
+  // Rebuild the preview for the newly selected vehicle.
+  refreshPhotoPreview();
 }
 
 function switchPhotoEditTab(tab) {
-  photoEditTab = (tab === "crop" || tab === "branding") ? tab : "background";
+  photoEditTab = (tab === "crop" || tab === "branding") ? tab : "photo";
   const on = "px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm cursor-pointer";
   const off = "px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer";
-  const bgBtn = document.getElementById("photoTabBackground");
+  const photoBtn = document.getElementById("photoTabPhoto");
   const cropBtn = document.getElementById("photoTabCrop");
   const brandingBtn = document.getElementById("photoTabBranding");
-  if (bgBtn) bgBtn.className = photoEditTab === "background" ? on : off;
+  if (photoBtn) photoBtn.className = photoEditTab === "photo" ? on : off;
   if (cropBtn) cropBtn.className = photoEditTab === "crop" ? on : off;
   if (brandingBtn) brandingBtn.className = photoEditTab === "branding" ? on : off;
-  const bgPanel = document.getElementById("photoBgPanel");
   const cropPanel = document.getElementById("photoCropPanel");
   const brandingPanel = document.getElementById("photoBrandingPanel");
-  if (bgPanel) bgPanel.classList.toggle("hidden", photoEditTab !== "background");
   if (cropPanel) cropPanel.classList.toggle("hidden", photoEditTab !== "crop");
   if (brandingPanel) brandingPanel.classList.toggle("hidden", photoEditTab !== "branding");
   const img = document.getElementById("previewPhotoEditImg");
@@ -6201,13 +5703,11 @@ async function saveAutoRepostPreferences() {
 
 async function saveAutoPhotoEdits() {
   if (!currentUser) return;
-  const aiMode = document.getElementById("selectAiBgMode").value;
   const autoCrop = document.getElementById("chkAutoCrop").checked;
 
   try {
     const { error } = await supabaseClient.from("user_settings").upsert({
       user_id: currentUser.id,
-      ai_background_mode: aiMode,
       auto_crop_enabled: autoCrop,
       updated_at: new Date().toISOString()
     }, { onConflict: "user_id" });
@@ -6229,16 +5729,6 @@ async function saveAutoPhotoEdits() {
       }, { onConflict: "user_id" });
       if (extraError) console.warn("Crop position/frequency not persisted yet:", extraError.message);
     } catch (e) { /* non-fatal: values still apply for this session */ }
-
-    // Persist WHICH background is selected (best-effort; column added 2026-10-22).
-    try {
-      const { error: bgError } = await supabaseClient.from("user_settings").upsert({
-        user_id: currentUser.id,
-        ai_background_choice: selectedPhotoBg,
-        updated_at: new Date().toISOString()
-      }, { onConflict: "user_id" });
-      if (bgError) console.warn("Background choice not persisted yet:", bgError.message);
-    } catch (e) { /* non-fatal: selection still applies for this session */ }
 
     // Branding frame: pick up any name/address edits typed in the panel
     // (change events normally persist them already) and flush the whole

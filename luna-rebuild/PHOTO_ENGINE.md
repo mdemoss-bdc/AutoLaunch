@@ -1,3 +1,12 @@
+> **RETIRED 2026-10-22 — background replacement removed by Matthew's decision; photos post as originals. Kept for history.**
+>
+> What replaced it: the photo-edits modal now previews the vehicle's real
+> photo at full size ("Photo | Adjust crop | Branding" tabs), the optional
+> branding frame still stamps the original, and a hard rule — a vehicle
+> with no real photos is never posted — is enforced by `hasRealPhoto()` in
+> the app and mirrored in the extension. Everything below describes the
+> retired engine.
+
 # AI Background Cut-Out Engine (v1)
 
 Powers the live preview in **Settings → Automatic photo edits**: the preview

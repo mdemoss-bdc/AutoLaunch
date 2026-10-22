@@ -116,6 +116,26 @@ async function checkQueue() {
       return;
     }
 
+    // NO-PHOTO RULE (mirrors hasRealPhoto in the web app): a vehicle with
+    // no real photos is never posted — its photos may have vanished after
+    // it was queued. Fail the row loudly, same as a missing car, instead
+    // of handing a photo-less listing to Facebook.
+    const FALLBACK_PHOTO = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+    const usablePhoto = u => {
+      if (!u || typeof u !== "string") return false;
+      let s = u.trim();
+      if (s.startsWith("//")) s = "https:" + s;
+      return /^https?:\/\//i.test(s) && !s.includes("/static/") && s !== FALLBACK_PHOTO;
+    };
+    const carRow = cars[0];
+    const hasPhoto = usablePhoto(carRow.image_url) ||
+      (Array.isArray(carRow.custom_photo_urls) && carRow.custom_photo_urls.some(usablePhoto));
+    if (!hasPhoto) {
+      await sbPatch(`auto_posting_queue?id=eq.${item.id}&status=eq.pending`, { status: "failed" });
+      await logFailure(item.id, "no_photos");
+      return;
+    }
+
     // Conditional claim: only succeeds while the row is still pending.
     const claimed = await sbPatch(
       `auto_posting_queue?id=eq.${item.id}&status=eq.pending`,
