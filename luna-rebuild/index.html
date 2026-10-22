@@ -6,7 +6,10 @@
 <!-- ============================================================================== -->
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>AutoLaunch | Dealer Intelligence & Automation Suite</title>
 <link rel="icon" href="data:,">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -76,6 +79,54 @@ body {
 .table-row-vibrant:hover {
   background-color: #f8fafc !important;
 }
+
+/* ============ Luna: mobile compatibility (iOS + Android) ============ */
+/* Desktop layout is untouched: everything below applies under 768px only. */
+@media (max-width: 767px) {
+  /* Sidebar becomes an off-canvas drawer, opened by the header menu button */
+  aside {
+    position: fixed !important;
+    top: 0; left: 0;
+    height: 100dvh !important;
+    z-index: 65 !important;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 0 40px rgba(15, 23, 42, 0.25);
+  }
+  aside.mobile-open { transform: translateX(0); }
+
+  /* Main column takes the full width, respects notch / home-bar insets */
+  main {
+    width: 100%;
+    height: 100dvh !important;
+    padding: 1rem 1rem calc(1.25rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  /* iOS Safari auto-zooms when a focused field is under 16px. Keep fields
+     at 16px on phones so the login screen does not jump or drift. */
+  input, select, textarea { font-size: 16px !important; }
+
+  /* Comfortable touch targets */
+  button, a { -webkit-tap-highlight-color: transparent; }
+  main button { min-height: 40px; }
+
+  /* Modal cards never exceed the visible screen; the card itself scrolls */
+  div.fixed.inset-0 { padding: 0.75rem !important; }
+  div.fixed.inset-0 > div {
+    max-height: calc(100dvh - 1.5rem) !important;
+    overflow-y: auto !important;
+    width: 100% !important;
+  }
+
+  /* Wide inner grids stack instead of crushing */
+  .grid-cols-12 { grid-template-columns: 1fr !important; }
+
+  /* Smooth momentum scrolling inside table / overflow regions */
+  .overflow-auto, .overflow-y-auto, .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+
+  /* Header title scales down so the bar fits small screens */
+  main h1 { font-size: 1.35rem !important; }
+}
 </style>
 </head>
 <!-- ============================================================================== -->
@@ -107,13 +158,13 @@ body {
     <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
       <div>
         <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Email</label>
-        <input type="email" id="authEmail" required placeholder="name@dealership.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
+        <input type="email" id="authEmail" required placeholder="name@dealership.com" autocomplete="email" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
       </div>
 
       <div>
         <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Password</label>
         <div class="relative">
-          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          <input type="password" id="authPassword" required placeholder="••••••••" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
           <button type="button" onclick="togglePasswordVisibility('authPassword', 'passwordToggleIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition focus:outline-none cursor-pointer">
             <i id="passwordToggleIcon" class="fa-regular fa-eye text-sm"></i>
           </button>
@@ -144,7 +195,7 @@ body {
         </div>
         <span class="brand-title font-black text-xl text-slate-900 tracking-tight">AutoLaunch</span>
       </div>
-      <button class="text-slate-400 hover:text-slate-700 text-xs p-1 cursor-pointer">
+      <button onclick="toggleMobileNav()" aria-label="Toggle menu" class="text-slate-400 hover:text-slate-700 text-xs p-1 cursor-pointer">
         <i class="fa-solid fa-bars-staggered"></i>
       </button>
     </div>
@@ -462,7 +513,11 @@ body {
 
 <div class="flex items-center justify-between">
 
-  <div>
+  <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
+    <i class="fa-solid fa-bars"></i>
+  </button>
+
+  <div class="flex-1 min-w-0">
 
     <h1 class="text-2xl font-black text-slate-900 tracking-tight">
       Inventory
@@ -1631,6 +1686,21 @@ function switchAuthMode(mode) {
     submitBtn.innerText = "Register";
   }
 }
+
+// Luna mobile: slide the sidebar drawer in/out on phones (no-op styling on desktop)
+function toggleMobileNav() {
+  const aside = document.querySelector("aside");
+  if (aside) aside.classList.toggle("mobile-open");
+}
+// Close the drawer after picking a destination on phones
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("aside a").forEach(function (link) {
+    link.addEventListener("click", function () {
+      const aside = document.querySelector("aside");
+      if (aside) aside.classList.remove("mobile-open");
+    });
+  });
+});
 
 function togglePasswordVisibility(inputId, iconId) {
   const passInput = document.getElementById(inputId);
