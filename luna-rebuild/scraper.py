@@ -1,11 +1,33 @@
 import asyncio
+import json
 import os
 import re
 import sys
 from typing import List
 from datetime import datetime, timezone
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from playwright.async_api import async_playwright
 from supabase import create_client
+
+# =============================================================================
+# NOTES (2026-10-22)
+# - PHOTOS: scraped_inventory.photos (jsonb, added 2026-10-22) holds up to 20
+#   gallery URLs per vehicle, hero first, each rewritten to the hi-res
+#   width=1600 form. SRP cards only ever expose ONE photo, so after each SRP
+#   page is extracted the scraper fetches every vehicle's VDP (raw HTML via
+#   the browser context — DealerOn serves the full gallery server-side) and
+#   harvests the gallery from the /inventoryphotos/<dealer>/<vin>/ip/N.jpg
+#   sequence. image_url is kept equal to photos[0] for backward compat, and
+#   the extension already flows `photos` through its select-* car fetch.
+# - PRICE RULE (Matthew, 2026-10-22 15:36 EDT; supersedes the morning's
+#   retail choice): store the ADVERTISED FINAL price (DealerOn's featured
+#   "Moses Price" = retail - savings + doc fee), never the retail line.
+#   Extraction keys off the featured-price element (.vehiclePricingHighlight-
+#   Amount) and stack position (final total = last price row), not labels.
+#   The VDP JSON-LD offers.price is that same final price and overrides the
+#   SRP value when the VDP is fetched. Acceptance: Sentra -> 11222,
+#   Tucson -> 11327.
+# =============================================================================
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or "https://tdsipiltwajwhzgjsupx.supabase.co"
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w"
