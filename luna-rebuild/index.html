@@ -215,6 +215,11 @@ body.dark-shell .nav-selected {
   background: linear-gradient(135deg, var(--d-electric), var(--d-electric-deep)) !important;
   box-shadow: 0 6px 18px rgba(var(--glow-rgb), 0.45) !important;
 }
+/* Get Started indicator dot: its fill already follows the accent via the
+   global .bg-blue-600 rule; re-point its blue-400 glow the same way.
+   Midnight's --accent-strong-rgb IS #60A5FA, so this is pixel-identical
+   under the default theme. */
+body.dark-shell aside .shadow-blue-400 { --tw-shadow-color: rgba(var(--accent-strong-rgb), 0.9); }
 
 /* ---- Surfaces ------------------------------------------------------------ */
 /* Order matters: .glass-card comes after .bg-white so cards win the tie. */
@@ -225,7 +230,7 @@ body.dark-shell :is(aside, main) .bg-slate-50\/80 { background-color: var(--d-de
 body.dark-shell :is(aside, main) .bg-slate-100 { background-color: rgba(148, 163, 184, 0.12); }
 body.dark-shell :is(aside, main) .bg-slate-200 { background-color: var(--d-track); }
 body.dark-shell :is(aside, main) .bg-blue-50 { background-color: rgba(var(--accent-rgb), 0.14); }
-body.dark-shell :is(aside, main) .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.16); }
+body.dark-shell :is(aside, main) .bg-indigo-50 { background-color: rgba(var(--accent-rgb), 0.14); }
 body.dark-shell :is(aside, main) .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.13); }
 body.dark-shell :is(aside, main) .bg-amber-50 { background-color: rgba(245, 158, 11, 0.13); }
 body.dark-shell :is(aside, main) .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
@@ -239,9 +244,14 @@ body.dark-shell :is(aside, main) .glass-card:hover {
   box-shadow: 0 14px 30px rgba(2, 6, 17, 0.55);
 }
 
-/* Ribbon cards: deepen the brand wash for dark; hairline stays blue→sky */
+/* Ribbon cards: deepen the brand wash for dark; the hairline (painted by
+   the base .ribbon-card::before with literal blues) is re-pointed at the
+   accent tokens so it follows the theme like the wash does. */
 body.dark-shell main .ribbon-card {
   background-image: linear-gradient(180deg, rgba(var(--accent-rgb), 0.10), rgba(var(--accent-rgb), 0) 55%);
+}
+body.dark-shell main .ribbon-card::before {
+  background: linear-gradient(90deg, rgb(var(--btn-rgb)), rgb(var(--accent-strong-rgb)));
 }
 body.dark-shell main #ribbonSafetyBar { box-shadow: 0 0 8px rgba(245, 158, 11, 0.55); }
 
@@ -255,8 +265,8 @@ body.dark-shell :is(aside, main) .text-slate-500 { color: var(--d-micro); }
 body.dark-shell :is(aside, main) .text-slate-400 { color: var(--d-faint); }
 body.dark-shell :is(aside, main) .text-slate-300 { color: var(--d-fainter); }
 body.dark-shell :is(aside, main) .text-blue-600 { color: var(--d-link); }
-body.dark-shell :is(aside, main) .text-indigo-700 { color: #A5B4FF; }
-body.dark-shell :is(aside, main) .text-sky-600 { color: #38BDF8; }
+body.dark-shell :is(aside, main) .text-indigo-700 { color: var(--d-link-bright); }
+body.dark-shell :is(aside, main) .text-sky-600 { color: var(--d-link-bright); }
 body.dark-shell :is(aside, main) .text-purple-600 { color: #C09BFF; }
 body.dark-shell :is(aside, main) .text-emerald-700 { color: #34D399; }
 body.dark-shell :is(aside, main) .text-amber-700 { color: #FBBF24; }
@@ -267,7 +277,7 @@ body.dark-shell :is(aside, main) .border-slate-200 { border-color: var(--d-edge)
 body.dark-shell :is(aside, main) .border-slate-300 { border-color: var(--d-field-edge); }
 body.dark-shell :is(aside, main) .border-slate-100 { border-color: var(--d-line); }
 body.dark-shell :is(aside, main) .border-blue-200 { border-color: rgba(var(--accent-rgb), 0.35); }
-body.dark-shell :is(aside, main) .border-indigo-200 { border-color: rgba(99, 102, 241, 0.38); }
+body.dark-shell :is(aside, main) .border-indigo-200 { border-color: rgba(var(--accent-rgb), 0.35); }
 body.dark-shell :is(aside, main) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.35); }
 body.dark-shell :is(aside, main) .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
 body.dark-shell :is(aside, main) .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
