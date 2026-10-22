@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#2563eb">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>AutoLaunch | Dealer Intelligence & Automation Suite</title>
+<title>AutoLaunch — Intelligence Suite</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/x-icon" href="icons/favicon.ico">
@@ -77,6 +77,21 @@ body {
 }
 .nav-selected i {
   color: #ffffff !important;
+}
+
+/* Ribbon cards: one shared AutoLaunch brand treatment — a blue-to-sky
+   gradient hairline across the top and a faint brand wash fading down. */
+.ribbon-card {
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(180deg, rgba(37, 99, 235, 0.05), rgba(37, 99, 235, 0) 60%);
+}
+.ribbon-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
 }
 
 .btn-gradient {
@@ -205,7 +220,10 @@ body {
     <div class="flex items-center justify-between px-2 pt-1 pb-1">
       <div class="flex items-center gap-2.5">
         <img src="icons/logo-mark-512.png" alt="AutoLaunch" class="w-7 h-7 rounded-lg shadow-md shadow-blue-500/20 object-cover">
-        <span class="brand-title font-black text-xl text-slate-900 tracking-tight">AutoLaunch</span>
+        <div>
+          <span class="brand-title font-black text-xl text-slate-900 tracking-tight block leading-none">AutoLaunch</span>
+          <span class="text-[9px] font-bold tracking-widest text-blue-600 uppercase block mt-1">Intelligence Suite</span>
+        </div>
       </div>
       <button onclick="toggleMobileNav()" aria-label="Toggle menu" class="text-slate-400 hover:text-slate-700 text-xs p-1 cursor-pointer">
         <i class="fa-solid fa-bars-staggered"></i>
@@ -223,7 +241,7 @@ body {
         <span class="w-2 h-2 rounded-full bg-blue-600 shadow-sm shadow-blue-400 ml-auto"></span>
       </a>
       <a href="#" onclick="showInventoryPage(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
-        <i class="fa-solid fa-chart-line w-4 text-cyan-600 text-xs"></i>
+        <i class="fa-solid fa-chart-line w-4 text-sky-600 text-xs"></i>
         <span>Dashboard</span>
       </a>
     </div>
@@ -247,24 +265,24 @@ body {
       </a>
       <a href="#" onclick="showEliteInfo('Calendar'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
-          <i class="fa-regular fa-calendar w-4 text-emerald-600 text-xs"></i>
+          <i class="fa-regular fa-calendar w-4 text-sky-600 text-xs"></i>
           <span>Calendar</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">Elite</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-200">Elite</span>
       </a>
       <a href="#" onclick="showEliteInfo('AI Training'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-wand-magic-sparkles w-4 text-pink-600 text-xs"></i>
+          <i class="fa-solid fa-wand-magic-sparkles w-4 text-blue-600 text-xs"></i>
           <span>AI Training</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pink-50 text-pink-600 border border-pink-200">Elite</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-200">Elite</span>
       </a>
       <a href="#" onclick="showEliteInfo('Playground'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-flask w-4 text-amber-600 text-xs"></i>
+          <i class="fa-solid fa-flask w-4 text-sky-600 text-xs"></i>
           <span>Playground</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200">Elite</span>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-200">Elite</span>
       </a>
     </div>
 
@@ -277,10 +295,10 @@ body {
       </a>
       <a href="#" onclick="openQueueModal()" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-list-check w-4 text-cyan-600 text-xs"></i>
+          <i class="fa-solid fa-list-check w-4 text-blue-600 text-xs"></i>
           <span>Post Queue</span>
         </div>
-        <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-cyan-500 text-[10px] font-mono font-bold text-white">0</span>
+        <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-600 text-[10px] font-mono font-bold text-white">0</span>
       </a>
     </div>
 
@@ -338,7 +356,7 @@ body {
         <div class="glass-card rounded-3xl p-8">
 
           <h1 class="text-3xl font-black text-slate-900">
-            Welcome To AutoLaunch
+            Welcome to AutoLaunch
           </h1>
 
           <p class="text-slate-500 mt-2">
@@ -656,7 +674,7 @@ body {
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
     
     <!-- 1. Automations -->
-    <div onclick="openSettingsModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-blue-600 shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
+    <div onclick="openSettingsModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
           <i class="fa-solid fa-bolt text-blue-600 text-xs"></i> Automations
@@ -677,67 +695,67 @@ body {
     </div>
 
     <!-- 2. Auto-post new arrivals -->
-    <div onclick="openAutoPostModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-purple-600 shadow-sm space-y-2 cursor-pointer transition hover:border-purple-300">
+    <div onclick="openAutoPostModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
           Auto-post new arrivals <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
         <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonArrivals" onchange="toggleRibbonSetting('auto_arrivals')" class="sr-only peer">
-          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-purple-600"></div>
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
       <div>
         <p id="ribbonAutoPostStatusLabel" class="text-[10px] text-slate-500">Off</p>
-        <span class="text-[10px] text-purple-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('autopost')">
-          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
+        <span class="text-[10px] text-blue-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('autopost')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How it works
         </span>
       </div>
     </div>
 
     <!-- 3. Auto delete & repost -->
-    <div onclick="openAutoRepostModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-emerald-600 shadow-sm space-y-2 cursor-pointer transition hover:border-emerald-300">
+    <div onclick="openAutoRepostModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
           Auto delete & repost <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
         <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonRepost" checked onchange="toggleRibbonSetting('auto_repost')" class="sr-only peer">
-          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
       <div>
         <p id="repostFrequencyLabel" class="text-[10px] text-slate-500">Every 3 days</p>
-        <span class="text-[10px] text-emerald-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('repost')">
-          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
+        <span class="text-[10px] text-blue-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('repost')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How it works
         </span>
       </div>
     </div>
 
     <!-- 4. Automatic photo edits -->
-    <div onclick="openAutoPhotoEditsModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-pink-600 shadow-sm space-y-2 cursor-pointer transition hover:border-pink-300">
+    <div onclick="openAutoPhotoEditsModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
           Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
         <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonPhotoCrop" checked onchange="toggleRibbonSetting('auto_crop')" class="sr-only peer">
-          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-pink-600"></div>
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
       <div>
         <p id="photoEditStatusLabel" class="text-[10px] text-slate-500">On — first photo · smart crop</p>
-        <span class="text-[10px] text-pink-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('photoedits')">
-          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
+        <span class="text-[10px] text-blue-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('photoedits')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How it works
         </span>
       </div>
     </div>
 
-    <!-- 5. Posting safety -->
-    <div onclick="openPostingSafetyModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-amber-600 shadow-sm space-y-2 cursor-pointer transition hover:border-amber-300">
+    <!-- 5. Safe posting limits -->
+    <div onclick="openPostingSafetyModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
-          Posting safety <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+          Safe posting limits <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
       </div>
       <div>
@@ -745,14 +763,14 @@ body {
         <div class="w-full bg-slate-200 rounded-full h-1 mt-1.5 mb-1.5">
           <div id="ribbonSafetyBar" class="bg-amber-500 h-1 rounded-full w-[20%]"></div>
         </div>
-        <span class="text-[10px] text-amber-600 flex items-center gap-1 font-semibold" onclick="event.stopPropagation(); openGuide('safety')">
-          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
+        <span class="text-[10px] text-blue-600 flex items-center gap-1 font-semibold" onclick="event.stopPropagation(); openGuide('safety')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How it works
         </span>
       </div>
     </div>
 
     <!-- 6. Posting preferences -->
-    <div onclick="openPostingPreferencesModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-cyan-600 shadow-sm space-y-2 cursor-pointer transition hover:border-cyan-300">
+    <div onclick="openPostingPreferencesModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
           Posting preferences <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
@@ -760,8 +778,8 @@ body {
       </div>
       <div>
         <p id="ribbonPrefsStatusLabel" class="text-[10px] text-slate-500 truncate">AI text · Medium</p>
-        <span class="text-[10px] text-cyan-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('preferences')">
-          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
+        <span class="text-[10px] text-blue-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('preferences')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How it works
         </span>
       </div>
     </div>
@@ -897,7 +915,7 @@ body {
             <th class="py-3.5 px-4">CAR</th>
             <th class="py-3.5 px-4">PRICE & MILES</th>
             <th class="py-3.5 px-4">STATUS</th>
-            <th class="py-3.5 px-4 text-right">WHAT YOU CAN DO</th>
+            <th class="py-3.5 px-4 text-right">LAUNCH IT</th>
           </tr>
         </thead>
         <tbody id="inventoryTableBody" class="divide-y divide-slate-100 text-slate-700">
@@ -1382,7 +1400,7 @@ body {
           <p class="text-sm text-slate-500">
             Marketplace posting runs through the AutoLaunch Chrome extension, inside your own
             signed-in Facebook session — there is no token or key to paste here, by design.
-            Cars you queue are picked up by the extension and posted with your daily safety limit.
+            Cars you queue are picked up by the extension and posted within your daily posting limit.
           </p>
           <div class="flex flex-wrap gap-3">
             <button onclick="closeModal('settingsModal'); openQueueModal()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
@@ -1460,12 +1478,12 @@ body {
   <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
     <div class="flex items-center justify-between border-b border-slate-200 pb-3">
       <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-        <i class="fa-solid fa-list-check text-cyan-600"></i> Active Post Queue
+        <i class="fa-solid fa-list-check text-blue-600"></i> Active Post Queue
       </h3>
       <button onclick="closeModal('queueModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
     <div id="queueItemsList" class="space-y-2">
-      <p class="text-xs text-slate-400 text-center py-8">Your post queue is currently empty.</p>
+      <p class="text-xs text-slate-400 text-center py-8">Nothing queued yet. Pick a car in Inventory and press Post To Facebook — it lines up here, ready to launch.</p>
     </div>
   </div>
 </div>
@@ -1569,7 +1587,7 @@ body {
     </div>
 
     <p class="text-xs text-slate-600 leading-relaxed">
-      Set it once — every vehicle you post gets these edits automatically. Included in your plan.
+      Set it up once. From then on, every vehicle you post gets the same polished treatment — background, branding and crop handled automatically.
     </p>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1729,13 +1747,13 @@ body {
   </div>
 </div>
 
-<!-- 10. Posting Safety Configuration Modal -->
+<!-- 10. Safe Posting Limits Configuration Modal -->
 <div id="postingSafetyModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl border border-slate-200 relative text-slate-900 bg-white max-h-[90vh] overflow-y-auto">
     
     <div class="flex items-center justify-between border-b border-slate-200 pb-3">
       <div>
-        <h3 class="text-base font-bold text-slate-900">Posting safety</h3>
+        <h3 class="text-base font-bold text-slate-900">Safe posting limits</h3>
         <p class="text-[11px] text-slate-500">Limits and pacing that keep your Facebook account out of trouble.</p>
       </div>
       <button onclick="closeModal('postingSafetyModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -1809,7 +1827,7 @@ body {
     
     <div class="flex items-center justify-between border-b border-slate-200 pb-4">
       <div>
-        <h3 class="text-base font-bold text-slate-900">Posting</h3>
+        <h3 class="text-base font-bold text-slate-900">Posting preferences</h3>
         <p class="text-[11px] text-slate-500">The same settings as your extension. Change them here or there, they stay in sync.</p>
       </div>
       <button onclick="closeModal('postingPreferencesModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -2931,7 +2949,7 @@ function renderGridRows(cars) {
   if (tbody) tbody.innerHTML = ""; // keep checkbox indexing 1:1 with the grid
 
   if (!cars.length) {
-    grid.innerHTML = '<div class="col-span-full py-16 text-center text-slate-400 text-xs">No vehicles match your search.</div>';
+    grid.innerHTML = '<div class="col-span-full py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</div>';
     return;
   }
 
@@ -3008,7 +3026,7 @@ function renderTableRows(cars) {
   if (gridEl) gridEl.innerHTML = "";
 
   if (!cars.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">No vehicles match your search.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</td></tr>';
     return;
   }
 
@@ -3407,7 +3425,7 @@ async function loadPostingQueue() {
 
             queueList.innerHTML = `
                 <p class="text-xs text-slate-400 text-center py-8">
-                    Your post queue is currently empty.
+                    Nothing queued yet. Pick a car in Inventory and press Post To Facebook — it lines up here, ready to launch.
                 </p>
             `;
 
@@ -4621,9 +4639,9 @@ function syncRibbonMasterCheckbox() {
 }
 
 // ==============================================================================
-// ===================== FEATURE GUIDES (How to use) ============================
+// ===================== FEATURE GUIDES (How it works) ==========================
 // ==============================================================================
-// The ribbon cards' "How to use" links open ONE reusable modal (guideModal)
+// The ribbon cards' "How it works" links open ONE reusable modal (guideModal)
 // filled from this map. Copy is written against what the rebuild actually
 // does today — saved settings, the Post Queue, the Chrome extension, the
 // on-device photo engine — and says plainly where a step is still queued.
@@ -4643,7 +4661,7 @@ const GUIDES = {
     ],
     notes: [
       "The master switch only shows on when all three cards are on. If just some are on, this card says so instead of pretending.",
-      "Automations work through the Post Queue and the Chrome extension, and every post counts against your daily safety limit."
+      "Automations work through the Post Queue and the Chrome extension, and every post counts against your daily posting limit."
     ]
   },
   autopost: {
@@ -4661,7 +4679,7 @@ const GUIDES = {
     notes: [
       "New arrivals are picked up when your inventory syncs from your website feed.",
       "Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.",
-      "Every auto-posted car counts against your daily safety limit, same as cars you queue by hand.",
+      "Every auto-posted car counts against your daily posting limit, same as cars you queue by hand.",
       "A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website."
     ]
   },
@@ -4679,7 +4697,7 @@ const GUIDES = {
     ],
     notes: [
       "Confirm mode is the extension default: it fills the listing in and waits for you to click Publish, so nothing posts without you seeing it first.",
-      "Reposts count against your daily safety limit.",
+      "Reposts count against your daily posting limit.",
       "Cars that sell or leave your website are never reposted.",
       "If Facebook asks you to log in or confirm your identity, the job stops and is marked failed — the extension never types into those screens."
     ]
@@ -4704,7 +4722,7 @@ const GUIDES = {
     ]
   },
   safety: {
-    title: "Posting safety",
+    title: "Safe posting limits",
     icon: "fa-solid fa-shield-halved",
     iconClasses: "bg-amber-50 text-amber-600 border-amber-200",
     modal: "postingSafetyModal",
@@ -4849,7 +4867,7 @@ function renderRibbonStatuses() {
   }
 }
 
-// ---- Daily posting safety limit -------------------------------------------
+// ---- Daily posting limit (Safe posting limits) -----------------------------
 // Usage today = queue rows created today that are not failed, plus cars
 // whose marketplace_posted_at is today and were not already counted above.
 async function getDailyPostUsage() {
@@ -4891,8 +4909,8 @@ async function checkDailyLimit(adding) {
   updateSafetyCounterUI(used, limit);
   if (used + adding > limit) {
     alert(
-      `Daily posting safety limit reached: ${used} of ${limit} used today.\n\n` +
-      `Raise the limit under Posting Safety, or queue again tomorrow. ` +
+      `Daily posting limit reached: ${used} of ${limit} used today.\n\n` +
+      `Raise the limit under Safe Posting Limits, or queue again tomorrow. ` +
       `Nothing was queued.`
     );
     return false;
@@ -6003,9 +6021,9 @@ async function savePostingSafetyPreferences() {
     refreshSafetyCounter();
 
     closeModal('postingSafetyModal');
-    alert("✓ Posting safety rules saved successfully!");
+    alert("✓ Safe posting limits saved!");
   } catch (err) {
-    alert("Could not save safety preferences: " + err.message);
+    alert("Could not save safe posting limits: " + err.message);
   }
 }
 
