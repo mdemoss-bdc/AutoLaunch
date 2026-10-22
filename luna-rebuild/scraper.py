@@ -117,9 +117,19 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                                 let price = null;
                                 if (item.offers) {
                                     const offer = Array.isArray(item.offers) ? item.offers[0] : item.offers;
-                                    if (offer && offer.price) {
-                                        const p = parseInt(String(offer.price).replace(/[^0-9]/g, ''));
-                                        if (p >= 4000 && p <= 350000) price = p;
+                                    if (offer) {
+                                        // Dealer platforms bury the price in different spots:
+                                        // offers.price, offers.priceSpecification(.price), AggregateOffer.lowPrice
+                                        let rawPrice = offer.price;
+                                        if (rawPrice == null && offer.priceSpecification) {
+                                            const spec = Array.isArray(offer.priceSpecification) ? offer.priceSpecification[0] : offer.priceSpecification;
+                                            if (spec) rawPrice = spec.price;
+                                        }
+                                        if (rawPrice == null && offer.lowPrice != null) rawPrice = offer.lowPrice;
+                                        if (rawPrice != null) {
+                                            const p = parseInt(String(rawPrice).replace(/[^0-9]/g, ''));
+                                            if (p >= 1000 && p <= 350000) price = p;
+                                        }
                                     }
                                 }
 
@@ -192,7 +202,60 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             });
         } catch(e) {}
 
-        if (results.length > 0) return results;
+        if (results.length > 0) {
+            // PRICE FILL PASS: JSON-LD often has VIN/stock/miles but no usable price
+            // (Moses/DealerOn hides it in the visible card). For any result still
+            // missing a price, find its card in the DOM by VIN and read the price there.
+            const missingPrice = results.filter(r => !r.price);
+            if (missingPrice.length > 0) {
+                const fillSelectors = [
+                    '[class*="mosesPrice"]', '[class*="moses-price"]',
+                    '[class*="finalPrice"]', '[class*="final-price"]',
+                    '[class*="internetPrice"]', '[class*="internet-price"]',
+                    '[class*="salePrice"]', '[class*="sale-price"]',
+                    '.final-price .price-value', '.internet-price .price-value', '.selling-price',
+                    '.normal-price .price', '.di-price', '.price-details .price',
+                    '[data-price]', '[itemprop="price"]', '.primary-price', '.price-value', '.value'
+                ];
+                const fillCards = document.querySelectorAll('.vehicle-card, .inventory-item, .vehicle-overview, .vehicle-item, .inventory-list-item, .vehicleListCard, .vehicleCard, .v-card, .inventory-vehicle, .vehicle-list-item, [data-vin], .listing-card, div[class*="inventory-card"], div[class*="vehicle-card"]');
+                const priceByVin = {};
+                fillCards.forEach(card => {
+                    const txt = card.innerText || "";
+                    const vm = txt.match(/\\b([A-HJ-NPR-Z0-9]{17})\\b/i) || (card.getAttribute('data-vin') || "").match(/([A-HJ-NPR-Z0-9]{17})/i);
+                    if (!vm) return;
+                    const vinKey = vm[1].toUpperCase();
+                    if (priceByVin[vinKey]) return;
+                    let p = null;
+                    for (const sel of fillSelectors) {
+                        const el = card.querySelector(sel);
+                        if (el) {
+                            const dataP = el.getAttribute('data-price') || el.getAttribute('content');
+                            if (dataP && parseInt(dataP) >= 1000) { p = parseInt(dataP); break; }
+                            if (el.innerText) {
+                                const num = parseInt(el.innerText.replace(/[^0-9]/g, ''));
+                                if (num >= 1000 && num <= 350000) { p = num; break; }
+                            }
+                        }
+                    }
+                    if (!p) {
+                        const lines = txt.split('\\n').map(l => l.trim()).filter(Boolean);
+                        for (const line of lines) {
+                            if (/per mo|\\/mo|down|discount|savings|rebate|doc fee|estimate/i.test(line)) continue;
+                            if (/price|final|sale|internet|selling|our price|market price/i.test(line)) {
+                                const m = line.match(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
+                                if (m) {
+                                    const val = parseInt(m[1].replace(/,/g, ''));
+                                    if (val >= 1000 && val <= 350000) { p = val; break; }
+                                }
+                            }
+                        }
+                    }
+                    if (p) priceByVin[vinKey] = p;
+                });
+                missingPrice.forEach(r => { if (priceByVin[r.vin]) r.price = priceByVin[r.vin]; });
+            }
+            return results;
+        }
 
         // STRATEGY 2: UNIVERSAL DOM MATRIX
         const cardSelectors = [
