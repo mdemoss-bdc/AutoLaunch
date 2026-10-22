@@ -21,34 +21,96 @@
 //  6. POSTED MEANS POSTED: this worker never marks a row posted. Only the
 //     content script can do that, and only after it has detected a real
 //     publish success on Facebook. Unconfirmed = failed, with a reason.
+//  7. SESSION TOKEN: the queue / settings / inventory tables are
+//     RLS-locked to the `authenticated` role with auth.uid() owner
+//     policies, so the publishable key alone can see and claim NOTHING.
+//     The app now sends the signed-in user's Supabase access token
+//     through the bridge with the user id; the worker stores it in
+//     chrome.storage.local and sends it as Authorization: Bearer on
+//     every REST call. A 401/403 marks the session expired and stops
+//     claiming until a NEW token arrives — no retry hammering. The
+//     token is never logged and never written into any error record.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 const POLL_ALARM = "autolaunch-queue-poll";
 const POLL_MINUTES = 1;
 
-function sbHeaders(extra) {
+class SbAuthError extends Error {
+  constructor(status) {
+    super(`Supabase rejected the session token (${status})`);
+    this.status = status;
+  }
+}
+
+async function storedAccessToken() {
+  const { autolaunch_access_token: token } =
+    await chrome.storage.local.get(["autolaunch_access_token"]);
+  return token || null;
+}
+
+async function sbHeaders(extra) {
+  const token = await storedAccessToken();
   return Object.assign({
     "apikey": SUPABASE_ANON_KEY,
-    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    "Authorization": `Bearer ${token || SUPABASE_ANON_KEY}`,
     "Content-Type": "application/json"
   }, extra || {});
 }
 
-async function sbGet(path) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: sbHeaders() });
-  if (!res.ok) throw new Error(`Supabase GET ${path} -> ${res.status}`);
+// Record (once per expiry) that the stored token died, in the same
+// autolaunch_last_error record the failure logger uses. Reason strings
+// only — the token value itself never lands in storage logs or errors.
+async function markSessionExpired() {
+  const { autolaunch_session_expired: already } =
+    await chrome.storage.local.get(["autolaunch_session_expired"]);
+  if (already) return;
+  await chrome.storage.local.set({
+    autolaunch_session_expired: true,
+    autolaunch_last_error: {
+      queueId: null,
+      reason: "session_expired — reopen the AutoLaunch tab",
+      at: new Date().toISOString()
+    }
+  });
+  console.warn("[AutoLaunch] Session token expired — reopen the AutoLaunch tab to reconnect the extension.");
+}
+
+async function noteWaitingForLogin() {
+  const { autolaunch_last_error: last } =
+    await chrome.storage.local.get(["autolaunch_last_error"]);
+  if (last && last.reason === "waiting_for_login") return;
+  await chrome.storage.local.set({
+    autolaunch_last_error: {
+      queueId: null,
+      reason: "waiting_for_login",
+      at: new Date().toISOString()
+    }
+  });
+}
+
+async function sbFetch(path, options) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, options);
+  if (res.status === 401 || res.status === 403) {
+    await markSessionExpired();
+    throw new SbAuthError(res.status);
+  }
+  if (!res.ok) {
+    throw new Error(`Supabase ${(options && options.method) || "GET"} ${path} -> ${res.status}`);
+  }
   return res.json();
 }
 
+async function sbGet(path) {
+  return sbFetch(path, { headers: await sbHeaders() });
+}
+
 async function sbPatch(path, body) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  return sbFetch(path, {
     method: "PATCH",
-    headers: sbHeaders({ "Prefer": "return=representation" }),
+    headers: await sbHeaders({ "Prefer": "return=representation" }),
     body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error(`Supabase PATCH ${path} -> ${res.status}`);
-  return res.json();
 }
 
 function startOfTodayISO() {
@@ -83,9 +145,21 @@ async function checkQueue() {
   if (isChecking) return;
   isChecking = true;
   try {
-    const { autolaunch_user_id: userId, current_posting_job: activeJob } =
-      await chrome.storage.local.get(["autolaunch_user_id", "current_posting_job"]);
+    const {
+      autolaunch_user_id: userId,
+      autolaunch_access_token: accessToken,
+      autolaunch_session_expired: sessionExpired,
+      current_posting_job: activeJob
+    } = await chrome.storage.local.get([
+      "autolaunch_user_id", "autolaunch_access_token",
+      "autolaunch_session_expired", "current_posting_job"
+    ]);
     if (!userId) return;               // not signed in to AutoLaunch yet
+    if (sessionExpired) return;        // dead token — wait for a fresh one via the bridge
+    if (!accessToken) {                // bridge hasn't delivered a session yet
+      await noteWaitingForLogin();
+      return;
+    }
     if (activeJob) return;             // one car at a time, always
 
     // Daily safety limit — enforced here too, not just in the UI.
@@ -170,15 +244,64 @@ async function logFailure(queueId, reason) {
   });
 }
 
+// The DB writes that end a job, split out so a finish that collides with
+// a dead token can be stashed and replayed when a fresh token arrives
+// (see autolaunch_pending_finish below) instead of being lost.
+async function applyPosted(queueId, vin, userId) {
+  await sbPatch(`auto_posting_queue?id=eq.${queueId}`, { status: "posted" });
+  await sbPatch(
+    `scraped_inventory?vin=eq.${encodeURIComponent(vin)}&user_id=eq.${userId}`,
+    { marketplace_posted_at: new Date().toISOString() }
+  );
+}
+
+async function applyFailed(queueId) {
+  await sbPatch(`auto_posting_queue?id=eq.${queueId}`, { status: "failed" });
+}
+
+async function flushPendingFinish() {
+  const { autolaunch_pending_finish: pending } =
+    await chrome.storage.local.get(["autolaunch_pending_finish"]);
+  if (!pending) return;
+  try {
+    if (pending.outcome === "posted") {
+      await applyPosted(pending.queueId, pending.vin, pending.userId);
+    } else {
+      await applyFailed(pending.queueId);
+    }
+    await chrome.storage.local.remove(["autolaunch_pending_finish"]);
+    console.log("[AutoLaunch] Replayed a job finish that was waiting on a fresh session token.");
+  } catch (e) {
+    // Still can't write — sbFetch already marked the session expired if
+    // that's the cause. Leave the record; the next new token retries it.
+  }
+}
+
 // The ONLY two ways a job ends. Called by the content script via message.
 async function finishJobPosted(queueId, listingUrl) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
   if (!job || job.queueId !== queueId) return;
-  await sbPatch(`auto_posting_queue?id=eq.${queueId}`, { status: "posted" });
-  await sbPatch(
-    `scraped_inventory?vin=eq.${encodeURIComponent(job.car.vin)}&user_id=eq.${job.userId}`,
-    { marketplace_posted_at: new Date().toISOString() }
-  );
+  try {
+    await applyPosted(queueId, job.car.vin, job.userId);
+  } catch (err) {
+    if (err instanceof SbAuthError) {
+      // The listing really is live; only the bookkeeping failed. Stash
+      // the finish and replay it on the next token rather than losing
+      // the confirmation (or wedging every future check behind a job
+      // whose browser-side work is already done).
+      await chrome.storage.local.set({
+        autolaunch_pending_finish: {
+          outcome: "posted", queueId,
+          vin: job.car.vin, userId: job.userId,
+          listingUrl: listingUrl || null
+        }
+      });
+      await chrome.storage.local.remove(["current_posting_job"]);
+      console.warn("[AutoLaunch] Posted confirmed on Facebook; the queue update is waiting on a fresh session token.");
+      return;
+    }
+    throw err;
+  }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Posted confirmed for queue item", queueId, listingUrl || "");
 }
@@ -187,7 +310,17 @@ async function finishJobFailed(queueId, reason) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
   if (!job || job.queueId !== queueId) return;
   try {
-    await sbPatch(`auto_posting_queue?id=eq.${queueId}`, { status: "failed" });
+    await applyFailed(queueId);
+  } catch (err) {
+    if (err instanceof SbAuthError) {
+      // Same stash-and-replay as the posted path, so the row doesn't
+      // sit in "processing" forever behind a dead token.
+      await chrome.storage.local.set({
+        autolaunch_pending_finish: { outcome: "failed", queueId }
+      });
+    } else {
+      throw err; // the finally below still logs + clears, as before
+    }
   } finally {
     await logFailure(queueId, reason || "unknown");
     await chrome.storage.local.remove(["current_posting_job"]);
@@ -216,10 +349,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "AUTOLAUNCH_SET_USER_ID" && message.userId) {
     const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
     if (!fromApp) return;
-    chrome.storage.local.set({ autolaunch_user_id: message.userId }, () => {
+    (async () => {
+      const updates = { autolaunch_user_id: message.userId };
+      let freshToken = false;
+      if (message.accessToken) {
+        const { autolaunch_access_token: oldToken } =
+          await chrome.storage.local.get(["autolaunch_access_token"]);
+        if (message.accessToken !== oldToken) {
+          // A NEW token revives an expired session: store it, clear the
+          // expired stop, and (below) replay any stashed job finish
+          // before resuming claims. The token value is never logged.
+          updates.autolaunch_access_token = message.accessToken;
+          updates.autolaunch_session_expired = false;
+          freshToken = true;
+        }
+      }
+      await chrome.storage.local.set(updates);
       sendResponse({ status: "connected" });
+      if (freshToken) await flushPendingFinish();
       checkQueue();
-    });
+    })();
     return true;
   }
 

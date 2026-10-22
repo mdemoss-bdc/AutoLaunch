@@ -2579,6 +2579,23 @@ async function handleSignOut() {
   window.location.reload();
 }
 
+// Hand the signed-in session to the Chrome extension (via bridge.js on
+// this origin). The worker needs the access token, not just the user id:
+// auto_posting_queue / user_settings / scraped_inventory are RLS-locked
+// to the `authenticated` role with auth.uid() owner policies, so calls
+// carrying only the publishable key can see and claim nothing. The token
+// travels the same path the user id always did — a same-window postMessage
+// that bridge.js re-validates (source + origin) before forwarding.
+function postExtLogin(user, accessToken) {
+  if (!user) return;
+  try {
+    window.postMessage(
+      { type: "AUTOLAUNCH_EXT_LOGIN", userId: user.id, accessToken: accessToken || null },
+      "*"
+    );
+  } catch (e) {}
+}
+
 async function initAppSession(user) {
   currentUser = user;
   document.getElementById("authOverlay").classList.add("hidden");
@@ -2587,8 +2604,11 @@ async function initAppSession(user) {
   document.getElementById("userInitial").innerText = userPrefix.charAt(0).toUpperCase();
 
   try {
-    window.postMessage({ type: "AUTOLAUNCH_EXT_LOGIN", userId: user.id }, "*");
-  } catch (e) {}
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    postExtLogin(user, session && session.access_token);
+  } catch (e) {
+    postExtLogin(user, null);
+  }
 
   await loadUserStoreSettings();
   await fetchLiveInventory(true);
@@ -6356,6 +6376,14 @@ document.addEventListener("DOMContentLoaded", async function() {
   // actually being signed in.
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (session && session.user) {
+      // Keep the extension's stored token fresh: Supabase rotates the
+      // access token periodically, and the worker stops claiming on a
+      // 401 until a new token arrives through the bridge. Re-posting on
+      // TOKEN_REFRESHED / SIGNED_IN is what delivers it. This cannot
+      // loop — posting a window message fires no auth events.
+      if (event === "TOKEN_REFRESHED" || event === "SIGNED_IN") {
+        postExtLogin(session.user, session.access_token);
+      }
       startAppForUser(session.user);
     } else if (event === "SIGNED_OUT") {
       appSessionStartedFor = null;

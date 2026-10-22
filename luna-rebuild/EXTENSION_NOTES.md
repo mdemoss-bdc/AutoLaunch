@@ -30,14 +30,38 @@ The repo-root extension/ is untouched.
 - host_permissions now include the AutoLaunch origin.
 
 ### bridge.js (NEW)
-- Runs only on the AutoLaunch origin. Listens for the app's existing
-  AUTOLAUNCH_EXT_LOGIN window message (same-window, same-origin only),
-  forwards the userId to the background worker. The app side needed no
-  change to its message — the bridge meets it where it already speaks.
+- Runs only on the AutoLaunch origin. Listens for the app's
+  AUTOLAUNCH_EXT_LOGIN window message (same-window, same-origin only) and
+  forwards the userId — and now the session accessToken too — to the
+  background worker. The app side speaks first; the bridge meets it where
+  it already speaks.
 
 ### background.js (rewritten)
 - User id arrives via the bridge (onMessage); the legacy onMessageExternal
   SET_USER_ID path is kept as a secondary route.
+- SESSION TOKEN (fixes the "queue sits pending forever" bug): the queue,
+  settings and inventory tables are RLS-locked to the `authenticated`
+  role with auth.uid() owner policies, so the worker's original
+  anon-key-only calls could see and claim NOTHING. Flow now: the app
+  includes its current Supabase access_token in AUTOLAUNCH_EXT_LOGIN
+  (postExtLogin in index.html; re-posted on every TOKEN_REFRESHED /
+  SIGNED_IN auth event), the bridge forwards it, and the worker stores
+  it in chrome.storage.local and sends `Authorization: Bearer <token>`
+  (alongside the publishable `apikey`) on EVERY Supabase REST call —
+  queue select/claim, inventory select/update, settings select and the
+  daily-limit count all go through sbGet/sbPatch, which build the header
+  from storage each time. The token is never logged and never written
+  into failure records.
+- Expiry behavior: a 401/403 from any call records
+  autolaunch_last_error = "session_expired — reopen the AutoLaunch tab"
+  and stops claiming (the 1-minute alarm becomes a no-op) until a NEW
+  token arrives through the bridge — the dead token is never retried.
+  With no token stored yet, cycles skip quietly with a one-time
+  "waiting_for_login" note. If a token dies mid-job and the content
+  script's posted/failed report can't be written, the finish is stashed
+  (autolaunch_pending_finish) and replayed when the fresh token arrives,
+  so a confirmed listing is never lost and the row never wedges in
+  "processing".
 - Polling via chrome.alarms (1 minute) created on install/startup, plus an
   immediate check on install/startup and whenever a user id arrives.
 - One status vocabulary with the UI: pending -> processing -> posted/failed.
@@ -84,8 +108,13 @@ The repo-root extension/ is untouched.
 1. In Chrome: chrome://extensions -> Developer mode ON -> Load unpacked ->
    select this folder once it is in your local clone of the repo
    (luna-rebuild/extension/).
-2. Open the AutoLaunch TEST app (…/AutoLaunch/luna-rebuild/) and sign in.
-   The bridge hands your user id to the extension automatically.
+2. Open the AutoLaunch TEST app (…/AutoLaunch/luna-rebuild/) and sign in
+   (or, after reloading the extension, hard-refresh the app tab). The
+   bridge hands your user id AND your Supabase session token to the
+   extension automatically — the worker can't see your queue without
+   the token, and it re-receives a fresh one whenever yours rotates.
+   If the extension ever reports "session_expired", reopening /
+   refreshing this tab is the fix.
 3. Queue one car (marketplace channel). Within about a minute a Facebook
    "Create vehicle" tab opens and the filler runs with the blue banner.
 4. Review the filled form. In confirm mode, click Publish yourself; the
@@ -100,10 +129,13 @@ The repo-root extension/ is untouched.
   heuristics against Facebook's current vehicle-create flow, which changes
   often. First real test may need selector tweaks — the failure reasons
   and banner will say exactly where it got stuck.
-- Supabase calls from the extension still use the publishable key without
-  a user JWT (same as the original design). RLS on auto_posting_queue /
-  scraped_inventory decides what that key may touch; the Phase 2 design
-  goal (pass the user's session through the bridge) remains future work —
-  the bridge is where that token would travel.
+- RESOLVED (was: "Supabase calls use the publishable key without a user
+  JWT"): the session-token flow described under background.js above is
+  live — app → bridge → worker storage → Authorization header on every
+  call, refresh re-posts from the app's auth listener, and a dead token
+  stops claiming instead of silently failing against RLS. One residual
+  truth: the token is the user's own short-lived Supabase session token
+  (rotated roughly hourly by Supabase); it lives only in the extension's
+  chrome.storage.local on the user's machine, never on a server of ours.
 - Facebook may treat any automation as a policy risk. Confirm mode +
   daily caps + human pacing reduce, not eliminate, that risk.
