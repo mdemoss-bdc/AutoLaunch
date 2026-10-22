@@ -1645,6 +1645,64 @@ const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ==============================================================================
+// ====================== PHASE 5: OUTPUT ESCAPING ==============================
+// ==============================================================================
+// Scraped dealer data and user input must never be interpolated raw into
+// innerHTML or inline onclick attributes: a quote in a VIN or a "<" in a
+// model name would break the row or inject markup. Text values go through
+// escapeHtml; record actions use data-action + the delegated handler below
+// instead of inline onclick with interpolated VINs.
+function escapeHtml(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Only http(s) URLs may land in href/src attributes.
+function safeHttpUrl(url, fallback) {
+  try {
+    const raw = String(url || "");
+    const absolute = raw.startsWith("//") ? "https:" + raw : raw;
+    const parsed = new URL(absolute);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return escapeHtml(parsed.href);
+    }
+  } catch (e) { /* fall through to fallback */ }
+  return fallback || "#";
+}
+
+// One delegated handler for every row/queue action (replaces inline
+// onclick attributes that used to embed raw VINs in JS strings).
+document.addEventListener("click", function (e) {
+  const el = e.target && e.target.closest ? e.target.closest("[data-action]") : null;
+  if (!el) return;
+  const action = el.dataset.action;
+  const vin = el.dataset.vin;
+  if (action === "details") {
+    const car = rawInventory.find(c => c.vin === vin);
+    if (car) openVehicleDetailsModal(car);
+  } else if (action === "enqueue") {
+    enqueueMarketplaceCar(vin);
+  } else if (action === "change-price") {
+    const car = rawInventory.find(c => c.vin === vin);
+    openChangePriceModal(vin, car ? (car.price || 0) : 0);
+  } else if (action === "remove-fb") {
+    removeVehicleFromFacebook(vin);
+  } else if (action === "row-dropdown") {
+    toggleRowDropdown({
+      stopPropagation: () => e.stopPropagation(),
+      preventDefault: () => e.preventDefault(),
+      currentTarget: el
+    }, vin);
+  } else if (action === "queue-remove") {
+    removeQueueItem(el.dataset.id);
+  }
+});
+
 let authMode = "signin";
 let currentUser = null;
 let activePillFilter = "ACTIVE";
@@ -1731,11 +1789,25 @@ async function handleAuthSubmit(e) {
       submitBtn.innerText = "Registering...";
       const { data, error } = await supabaseClient.auth.signUp({ email, password });
       if (error) throw error;
-      if (data && data.session) await initAppSession(data.session.user);
-      else if (data && data.user) {
-        const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (signInErr) throw signInErr;
-        await initAppSession(signInData.user);
+      if (data && data.session) {
+        await initAppSession(data.session.user);
+      } else if (data && data.user) {
+        // Email confirmation is ON for this project: signUp created the
+        // account but returned no session. The old code immediately tried
+        // signInWithPassword, which Supabase rejects with "Email not
+        // confirmed" — a dead end that looked like a wrong password.
+        // Correct behaviour: tell the user to confirm, and let the
+        // onAuthStateChange listener start the session when they return
+        // via the confirmation link.
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Register";
+        switchAuthMode("signin");
+        // switchAuthMode hides the message box, so set the success text
+        // AFTER the switch, in a success colour instead of the error red.
+        errBox.innerText = "✓ Account created! Check your email to confirm your account, then sign in.";
+        errBox.classList.remove("hidden", "text-rose-600");
+        errBox.classList.add("text-emerald-600");
+        return;
       }
     } else {
       submitBtn.innerText = "Signing In...";
@@ -1965,7 +2037,7 @@ async function updateLastSyncDisplay() {
 const certifiedUrl =
     document.getElementById("settingsCertifiedUrl").value.trim();
   try {
-    await supabaseClient.from("user_settings").upsert({
+    const { error } = await supabaseClient.from("user_settings").upsert({
   user_id: currentUser.id,
   dealership_name: storeName,
   store_name: storeName,
@@ -1974,6 +2046,7 @@ const certifiedUrl =
   certified_url: certifiedUrl,
   updated_at: new Date().toISOString()
 }, { onConflict: "user_id" });
+    if (error) throw error;
 
     currentStore.name = storeName;
 currentStore.usedUrl = usedUrl;
@@ -2117,24 +2190,24 @@ function populateFilterDropdowns() {
 
     locationSelect.innerHTML =
         '<option value="">All Locations</option>' +
-        locations.map(v => `<option value="${v}">${v}</option>`).join("");
+        locations.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
 
     yearSelect.innerHTML =
         '<option value="">All Years</option>' +
-        years.map(v => `<option value="${v}">${v}</option>`).join("");
+        years.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
 
     makeSelect.innerHTML =
         '<option value="">All Makes</option>' +
-        makes.map(v => `<option value="${v}">${v}</option>`).join("");
+        makes.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
 
     modelSelect.innerHTML =
         '<option value="">All Models</option>' +
-        models.map(v => `<option value="${v}">${v}</option>`).join("");
+        models.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
 
     if (colorSelect) {
         colorSelect.innerHTML =
             '<option value="">All Colors</option>' +
-            colors.map(v => `<option value="${v}">${v}</option>`).join("");
+            colors.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
     }
 
     if (locations.includes(currentLocation)) {
@@ -2293,7 +2366,9 @@ function renderTableRows(cars) {
   cars.forEach(car => {
     let photoUrl = car.image_url;
     if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
-    if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
+    if (!photoUrl || photoUrl.includes('/static/') || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
+    photoUrl = escapeHtml(photoUrl);
+    const vinAttr = escapeHtml(car.vin || '');
 
     const priceText = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
     const milesText = (car.mileage || 0).toLocaleString() + " mi";
@@ -2307,28 +2382,28 @@ function renderTableRows(cars) {
       
 <td class="py-4 px-4">
   <div
-    onclick="openVehicleDetailsModal(rawInventory.find(c => c.vin === '${car.vin}'))"
+    data-action="details" data-vin="${vinAttr}"
     class="flex items-center gap-3.5 cursor-pointer hover:bg-slate-50 rounded-xl p-2 transition"
   >
     <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-16 h-12 rounded-xl object-cover border border-slate-200 shrink-0 shadow-sm">
 
     <div>
   <strong class="text-xs font-bold text-slate-950 block leading-tight">
-    ${car.year || ''} ${car.make || ''} ${car.model || ''}
+    ${escapeHtml(car.year || '')} ${escapeHtml(car.make || '')} ${escapeHtml(car.model || '')}
   </strong>
 
   <div class="text-[10px] text-slate-500 mt-1">
-    Stock: ${car.stock_num || car.stock_number || 'N/A'}
+    Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')}
   </div>
 
   <div class="text-[10px] text-slate-500">
-    VIN: ${car.vin || 'N/A'}
+    VIN: ${escapeHtml(car.vin || 'N/A')}
 </div>
 
 ${car.location_name ? `
 <div class="mt-1">
     <span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-        ${car.location_name}
+        ${escapeHtml(car.location_name)}
     </span>
 </div>
 ` : ''}
@@ -2372,18 +2447,18 @@ ${car.location_name ? `
       <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2 relative">
           ${isPosted
-            ? `<button onclick="openChangePriceModal('${car.vin}', ${car.price || 0})" class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm">
+            ? `<button data-action="change-price" data-vin="${vinAttr}" class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm">
                  <i class="fa-solid fa-tag text-slate-400 text-xs"></i> Change price
                </button>
-               <button onclick="removeVehicleFromFacebook('${car.vin}')" id="btnRemoveFb_${car.vin}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
+               <button data-action="remove-fb" data-vin="${vinAttr}" id="btnRemoveFb_${vinAttr}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
                  <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
                </button>`
-            : `<button onclick="enqueueMarketplaceCar('${car.vin}')" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
+            : `<button data-action="enqueue" data-vin="${vinAttr}" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
                  <i class="fa-solid fa-paper-plane text-[10px]"></i>
                  <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
                </button>`
           }
-          <button onclick="toggleRowDropdown(event, '${car.vin}')" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+          <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
             <i class="fa-solid fa-ellipsis text-xs"></i>
           </button>
         </div>
@@ -2414,7 +2489,10 @@ function toggleRowDropdown(event, vin) {
 
 document.addEventListener("click", function(e) {
   const dropdown = document.getElementById("vehicleActionDropdown");
-  if (dropdown && !dropdown.contains(e.target)) {
+  const onDropdownBtn = e.target && e.target.closest
+    ? e.target.closest('[data-action="row-dropdown"]')
+    : null;
+  if (dropdown && !dropdown.contains(e.target) && !onDropdownBtn) {
     dropdown.classList.add("hidden");
     activeDropdownVin = null;
   }
@@ -2471,11 +2549,15 @@ async function removeVehicleFromFacebook(vin) {
       car.status = "Available";
     }
 
-    await supabaseClient
+    const { error: queueErr } = await supabaseClient
       .from("auto_posting_queue")
       .delete()
       .eq("vin", vin)
       .eq("user_id", currentUser.id);
+    if (queueErr) {
+      console.error("Queue cleanup after FB removal failed:", queueErr);
+      alert("Listing updated, but removing it from the post queue failed: " + (queueErr.message || "Unknown error"));
+    }
 
     await loadPostingQueue();
     applyFilters();
@@ -2573,7 +2655,8 @@ function openVehicleDetailsModal(car) {
 
   let photoUrl = car.image_url;
   if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
-  if (!photoUrl) photoUrl = FALLBACK_IMAGE;
+  if (!photoUrl || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
+  photoUrl = escapeHtml(photoUrl);
 
   document.getElementById("detailsModalContent").innerHTML = `
     <div class="h-64 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
@@ -2590,15 +2673,15 @@ function openVehicleDetailsModal(car) {
       </div>
       <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
         <span class="text-slate-500 block text-[10px] uppercase font-bold">Exterior</span>
-        <strong class="text-slate-900 text-sm">${car.color || 'Standard'}</strong>
+        <strong class="text-slate-900 text-sm">${escapeHtml(car.color || 'Standard')}</strong>
       </div>
       <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
         <span class="text-slate-500 block text-[10px] uppercase font-bold">Condition</span>
-        <strong class="text-slate-900 text-sm">${car.condition || 'Used'}</strong>
+        <strong class="text-slate-900 text-sm">${escapeHtml(car.condition || 'Used')}</strong>
       </div>
     </div>
     <div class="pt-2 flex justify-end">
-      <a href="${car.detail_url || '#'}" target="_blank" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+      <a href="${safeHttpUrl(car.detail_url, '#')}" target="_blank" rel="noopener" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
         <span>View on Dealer Website</span>
         <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
       </a>
@@ -2637,11 +2720,13 @@ async function loadPostingQueue() {
 
     try {
 
-        const { data } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from("auto_posting_queue")
             .select("*")
             .eq("user_id", currentUser.id)
             .order("created_at", { ascending: true });
+
+        if (error) throw error;
 
         postingQueue = data || [];
 
@@ -2694,17 +2779,21 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
                     <div class="text-sm font-bold text-slate-900">
                         ${
     car
-    ? `${car.year || ''} ${car.make || ''} ${car.model || ''}`.trim()
-    : `${item.year || ''} ${item.make || ''} ${item.model || ''}`.trim() || 'Vehicle'
+    ? escapeHtml(`${car.year || ''} ${car.make || ''} ${car.model || ''}`.trim())
+    : escapeHtml(`${item.year || ''} ${item.make || ''} ${item.model || ''}`.trim() || 'Vehicle')
 }
                     </div>
 
                     <div class="text-xs text-slate-500 mt-1">
-                        Stock: ${item.stock_num || item.stock_number || 'N/A'}
+                        Stock: ${escapeHtml(item.stock_num || item.stock_number || 'N/A')}
                     </div>
 
                     <div class="text-xs text-slate-500">
-                        VIN: ${item.vin}
+                        VIN: ${escapeHtml(item.vin)}
+                    </div>
+
+                    <div class="text-xs text-slate-500">
+                        Channel: ${escapeHtml(item.target_channel || 'marketplace')}
                     </div>
 
                 </div>
@@ -2721,12 +2810,12 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
                                 ? "🟢 Posted"
                                 : item.status === "failed"
                                 ? "🔴 Failed"
-                                : item.status
+                                : escapeHtml(item.status)
                         }
                     </span>
 
                     <button
-                        onclick="removeQueueItem('${item.id}')"
+                        data-action="queue-remove" data-id="${escapeHtml(item.id)}"
                         class="text-xs text-red-600 hover:text-red-700 font-semibold">
 
                         Remove
@@ -2905,13 +2994,15 @@ async function triggerLiveLotCrawl(event) {
 
     try {
 
-        await supabaseClient
+        const { error } = await supabaseClient
             .from("scrape_jobs")
             .insert({
                 user_id: currentUser.id,
                 status: "pending",
                 triggered_by: currentUser.email
             });
+
+        if (error) throw error;
 
         alert(
             "✓ Inventory refresh started. Inventory will begin updating shortly!"
@@ -2926,7 +3017,7 @@ async function triggerLiveLotCrawl(event) {
     } catch (e) {
 
         alert(
-            "Inventory refresh failed."
+            "Inventory refresh failed: " + (e.message || "Unknown error")
         );
 
     } finally {
@@ -3023,6 +3114,8 @@ async function finishSetup() {
 
     if (error) {
         console.error(error);
+        alert("Could not save your dealership settings: " + (error.message || "Unknown error") + "\n\nYour inventory URLs were NOT saved. Please try again.");
+        return;
     }
 
 }
@@ -3193,7 +3286,7 @@ function populateOnboardingFields() {
     const resultsEl = document.getElementById("inventoryTestResults");
     const allOk = results.every(r => r.ok);
     const lines = results.map(r =>
-        `<div>${r.ok ? "✅" : "❌"} <strong>${r.label}:</strong> ${r.ok ? "Reachable" : "Not reachable"} — ${r.reason}<br><span class="text-xs text-slate-500">${r.url}</span></div>`
+        `<div>${r.ok ? "✅" : "❌"} <strong>${r.label}:</strong> ${r.ok ? "Reachable" : "Not reachable"} — ${r.reason}<br><span class="text-xs text-slate-500">${escapeHtml(r.url)}</span></div>`
     ).join("");
     resultsEl.innerHTML = `
         <h3 class="text-lg font-bold text-slate-900 mb-4">
@@ -3644,22 +3737,50 @@ async function savePostingPreferences() {
   }
 }
 
+let appSessionStartedFor = null;
+let syncPollerStarted = false;
+
+function startAppForUser(user) {
+  if (!user || appSessionStartedFor === user.id) return;
+  appSessionStartedFor = user.id;
+  initAppSession(user);
+  if (!syncPollerStarted) {
+    syncPollerStarted = true;
+    setInterval(() => {
+
+        updateLastSyncDisplay();
+
+    }, 10000);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async function() {
+
+  // Phase 5: react to auth changes instead of only checking once on load.
+  // This is what brings a user straight into the app when they return via
+  // an email-confirmation link (the session appears without a page flow
+  // through the sign-in form), and it keeps the 10s sync poller tied to
+  // actually being signed in.
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session && session.user) {
+      startAppForUser(session.user);
+    } else if (event === "SIGNED_OUT") {
+      appSessionStartedFor = null;
+      currentUser = null;
+      document
+        .getElementById(
+            "authOverlay"
+        )
+        .classList.remove("hidden");
+    }
+  });
 
   const { data: { session } } =
       await supabaseClient.auth.getSession();
 
   if (session && session.user) {
 
-    await initAppSession(
-        session.user
-    );
-
-    setInterval(() => {
-
-        updateLastSyncDisplay();
-
-    }, 10000);
+    startAppForUser(session.user);
 
   } else {
 
