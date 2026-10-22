@@ -30,6 +30,16 @@
 //     every REST call. A 401/403 marks the session expired and stops
 //     claiming until a NEW token arrives — no retry hammering. The
 //     token is never logged and never written into any error record.
+//  8. PHOTO RELAY: the content script runs on facebook.com, so its direct
+//     fetch of a dealer photo URL is page-CORS-bound — and dealer photo
+//     servers (mosescars.com proven) send no Access-Control-Allow-Origin,
+//     so the fetch dies and the job fails with photo_download_failed.
+//     Fetches from this worker are extension fetches: with host
+//     permission for the origin they are NOT page-CORS-bound. The
+//     content script now asks the worker for the bytes
+//     (AUTOLAUNCH_FETCH_PHOTO) and rebuilds the File itself; its
+//     fallback is the photo-proxy Edge Function, and only if both fail
+//     does the job fail honestly — a photoless car is never posted.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -235,6 +245,53 @@ async function checkQueue() {
   }
 }
 
+// --- Photo relay --------------------------------------------------------
+// The content script (on facebook.com) cannot fetch dealer photo URLs
+// itself — page CORS. This worker can: extension fetches backed by host
+// permissions are not page-CORS-bound. Returns the bytes base64-encoded
+// (chunked conversion — String.fromCharCode on a whole 15MB buffer would
+// blow the argument limit) with the content type; every failure is a
+// structured { ok:false, error } so the content script can fall through
+// to the photo-proxy and, failing that, the honest job failure.
+const PHOTO_MAX_BYTES = 15 * 1024 * 1024; // ~15MB — dealer photos are ~50KB
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+async function fetchPhotoForContent(url) {
+  if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+    return { ok: false, error: "photo_url_not_http" };
+  }
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    return { ok: false, error: "photo_fetch_threw" };
+  }
+  if (!res.ok) return { ok: false, error: `photo_http_${res.status}` };
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType && !contentType.toLowerCase().startsWith("image/")) {
+    return { ok: false, error: "photo_not_an_image" };
+  }
+  const buffer = await res.arrayBuffer();
+  if (!buffer.byteLength) return { ok: false, error: "photo_empty" };
+  if (buffer.byteLength > PHOTO_MAX_BYTES) {
+    return { ok: false, error: "photo_too_large" };
+  }
+  return {
+    ok: true,
+    base64: arrayBufferToBase64(buffer),
+    contentType: contentType || "image/jpeg"
+  };
+}
+
 async function logFailure(queueId, reason) {
   const { autolaunch_failure_log: log = [] } = await chrome.storage.local.get(["autolaunch_failure_log"]);
   log.unshift({ queueId, reason, at: new Date().toISOString() });
@@ -369,6 +426,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (freshToken) await flushPendingFinish();
       checkQueue();
     })();
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_FETCH_PHOTO") {
+    // Only the Facebook content script may use the relay (it is the one
+    // CORS-blocked from dealer photo servers), and only real URLs — the
+    // http(s) check lives in fetchPhotoForContent.
+    const senderUrl = (sender && sender.url) ||
+      (sender && sender.tab && sender.tab.url) || "";
+    if (!senderUrl.startsWith("https://www.facebook.com/")) return;
+    fetchPhotoForContent(message.url)
+      .then(result => sendResponse(result))
+      .catch(() => sendResponse({ ok: false, error: "photo_relay_failed" }));
     return true;
   }
 

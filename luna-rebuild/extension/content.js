@@ -22,6 +22,15 @@
 //     in chrome.storage (autolaunch_confirm_mode = false) for full-auto.
 //  6. CHECKPOINTS STOP THE JOB: a Facebook login wall or identity
 //     checkpoint fails the job immediately. Never type into one.
+//  7. PHOTO FETCH GOES AROUND CORS: this script runs on facebook.com, so
+//     a direct fetch of a dealer photo URL is cross-origin — and dealer
+//     photo servers send no Access-Control-Allow-Origin, so the fetch
+//     died and every job failed with photo_download_failed (proven in
+//     the first live test). Photos are now fetched two ways, in order:
+//     (a) relayed through the background worker (extension fetches are
+//     not page-CORS-bound; bytes come back base64), then (b) the
+//     photo-proxy Edge Function, which returns CORS *. Only if BOTH fail
+//     does the job fail honestly — a photoless car is never posted.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -137,6 +146,46 @@
     return false;
   }
 
+  // ---- photo fetching (see note 7 in the header) -----------------------
+  // Same project URL + publishable key the background worker uses; the
+  // photo-proxy is an Edge Function on that project that streams dealer
+  // photos back with CORS * (built for the web app, reused here).
+  const PHOTO_PROXY_URL = "https://tdsipiltwajwhzgjsupx.supabase.co/functions/v1/photo-proxy";
+  const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
+
+  function base64ToBlob(base64, contentType) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: contentType || "image/jpeg" });
+  }
+
+  function relayPhoto(url) {
+    return new Promise(resolve => {
+      try {
+        chrome.runtime.sendMessage({ type: "AUTOLAUNCH_FETCH_PHOTO", url }, resp => {
+          void chrome.runtime.lastError;
+          resolve(resp || null);
+        });
+      } catch (e) { resolve(null); }
+    });
+  }
+
+  // One photo, two stages: background relay first (no CORS wall), then
+  // the photo-proxy. Throws only when both stages failed, so the caller
+  // can skip to the next photo exactly like the old direct fetch did.
+  async function fetchPhotoBlob(url) {
+    const relayed = await relayPhoto(url);
+    if (relayed && relayed.ok && relayed.base64) {
+      return base64ToBlob(relayed.base64, relayed.contentType);
+    }
+    const res = await fetch(PHOTO_PROXY_URL + "?url=" + encodeURIComponent(url), {
+      headers: { apikey: SUPABASE_ANON_KEY }
+    });
+    if (!res.ok) throw new Error("photo_proxy_" + res.status);
+    return res.blob();
+  }
+
   function photoUrls() {
     const urls = [];
     if (car.image_url) urls.push(car.image_url);
@@ -156,13 +205,14 @@
     let added = 0;
     for (const url of urls) {
       try {
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const blob = await res.blob();
+        // Relay → photo-proxy (fetchPhotoBlob). A direct fetch of the
+        // dealer URL from this page is CORS-blocked by design of the
+        // photo servers — never add one back here.
+        const blob = await fetchPhotoBlob(url);
         const name = (url.split("/").pop() || `photo-${added}.jpg`).split("?")[0];
         dt.items.add(new File([blob], name, { type: blob.type || "image/jpeg" }));
         added++;
-      } catch (e) { /* try the next photo */ }
+      } catch (e) { /* both stages failed for this one — try the next photo */ }
     }
     if (!added) return { ok: false, reason: "photo_download_failed" };
     input.files = dt.files;

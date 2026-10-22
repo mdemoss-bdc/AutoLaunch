@@ -28,6 +28,11 @@ The repo-root extension/ is untouched.
 - Added content script bridge.js on https://mdemoss-bdc.github.io/AutoLaunch/*
 - Added externally_connectable for https://mdemoss-bdc.github.io/*
 - host_permissions now include the AutoLaunch origin.
+- Added host_permission "https://*/*" (photo relay, below): dealer photo
+  CDNs live on whatever host each store's site uses, and the background
+  worker needs host access to fetch their photos around CORS. The
+  worker only fetches a URL when the Facebook content script asks for
+  one photo, and only http(s) URLs at that.
 
 ### bridge.js (NEW)
 - Runs only on the AutoLaunch origin. Listens for the app's
@@ -78,6 +83,18 @@ The repo-root extension/ is untouched.
   has no reason column we can rely on.
 - Queue rows whose inventory row has vanished are marked failed instead
   of pending forever.
+- PHOTO RELAY (fixes the first live test's only failure): the content
+  script's direct fetch of dealer photo URLs was CORS-blocked from the
+  facebook.com page — dealer photo servers send no
+  Access-Control-Allow-Origin (verified for mosescars.com; the same
+  wall the web app's photo-proxy Edge Function was built for). The
+  content script now sends {type:"AUTOLAUNCH_FETCH_PHOTO", url} here;
+  the worker's fetches are extension fetches (host-permitted, not
+  page-CORS-bound). Replies are structured: {ok:true, base64,
+  contentType} (chunked base64; ~15MB cap; non-200, non-image and empty
+  bodies are structured errors), and the handler only serves senders on
+  facebook.com. A failed relay falls through to the photo-proxy in the
+  content script; only if both fail does the job fail, as before.
 
 ### content.js (rewritten)
 - React-safe fill: native prototype value setter + input/change events.
@@ -90,6 +107,13 @@ The repo-root extension/ is untouched.
   image_urls, photo_urls; max 10). An upload only counts if a preview
   image actually appears. Failure = banner + job FAILED with reason.
   No more silent continue, and no posting photoless cars by accident.
+- Photo BYTES arrive via a two-stage path, never a direct fetch from
+  this page (CORS — see the relay note under background.js): stage 1,
+  the background relay returns the photo base64 and it is rebuilt into
+  a File locally; stage 2, on relay error, the photo-proxy Edge
+  Function (same publishable apikey the app uses; returns CORS *).
+  The DataTransfer/input.files upload and preview check after that are
+  unchanged.
 - Visible banner at the top of the page narrates every step.
 - Login wall / checkpoint / "confirm your identity" = immediate FAILED
   with a plain-language reason. The script never types into a checkpoint.
@@ -122,6 +146,19 @@ The repo-root extension/ is untouched.
    car gets marketplace_posted_at in the app.
 5. To see failures honestly: queue a car while logged out of Facebook —
    the job should end Failed with the login reason, never Posted.
+
+## Live test log
+
+- 2026-10-22, first end-to-end run: handshake, session token, queue
+  claim, Facebook tab and form fill all worked. The job failed at
+  exactly one step — photo upload, "photo_download_failed" — because
+  the content script's direct fetch of the dealer photo was
+  CORS-blocked (root cause verified, see the photo relay notes). The
+  relay → photo-proxy path above is the fix; it is the one piece of
+  this build that has NOT yet had a live Facebook run. Re-test: reload
+  the extension at the same folder (Reload on its card; same folder =
+  same extension ID), hard-refresh the app tab, re-queue the car (a
+  FAILED row can be queued again).
 
 ## Honest limits (untested overnight)
 
