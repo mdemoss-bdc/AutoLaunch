@@ -754,6 +754,87 @@ nothing) plus publish_unverified diag compaction. Regressions:
 v36 19/19, v35 22/22, v34 42/42, v33 50/50, v32 40/40 — 219
 checks total, node --check clean.
 
+## v2.1.8 — the bricked job slot (claim-cycle reconciliation)
+
+**The live failure (2026-10-22 ~19:28–19:46 EDT):** Matthew
+queued the Silverado; the row sat `pending` for 15+ minutes
+while nothing happened — no tab, no error, an empty worker
+console. The helper was healthy and awake the whole time. The
+cause was a ghost: `current_posting_job` in chrome.storage.local
+still held the FIRST Silverado attempt (claimed 23:14:48Z),
+which Matthew had stopped by cancelling its queue row in the
+app. That job's content script was gone, so its finish message
+— the ONLY thing that ever cleared the slot — could never
+arrive, and every claim cycle hit `if (activeJob) return;` and
+skipped, silently. `claimedAt` had been written at claim time
+since the slot existed but was never read anywhere. Matthew
+cleared the slot by hand from the worker console
+(`chrome.storage.local.remove("current_posting_job")`) and the
+very next cycle claimed the truck, which then posted cleanly —
+the manual clear remains a valid emergency unstick.
+
+**The fix (background.js only; header note 15):** before
+checkQueue honours an occupied slot, it reconciles the slot
+against its queue row — one lightweight read
+(`auto_posting_queue?id=eq.<queueId>&select=id,status`), only
+on cycles where a slot exists:
+
+- **Row no longer exists** (cancelled in the app) → clear the
+  slot; the cycle FALLS THROUGH and claims fresh work in the
+  same pass.
+- **Row terminal** (`posted` / `failed` / `completed`) → same:
+  the run ended; clear and continue.
+- **Row `pending` again** (re-queued externally, or the claim
+  write never landed) → the stored run is dead either way;
+  clear and continue — the same cycle's claim pass picks the
+  row up fresh.
+- **Row `processing`, claimedAt ≤ 45 min old** → genuinely
+  running; slot kept, cycle skips as before. 45 minutes is
+  deliberately generous — past the 10-minute confirm watch
+  plus the ~4-minute verification cap, with wide margin.
+- **Row `processing`, claimedAt older than 45 min** (or
+  unreadable — a claim that can't prove it's fresh doesn't get
+  to wedge the queue) → the content script is certainly dead
+  (tab closed / crashed): the row is failed honestly with a
+  compacted `job_orphaned` diagnostic in `error_message` (via
+  the existing applyFailed path, including the token-death
+  stash-and-replay if the write hits a dead token), the
+  failure is logged, the slot is cleared, and the cycle
+  continues to fresh work.
+- **The lookup itself errors** (network or auth) → NOTHING
+  changes: slot kept, no row failed, cycle skips. A transient
+  failure must never free a live job's slot or fail its row;
+  auth errors keep the existing session-expired semantics.
+- Every reconciliation action is logged with the `[AutoLaunch]`
+  prefix (reason + queueId) — the old failure was invisible
+  precisely because the skip was silent.
+
+Untouched: claim order, daily limit, the no-photo rule, the
+finish paths, tab auto-close, verification, and all of
+content.js.
+
+Verification (node, chrome/fetch-stub harness, new v38):
+56/56 — deleted row → cleared + fresh row claimed in the same
+cycle (exactly one lookup read; the clear is logged with the
+dead queue id); each terminal status → cleared, row untouched;
+pending-again row → cleared and re-claimed in the same pass
+with a fresh claimedAt; fresh processing row → slot kept, no
+claim, no PATCH at all; stale processing row (46 min) → row
+failed with `job_orphaned` in error_message + failure log,
+slot cleared, fresh claim proceeds; lookup network error →
+slot kept, zero writes; lookup 401 → slot kept, session
+marked expired, zero writes. Worker regressions in the same
+harness: normal claim (fullAuto rides, tab id recorded),
+no-photo fail, daily limit gating posts but not deletes
+(delete claimed from the row's stamped context), posted
+finish (posted + inventory stamped + slot cleared + exactly
+the job's tab closed after the 4s schedule), failed finish
+(diags compacted, tab never closed), pending-finish stash
+replay on a fresh token, compactDiagError caps/preservation.
+content.js is byte-unchanged in this build, so the content-side
+suites (v32–v37) exercise identical code; node --check clean
+on all three scripts.
+
 ## How to test it (Matthew)
 
 1. In Chrome: chrome://extensions -> Developer mode ON -> Load unpacked ->

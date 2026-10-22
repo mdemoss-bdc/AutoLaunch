@@ -141,6 +141,36 @@
 //     the apply* writes directly; by replay time the moment has
 //     passed). Only the exact tab this worker opened is ever
 //     closed; a tab the user already closed is a no-op.
+// 15. JOB-SLOT RECONCILIATION (v2.1.8): the current_posting_job
+//     slot used to be cleared ONLY by a finish message from the
+//     job's own content script. Stop a run any other way — cancel
+//     the queue row in the app, close the job's tab — and the
+//     finish never arrives: the slot stays occupied forever and
+//     every claim cycle silently returns at `if (activeJob)`, with
+//     a healthy awake worker, a valid token, and a pending row
+//     nobody will ever claim. Proven live 2026-10-22 ~19:46 EDT:
+//     storage held a job claimed at 23:14:48Z whose queue row the
+//     user had deleted; a fresh pending row sat unclaimed 15+
+//     minutes. claimedAt was written at claim time but never read.
+//     checkQueue now reconciles the slot against its queue row
+//     before honouring it (one lightweight read, only when a slot
+//     is occupied): row gone, terminal (posted/failed/completed),
+//     or pending again -> the run it belonged to is dead; clear
+//     the slot and fall through to claim fresh work in the SAME
+//     pass. Row still "processing" -> the slot is kept, UNLESS
+//     claimedAt is older than 45 minutes — past every legitimate
+//     run (the 10-minute confirm watch + the ~4-minute
+//     verification cap, with generous margin) — in which case the
+//     content script is certainly dead, so the row is failed
+//     honestly as job_orphaned (diagnostics compacted into
+//     error_message, token-death stash behaviour as in the other
+//     finishes), the slot cleared, and the cycle continues. A
+//     lookup that itself errors (network/auth) changes NOTHING:
+//     the slot is kept and the cycle skips, so a transient failure
+//     can never free a live job's slot or fail its row; auth
+//     errors keep the session-expired semantics sbFetch already
+//     records. Every reconciliation action is logged — the old
+//     failure was invisible precisely because the skip was silent.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -254,6 +284,102 @@ async function userSettings(userId) {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const jitter = (min, max) => sleep(min + Math.random() * (max - min));
 
+// Job-slot reconciliation (v2.1.8, header note 15). A claimed job
+// may legitimately run long — confirm mode waits up to 10 minutes
+// for a human Publish click, and the v2.1.7 post-publish
+// verification adds up to ~4 minutes of Selling-page rescans —
+// but no legitimate run approaches 45 minutes, so a "processing"
+// row older than that has no living content script behind it.
+const JOB_STALE_MS = 45 * 60 * 1000;
+const TERMINAL_ROW_STATUSES = ["posted", "failed", "completed"];
+
+// Returns true when the stored job slot must be KEPT (a run is
+// genuinely in flight, or this cycle could not verify either
+// way), false when the slot was dead and has been cleared — the
+// caller then falls through and claims fresh work in the same
+// pass. Runs at most one lightweight queue-row read per cycle,
+// and only when a slot is occupied.
+async function reconcileActiveJob(job) {
+  const queueId = job && job.queueId;
+  if (!queueId) {
+    // A slot with no queue id can never be finished or verified —
+    // it is dead by construction.
+    await chrome.storage.local.remove(["current_posting_job"]);
+    console.log("[AutoLaunch] Job slot cleared (slot carried no queue id).");
+    return false;
+  }
+  let rows;
+  try {
+    rows = await sbGet(`auto_posting_queue?id=eq.${queueId}&select=id,status`);
+  } catch (err) {
+    // The lookup itself failed (network, or auth — sbFetch has
+    // already recorded a session expiry if it was one). Believe
+    // nothing, change nothing: keep the slot and let this cycle
+    // skip, exactly as conservative as the rest of the worker.
+    return true;
+  }
+  const row = Array.isArray(rows) && rows.length ? rows[0] : null;
+  const clearSlot = async reason => {
+    await chrome.storage.local.remove(["current_posting_job"]);
+    console.log(`[AutoLaunch] Job slot cleared (${reason}) for queue item ${queueId}.`);
+  };
+  if (!row) {
+    // The user cancelled the job in the app (the queue row is
+    // deleted there) — the run it belonged to can never report
+    // back, so the slot it wedged is dead.
+    await clearSlot("queue row no longer exists");
+    return false;
+  }
+  if (TERMINAL_ROW_STATUSES.includes(row.status)) {
+    await clearSlot(`queue row already ${row.status}`);
+    return false;
+  }
+  if (row.status === "pending") {
+    // Re-queued externally (or the claim write never landed):
+    // the stored run is dead either way. Clearing the slot lets
+    // THIS cycle's claim pass pick the row up fresh below.
+    await clearSlot("queue row is pending again");
+    return false;
+  }
+  if (row.status === "processing") {
+    const claimedAtMs = Date.parse(job.claimedAt || "");
+    // A claim that cannot prove it is fresh (no readable
+    // claimedAt) does not get to wedge the queue forever.
+    const ageMs = isFinite(claimedAtMs) ? Date.now() - claimedAtMs : Infinity;
+    if (ageMs <= JOB_STALE_MS) return true; // genuinely running
+    // Orphaned: still "processing" far beyond any legitimate
+    // run, so the content script is certainly dead (its tab was
+    // closed, or it crashed). Fail the row honestly — the
+    // diagnostics ride error_message like every other failure —
+    // clear the slot, and let the cycle continue to fresh work.
+    console.warn(`[AutoLaunch] Job orphaned: queue item ${queueId} still processing ${Math.round(ageMs / 60000)} min after claim — failing it and clearing the slot.`);
+    const errorMessage = compactDiagError([{
+      field: "Job",
+      note: "job_orphaned",
+      detail: `claimed ${job.claimedAt || "unknown"}, still "processing" after 45+ min — content script presumed dead (tab closed or crashed)`
+    }]);
+    try {
+      await applyFailed(queueId, errorMessage);
+    } catch (err) {
+      if (err instanceof SbAuthError) {
+        // Same stash-and-replay as finishJobFailed, so the
+        // failure lands when the next fresh token arrives instead
+        // of being lost with the dead token.
+        await chrome.storage.local.set({
+          autolaunch_pending_finish: { outcome: "failed", queueId, errorMessage }
+        });
+      } else {
+        throw err;
+      }
+    }
+    await logFailure(queueId, "job_orphaned");
+    await clearSlot("orphaned processing row failed");
+    return false;
+  }
+  // A status vocabulary this build does not know: change nothing.
+  return true;
+}
+
 let isChecking = false;
 
 async function checkQueue() {
@@ -275,7 +401,17 @@ async function checkQueue() {
       await noteWaitingForLogin();
       return;
     }
-    if (activeJob) return;             // one car at a time, always
+    if (activeJob) {
+      // One car at a time, always — but verify the stored job is
+      // still a live run before honouring the slot (v2.1.8): a
+      // run stopped out-of-band (row cancelled in the app, tab
+      // closed) never sends its finish, and an unreconciled slot
+      // would wedge every future claim behind it, silently.
+      const slotKept = await reconcileActiveJob(activeJob);
+      if (slotKept) return;
+      // The slot was dead and has been cleared — fall through and
+      // claim fresh work in this same pass.
+    }
 
     const settings = await userSettings(userId);
 
