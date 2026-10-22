@@ -31,9 +31,9 @@ Goal: "Refresh Inventory" works for every dealer, not just one hardcoded user.
 - [x] DECIDED 2026-10-22 (Matthew): webhook-first for everything — a Supabase webhook on scrape_jobs calls an Edge Function that dispatches the Action with a user_id. See WEBHOOK_ARCHITECTURE.md. Users never handle Facebook/GitHub/Supabase keys; all secrets are Matthew's, server-side only.
 - [x] Fix parseFromUrl model parsing at the source (HR-V / CR-V / CX / F-series, test copy built + unit tested)
 - [ ] Remove the frontend Hr/Cr hack — AFTER a full re-scrape replaces old rows; keep it until then
-- Mark stale inventory: cars that disappear from dealer feeds should become inactive/sold instead of staying "Available" forever
+- [x] Mark stale inventory: DONE overnight 2026-10-22 — clean-crawl rule flags unseen cars is_active=false (status untouched), 50% safety brake. See PHASE1_NOTES.md completion section.
 
-## Phase 2 — Unify the queue + extension handshake
+## Phase 2 — Unify the queue + extension handshake (DONE overnight 2026-10-22 in luna-rebuild/extension/ — see EXTENSION_NOTES.md)
 Goal: A queued car can actually reach Facebook Marketplace.
 - Replace window.postMessage("*") / onMessageExternal mismatch with ONE bridge:
   a content script on the AutoLaunch origin that forwards the signed-in user id
@@ -43,21 +43,21 @@ Goal: A queued car can actually reach Facebook Marketplace.
   (extension currently writes "completed", the UI expects "posted")
 - Extension must NOT mark a car posted until publishing is confirmed on Facebook
 
-## Phase 3 — Content script that can fill Facebook's form
+## Phase 3 — Content script that can fill Facebook's form (DONE overnight 2026-10-22, same extension pass — see EXTENSION_NOTES.md)
 Goal: Reliable form fill on facebook.com/marketplace/create/vehicle
 - Use the native value setter + input/change events React actually listens to
 - Fill year/make/model/condition etc., not just price/mileage/first textarea
 - Handle photo upload failures visibly instead of silently continuing
 - Keep a human final click: user reviews and publishes; only then write marketplace_posted_at
 
-## Phase 4 — Wire the settings that are currently theatre
+## Phase 4 — Wire the settings that are currently theatre (DONE overnight 2026-10-22 — ribbon toggles persist, daily limit enforced at enqueue, real testInventory; auto-post/repost/photo modal saves already persisted and now share columns with the ribbon)
 Goal: Every toggle in the UI either works or is removed.
 - Ribbon toggles (toggleRibbonSetting is currently a console.log) persist to user_settings like the modals do
 - Daily safety limit: count today's real posts, enforce in enqueue + bulk queue, replace hardcoded "1 of X"
 - testInventory(): perform a real check of the dealer URLs instead of a 1.5s always-success timeout
 - Auto-post / repost / photo settings: connect each to the worker/extension behaviour it claims to control, or label it "not yet active"
 
-## Phase 5 — Hardening before real dealers rely on it
+## Phase 5 — Hardening before real dealers rely on it (DONE overnight 2026-10-22 — escaping + delegated handlers, error audit, signup confirmation flow, onAuthStateChange. Repo privacy/Pro decision still Matthew's, deferred)
 - Escape scraped fields (or use DOM/textContent) instead of interpolating dealer data into HTML + inline onclick
 - Check every Supabase call's `error` return (they do not throw) — audit remains after Phase 0
 - Signup flow when email confirmation is on (signUp -> immediate signIn currently fails with "Email not confirmed")
