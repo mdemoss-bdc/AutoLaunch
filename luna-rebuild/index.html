@@ -774,11 +774,6 @@ body {
     </div>
 
     <div class="flex items-center gap-2">
-      <button onclick="openFiltersModal()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
-        <i class="fa-solid fa-sliders text-blue-600 text-xs"></i>
-        <span>Filters</span>
-      </button>
-
       <div class="relative">
         <select id="sortSelect" onchange="applyFilters()" class="appearance-none bg-white border border-slate-300 hover:bg-slate-50 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-slate-700 focus:outline-none shadow-sm cursor-pointer">
           <option value="newest_first">Newest first</option>
@@ -800,6 +795,74 @@ body {
     </div>
   </div>
 
+  <!-- Filter Bar (always visible — replaces the old Filters modal, per Matthew) -->
+  <div id="filterBar" class="flex flex-wrap items-end gap-2 pt-1">
+    <div class="flex flex-col gap-1">
+      <label for="filterLocation" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Location</label>
+      <select id="filterLocation" onchange="applyFilters()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm cursor-pointer">
+        <option value="">All Locations</option>
+      </select>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="filterYear" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Year</label>
+      <select id="filterYear" onchange="applyFilters()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm cursor-pointer">
+        <option value="">All Years</option>
+      </select>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="filterMake" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Make</label>
+      <select id="filterMake" onchange="populateFilterDropdowns(); applyFilters()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm cursor-pointer">
+        <option value="">All Makes</option>
+      </select>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="filterModel" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Model</label>
+      <select id="filterModel" onchange="applyFilters()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm cursor-pointer">
+        <option value="">All Models</option>
+      </select>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="filterCondition" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Condition</label>
+      <select id="filterCondition" onchange="applyFilters()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm cursor-pointer">
+        <option value="">All Conditions</option>
+        <option value="New">New</option>
+        <option value="Used">Used</option>
+        <option value="Certified Pre-Owned">Certified Pre-Owned</option>
+      </select>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="filterColor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Color</label>
+      <select id="filterColor" onchange="applyFilters()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm cursor-pointer">
+        <option value="">All Colors</option>
+      </select>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="filterPriceRange" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Price</label>
+      <select id="filterPriceRange" onchange="applyFilters()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm cursor-pointer">
+        <option value="">Any Price</option>
+        <option value="0-10000">Under $10,000</option>
+        <option value="10000-20000">$10,000 - $20,000</option>
+        <option value="20000-30000">$20,000 - $30,000</option>
+        <option value="30000-50000">$30,000 - $50,000</option>
+        <option value="50000+">$50,000+</option>
+      </select>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="filterMileageRange" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Mileage</label>
+      <select id="filterMileageRange" onchange="applyFilters()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm cursor-pointer">
+        <option value="">Any Mileage</option>
+        <option value="0-10000">Under 10,000</option>
+        <option value="10000-30000">10,000 - 30,000</option>
+        <option value="30000-60000">30,000 - 60,000</option>
+        <option value="60000-100000">60,000 - 100,000</option>
+        <option value="100000+">100,000+</option>
+      </select>
+    </div>
+    <button id="clearFiltersBtn" onclick="clearFilters()" class="hidden px-2 py-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer">
+      <i class="fa-solid fa-xmark mr-0.5"></i>Clear
+    </button>
+  </div>
+
   <!-- Filter Pills Bar -->
   <div class="flex items-center gap-2 text-xs pt-0.5">
     <button onclick="setPillFilter('ACTIVE')" id="pillActive" class="px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer">
@@ -810,9 +873,6 @@ body {
     </button>
     <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">0</span>
-    </button>
-    <button onclick="setPillFilter('SOLD')" id="pillSold" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
-      <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Sold <span id="pillSoldCount">0</span>
     </button>
     <button onclick="setPillFilter('ALL')" id="pillAll" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer shadow-sm">
       All <span id="pillAllCount">0</span>
@@ -1335,159 +1395,6 @@ body {
 
 </div>
 
-  <!-- Inventory Filters Modal -->
-<div id="filtersModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
-
-  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 bg-white">
-
-    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
-      <div>
-        <h3 class="text-xl font-black text-slate-900">
-          Inventory Filters
-        </h3>
-
-        <p class="text-sm text-slate-500">
-          Narrow down your inventory.
-        </p>
-      </div>
-
-      <button onclick="closeModal('filtersModal')"
-              class="text-slate-400 hover:text-slate-700">
-        <i class="fa-solid fa-xmark text-xl"></i>
-      </button>
-    </div>
-
-   <div class="grid grid-cols-2 gap-4">
-
-    <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            Location
-        </label>
-        <select id="filterLocation" onchange="applyFilters()"
-                class="w-full border border-slate-300 rounded-xl px-3 py-2">
-            <option value="">All Locations</option>
-        </select>
-    </div>
-
-    <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            Year
-        </label>
-        <select id="filterYear" onchange="applyFilters()"
-                class="w-full border border-slate-300 rounded-xl px-3 py-2">
-            <option value="">All Years</option>
-        </select>
-    </div>
-
-    <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            Make
-        </label>
-        <select id="filterMake"
-        onchange="populateFilterDropdowns(); applyFilters()"
-                class="w-full border border-slate-300 rounded-xl px-3 py-2">
-            <option value="">All Makes</option>
-        </select>
-    </div>
-
-    <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            Model
-        </label>
-        <select id="filterModel" onchange="applyFilters()"
-                class="w-full border border-slate-300 rounded-xl px-3 py-2">
-            <option value="">All Models</option>
-        </select>
-    </div>
-
-    <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            Condition
-        </label>
-        <select id="filterCondition" onchange="applyFilters()"
-                class="w-full border border-slate-300 rounded-xl px-3 py-2">
-            <option value="">All Conditions</option>
-            <option value="New">New</option>
-            <option value="Used">Used</option>
-            <option value="Certified Pre-Owned">Certified Pre-Owned</option>
-        </select>
-    </div>
-
-    <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            Color
-        </label>
-        <select id="filterColor" onchange="applyFilters()"
-                class="w-full border border-slate-300 rounded-xl px-3 py-2">
-            <option value="">All Colors</option>
-        </select>
-    </div>
-
-    <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            Price
-        </label>
-        <select id="filterPriceRange" onchange="applyFilters()"
-        class="w-full border border-slate-300 rounded-xl px-3 py-2">
-    <option value="">Any Price</option>
-    <option value="0-10000">Under $10,000</option>
-    <option value="10000-20000">$10,000 - $20,000</option>
-    <option value="20000-30000">$20,000 - $30,000</option>
-    <option value="30000-50000">$30,000 - $50,000</option>
-    <option value="50000+">$50,000+</option>
-</select>
-</div>
-
-<div>
-    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-        Mileage
-    </label>
-
-    <select id="filterMileageRange" onchange="applyFilters()"
-            class="w-full border border-slate-300 rounded-xl px-3 py-2">
-
-        <option value="">Any Mileage</option>
-        <option value="0-10000">Under 10,000</option>
-        <option value="10000-30000">10,000 - 30,000</option>
-        <option value="30000-60000">30,000 - 60,000</option>
-        <option value="60000-100000">60,000 - 100,000</option>
-        <option value="100000+">100,000+</option>
-
-    </select>
-</div>
-    </div>
-</div>
-    <div class="flex justify-between gap-3 pt-3 border-t border-slate-200">
-      <button
-    onclick="clearFilters()"
-    class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold">
-
-    Clear Filters
-
-</button>
-
-      <button
-        onclick="closeModal('filtersModal')"
-        class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold">
-
-        Cancel
-
-      </button>
-
-      <button
-        onclick="applyFilters(); closeModal('filtersModal')"
-        class="px-6 py-2 rounded-xl btn-gradient text-white font-bold">
-
-        Apply Filters
-
-      </button>
-
-    </div>
-
-  </div>
-
-</div>
-  
 <!-- 6. Queue Modal -->
 <div id="queueModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
@@ -2446,7 +2353,6 @@ async function fetchLiveInventory(isManual) {
     document.getElementById("pillActiveCount").innerText = rawInventory.length;
     document.getElementById("pillUnpostedCount").innerText = unpostedCount;
     document.getElementById("pillPostedCount").innerText = postedCount;
-    document.getElementById("pillSoldCount").innerText = rawInventory.filter(c => (c.status || "").toLowerCase() === "sold").length;
     document.getElementById("pillAllCount").innerText = rawInventory.length;
 
     applyFilters();
@@ -2463,7 +2369,6 @@ function setPillFilter(filter) {
     ACTIVE: "pillActive",
     UNPOSTED: "pillUnposted",
     POSTED: "pillPosted",
-    SOLD: "pillSold",
     ALL: "pillAll"
   };
 
@@ -2686,8 +2591,7 @@ const isPosted = !!car.marketplace_posted_at;
     if (activePillFilter === 'POSTED' && !isPosted) return false;
     if (activePillFilter === 'UNPOSTED' && isPosted) return false;
     const isSold = (car.status || "").toLowerCase() === "sold";
-    if (activePillFilter === 'SOLD' && !isSold) return false;
-    if (activePillFilter !== 'SOLD' && activePillFilter !== 'ALL' && isSold) return false;
+    if (activePillFilter !== 'ALL' && isSold) return false;
 
     const title = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.trim || ''} ${car.vin || ''} ${car.stock_num || ''}`.toLowerCase();
     return !query || title.includes(query);
@@ -2702,6 +2606,7 @@ const isPosted = !!car.marketplace_posted_at;
 
 document.getElementById("showingCountBold").innerText = filtered.length;
 renderTableRows(filtered);
+updateClearFiltersVisibility();
 }
 // Button Audit: list/grid view toggle. Only ONE view is rendered at a time
 // so .car-select-chk checkboxes always line up 1:1 (by DOM order) with
@@ -4241,7 +4146,6 @@ async function saveWishlistForm() {
   }
 }
 
-function openFiltersModal() {document.getElementById("filtersModal").classList.remove("hidden"); }
 function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); }
 function renderUserId() { const el = document.getElementById("settingsUserId"); if (el) el.textContent = (currentUser && currentUser.id) ? currentUser.id : "—"; }
 async function copyUserId() {
@@ -4280,17 +4184,23 @@ function openAutoPhotoEditsModal() {
 }
 function openPostingSafetyModal() { document.getElementById("postingSafetyModal").classList.remove("hidden"); }
 function openPostingPreferencesModal() { document.getElementById("postingPreferencesModal").classList.remove("hidden"); }
+// Filter bar: reset every bar select to its "All/Any" option and re-render.
+// populateFilterDropdowns() runs after the reset so the Model list rebuilds
+// for "All Makes" instead of staying narrowed to the previously picked make.
 function clearFilters() {
-    document.getElementById("filterLocation").value = "";
-    document.getElementById("filterYear").value = "";
-    document.getElementById("filterMake").value = "";
-    document.getElementById("filterModel").value = "";
-    document.getElementById("filterCondition").value = "";
-    document.getElementById("filterColor").value = "";
-    document.getElementById("filterPriceRange").value = "";
-    document.getElementById("filterMileageRange").value = "";
+    ["filterLocation", "filterYear", "filterMake", "filterModel", "filterCondition", "filterColor", "filterPriceRange", "filterMileageRange"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    populateFilterDropdowns();
     applyFilters();
-    closeModal('filtersModal');
+}
+// The bar's Clear button only shows while at least one filter is set.
+function updateClearFiltersVisibility() {
+  const ids = ["filterLocation", "filterYear", "filterMake", "filterModel", "filterCondition", "filterColor", "filterPriceRange", "filterMileageRange"];
+  const anyActive = ids.some(id => { const el = document.getElementById(id); return el && el.value !== ""; });
+  const btn = document.getElementById("clearFiltersBtn");
+  if (btn) btn.classList.toggle("hidden", !anyActive);
 }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
 // ==============================================================================
