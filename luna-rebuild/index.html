@@ -11,7 +11,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>AutoLaunch | Dealer Intelligence & Automation Suite</title>
-<link rel="icon" href="data:,">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/x-icon" href="icons/favicon.ico">
+<link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <!-- Supabase JS Client -->
@@ -141,12 +144,10 @@ body {
 <div id="authOverlay" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-md rounded-2xl p-8 space-y-6 shadow-2xl relative border border-slate-200 bg-white">
     <div class="flex items-center gap-3 justify-center mb-2">
-      <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25 text-white font-black text-xl">
-        <i class="fa-solid fa-bolt"></i>
-      </div>
+      <img src="icons/logo-mark-512.png" alt="AutoLaunch" class="w-12 h-12 rounded-2xl shadow-lg shadow-blue-500/25 object-cover">
       <div>
         <span class="brand-title font-extrabold text-2xl tracking-tight text-slate-900 block">AutoLaunch</span>
-        <span class="text-[10px] font-bold tracking-widest text-blue-600 uppercase">Dealer Intelligence Suite</span>
+        <span class="text-[10px] font-bold tracking-widest text-blue-600 uppercase">Intelligence Suite</span>
       </div>
     </div>
 
@@ -190,9 +191,7 @@ body {
   <div class="p-4 space-y-4 overflow-y-auto">
     <div class="flex items-center justify-between px-2 pt-1 pb-1">
       <div class="flex items-center gap-2.5">
-        <div class="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs shadow-md shadow-blue-500/20 font-black">
-          <i class="fa-solid fa-bolt"></i>
-        </div>
+        <img src="icons/logo-mark-512.png" alt="AutoLaunch" class="w-7 h-7 rounded-lg shadow-md shadow-blue-500/20 object-cover">
         <span class="brand-title font-black text-xl text-slate-900 tracking-tight">AutoLaunch</span>
       </div>
       <button onclick="toggleMobileNav()" aria-label="Toggle menu" class="text-slate-400 hover:text-slate-700 text-xs p-1 cursor-pointer">
@@ -1033,6 +1032,53 @@ body {
 
         </div>
 
+        <!-- SYNDICATION CHANNELS (Phase 6) -->
+
+        <div class="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
+
+          <div>
+            <h3 class="font-bold text-lg">Syndication Channels</h3>
+            <p class="text-sm text-slate-500">
+              One car, posted everywhere. Marketplace is always on (via the Chrome extension).
+              Switch on more channels and every queued car fans out to each of them.
+            </p>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-slate-800">Instagram</p>
+              <p class="text-xs text-slate-500">Photo carousels &amp; Reels via the official API. Needs a Professional account and the Phase 6 channel setup.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkChannelInstagram" onchange="toggleChannelSetting('instagram', this)" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-slate-800">TikTok</p>
+              <p class="text-xs text-slate-500">Generated vehicle videos via the official API. Public posting unlocks after TikTok's client audit.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkChannelTiktok" onchange="toggleChannelSetting('tiktok', this)" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-slate-800">Facebook Page</p>
+              <p class="text-xs text-slate-500">Posts to your dealership Page via the official API, from the same Meta connection as Instagram.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkChannelFacebookPage" onchange="toggleChannelSetting('facebook_page', this)" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+            </label>
+          </div>
+
+        </div>
+
         <!-- SAVE -->
 
         <div class="flex justify-end">
@@ -1726,6 +1772,18 @@ let activeModelFilter = "";
 let activeConditionFilter = "";
 let postingQueue = [];
 let userDailyPostLimit = 10;
+// Phase 6: per-channel syndication switches (persisted in user_settings
+// once the channels migration draft is applied — see
+// CHANNELS_IMPLEMENTATION.md). Marketplace is the always-on core channel.
+let userChannels = { instagram: false, tiktok: false, facebook_page: false };
+
+function getEnabledChannels() {
+  const channels = ["marketplace"];
+  if (userChannels.instagram) channels.push("instagram");
+  if (userChannels.tiktok) channels.push("tiktok");
+  if (userChannels.facebook_page) channels.push("facebook_page");
+  return channels;
+}
 let activeDropdownVin = null;
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
 
@@ -1911,6 +1969,18 @@ updateLastSyncDisplay();
         if (ribbonRepost) ribbonRepost.checked = !!data.enable_auto_repost;
       }
       syncRibbonMasterCheckbox();
+
+      // Phase 6: channel switches (columns arrive with the channels
+      // migration draft; absent columns simply leave the defaults off)
+      userChannels.instagram = !!data.channel_instagram_enabled;
+      userChannels.tiktok = !!data.channel_tiktok_enabled;
+      userChannels.facebook_page = !!data.channel_facebook_page_enabled;
+      const chkIg = document.getElementById("chkChannelInstagram");
+      if (chkIg) chkIg.checked = userChannels.instagram;
+      const chkTt = document.getElementById("chkChannelTiktok");
+      if (chkTt) chkTt.checked = userChannels.tiktok;
+      const chkFb = document.getElementById("chkChannelFacebookPage");
+      if (chkFb) chkFb.checked = userChannels.facebook_page;
 
       if (data.ai_background_mode) {
         const aiSel = document.getElementById("selectAiBgMode");
@@ -2865,25 +2935,31 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 
     try {
 
-        const existingVins = new Set(
+        // Phase 6 fan-out: dedupe per (vin, channel), one row per channel
+        const existingKeys = new Set(
     postingQueue
-        .filter(i => i.status === "pending")
-        .map(i => i.vin)
+        .filter(i => i.status === "pending" || i.status === "processing")
+        .map(i => `${i.vin}|${i.target_channel || "marketplace"}`)
 );
 
-const rows = selectedVehicles
-    .filter(car => !existingVins.has(car.vin))
-    .map(car => ({
-        user_id: currentUser.id,
-        vin: car.vin,
-        year: car.year,
-        make: car.make,
-        model: car.model,
-        stock_num: car.stock_num || car.stock_number,
-        status: "pending",
-        target_channel: "marketplace",
-        created_at: new Date().toISOString()
-    }));
+const enabledChannels = getEnabledChannels();
+const rows = [];
+selectedVehicles.forEach(car => {
+    enabledChannels.forEach(channel => {
+        if (existingKeys.has(`${car.vin}|${channel}`)) return;
+        rows.push({
+            user_id: currentUser.id,
+            vin: car.vin,
+            year: car.year,
+            make: car.make,
+            model: car.model,
+            stock_num: car.stock_num || car.stock_number,
+            status: "pending",
+            target_channel: channel,
+            created_at: new Date().toISOString()
+        });
+    });
+});
 
 if (!rows.length) {
 
@@ -2894,7 +2970,8 @@ if (!rows.length) {
     return;
 }
 
-        if (!(await checkDailyLimit(rows.length))) return;
+        const marketplaceRows = rows.filter(r => r.target_channel === "marketplace").length;
+        if (!(await checkDailyLimit(marketplaceRows))) return;
 
         const { error } = await supabaseClient
             .from("auto_posting_queue")
@@ -2908,7 +2985,9 @@ if (!rows.length) {
 
         refreshSafetyCounter();
 
-        alert(`${rows.length} vehicle(s) queued.`);
+        alert(enabledChannels.length > 1
+            ? `${marketplaceRows} vehicle(s) queued across ${enabledChannels.length} channels (${rows.length} posts total).`
+            : `${rows.length} vehicle(s) queued.`);
 
     } catch (err) {
 
@@ -2959,18 +3038,25 @@ async function enqueueMarketplaceCar(vin) {
   try {
     if (!(await checkDailyLimit(1))) return;
 
-    const { error } = await supabaseClient.from("auto_posting_queue").insert({
+    // Phase 6 fan-out: one queue row per enabled channel. The extension
+    // claims marketplace rows; the other channels' workers pick up theirs.
+    const channels = getEnabledChannels();
+    const rows = channels.map(channel => ({
       user_id: currentUser.id,
       vin: vin,
-      target_channel: 'marketplace',
+      target_channel: channel,
       status: 'pending'
-    });
+    }));
+
+    const { error } = await supabaseClient.from("auto_posting_queue").insert(rows);
     if (error) throw error;
 
     await loadPostingQueue();
     applyFilters();
     refreshSafetyCounter();
-    alert("✓ Vehicle scheduled in Post Queue!");
+    alert(channels.length > 1
+      ? `✓ Vehicle scheduled in Post Queue for ${channels.length} channels: ${channels.join(", ")}!`
+      : "✓ Vehicle scheduled in Post Queue!");
   } catch (err) {
     alert("Could not queue vehicle: " + err.message);
   }
@@ -3441,6 +3527,37 @@ async function toggleRibbonSetting(k) {
   syncRibbonMasterCheckbox();
 }
 
+// Phase 6: per-channel switches. Columns live in user_settings once the
+// channels migration draft is applied; before that, the save fails and
+// we say so honestly instead of pretending the switch worked.
+const CHANNEL_SETTING_COLUMNS = {
+  instagram: "channel_instagram_enabled",
+  tiktok: "channel_tiktok_enabled",
+  facebook_page: "channel_facebook_page_enabled"
+};
+
+async function toggleChannelSetting(channel, el) {
+  const column = CHANNEL_SETTING_COLUMNS[channel];
+  if (!column || !currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  try {
+    const payload = { user_id: currentUser.id, updated_at: new Date().toISOString() };
+    payload[column] = value;
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert(payload, { onConflict: "user_id" });
+    if (error) throw error;
+    userChannels[channel] = value;
+  } catch (err) {
+    el.checked = !value;
+    alert(
+      "Could not save that channel yet: " + (err.message || "Unknown error") +
+      "\n\nChannel switches need the Phase 6 database migration first " +
+      "(supabase/channels_migration_DRAFT.sql — see CHANNELS_IMPLEMENTATION.md)."
+    );
+  }
+}
+
 // The Settings modal's Auto Posting switch controls the same column as the
 // ribbon's "Auto-post new arrivals" switch. Route it through the same save.
 function toggleSettingsAutoPost(el) {
@@ -3474,6 +3591,7 @@ async function getDailyPostUsage() {
       .from("auto_posting_queue")
       .select("vin, status, created_at")
       .eq("user_id", currentUser.id)
+      .eq("target_channel", "marketplace")
       .gte("created_at", startISO);
     if (qErr) throw qErr;
     (qRows || []).forEach(r => {
