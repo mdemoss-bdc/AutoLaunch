@@ -2609,6 +2609,7 @@ async function handleAuthSubmit(e) {
 }
 
 async function handleSignOut() {
+  stopQueuePoller();
   await supabaseClient.auth.signOut();
   window.location.reload();
 }
@@ -2647,6 +2648,7 @@ async function initAppSession(user) {
   await loadUserStoreSettings();
   await fetchLiveInventory(true);
   await loadPostingQueue();
+  syncQueuePoller();
 }
 
 async function loadUserStoreSettings() {
@@ -3888,6 +3890,99 @@ const statusChip = blockedNoPhoto
     }
 
 }
+
+// =====================================================================
+// LIVE QUEUE POLLING — the queue used to be a page-load snapshot: a job
+// could flip Pending -> Failed in the database while the open "Active
+// Post Queue" modal still showed Pending until a hard refresh. One
+// shared poller re-checks every ~12s, but only while there is something
+// on screen worth updating: the queue modal open, or the Inventory view
+// visible (its Posted pills read scraped_inventory.marketplace_posted_at,
+// which the extension flips when a post/delete lands). Ticks are skipped
+// while the tab is hidden, while signed out, or while a previous tick is
+// still fetching — the timer can never stack or overlap itself.
+// =====================================================================
+const QUEUE_POLL_MS = 12000;
+let queuePollTimer = null;
+let queuePollInFlight = false;
+
+function isQueueModalOpen() {
+    const m = document.getElementById("queueModal");
+    return !!m && !m.classList.contains("hidden");
+}
+
+function isInventoryVisible() {
+    const main = document.querySelector("main");
+    return !!main && !main.classList.contains("hidden");
+}
+
+function startQueuePoller() {
+    if (queuePollTimer !== null) return; // single timer, never stacked
+    queuePollTimer = setInterval(pollQueueTick, QUEUE_POLL_MS);
+}
+
+function stopQueuePoller() {
+    if (queuePollTimer !== null) {
+        clearInterval(queuePollTimer);
+        queuePollTimer = null;
+    }
+}
+
+// Start/stop to match what's on screen. Called from view switching,
+// queue modal open/close, session init and sign-out.
+function syncQueuePoller() {
+    if (currentUser && (isQueueModalOpen() || isInventoryVisible())) {
+        startQueuePoller();
+    } else {
+        stopQueuePoller();
+    }
+}
+
+async function pollQueueTick() {
+    if (queuePollInFlight) return; // previous tick still fetching — skip
+    if (document.visibilityState !== "visible") return;
+    if (!currentUser) { stopQueuePoller(); return; }
+
+    const modalOpen = isQueueModalOpen();
+    const invVisible = isInventoryVisible();
+    if (!modalOpen && !invVisible) { stopQueuePoller(); return; }
+
+    queuePollInFlight = true;
+    try {
+        // Preserve scroll + focus across the re-render: the queue list
+        // scrolls inside the modal's card, the inventory in the window.
+        // If focus sat on a queue row's Remove button, hand it back to
+        // the same button after the list is rebuilt.
+        const card = document.querySelector("#queueModal .glass-card");
+        const cardScroll = card ? card.scrollTop : 0;
+        const winScroll = window.scrollY;
+        const ae = document.activeElement;
+        const focusId = (ae && ae.dataset && ae.dataset.id) ? ae.dataset.id : null;
+        const focusAction = (ae && ae.dataset) ? (ae.dataset.action || "") : "";
+
+        if (modalOpen) await loadPostingQueue();       // list + sidebar badge
+        if (invVisible) await fetchLiveInventory(false); // rows + Posted pills
+
+        if (card) card.scrollTop = cardScroll;
+        if (window.scrollY !== winScroll) window.scrollTo(0, winScroll);
+        if (focusId && document.activeElement !== ae) {
+            const again = document.querySelector(
+                '#queueItemsList [data-action="' + focusAction + '"][data-id="' + focusId + '"]'
+            );
+            if (again) again.focus({ preventScroll: true });
+        }
+    } catch (e) {
+        // A failed tick is not fatal — the next one retries.
+    }
+    queuePollInFlight = false;
+}
+
+// Coming back to the tab: refresh right away instead of waiting out
+// the rest of the interval (the tick itself re-checks every guard).
+document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") pollQueueTick();
+});
+
   async function bulkQueueSelectedVehicles() {
 
     if (!currentUser) return;
@@ -4244,6 +4339,8 @@ if (completeStep) {
 
     setActiveNav("inventory");
 
+    syncQueuePoller();
+
     alert("🎉 Setup Complete");
 
 }
@@ -4444,6 +4541,7 @@ function showGetStartedPage() {
     document.getElementById("getStartedPage")
         .classList.remove("hidden");
 
+    syncQueuePoller();
 }
 // Button Audit: the header dealer-site link points at "#" until settings
 // load assigns the real URL. If no inventory URL is configured yet, send
@@ -4471,6 +4569,7 @@ function showInventoryPage(navKey) {
         .querySelector("main")
         .classList.remove("hidden");
 
+    syncQueuePoller();
 }
 // Button Audit: sidebar Elite items (Inbox / Calendar / AI Training /
 // Playground) are roadmap features. Give them an honest, polished response
@@ -4738,6 +4837,7 @@ async function showWishlistPage() {
   renderWishlist(fresh);
   markWishlistSeen();
   updateWishlistBadge(0);
+  syncQueuePoller();
 }
 
 function renderWishlist(fresh) {
@@ -5218,7 +5318,11 @@ function renderThemePicker() {
 // ==============================================================================
 // ====================== COLOR THEME ENGINE END ================================
 // ==============================================================================
-function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
+function openQueueModal() {
+  document.getElementById("queueModal").classList.remove("hidden");
+  loadPostingQueue(); // fresh state the moment it opens, not the page-load snapshot
+  syncQueuePoller();  // and keep it live while it stays open
+}
 function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
 function openAutoPhotoEditsModal() {
@@ -5250,7 +5354,10 @@ function updateClearFiltersVisibility() {
   const btn = document.getElementById("clearFiltersBtn");
   if (btn) btn.classList.toggle("hidden", !anyActive);
 }
-function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+function closeModal(id) {
+  document.getElementById(id).classList.add("hidden");
+  if (id === "queueModal") syncQueuePoller();
+}
 // ==============================================================================
 // ====================== PHASE 4: SETTINGS THAT WORK ===========================
 // ==============================================================================
