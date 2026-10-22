@@ -507,6 +507,101 @@ Schema cache reloaded (`notify pgrst, 'reload schema'`).
   or anything else = FAILED with the reason. There is no timer that
   declares success.
 
+## v2.1.5 — structural field gating (the ghost's third mask)
+
+The 2.1.4 Full Auto live run (queue row cab322f1, 2026-10-22
+~18:41 EDT) filled everything correctly — both colors color_set
+again — reached the final audience step, and FAILED on the preview
+panel AGAIN, in a new mask. The diag records, verbatim: an
+ExteriorColor attempt against a div[role=button] with aria-label
+"View listing location" (note color_options_never_opened,
+readBack ""), and Price laddered through all three rungs against
+THE SAME element, expected "11327", readBack "". That element is
+the preview card's location-map button. Full Auto never reached
+its Publish click; Matthew published by hand on a perfect form.
+
+**The live structure lesson:** the "Preview" heading on the real
+page is a small label rendered ABOVE the preview card — a SIBLING
+of the card, not an ancestor of the card's contents — and the card
+is nested deep enough that the 8-level ancestor climb in
+isInPreview never reaches any "Preview"-labelled container (the
+card's own leading text is the car title). The 2.1.4 harness had
+modelled the pane as a text-labelled ancestor container, so it
+passed while live failed. nearbyText then aggregated the card's
+prose (it contains "Exterior color: Beige" and the description's
+"Price: $11,327") and landed on the map button as the "clickable
+candidate"; the UI-chrome guard checked only the element's OWN
+text ("See less") — the map button's own text is EMPTY, so the
+guard waved it through. Text heuristics are therefore DEMOTED to
+backstops. The primary defenses are now structural, all in the
+field-location layer of content.js (header note 16):
+
+1. **Real-control gating (the deterministic kill).** A step's
+   required/best-effort spec — and ALL field location (fillers,
+   ladder rungs, diagnostic snapshots draw through the single
+   findAnyField choke point) — only exists when the step contains
+   at least one REAL form control in the form region: a text-like
+   input (not checkbox/radio/file/hidden), a textarea, a native
+   select, a [role="combobox"]/[role="textbox"], a listbox
+   dropdown trigger ([aria-haspopup="listbox"] — a value-carrying
+   control, unlike a plain button), or a [contenteditable]. The
+   audience step's left column is group checkboxes + Previous /
+   Publish buttons: zero real controls, so its spec is EMPTY BY
+   CONSTRUCTION, no field location runs at all, the step completes
+   cleanly, and Full Auto clicks Publish. Clickable divs are
+   eligible as select-like fields ONLY on steps where real
+   controls exist.
+2. **Media/chrome exclusion.** An element is never a field when
+   its aria-label starts with "View " (View listing location,
+   View photo, …), when its own text OR aria-label is a known
+   chrome phrase (See more / See less / Learn more / …), or when
+   its subtree contains media — an <img> or <canvas> at any size,
+   or an <svg> with a declared size ≥48px (maps and photos; a
+   16px chevron icon inside a real dropdown trigger declares 16
+   and stays eligible). Applied in findField/findAnyField, the
+   color locators, the clean-title locator, the description
+   locator, option pickers and the form map.
+3. **Preview identification by structure.** Once per step, the
+   pane is tagged by what it IS: the card is the smallest
+   ancestor of the "Seller information" block whose subtree also
+   carries the car's static formatted price ("$11,327") AND a
+   photo <img> (degraded anchor: the first photo-holding
+   ancestor). Candidates inside a tagged card are excluded
+   everywhere, and the nearby-text climb stops at any ancestor
+   that contains a tagged card. 2.1.4's label-based isInPreview
+   checks remain as backstops.
+4. **Fallback discipline.** The nearbyText strategy can never
+   select an element inside a tagged preview subtree, nor a
+   div[role=button] whose subtree contains media. If the
+   own-label and container strategies find nothing and the
+   fallback only finds excluded elements, the outcome is an
+   honest field_not_located — chrome elements are never laddered.
+
+Untouched, per the run's evidence: color normalization + verify,
+clean title, verify-gate semantics for real fields, the photo
+flow, Full Auto publish logic, the delete flow, confirm mode.
+Verification (node, DOM-stub harnesses): a NEW v35 harness whose
+audience step reproduces the LIVE structure (sibling "Preview"
+heading, card nested six wrappers deep, map button with empty
+text + map <img> + "View listing location" aria-label, "Seller
+information" block, group-checkbox left column with zero real
+controls) — 22/22: Full Auto walks the real form (Year/Make/
+Model/Price set, both colors color_set, clean title checked),
+never clicks the map button or "See more", records no Price diag
+and no color_options_never_opened, clicks Publish itself and
+posts on detection; confirm mode reaches the verified state and
+the human's single click publishes; Full Auto with no Publish
+anywhere still fails honestly as publish_button_not_found.
+Fidelity check: the SAME harness run against the 2.1.4 build
+reproduces the live failure exactly (fields_unfilled:Price, the
+map button clicked, a diag naming "View listing location").
+Regressions: v2.1.4 harness 42/42, v2.1.3 harness 50/50, v3.2
+harness 40/40 — 154 checks total, node --check clean. (One
+harness-driven refinement during the build: a step whose only
+controls are listbox dropdown triggers — the v2.1.3 stub's step
+2 — must still count as a form step, so [aria-haspopup="listbox"]
+is a real control; plain [role="button"] is not.)
+
 ## How to test it (Matthew)
 
 1. In Chrome: chrome://extensions -> Developer mode ON -> Load unpacked ->
@@ -541,6 +636,14 @@ Schema cache reloaded (`notify pgrst, 'reload schema'`).
    is back to Not Posted in the app. If two identical cars were
    listed at the same price, it should refuse (listing_ambiguous)
    and delete nothing.
+8. v2.1.5 RETEST (Full Auto, the run-7 scenario): Reload the
+   extension (card must read version 2.1.5), hard-refresh the app
+   tab, make sure Settings → Automation → "Full Auto posting" is
+   ON, queue the Tucson, and touch NOTHING. Expected: it walks
+   every step, sets the colors itself, passes the audience step
+   without a glance at the preview card, clicks Publish itself,
+   and the queue row ends Posted. Then run the step-7 delete test
+   on that same listing.
 
 ## Live test log
 
@@ -680,6 +783,29 @@ Schema cache reloaded (`notify pgrst, 'reload schema'`).
   trusted-input rung). If a field still fails, its record — or its
   field_not_located record + the form_map — will be sitting in the
   queue row's error_message for Luna to read directly.
+
+- 2026-10-22, seventh run (v2.1.4, 2.1.4 — the Full Auto test,
+  queue row cab322f1): everything filled correctly AGAIN (both
+  colors color_set on the real comboboxes) and the job still
+  FAILED on the final audience step — on the preview AGAIN, in a
+  new mask. The diag names the element precisely: a
+  div[role=button] with aria-label "View listing location" — the
+  preview card's location-map button. ExteriorColor was attempted
+  against it (color_options_never_opened) and Price was laddered
+  through all three rungs against it (expected "11327", readBack
+  ""). Screenshots showed why 2.1.4's isInPreview never fired: the
+  "Preview" heading is a small label ABOVE the card (a sibling,
+  not an ancestor of the card's contents), too far up a deep
+  ancestor chain; the card's own leading text is the car title;
+  and the map button's own text is EMPTY, so the own-text chrome
+  guard ("See less") missed it. Matthew published by hand on a
+  perfect form; Full Auto never reached its Publish click. The
+  v2.1.5 build (structural gating — see the v2.1.5 section above)
+  is the fix; its harness reproduces this exact failure against
+  the 2.1.4 build on a live-structure stub and passes on 2.1.5.
+  It has NOT yet had a live Facebook run. Re-test: Reload (card
+  must read 2.1.5), hard-refresh the app tab, Full Auto ON, queue
+  the Tucson, touch nothing.
 
 ## Honest limits (untested overnight)
 

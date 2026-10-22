@@ -198,6 +198,54 @@
 //     Publish button being "located" as Price through exactly that
 //     bleed and laddered (it survived only because read-back kept
 //     failing honestly).
+// 16. STRUCTURAL FIELD GATING (v2.1.5 — the ghost's third mask, the
+//     2.1.4 Full Auto live run): the form filled perfectly AGAIN
+//     (both colors color_set), reached the audience step — and
+//     failed on the preview AGAIN, wearing a new face. This time the
+//     matched element was the preview card's LOCATION-MAP button
+//     (div[role=button], aria-label "View listing location"): the
+//     diag shows ExteriorColor attempted against it
+//     (color_options_never_opened) and Price laddered through all
+//     three rungs against it, expected "11327", readBack "". Why
+//     note 15's defenses missed: on the live page the "Preview"
+//     heading is a small label rendered ABOVE the card — a SIBLING
+//     of the card, not an ancestor of its contents — and the card
+//     is nested too deep for the 8-level ancestor climb to reach
+//     any "Preview"-labelled container; the card's own leading text
+//     is the car title. nearbyText then aggregated the card's prose
+//     (it contains "Exterior color: Beige" and the description's
+//     "Price: $11,327") and landed on the map button, and the
+//     chrome guard only checked the element's OWN text ("See less")
+//     — the map button's own text is EMPTY, so the guard passed it.
+//     (The 2.1.4 harness passed because its stub modelled the pane
+//     as a text-labelled ancestor container; live structure
+//     differs.) Text heuristics are therefore DEMOTED to backstops.
+//     The primary defenses are now structural:
+//       (1) REAL-CONTROL GATING: a step's field spec — and ALL
+//           field location — only exists when the step contains at
+//           least one REAL form control (input / textarea / select
+//           / [role=combobox] / [role=textbox] / a listbox dropdown
+//           trigger / [contenteditable])
+//           in the form region. The audience step has none (its
+//           left column is checkboxes and buttons), so its spec is
+//           EMPTY BY CONSTRUCTION: no location runs, nothing can be
+//           resurrected, the step completes, and Full Auto clicks
+//           Publish. Clickable divs are eligible as select-like
+//           fields only on steps where real controls exist.
+//       (2) MEDIA/CHROME EXCLUSION: an element is never a field
+//           when its aria-label starts with "View " (View listing
+//           location, View photo, …), when its own text OR
+//           aria-label is a known chrome phrase, or when its
+//           subtree contains media (an <img>, a <canvas>, or an
+//           <svg> with a declared size of 48px or more — maps and
+//           photos, not 16px chevron icons).
+//       (3) PREVIEW BY STRUCTURE: the pane is identified ONCE per
+//           step by what it IS, not by its label — the card is the
+//           smallest ancestor of the "Seller information" block
+//           whose subtree also carries the car's static formatted
+//           price AND a photo <img>. Candidates inside a tagged
+//           card are excluded everywhere; the nearby-text climb
+//           also stops at any ancestor containing a tagged card.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -697,7 +745,7 @@
       // Publish button itself was "located" as Price through a shared
       // ancestor's text and laddered. Stop before such an ancestor;
       // everything above it spans the preview too.
-      if (subtreeContainsPreview(node)) break;
+      if (subtreeContainsPreview(node) || containsTaggedPreview(node)) break;
       text += " " + (node.textContent || "").slice(0, 160);
     }
     return text.toLowerCase();
@@ -716,6 +764,164 @@
     if (el.offsetParent !== null) return true;
     if (typeof el.getClientRects === "function" && el.getClientRects().length) return true;
     return false;
+  }
+
+  // ---- preview identification BY STRUCTURE (v2.1.5, header note 16) -----
+  // The live lesson of the 2.1.4 Full Auto run: the "Preview" heading
+  // is a SIBLING label above the card, too far up a deep ancestor
+  // chain for label-based detection to reach from inside the card.
+  // So the pane is found by what it IS: Facebook's preview card
+  // always carries a "Seller information" block (seller avatar +
+  // name) next to the listing's STATIC title/price and a photo. The
+  // card is the smallest ancestor of that block whose subtree also
+  // holds the car's formatted price as text AND an <img>. Roots are
+  // tagged once per step (cached per URL, re-derived when a cached
+  // root leaves the document) and every candidate inside a tagged
+  // subtree is excluded from field location.
+  function subtreeHasImg(root, cap) {
+    let seen = 0;
+    const stack = [root];
+    while (stack.length) {
+      const n = stack.pop();
+      if (!n || seen++ > (cap || 600)) continue;
+      if (n.nodeType === 1 && String(n.tagName || "").toUpperCase() === "IMG") return true;
+      const kids = n.childNodes || [];
+      for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
+    }
+    return false;
+  }
+  function findPreviewRoots() {
+    const roots = [];
+    const priceText = car && car.price
+      ? "$" + Number(car.price).toLocaleString("en-US") : "";
+    const labels = Array.from(document.querySelectorAll("div, span, p, h1, h2, h3, h4, h5, li, a"));
+    for (const lab of labels) {
+      if (normText(containerLeadingText(lab)) !== "seller information") continue;
+      let root = null;
+      let node = lab;
+      for (let depth = 0; depth < 10 && !root; depth++) {
+        node = node.parentElement;
+        if (!node) break;
+        const text = String(node.textContent || "");
+        if (subtreeHasImg(node) && (!priceText || text.includes(priceText))) root = node;
+      }
+      if (!root) {
+        // Degraded anchor: the first ancestor holding any photo is
+        // still the preview's side of the page, never the form's.
+        node = lab;
+        for (let depth = 0; depth < 10 && !root; depth++) {
+          node = node.parentElement;
+          if (!node) break;
+          if (subtreeHasImg(node)) root = node;
+        }
+      }
+      if (root && !roots.includes(root)) roots.push(root);
+    }
+    return roots;
+  }
+  let previewTagCache = null; // { href, roots } — one tagging per step
+  function previewRoots() {
+    const href = window.location.href;
+    if (previewTagCache && previewTagCache.href === href &&
+        previewTagCache.roots.every(r =>
+          !document.body || (typeof document.body.contains === "function" &&
+            document.body.contains(r)))) {
+      return previewTagCache.roots;
+    }
+    const roots = findPreviewRoots();
+    previewTagCache = { href, roots };
+    return roots;
+  }
+  function isInTaggedPreview(el) {
+    if (!el) return false;
+    return previewRoots().some(r =>
+      r === el || (typeof r.contains === "function" && r.contains(el)));
+  }
+  // For the nearby-text bleed stop: does this ancestor CONTAIN a
+  // tagged preview card (making its aggregated text cross-region)?
+  function containsTaggedPreview(node) {
+    if (!node) return false;
+    return previewRoots().some(r =>
+      r === node || (typeof node.contains === "function" && node.contains(r)));
+  }
+
+  // ---- media exclusion (v2.1.5, header note 16) --------------------------
+  // A field never CONTAINS media: the preview's map button wraps a
+  // map <img>, photo tiles wrap the photos themselves. Walk the
+  // candidate's subtree for an <img> or <canvas> (any size — a real
+  // control never holds one) or an <svg> with a DECLARED size of
+  // 48px or more (maps/photos; a 16px chevron icon inside a real
+  // dropdown trigger declares 16 and stays eligible).
+  function subtreeHasMedia(root) {
+    let seen = 0;
+    const stack = [root];
+    while (stack.length) {
+      const n = stack.pop();
+      if (!n || seen++ > 300) continue;
+      if (n.nodeType === 1) {
+        const tag = String(n.tagName || "").toUpperCase();
+        if (tag === "IMG" || tag === "CANVAS") return true;
+        if (tag === "SVG" && typeof n.getAttribute === "function") {
+          const w = parseInt(n.getAttribute("width") || "", 10);
+          const h = parseInt(n.getAttribute("height") || "", 10);
+          if ((isFinite(w) && w >= 48) || (isFinite(h) && h >= 48)) return true;
+        }
+      }
+      const kids = n.childNodes || [];
+      for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
+    }
+    return false;
+  }
+  function isMediaChrome(el) {
+    if (!el) return false;
+    const tag = (el.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return false;
+    return subtreeHasMedia(el);
+  }
+
+  // ---- real-control gating (v2.1.5, header note 16) ----------------------
+  // THE deterministic kill for the audience-step ghost: field
+  // location — and with it spec construction, filling, verification
+  // and the ladder — only exists on steps that hold at least one
+  // REAL form control in the form region. "Real" = a control that
+  // can carry one of our field values: a text-like input (NOT
+  // checkbox/radio/file/hidden — a step whose only inputs are group
+  // checkboxes has no fields), a textarea, a native select, a
+  // combobox/textbox role, a listbox dropdown trigger
+  // ([aria-haspopup="listbox"] — a value-carrying control, unlike a
+  // plain button), or a contenteditable. The audience step's
+  // left column is checkboxes + Previous/Publish buttons: zero real
+  // controls, so its spec is empty BY CONSTRUCTION and clickable
+  // divs are not eligible as fields there at all.
+  const REAL_FIELD_SELECTOR =
+    'input, textarea, select, [role="combobox"], [role="textbox"], ' +
+    '[aria-haspopup="listbox"], [contenteditable="true"]';
+  function isRealFieldControl(el) {
+    if (!el) return false;
+    const tag = (el.tagName || "").toUpperCase();
+    if (tag === "INPUT") {
+      const t = String(
+        typeof el.getAttribute === "function" ? el.getAttribute("type") || "text" : "text"
+      ).toLowerCase();
+      return !["checkbox", "radio", "file", "hidden", "submit", "button", "image", "reset"]
+        .includes(t);
+    }
+    if (tag === "TEXTAREA" || tag === "SELECT") return true;
+    const role = typeof el.getAttribute === "function" ? el.getAttribute("role") : null;
+    if (role === "combobox" || role === "textbox") return true;
+    // A listbox dropdown trigger is a genuine value-carrying
+    // control (the step-2 color triggers in some variants are
+    // exactly this, with no combobox role and no other control on
+    // the step) — distinct from a plain [role="button"], which is
+    // eligible as a FIELD only once a real control exists.
+    if (typeof el.getAttribute === "function" &&
+        el.getAttribute("aria-haspopup") === "listbox") return true;
+    const ce = typeof el.getAttribute === "function" ? el.getAttribute("contenteditable") : null;
+    return ce === "true" || ce === "";
+  }
+  function stepHasRealControls() {
+    return Array.from(document.querySelectorAll(REAL_FIELD_SELECTOR))
+      .some(el => isRealFieldControl(el) && isFormCandidate(el) && isVisibleEl(el));
   }
 
   // ---- form region vs preview pane (v2.1.4, header note 15) ------------
@@ -741,6 +947,9 @@
     return false;
   }
   function isInPreview(el) {
+    // Structural first (v2.1.5, header note 16): inside a tagged
+    // preview card is decisive, wherever the "Preview" label sits.
+    if (el && isInTaggedPreview(el)) return true;
     let node = el ? el.parentElement : null;
     for (let depth = 0; depth < 8 && node; depth++) {
       if (labelTextMatches(containerLeadingText(node), ["preview"])) return true;
@@ -754,7 +963,11 @@
   }
   // A generic clickable whose WHOLE text is a UI chrome word is page
   // furniture, never a field — the second half of the run-6 trap (the
-  // "See less" expander was laddered as Price). Real inputs, textareas
+  // "See less" expander was laddered as Price). v2.1.5 (note 16): the
+  // check now covers the aria-label too, and any "View …" label —
+  // the run-7 map button's own text was EMPTY, so the text-only
+  // check waved it through while its aria-label announced exactly
+  // what it was ("View listing location"). Real inputs, textareas
   // and selects are exempt by tag: their text is their value.
   const UI_CHROME_TEXTS = new Set([
     "see less", "see more", "learn more", "show more", "show less",
@@ -763,11 +976,18 @@
   function isChromeButton(el) {
     const tag = (el && el.tagName || "").toUpperCase();
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return false;
-    return UI_CHROME_TEXTS.has(normText(el && el.textContent));
+    const own = normText(el && el.textContent);
+    if (UI_CHROME_TEXTS.has(own)) return true;
+    if (own.startsWith("view ")) return true;
+    const aria = normText(
+      el && typeof el.getAttribute === "function" ? el.getAttribute("aria-label") : "");
+    if (!aria) return false;
+    return UI_CHROME_TEXTS.has(aria) || aria.startsWith("view ");
   }
-  // One gate for every field-location candidate (v2.1.4).
+  // One gate for every field-location candidate (v2.1.4; media
+  // exclusion added v2.1.5).
   function isFormCandidate(el) {
-    return !!el && !isChromeButton(el) && !isInPreview(el);
+    return !!el && !isChromeButton(el) && !isMediaChrome(el) && !isInPreview(el);
   }
 
   // Locate a field in three tries, in an order that cannot move a
@@ -782,7 +1002,13 @@
   // filtered out up front, so the audience step — which has no form
   // fields at all — locates nothing instead of resurrecting fields
   // from preview prose.
+  // And the structural cap (v2.1.5, header note 16): on a step with
+  // NO real form control there is nothing to locate — return null
+  // before any strategy runs, whatever the page's prose contains.
+  // This one choke point gates the fillers, the spec builders, the
+  // ladder rungs and the diagnostic snapshots alike.
   function findAnyField(keywords, selector) {
+    if (!stepHasRealControls()) return null;
     const all = Array.from(document.querySelectorAll(selector || FIELD_SELECTOR))
       .filter(isFormCandidate);
     const own = all.find(el => keywords.some(k => fieldLabel(el).includes(k)));
@@ -849,7 +1075,8 @@
   function findOptionExact(value) {
     const wanted = normText(value);
     if (!wanted) return null;
-    const opts = Array.from(document.querySelectorAll('[role="option"]'));
+    const opts = Array.from(document.querySelectorAll('[role="option"]'))
+      .filter(isFormCandidate);
     return opts.find(o => normText(o.textContent) === wanted) ||
       opts.find(o => normText(o.textContent).startsWith(wanted)) ||
       opts.find(o => normText(o.textContent).includes(wanted)) || null;
@@ -1112,7 +1339,7 @@
     // The map is evidence about the FORM — preview-pane controls are
     // excluded (v2.1.4) so a future label change reads cleanly.
     return Array.from(document.querySelectorAll(FORM_MAP_SELECTOR))
-      .filter(el => isVisibleEl(el) && !isInPreview(el))
+      .filter(el => isVisibleEl(el) && isFormCandidate(el))
       .slice(0, limit || 12)
       .map(el => {
         const d = describeElement(el);
@@ -1217,6 +1444,7 @@
       for (const cand of candidates) {
         if (!cand) continue;
         const opt = Array.from(document.querySelectorAll('[role="option"]'))
+          .filter(isFormCandidate)
           .find(o => (o.textContent || "").toLowerCase().includes(String(cand).toLowerCase()));
         if (opt) { opt.click(); await sleep(400); return true; }
       }
@@ -1230,7 +1458,7 @@
   // else in this file.
   function colorOptionElements() {
     return Array.from(document.querySelectorAll('[role="option"], [role="menuitem"]'))
-      .filter(el => isVisibleEl(el) && !isInPreview(el));
+      .filter(el => isVisibleEl(el) && isFormCandidate(el));
   }
   async function waitForColorOptions(timeoutMs) {
     const deadline = Date.now() + (timeoutMs || 2500);
@@ -1397,7 +1625,7 @@
       nearbyText(b).includes("clean title") || fieldLabel(b).includes("clean"));
     if (box) return { stateEl: box, clickEl: box };
     const labelled = Array.from(document.querySelectorAll("div, label, span"))
-      .filter(el => isVisibleEl(el) && !isInPreview(el))
+      .filter(el => isVisibleEl(el) && isFormCandidate(el))
       .find(elm => {
         if (String(elm.textContent || "").length > 300) return false;
         return normText(containerLeadingText(elm)).includes("clean title") ||
@@ -1759,6 +1987,8 @@
   }
 
   function findDescriptionField() {
+    // No real controls on the step = no editor exists (v2.1.5).
+    if (!stepHasRealControls()) return null;
     // Form region only (v2.1.4): the preview pane repeats the whole
     // description as prose — it is not an editor and must never be
     // "filled" or read back as one.
@@ -1798,6 +2028,11 @@
   // Everything here is presence-guarded: Facebook serves layout variants
   // and steps, so each filler only acts when its field is on this step.
   async function fillCurrentStepFields(isFirstStep) {
+    // A step with no real form control has nothing to fill (v2.1.5,
+    // header note 16) — the audience step is the case that matters:
+    // prose, checkboxes and the preview card, but no fields. Skip
+    // the whole pass; the step walker still finds Publish/Next.
+    if (!stepHasRealControls()) return;
     // VIN FIRST on step 1, before anything it can corrupt: Facebook's
     // VIN decoder auto-populates (badly, observed live), so give it time
     // to fire and settle, THEN overwrite with payload truth below.
@@ -1896,6 +2131,11 @@
   // Required set (verify-or-report): Photos ≥1, Year, Make, Model,
   // Price, Description. Everything else is best-effort.
   function requiredSpecForStep() {
+    // EMPTY BY CONSTRUCTION on a step with no real form control
+    // (v2.1.5, header note 16): the audience step can never demand
+    // Year/Price from its preview card again. Fields verified on
+    // earlier steps stay verified via the flow's verifiedEver set.
+    if (!stepHasRealControls()) return [];
     const spec = [];
     // The four stubborn fields (Year/Make/Model/Price) refill via the
     // escalation ladder; their `refill` only reports success when a
