@@ -1163,6 +1163,24 @@ body {
                 class="w-full border border-slate-300 rounded-xl px-4 py-3">
 
             </div>
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Dealership Address
+              </label>
+
+              <input
+                type="text"
+                id="settingsAddress"
+                placeholder="e.g. 1420 Main St, Charleston, WV"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+              <p class="text-xs text-slate-400 mt-2">
+                Used on the branding frame that can be stamped onto your edited vehicle photos.
+              </p>
+
+            </div>
 <div>
 
     <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
@@ -1561,9 +1579,10 @@ body {
         <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200">
           <button id="photoTabBackground" onclick="switchPhotoEditTab('background')" class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm cursor-pointer">Background</button>
           <button id="photoTabCrop" onclick="switchPhotoEditTab('crop')" class="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">Adjust crop</button>
+          <button id="photoTabBranding" onclick="switchPhotoEditTab('branding')" class="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">Branding</button>
         </div>
 
-        <div id="previewPhotoWrap" class="h-48 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
+        <div id="previewPhotoWrap" class="w-full aspect-[4/3] rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
           <img id="previewPhotoEditImg" src="assets/backgrounds/bg-bright.jpg" class="w-full h-full object-cover" draggable="false">
           <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/60 to-transparent p-2 text-center">
             <span id="previewCaptionText" class="text-[10px] text-white font-medium">Background Preview</span>
@@ -1585,27 +1604,84 @@ body {
         </div>
 
         <div id="photoBgPanel" class="space-y-2 pt-1">
-          <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Showroom Backgrounds</span>
-          <div class="grid grid-cols-3 gap-2">
-            <button data-bg-btn onclick="setPreviewBg('assets/backgrounds/bg-bright.jpg', this)" class="p-1 rounded-xl border border-blue-600 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Showroom Backgrounds</span>
+            <button type="button" id="customBgReplaceBtn" onclick="document.getElementById('customBgInput').click()" class="hidden text-[10px] text-blue-600 hover:underline font-semibold cursor-pointer">Replace your photo</button>
+          </div>
+          <div class="grid grid-cols-4 gap-2">
+            <button data-bg-btn data-bg-url="assets/backgrounds/bg-bright.jpg" onclick="setPreviewBg('assets/backgrounds/bg-bright.jpg', this)" class="p-1 rounded-xl border border-blue-600 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
               <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-bright.jpg" class="w-full h-full object-cover"></div>
               <span data-bg-label class="text-[10px] text-slate-900 font-semibold block mt-1 text-center">Bright</span>
             </button>
-            <button data-bg-btn onclick="setPreviewBg('assets/backgrounds/bg-dark.jpg', this)" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+            <button data-bg-btn data-bg-url="assets/backgrounds/bg-dark.jpg" onclick="setPreviewBg('assets/backgrounds/bg-dark.jpg', this)" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
               <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-dark.jpg" class="w-full h-full object-cover"></div>
               <span data-bg-label class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Dark</span>
             </button>
-            <button data-bg-btn onclick="setPreviewBg('assets/backgrounds/bg-lot.jpg', this)" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+            <button data-bg-btn data-bg-url="assets/backgrounds/bg-lot.jpg" onclick="setPreviewBg('assets/backgrounds/bg-lot.jpg', this)" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
               <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-lot.jpg" class="w-full h-full object-cover"></div>
               <span data-bg-label class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Clean lot</span>
             </button>
+            <button data-bg-btn id="customBgBtn" data-bg-url="" onclick="onCustomBgTileClick()" class="p-1 rounded-xl border border-dashed border-slate-300 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center">
+                <img id="customBgThumb" src="" alt="" class="w-full h-full object-cover hidden">
+                <i id="customBgIcon" class="fa-solid fa-cloud-arrow-up text-slate-400 text-sm"></i>
+              </div>
+              <span data-bg-label class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Your photo</span>
+            </button>
           </div>
+          <input type="file" id="customBgInput" accept="image/*" class="hidden" onchange="onCustomBgFileChosen(this)">
+          <p id="customBgStatus" class="text-[10px] text-slate-400 leading-snug"></p>
         </div>
 
         <div id="photoCropPanel" class="hidden space-y-2 pt-1">
           <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Adjust Crop</span>
           <p class="text-[11px] text-slate-500 leading-snug">Drag the photo above to choose which part stays in frame. When Auto-crop is on, future posts use exactly this crop.</p>
           <button type="button" onclick="resetPhotoCrop()" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[11px] font-semibold cursor-pointer">Reset to center</button>
+        </div>
+
+        <div id="photoBrandingPanel" class="hidden space-y-3 pt-1">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Branding frame</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkBrandingFrame" class="sr-only peer" onchange="onBrandingFrameToggle()">
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+          <p class="text-[11px] text-slate-500 leading-snug">Stamps your store logo at the top of every edited photo, with a strip along the bottom carrying your dealership name, address and email — the same kind of frame dealers burn into their website photos.</p>
+
+          <div>
+            <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Store logo</label>
+            <div class="flex items-center gap-3">
+              <div class="w-24 h-12 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
+                <img id="brandingLogoThumb" src="" alt="" class="max-w-full max-h-full hidden">
+                <span id="brandingLogoEmpty" class="text-[10px] text-slate-400">No logo yet</span>
+              </div>
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <button type="button" onclick="document.getElementById('brandingLogoInput').click()" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[11px] font-semibold cursor-pointer">Upload logo</button>
+                  <button type="button" id="btnRemoveLogo" onclick="removeBrandingLogo()" class="hidden px-3 py-1.5 rounded-lg bg-white hover:bg-red-50 text-red-600 border border-red-200 text-[11px] font-semibold cursor-pointer">Remove</button>
+                </div>
+                <p id="brandingLogoStatus" class="text-[10px] text-slate-400 leading-snug">PNG with a transparent background works best.</p>
+              </div>
+            </div>
+            <input type="file" id="brandingLogoInput" accept="image/*" class="hidden" onchange="onBrandingLogoChosen(this)">
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Dealership name</label>
+            <input type="text" id="brandingDealerName" onchange="onBrandingFieldChange()" placeholder="e.g. Moses Auto Group" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Dealership address</label>
+            <input type="text" id="brandingDealerAddress" onchange="onBrandingFieldChange()" placeholder="e.g. 1420 Main St, Charleston, WV" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Email on the frame</label>
+            <p id="brandingEmailDisplay" class="text-xs text-slate-700 font-medium">—</p>
+            <p class="text-[10px] text-slate-400 leading-snug">From your account — this is the address printed on the bottom strip.</p>
+          </div>
         </div>
       </div>
 
@@ -2201,6 +2277,23 @@ updateLastSyncDisplay();
         if (aiSel) aiSel.value = data.ai_background_mode;
       }
 
+      // Photo pipeline v1.1: branding frame + custom background restore.
+      // Runs BEFORE the ai_background_choice restore below so the custom
+      // tile carries its URL when the selection ring is matched.
+      if (data.dealership_address !== undefined && data.dealership_address !== null) {
+        brandingState.address = data.dealership_address || "";
+        const addrField = document.getElementById("settingsAddress");
+        if (addrField) addrField.value = brandingState.address;
+      }
+      brandingState.name = data.dealership_name || brandingState.name || "";
+      brandingState.logoUrl = data.dealer_logo_url || "";
+      brandingState.enabled = !!data.branding_frame_enabled;
+      if (data.custom_bg_url) {
+        customBgUrl = data.custom_bg_url;
+        syncCustomBgTile();
+      }
+      syncBrandingPanelFromState();
+
       if (data.ai_background_choice) {
         applyPhotoBgSelection(data.ai_background_choice);
         const pimg = document.getElementById("previewPhotoEditImg");
@@ -2326,6 +2419,8 @@ async function updateLastSyncDisplay() {
   async function saveAllSettings() {
   if (!currentUser) return;
   const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
+  const addressEl = document.getElementById("settingsAddress");
+  const storeAddress = addressEl ? addressEl.value.trim() : "";
   const usedUrl = document.getElementById("settingsUsedUrl").value.trim();
   const newUrl = document.getElementById("settingsNewUrl").value.trim();
 const certifiedUrl =
@@ -2335,6 +2430,7 @@ const certifiedUrl =
   user_id: currentUser.id,
   dealership_name: storeName,
   store_name: storeName,
+  dealership_address: storeAddress,
   used_url: usedUrl,
   new_url: newUrl,
   certified_url: certifiedUrl,
@@ -4215,6 +4311,10 @@ function openAutoPostModal() { document.getElementById("autoPostModal").classLis
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
 function openAutoPhotoEditsModal() {
   document.getElementById("autoPhotoEditsModal").classList.remove("hidden");
+  // Branding panel reflects the latest account state (name may have been
+  // edited in Settings since the modal last opened).
+  syncBrandingPanelFromState();
+  syncCustomBgTile();
   // Cut-out engine: (re)build the live composite preview for the current
   // vehicle + selected background. Lazy — the engine module and AI model
   // only download the first time this runs.
@@ -4427,12 +4527,13 @@ const GUIDES = {
     modal: "autoPhotoEditsModal",
     what: "Pick a showroom background once, and your vehicle photos get the same treatment every time: the car is cut out of its dealer photo and placed on your background, and auto-crop keeps the part of the photo you choose in frame.",
     steps: [
-      "Open this card and pick a background: Bright, Dark or Clean lot.",
+      "Open this card and pick a background: Bright, Dark or Clean lot — or upload a photo of your own lot with the 'Your photo' tile.",
       "Choose 'First photo only' (fastest), 'All photos', or 'Disabled'.",
       "Turn Auto-crop on, open the 'Adjust crop' tab and drag the photo to set what stays in frame, then pick 'Every photo' or 'First photo only' underneath.",
       "Press Save settings — the background you picked saves to your account too."
     ],
     notes: [
+      "The 'Branding' tab stamps your store logo plus a strip with your dealership name, address and email onto every edited photo — upload the logo once and it saves to your account.",
       "The cut-out runs on your own device, right in the preview — your photos are not uploaded for it. The first preview downloads the AI model once (it is sizeable); your browser keeps it for next time.",
       "In this popup only the preview vehicle's first photo is processed. Using the edited photos automatically when a car posts is the next wiring step — for now you can download the finished preview from the popup.",
       "If a photo cannot be processed, you see the original photo with a note — never a broken image."
@@ -4660,6 +4761,11 @@ function toggleSelectAllCars(master) {
 }
 
 let selectedPhotoBg = "assets/backgrounds/bg-bright.jpg";
+// Photo pipeline v1.1 state: the user's own uploaded background and the
+// branding frame (logo + contact strip). Both restore from user_settings
+// in loadUserStoreSettings and persist via best-effort upserts.
+let customBgUrl = "";
+const brandingState = { enabled: false, logoUrl: "", name: "", address: "" };
 function setPreviewBg(url, btn) {
   selectedPhotoBg = url;
   applyPhotoBgSelection(url);
@@ -4671,9 +4777,15 @@ function applyPhotoBgSelection(url) {
   selectedPhotoBg = url;
   document.querySelectorAll("[data-bg-btn]").forEach(b => {
     const label = b.querySelector("[data-bg-label]");
-    const active = b.getAttribute("onclick") && b.getAttribute("onclick").includes(url);
+    // Built-ins match by their data-bg-url (falling back to the URL inside
+    // the onclick attribute); the custom tile only matches by data-bg-url,
+    // which is set when the user has uploaded their own background.
+    const btnUrl = b.getAttribute("data-bg-url") || "";
+    const onclickAttr = b.getAttribute("onclick") || "";
+    const active = (btnUrl && btnUrl === url) || (!!url && onclickAttr.includes(url));
     b.classList.toggle("border-blue-600", active);
-    b.classList.toggle("border-slate-200", !active);
+    b.classList.toggle("border-slate-200", !active && !b.classList.contains("border-dashed"));
+    b.classList.toggle("border-slate-300", !active && b.classList.contains("border-dashed"));
     if (label) {
       label.classList.toggle("text-slate-900", active);
       label.classList.toggle("text-slate-600", !active);
@@ -4681,8 +4793,182 @@ function applyPhotoBgSelection(url) {
   });
 }
 
+// ---------- Branding frame + custom background (v1.1) ----------
+// Assets live in the public "branding" Storage bucket under the user's own
+// folder (<user_id>/logo.<ext>, <user_id>/background.<ext>); the URLs are
+// kept on user_settings (dealer_logo_url / custom_bg_url) so they follow
+// the account across devices.
+
+function syncBrandingPanelFromState() {
+  const chk = document.getElementById("chkBrandingFrame");
+  if (chk) chk.checked = brandingState.enabled;
+  const nameEl = document.getElementById("brandingDealerName");
+  if (nameEl && document.activeElement !== nameEl) nameEl.value = brandingState.name || "";
+  const addrEl = document.getElementById("brandingDealerAddress");
+  if (addrEl && document.activeElement !== addrEl) addrEl.value = brandingState.address || "";
+  const emailEl = document.getElementById("brandingEmailDisplay");
+  if (emailEl) emailEl.innerText = currentUserEmail() || "—";
+  const thumb = document.getElementById("brandingLogoThumb");
+  const empty = document.getElementById("brandingLogoEmpty");
+  const removeBtn = document.getElementById("btnRemoveLogo");
+  if (thumb) {
+    thumb.src = brandingState.logoUrl || "";
+    thumb.classList.toggle("hidden", !brandingState.logoUrl);
+  }
+  if (empty) empty.classList.toggle("hidden", !!brandingState.logoUrl);
+  if (removeBtn) removeBtn.classList.toggle("hidden", !brandingState.logoUrl);
+}
+
+function syncCustomBgTile() {
+  const thumb = document.getElementById("customBgThumb");
+  const icon = document.getElementById("customBgIcon");
+  const btn = document.getElementById("customBgBtn");
+  const replaceBtn = document.getElementById("customBgReplaceBtn");
+  if (thumb) {
+    thumb.src = customBgUrl || "";
+    thumb.classList.toggle("hidden", !customBgUrl);
+  }
+  if (icon) icon.classList.toggle("hidden", !!customBgUrl);
+  if (btn) btn.setAttribute("data-bg-url", customBgUrl || "");
+  if (replaceBtn) replaceBtn.classList.toggle("hidden", !customBgUrl);
+}
+
+// Best-effort persist of the branding fields (same pattern as the other
+// photo-edit saves: a failure here never blocks the modal's main save).
+async function persistBrandingSettings() {
+  if (!currentUser) return;
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      dealer_logo_url: brandingState.logoUrl || null,
+      dealership_address: brandingState.address || null,
+      branding_frame_enabled: brandingState.enabled,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+    if (error) console.warn("Branding settings not persisted yet:", error.message);
+  } catch (e) { /* non-fatal: values still apply for this session */ }
+}
+
+function onBrandingFrameToggle() {
+  const chk = document.getElementById("chkBrandingFrame");
+  brandingState.enabled = !!(chk && chk.checked);
+  persistBrandingSettings();
+  // Re-render the preview so the frame appears/disappears immediately.
+  refreshCutoutPreview();
+}
+
+function readBrandingFieldsIntoState() {
+  const nameEl = document.getElementById("brandingDealerName");
+  const addrEl = document.getElementById("brandingDealerAddress");
+  if (nameEl) {
+    brandingState.name = nameEl.value.trim();
+    // Keep the Settings tab + store header on the same name.
+    const settingsName = document.getElementById("settingsStoreName");
+    if (settingsName && brandingState.name) settingsName.value = brandingState.name;
+    if (brandingState.name) currentStore.name = brandingState.name;
+  }
+  if (addrEl) {
+    brandingState.address = addrEl.value.trim();
+    const settingsAddr = document.getElementById("settingsAddress");
+    if (settingsAddr) settingsAddr.value = brandingState.address;
+  }
+}
+
+function onBrandingFieldChange() {
+  readBrandingFieldsIntoState();
+  persistBrandingSettings();
+  if (brandingState.enabled) refreshCutoutPreview();
+}
+
+// Upload one branding asset (logo or background) into the user's folder
+// and return its public URL.
+async function uploadBrandingAsset(file, baseName) {
+  const extMatch = (file.name || "").match(/\.([a-z0-9]+)$/i);
+  const ext = extMatch ? extMatch[1].toLowerCase() : "png";
+  const path = currentUser.id + "/" + baseName + "." + ext;
+  const { error } = await supabaseClient.storage.from("branding")
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (error) throw error;
+  const { data } = supabaseClient.storage.from("branding").getPublicUrl(path);
+  return { path: path, url: data.publicUrl };
+}
+
+async function onBrandingLogoChosen(input) {
+  const file = input.files && input.files[0];
+  input.value = "";
+  if (!file || !currentUser) return;
+  const status = document.getElementById("brandingLogoStatus");
+  if (status) status.innerText = "Uploading logo…";
+  try {
+    const up = await uploadBrandingAsset(file, "logo");
+    brandingState.logoUrl = up.url;
+    brandingLogoCache.clear();
+    syncBrandingPanelFromState();
+    await persistBrandingSettings();
+    if (status) status.innerText = "Logo saved to your account.";
+    if (brandingState.enabled) refreshCutoutPreview();
+  } catch (err) {
+    console.error("[PhotoEngine] Logo upload failed:", err);
+    if (status) status.innerText = "Upload failed: " + (err.message || "please try again");
+  }
+}
+
+async function removeBrandingLogo() {
+  if (!currentUser) return;
+  brandingState.logoUrl = "";
+  brandingLogoCache.clear();
+  syncBrandingPanelFromState();
+  try {
+    await supabaseClient.storage.from("branding")
+      .remove([currentUser.id + "/logo.png", currentUser.id + "/logo.jpg", currentUser.id + "/logo.jpeg", currentUser.id + "/logo.webp", currentUser.id + "/logo.svg"]);
+  } catch (e) { /* best-effort cleanup; the settings URL is already cleared */ }
+  await persistBrandingSettings();
+  const status = document.getElementById("brandingLogoStatus");
+  if (status) status.innerText = "Logo removed. Your dealership name will be printed instead.";
+  if (brandingState.enabled) refreshCutoutPreview();
+}
+
+function onCustomBgTileClick() {
+  if (customBgUrl) {
+    setPreviewBg(customBgUrl);
+  } else {
+    const input = document.getElementById("customBgInput");
+    if (input) input.click();
+  }
+}
+
+async function onCustomBgFileChosen(input) {
+  const file = input.files && input.files[0];
+  input.value = "";
+  if (!file || !currentUser) return;
+  const status = document.getElementById("customBgStatus");
+  if (status) status.innerText = "Uploading your background…";
+  try {
+    const up = await uploadBrandingAsset(file, "background");
+    customBgUrl = up.url;
+    syncCustomBgTile();
+    try {
+      const { error } = await supabaseClient.from("user_settings").upsert({
+        user_id: currentUser.id,
+        custom_bg_url: customBgUrl,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+      if (error) console.warn("Custom background not persisted yet:", error.message);
+    } catch (e) { /* non-fatal: applies for this session */ }
+    if (status) status.innerText = "Your background is saved to your account.";
+    setPreviewBg(customBgUrl);
+  } catch (err) {
+    console.error("[PhotoEngine] Custom background upload failed:", err);
+    if (status) status.innerText = "Upload failed: " + (err.message || "please try again");
+  }
+}
+
 // ==============================================================================
-// ==================== AI BACKGROUND CUT-OUT ENGINE (v1) =====================
+// ==================== AI BACKGROUND CUT-OUT ENGINE (v1.1) ===================
+// v1.1: realism pass (defocused/graded background, tone harmonisation,
+// two-layer ground shadow, full-bleed 4:3 frame), Moses-style branding
+// frame (dealer logo + name/address/email strip), and user-uploaded custom
+// backgrounds. See PHOTO_ENGINE.md.
 // Client-side vehicle background removal + composite preview for the photo-
 // edits modal, powered by @imgly/background-removal (ISNet model running on
 // onnxruntime-web). Everything happens on the user's device: no API keys, no
@@ -4798,6 +5084,165 @@ function computeAlphaBBox(img) {
   }
 }
 
+// Fetch a photo's bytes as a Blob: direct CORS fetch first, then the
+// photo-proxy Edge Function. Returns null when both routes fail.
+async function fetchPhotoBlob(photoUrl) {
+  try {
+    const resp = await fetch(photoUrl, { mode: "cors" });
+    if (!resp.ok) throw new Error("photo fetch HTTP " + resp.status);
+    return await resp.blob();
+  } catch (fetchErr) {
+    console.warn("[PhotoEngine] direct fetch blocked; trying photo proxy:", fetchErr);
+  }
+  try {
+    const proxyUrl = SUPABASE_URL + "/functions/v1/photo-proxy?url=" + encodeURIComponent(photoUrl);
+    const resp = await fetch(proxyUrl, { headers: { apikey: SUPABASE_KEY } });
+    if (!resp.ok) throw new Error("photo proxy HTTP " + resp.status);
+    return await resp.blob();
+  } catch (proxyErr) {
+    console.warn("[PhotoEngine] photo proxy failed:", proxyErr);
+    return null;
+  }
+}
+
+// Average luminance + saturation of an image, sampled tiny. For a cut-out
+// (alphaOnly=true) only near-opaque pixels count, so the transparent
+// surround doesn't drag the car's tone toward black.
+function sampleImageTone(img, alphaOnly) {
+  try {
+    const S = 24;
+    const c = document.createElement("canvas");
+    c.width = S; c.height = S;
+    const cx = c.getContext("2d", { willReadFrequently: true });
+    cx.drawImage(img, 0, 0, S, S);
+    const d = cx.getImageData(0, 0, S, S).data;
+    let lum = 0, sat = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (alphaOnly && d[i + 3] < 200) continue;
+      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+      lum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      sat += mx === 0 ? 0 : (mx - mn) / mx;
+      n++;
+    }
+    if (!n) return null;
+    return { lum: lum / n, sat: sat / n };
+  } catch (e) {
+    return null;
+  }
+}
+
+// One elliptical shadow layer: a radial gradient squashed vertically.
+// Two of these (wide faint AO + tight dark contact patch) anchor the car
+// far better than one diffuse blob.
+function drawGroundShadow(ctx, cx, cy, radiusX, squash, alpha) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1, squash);
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radiusX);
+  grad.addColorStop(0, "rgba(0,0,0," + alpha + ")");
+  grad.addColorStop(0.6, "rgba(0,0,0," + (alpha * 0.5) + ")");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, radiusX, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+const brandingLogoCache = new Map(); // logoUrl -> Promise<img>
+function loadBrandingLogoImage(url) {
+  if (!brandingLogoCache.has(url)) {
+    brandingLogoCache.set(url, loadEngineImage(url).catch(err => {
+      brandingLogoCache.delete(url);
+      throw err;
+    }));
+  }
+  return brandingLogoCache.get(url);
+}
+
+function currentUserEmail() {
+  return (currentUser && currentUser.email) || "";
+}
+
+// The Moses-style frame, drawn LAST over a finished render: dealer logo
+// top-left (or the dealership name in bold type when no logo is uploaded),
+// and a dark bottom strip with "Name • Address • email".
+async function applyBrandingFrame(ctx, W, H) {
+  const pad = Math.round(W * 0.03);
+  let logoDrawn = false;
+  if (brandingState.logoUrl) {
+    try {
+      const logo = await loadBrandingLogoImage(brandingState.logoUrl);
+      const maxH = H * 0.11, maxW = W * 0.36;
+      const s = Math.min(maxH / logo.naturalHeight, maxW / logo.naturalWidth);
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 14;
+      ctx.shadowOffsetY = 3;
+      ctx.drawImage(logo, pad, pad, logo.naturalWidth * s, logo.naturalHeight * s);
+      ctx.restore();
+      logoDrawn = true;
+    } catch (e) {
+      console.warn("[PhotoEngine] Branding logo failed to load; using name text:", e);
+    }
+  }
+  if (!logoDrawn && brandingState.name) {
+    ctx.save();
+    ctx.font = "700 " + Math.round(H * 0.042) + "px Arial, Helvetica, sans-serif";
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(brandingState.name, pad, pad, W * 0.7);
+    ctx.restore();
+  }
+  const parts = [brandingState.name, brandingState.address, currentUserEmail()]
+    .map(s => (s || "").trim()).filter(Boolean);
+  if (parts.length) {
+    const bandH = Math.round(H * 0.09);
+    ctx.save();
+    ctx.fillStyle = "rgba(10,15,30,0.78)";
+    ctx.fillRect(0, H - bandH, W, bandH);
+    const text = parts.join("  •  ");
+    let fontSize = Math.round(bandH * 0.42);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffffff";
+    while (fontSize > 12) {
+      ctx.font = "600 " + fontSize + "px Arial, Helvetica, sans-serif";
+      if (ctx.measureText(text).width <= W * 0.94) break;
+      fontSize -= 2;
+    }
+    ctx.fillText(text, W / 2, H - bandH / 2 + 1);
+    ctx.restore();
+  }
+}
+
+// Render the ORIGINAL photo (cover-fit, 1600x1200) with the branding frame
+// baked in — used when the preview is showing the original (AI disabled or
+// the cut-out failed) but the frame is on. Returns a JPEG data URL, or
+// null when the photo bytes can't be read (caller keeps the plain photo).
+async function renderOriginalFramed(photoUrl) {
+  const blob = await fetchPhotoBlob(photoUrl);
+  if (!blob) return null;
+  const objUrl = URL.createObjectURL(blob);
+  try {
+    const img = await loadEngineImage(objUrl);
+    const W = 1600, H = 1200;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+    const w = img.naturalWidth * s, h = img.naturalHeight * s;
+    ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+    await applyBrandingFrame(ctx, W, H);
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } finally {
+    URL.revokeObjectURL(objUrl);
+  }
+}
+
 // Run background removal for one photo URL (or reuse the cached / in-flight
 // result). Returns the cutout cache entry.
 async function getOrCreateCutout(photoUrl, onProgress) {
@@ -4809,32 +5254,16 @@ async function getOrCreateCutout(photoUrl, onProgress) {
     if (typeof mod.removeBackground !== "function") {
       throw new Error("Background engine module loaded without removeBackground()");
     }
-    // Photo bytes, three ways: (1) direct fetch (works when the dealer's
-    // photo server sends CORS headers); (2) via our photo-proxy Edge
+    // Photo bytes via fetchPhotoBlob: direct fetch first (works when the
+    // dealer's photo server sends CORS headers), then our photo-proxy Edge
     // Function (servers like mosescars.com send NO CORS headers, so the
     // browser blocks direct reads — the proxy relays the bytes back with
-    // permission headers); (3) hand the library the URL as a last resort.
-    let source = photoUrl;
-    let gotBlob = false;
-    try {
-      const resp = await fetch(photoUrl, { mode: "cors" });
-      if (!resp.ok) throw new Error("photo fetch HTTP " + resp.status);
-      source = await resp.blob();
-      gotBlob = true;
-    } catch (fetchErr) {
-      console.warn("[PhotoEngine] direct fetch blocked; trying photo proxy:", fetchErr);
-    }
-    if (!gotBlob) {
-      try {
-        const proxyUrl = SUPABASE_URL + "/functions/v1/photo-proxy?url=" + encodeURIComponent(photoUrl);
-        const resp = await fetch(proxyUrl, { headers: { apikey: SUPABASE_KEY } });
-        if (!resp.ok) throw new Error("photo proxy HTTP " + resp.status);
-        source = await resp.blob();
-        gotBlob = true;
-      } catch (proxyErr) {
-        console.warn("[PhotoEngine] photo proxy failed; passing URL to engine instead:", proxyErr);
-        source = photoUrl;
-      }
+    // permission headers). If both fail, hand the library the URL as a
+    // last resort and let it fetch its own way.
+    let source = await fetchPhotoBlob(photoUrl);
+    if (!source) {
+      console.warn("[PhotoEngine] fetch->blob failed for photo; passing URL to engine instead");
+      source = photoUrl;
     }
     const cutoutBlob = await mod.removeBackground(source, {
       model: "medium",
@@ -4861,44 +5290,103 @@ async function getOrCreateCutout(photoUrl, onProgress) {
 
 // Draw background (cover-fit) + soft ground shadow + the cut-out vehicle,
 // bottom-aligned on the ground line, and export as a JPEG data URL.
+//
+// v1.1 realism pass: the background is defocused + lightly graded (a blurred
+// backdrop hides the perspective mismatch between the car's original photo
+// and the scene — the standard dealer-photo trick), the car's brightness /
+// saturation is nudged toward the scene's tone, and the ground shadow is
+// two layers (wide faint ambient occlusion + a tight dark contact patch at
+// the wheels) so the car sits ON the ground instead of floating over it.
+// The branding frame, when enabled, is drawn last over everything.
 async function renderComposite(cutout, bgUrl) {
-  const W = 1600, H = 1200; // 4:3 — matches the modal preview's aspect family
+  const W = 1600, H = 1200; // 4:3 — matches the modal preview frame exactly
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
   const bgImg = await loadEngineImage(bgUrl);
+
+  // --- Background: cover-fit onto an offscreen canvas, then drawn through
+  // a blur/grade filter (guarded — browsers without ctx.filter just get the
+  // sharp background). Drawn slightly oversized so the blur can't feather
+  // the frame edges into transparency.
+  const bgCanvas = document.createElement("canvas");
+  bgCanvas.width = W; bgCanvas.height = H;
+  const bctx = bgCanvas.getContext("2d");
   const bs = Math.max(W / bgImg.naturalWidth, H / bgImg.naturalHeight);
   const bw = bgImg.naturalWidth * bs, bh = bgImg.naturalHeight * bs;
-  ctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh);
+  bctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh);
+  let filterApplied = false;
+  try {
+    ctx.filter = "blur(6px) brightness(1.02) contrast(0.98) saturate(0.96)";
+    filterApplied = ctx.filter !== "none" && ctx.filter !== "";
+  } catch (e) { filterApplied = false; }
+  if (filterApplied) {
+    ctx.drawImage(bgCanvas, -14, -14, W + 28, H + 28);
+    ctx.filter = "none";
+  } else {
+    ctx.drawImage(bgCanvas, 0, 0);
+  }
 
+  // --- Placement (alpha-trimmed silhouette, wheels on the ground line).
   const bb = cutout.bbox || { x: 0, y: 0, w: cutout.width, h: cutout.height };
   const groundY = H * 0.90;
-  const vs = Math.min((W * 0.94) / bb.w, (H * 0.84) / bb.h);
+  const vs = Math.min((W * 0.95) / bb.w, (H * 0.85) / bb.h);
   const vw = bb.w * vs, vh = bb.h * vs;
   const vx = (W - vw) / 2, vy = groundY - vh;
 
-  // Soft elliptical ground shadow under the vehicle (radial gradient scaled
-  // vertically — no ctx.filter, so it renders the same in every browser).
-  ctx.save();
-  ctx.translate(W / 2, groundY + vh * 0.02);
-  ctx.scale(1, 0.16);
-  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, vw * 0.52);
-  grad.addColorStop(0, "rgba(0,0,0,0.40)");
-  grad.addColorStop(0.65, "rgba(0,0,0,0.20)");
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(0, 0, vw * 0.52, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
+  // --- Ground shadow: wide, faint ambient occlusion first, then the tight
+  // dark contact patch centred a hair above the car's bottom edge so the
+  // tyres read as touching the floor.
+  drawGroundShadow(ctx, W / 2, groundY + vh * 0.012, vw * 0.58, 0.18, 0.18);
+  drawGroundShadow(ctx, W / 2, groundY - vh * 0.006, vw * 0.46, 0.10, 0.45);
 
-  ctx.drawImage(cutout.img, bb.x, bb.y, bb.w, bb.h, vx, vy, vw, vh);
+  // --- Vehicle, tone-harmonised toward the scene: compare average
+  // luminance/saturation of background vs cut-out and apply a gentle,
+  // clamped brightness()/saturate() to the car layer only.
+  const bgTone = sampleImageTone(bgImg, false);
+  const carTone = sampleImageTone(cutout.img, true);
+  let carFilter = "";
+  if (bgTone && carTone && carTone.lum > 0.02) {
+    const bF = Math.min(1.08, Math.max(0.92, Math.pow(bgTone.lum / carTone.lum, 0.35)));
+    const sF = Math.min(1.06, Math.max(0.94, 1 + (bgTone.sat - carTone.sat) * 0.3));
+    if (Math.abs(bF - 1) > 0.005 || Math.abs(sF - 1) > 0.005) {
+      carFilter = "brightness(" + bF.toFixed(3) + ") saturate(" + sF.toFixed(3) + ")";
+    }
+  }
+  if (carFilter) {
+    const carCanvas = document.createElement("canvas");
+    carCanvas.width = Math.max(2, Math.round(vw));
+    carCanvas.height = Math.max(2, Math.round(vh));
+    const cctx = carCanvas.getContext("2d");
+    let ok = false;
+    try {
+      cctx.filter = carFilter;
+      ok = cctx.filter !== "none" && cctx.filter !== "";
+    } catch (e) { ok = false; }
+    if (ok) {
+      cctx.drawImage(cutout.img, bb.x, bb.y, bb.w, bb.h, 0, 0, carCanvas.width, carCanvas.height);
+      cctx.filter = "none";
+      ctx.drawImage(carCanvas, vx, vy, vw, vh);
+    } else {
+      ctx.drawImage(cutout.img, bb.x, bb.y, bb.w, bb.h, vx, vy, vw, vh);
+    }
+  } else {
+    ctx.drawImage(cutout.img, bb.x, bb.y, bb.w, bb.h, vx, vy, vw, vh);
+  }
+
+  // --- Branding frame last, so it sits over scene + car alike.
+  if (brandingState.enabled) {
+    await applyBrandingFrame(ctx, W, H);
+  }
   return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 function paintComposite(img, dataUrl) {
+  lastOriginalPhotoUrl = null; // a composite supersedes any framed-original job
   currentCompositeDataUrl = dataUrl;
-  // "contain" (not cover) so the full 4:3 composite — vehicle AND its ground
-  // shadow — stays visible in the wide, short preview frame.
-  img.style.objectFit = "contain";
+  // The preview frame is exactly 4:3 like the canvas, so "cover" fills it
+  // edge-to-edge with no letterbox bars and no distortion.
+  img.style.objectFit = "cover";
   img.style.objectPosition = "50% 50%";
   img.src = dataUrl;
   setPreviewCaption("Live cut-out preview");
@@ -4906,13 +5394,30 @@ function paintComposite(img, dataUrl) {
   setDownloadPreviewEnabled(true);
 }
 
+// Which original photo the fallback path most recently painted — a framed
+// render that finishes late only swaps in if this still matches.
+let lastOriginalPhotoUrl = null;
+
 function paintOriginalFallback(img, photoUrl, note) {
+  lastOriginalPhotoUrl = photoUrl;
   currentCompositeDataUrl = null;
   img.style.objectFit = "cover";
   img.src = photoUrl;
   setPreviewCaption("Original Photo");
   setPreviewNote(note || "Couldn't process this photo — showing the original.", true);
   setDownloadPreviewEnabled(false);
+  // Branding frame still applies over the original when it's enabled:
+  // render the photo with the frame baked in and swap it in when ready.
+  // If the photo bytes can't be read, the plain photo simply stays.
+  if (brandingState.enabled) {
+    renderOriginalFramed(photoUrl).then(framedUrl => {
+      if (!framedUrl) return;
+      if (lastOriginalPhotoUrl !== photoUrl || !brandingState.enabled) return;
+      currentCompositeDataUrl = framedUrl;
+      img.src = framedUrl;
+      setDownloadPreviewEnabled(true);
+    }).catch(err => console.warn("[PhotoEngine] Framed-original render failed:", err));
+  }
 }
 
 // The conductor: called when the modal opens, when the vehicle cycles, when
@@ -4929,6 +5434,7 @@ async function refreshCutoutPreview() {
 
   if (!car) {
     // No inventory yet — keep the previous behaviour (background only).
+    lastOriginalPhotoUrl = null;
     img.style.objectFit = "cover";
     img.src = selectedPhotoBg;
     currentCompositeDataUrl = null;
@@ -5049,17 +5555,21 @@ function cyclePreviewVehicle() {
 }
 
 function switchPhotoEditTab(tab) {
-  photoEditTab = tab === "crop" ? "crop" : "background";
+  photoEditTab = (tab === "crop" || tab === "branding") ? tab : "background";
   const on = "px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm cursor-pointer";
   const off = "px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer";
   const bgBtn = document.getElementById("photoTabBackground");
   const cropBtn = document.getElementById("photoTabCrop");
+  const brandingBtn = document.getElementById("photoTabBranding");
   if (bgBtn) bgBtn.className = photoEditTab === "background" ? on : off;
   if (cropBtn) cropBtn.className = photoEditTab === "crop" ? on : off;
+  if (brandingBtn) brandingBtn.className = photoEditTab === "branding" ? on : off;
   const bgPanel = document.getElementById("photoBgPanel");
   const cropPanel = document.getElementById("photoCropPanel");
+  const brandingPanel = document.getElementById("photoBrandingPanel");
   if (bgPanel) bgPanel.classList.toggle("hidden", photoEditTab !== "background");
   if (cropPanel) cropPanel.classList.toggle("hidden", photoEditTab !== "crop");
+  if (brandingPanel) brandingPanel.classList.toggle("hidden", photoEditTab !== "branding");
   const img = document.getElementById("previewPhotoEditImg");
   if (img) img.style.cursor = photoEditTab === "crop" ? "grab" : "";
 }
@@ -5280,6 +5790,12 @@ async function saveAutoPhotoEdits() {
       }, { onConflict: "user_id" });
       if (bgError) console.warn("Background choice not persisted yet:", bgError.message);
     } catch (e) { /* non-fatal: selection still applies for this session */ }
+
+    // Branding frame: pick up any name/address edits typed in the panel
+    // (change events normally persist them already) and flush the whole
+    // branding state with the modal save.
+    readBrandingFieldsIntoState();
+    await persistBrandingSettings();
 
     // The modal's Auto-crop switch and the ribbon switch are the same
     // setting — keep them in sync, then re-render the status line.

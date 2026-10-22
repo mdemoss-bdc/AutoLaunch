@@ -4,8 +4,9 @@ Powers the live preview in **Settings → Automatic photo edits**: the preview
 vehicle is cut out of its dealer photo and composited onto the selected
 showroom background (Bright / Dark / Clean lot), entirely in the browser.
 
-Built 2026-10-22. Status: **v1 — preview only.** Posting with edited photos is
-deliberately NOT wired yet (see "Remaining wiring" below).
+Built 2026-10-22. Status: **v1.1 — preview only** (realism pass, branding
+frame, custom backgrounds — see the v1.1 section below). Posting with edited
+photos is deliberately NOT wired yet (see "Remaining wiring" below).
 
 ## How it works
 
@@ -83,6 +84,69 @@ original photo with the honest note
 logged to the console with a `[PhotoEngine]` prefix. A sequence guard makes
 sure a slow job for a previous vehicle/background can never overwrite a
 newer preview.
+
+## v1.1 — realism pass, branding frame, custom backgrounds (2026-10-22)
+
+Matthew's verdict on v1 was "cheesy and fake": visible pillar bars at the
+sides of the preview, a car that floated over a diffuse shadow blob, and
+generated backgrounds whose lighting clashed with the car's photo. v1.1
+attacks all four:
+
+- **Full-bleed frame.** The preview frame is now exactly 4:3
+  (`aspect-[4/3]`), matching the 1600×1200 canvas, and the preview image
+  uses `object-fit: cover` — no letterbox/pillar bars in the modal, and the
+  Download JPEG is the same full-bleed composite.
+- **Defocused, graded background.** The background is drawn to an offscreen
+  canvas and composited through `ctx.filter: blur(6px) brightness(1.02)
+  contrast(0.98) saturate(0.96)` (guarded — browsers without `ctx.filter`
+  get the sharp background). A slightly blurred backdrop hides the
+  perspective mismatch between the car's original photo and the scene,
+  which is the standard dealer-photo technique. The car is never blurred.
+- **Tone harmonisation.** Average luminance/saturation are sampled from the
+  background and from the cut-out (alpha-weighted, so the transparent
+  surround doesn't count). The car layer is then drawn through a gentle,
+  clamped `brightness()` (0.92–1.08) / `saturate()` (0.94–1.06) adjustment
+  so a sunlit car on an overcast scene (and vice versa) sits closer in tone.
+- **Two-layer ground shadow.** A wide, faint ambient-occlusion ellipse
+  (alpha 0.18) plus a tight, dark contact patch (alpha 0.45, squashed to
+  0.10) centred a hair above the car's bottom edge, so the tyres read as
+  touching the floor. The car is scaled to ≤95% of frame width with its
+  alpha-trimmed bottom on the 90% ground line.
+
+### Branding frame (Moses-style)
+
+A third tab in the photo-edits modal — **Branding** — stamps a dealer frame
+onto every rendered photo, drawn last in the composite pipeline (and over
+the original photo too when the preview falls back to it, via
+`renderOriginalFramed`):
+
+- **Top-left:** the dealer's logo (max height 11% of frame height, soft
+  drop shadow). With no logo uploaded, the dealership name is drawn in
+  bold white type instead.
+- **Bottom strip:** a full-width band, 9% of frame height,
+  `rgba(10,15,30,0.78)`, with centred white text
+  "Dealership Name • Address • email" — only the non-empty parts, font
+  shrunk to fit one line. The email is the signed-in account's email.
+- Logo upload goes to the public Supabase Storage bucket **`branding`**
+  at `<user_id>/logo.<ext>` (RLS: anyone can read; a user can only write
+  inside their own folder). Settings live on `user_settings`:
+  `dealer_logo_url`, `dealership_address`, `branding_frame_enabled`
+  (plus the existing `dealership_name`). The address is also editable in
+  Settings → Dealership. Everything restores on load, and the frame is
+  included in the Download output.
+
+### Custom backgrounds
+
+The Showroom Backgrounds grid has a fourth tile, **Your photo**. First
+click opens a file picker; the upload goes to the same `branding` bucket
+at `<user_id>/background.<ext>`, the public URL is saved to
+`user_settings.custom_bg_url`, and the tile becomes selectable with the
+same blue ring as the built-ins (matched via a `data-bg-url` attribute).
+A "Replace your photo" link re-opens the picker. Custom backgrounds flow
+through the exact same defocus/grade/harmonisation pipeline as built-ins.
+Restoring a saved choice (`ai_background_choice` = the custom URL) lights
+up the custom tile, because the settings load restores the custom tile
+before matching the selection.
 
 ## Remaining wiring (v2 — explicitly out of scope for v1)
 
