@@ -654,6 +654,106 @@ info_modal_dismissed notes where Matthew also never saw the
 modal is the other good outcome — it means the input narrowing
 stopped it appearing at all).
 
+## v2.1.7 — the success detector verifies actively, deletes accept
+## "already gone", and finished tabs close themselves
+
+Built 2026-10-22 after the Full Auto live run (job c8405f83,
+19:04 EDT) exposed a blind detector, and the hand-deleted Tucson
+(job 3dfef826, 19:07 EDT) exposed wrong delete semantics.
+
+**The live failure:** Full Auto filled everything and clicked
+Publish itself; Facebook DID post the Tucson (live, "in review")
+— but the passive success detector never saw a state it knew, so
+after 2 minutes the job FAILED with "Clicked Publish but Facebook
+never showed a success state within 2 minutes — NOT marked
+posted. Check Marketplace drafts." Both halves were wrong: the
+car was live (not in drafts), and Luna had to reconcile the queue
+row + marketplace_posted_at by hand. In confirm mode the same
+passive detector HAS worked live, so post-publish screens vary
+by path/timing — the passive vocabulary alone can't be the only
+witness.
+
+**Fix 1 — active post-publish verification (both modes).** The
+passive signals stay, but they're a hint now, not the verdict:
+
+- Full Auto: after clicking Publish, the passive watch runs ~15s;
+  if the Publish button is still on screen, one trusted-input
+  retry click; then a second passive window (~45s). If nothing
+  fires, instead of failing, the filler ESCALATES — it records a
+  `posted_verify_escalated` step note, persists a verify flag on
+  the stored job, and navigates the tab to the Selling page.
+- Confirm mode: the 10-minute watch for the human's click is
+  unchanged. If the watch expires and a click was evident (the
+  Publish button vanished or the URL moved), it escalates the
+  same way instead of failing. If the human truly never clicked,
+  the original honest failure stands.
+- On the Selling page the verifier runs the DELETE flow's strict
+  matcher (year+make+model AND price) in a read-only scan, with
+  the same lazy-load patience. Found → step note
+  `posted_verified_on_selling_page` (match count included) and
+  the normal posted completion path (queue posted +
+  marketplace_posted_at stamped by the worker). Absent → rescan
+  on a fresh page load up to 2 more times, ~30s apart, inside a
+  4-minute wall-clock cap (a fresh listing can lag while "in
+  review"). Still absent → honest fail, reason
+  `publish_unverified`, banner: "Publish was clicked but the
+  listing could not be found on your Selling page — NOT marked
+  posted." The drafts advice is gone. A login wall / checkpoint
+  during verification fails as `facebook_checkpoint`, as before.
+  The worker now compacts `publish_unverified` diagnostics into
+  error_message too, so the verify scans are the evidence on the
+  row.
+
+**Fix 2 — goal-achieved deletes.** The delete scan's zero-match
+branch now asks one more question before failing: does any card
+match the car's TITLE (year+make+model, price ignored), and did
+the listings region actually render ("Your listings"/empty-state
+markers or the listings search box)? If the page rendered, the
+strict scan ran, and the car isn't there at ANY price, the goal
+— no live listing — is already met: the job finishes through the
+SAME completion path as a verified delete (status completed,
+executed_at, marketplace_posted_at cleared) with a step note
+`delete_already_gone`. That's exactly the job 3dfef826 case
+(Matthew had deleted the listing by hand first; Luna had to clear
+the stamp by hand). Deliberately NOT goal-achieved: a title
+match at a different price (the car is still live — stays
+`listing_not_found`), a page that didn't render, a login wall
+(`facebook_checkpoint`), or duplicate strict matches
+(`listing_ambiguous`, unchanged).
+
+**Fix 3 — tab auto-close on success (Matthew's add, same
+evening).** Jobs no longer leave a pile of finished Facebook
+tabs: the worker records the id of the tab it opened for each
+job, and after a SUCCESS finish — posted (passive, verified, or
+confirm-mode), delete completed, or a goal-achieved delete — it
+closes exactly that tab ~4 seconds later (long enough to read
+the success banner). Failures never close (the tab is the
+evidence), a token-stash replay doesn't close (the moment has
+passed), and a tab the user already closed is a no-op.
+
+Unchanged: field gating, color normalization, clean title, the
+VIN swatter, the photo flow, delete matching strictness, the
+claim/limit/session machinery.
+
+Verification (node, DOM-stub harnesses): new v37 harness with a
+multi-boot session driver (navigation + reloads reboot the
+content script against fresh pages over one shared storage
+store, like a real tab): 46/46 — Full Auto with a blind passive
+detector rescued by the Selling-page scan (posted +
+posted_verified_on_selling_page); a truly-absent car failing
+publish_unverified after the initial scan + 2 rescans with the
+new banner copy; confirm mode rescued after the human's click;
+delete present → deleted; delete absent on a rendered page →
+completed + delete_already_gone; delete on an unrendered page
+and behind a login wall → honest fails; a title match at the
+wrong price still failing listing_not_found; unit checks for
+the title matcher; and worker checks for the tab rules (claim
+records the tab id, success closes exactly that tab after the
+delay, failures never close, a job without a tab id closes
+nothing) plus publish_unverified diag compaction. Regressions:
+v36 19/19, v35 22/22, v34 42/42, v33 50/50, v32 40/40 — 219
+checks total, node --check clean.
+
 ## How to test it (Matthew)
 
 1. In Chrome: chrome://extensions -> Developer mode ON -> Load unpacked ->

@@ -124,6 +124,23 @@
 //     alongside "posted"/"failed". Delete failures compact their
 //     diagnostics into error_message too, not just fields_unfilled
 //     ones — the delete step notes are the evidence there.
+// 14. VERIFY FAILURES + TAB AUTO-CLOSE (v2.1.7): (a) a post that
+//     ends publish_unverified (the content script clicked Publish,
+//     then could not find the listing on the Selling page after
+//     repeated strict-match scans) compacts its diagnostics into
+//     error_message too — the records are the verify scans, the
+//     evidence the listing truly was not there. (b) TAB AUTO-CLOSE:
+//     every job used to leave its Facebook tab behind, and they
+//     piled up across a testing session. The claim now records the
+//     opened tab's id on the job (current_posting_job.tabId), and
+//     the two SUCCESS finishes (posted, deleted — including a
+//     delete that finished goal-achieved) schedule that tab's
+//     closure ~4s later, once the success banner has been readable.
+//     Failures NEVER close — the tab is the user's evidence — and
+//     neither does a token-stash replay (flushPendingFinish calls
+//     the apply* writes directly; by replay time the moment has
+//     passed). Only the exact tab this worker opened is ever
+//     closed; a tab the user already closed is a no-op.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -369,11 +386,24 @@ async function checkQueue() {
     });
 
     await jitter(1500, 4000); // human pacing, never machine-gun tabs
-    await chrome.tabs.create({
+    const jobTab = await chrome.tabs.create({
       url: isDelete
         ? "https://www.facebook.com/marketplace/you/selling"
         : "https://www.facebook.com/marketplace/create/vehicle"
     });
+    // Record the tab THIS worker opened for THIS job (note 14):
+    // a successful finish closes exactly that tab ~4s after the
+    // success banner lands. Written as a follow-up merge because
+    // the job record was stored (and the pacing jitter spent)
+    // before the tab existed.
+    if (jobTab && jobTab.id != null) {
+      const { current_posting_job: j } =
+        await chrome.storage.local.get(["current_posting_job"]);
+      if (j && j.queueId === item.id) {
+        j.tabId = jobTab.id;
+        await chrome.storage.local.set({ current_posting_job: j });
+      }
+    }
   } catch (err) {
     console.error("[AutoLaunch] Queue check error:", err);
   } finally {
@@ -693,6 +723,24 @@ async function flushPendingFinish() {
   }
 }
 
+// Tab auto-close on success (v2.1.7, header note 14): ~4s after a
+// successful finish — long enough for the success banner to be
+// read — close the tab this worker opened for the job. Called
+// ONLY from the two success finishes; finishJobFailed never calls
+// it (a failed job's tab stays open as evidence), and a tab the
+// user already closed is a silent no-op.
+function scheduleJobTabClose(job) {
+  const tabId = job && job.tabId;
+  if (tabId == null) return;
+  if (!chrome.tabs || typeof chrome.tabs.remove !== "function") return;
+  setTimeout(() => {
+    try {
+      const p = chrome.tabs.remove(tabId);
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch (e) { /* the tab is already gone — nothing to do */ }
+  }, 4000);
+}
+
 // The ONLY two ways a job ends. Called by the content script via message.
 async function finishJobPosted(queueId, listingUrl) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
@@ -714,12 +762,14 @@ async function finishJobPosted(queueId, listingUrl) {
       });
       await chrome.storage.local.remove(["current_posting_job"]);
       console.warn("[AutoLaunch] Posted confirmed on Facebook; the queue update is waiting on a fresh session token.");
+      scheduleJobTabClose(job);
       return;
     }
     throw err;
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Posted confirmed for queue item", queueId, listingUrl || "");
+  scheduleJobTabClose(job);
 }
 
 // The delete counterpart of finishJobPosted (v2.1.4). Called by the
@@ -742,12 +792,14 @@ async function finishJobDeleted(queueId) {
       });
       await chrome.storage.local.remove(["current_posting_job"]);
       console.warn("[AutoLaunch] Delete confirmed on Facebook; the queue update is waiting on a fresh session token.");
+      scheduleJobTabClose(job);
       return;
     }
     throw err;
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Delete confirmed for queue item", queueId);
+  scheduleJobTabClose(job);
 }
 
 async function finishJobFailed(queueId, reason, diags) {
@@ -758,9 +810,12 @@ async function finishJobFailed(queueId, reason, diags) {
   // into the row's error_message in the same write that fails it.
   // Delete jobs (v2.1.4) compact too — there the records are the
   // delete step notes (match scan, outcome), the evidence that says
-  // WHY nothing was deleted.
+  // WHY nothing was deleted. A publish_unverified failure (v2.1.7)
+  // compacts as well: its records are the Selling-page verify scans,
+  // the evidence that the listing truly was not there.
   const errorMessage =
     ((typeof reason === "string" && reason.startsWith("fields_unfilled")) ||
+     reason === "publish_unverified" ||
      (job && job.action === "delete"))
       ? compactDiagError(diags)
       : null;

@@ -269,6 +269,46 @@
 //     dialog fails every gate and is left exactly alone. Each
 //     dismissal is recorded as a non-fatal step note
 //     (info_modal_dismissed, the heading in `detail`).
+// 18. ACTIVE POST-PUBLISH VERIFICATION + GOAL-ACHIEVED DELETES
+//     (v2.1.7 — two live lessons from 2026-10-22 evening):
+//     (a) THE BLIND DETECTOR (the first true Full Auto run, 19:04):
+//     the filler filled everything, clicked Publish ITSELF, and
+//     Facebook DID post the car (live, "in review") — but the
+//     passive success detector never saw a state it knew within
+//     2 minutes, so the job was marked FAILED and Luna reconciled
+//     the record by hand; the banner's "Check Marketplace drafts"
+//     was wrong on top of it (the car was live, not drafted). In
+//     confirm mode the same passive vocabulary HAS worked live —
+//     post-publish screens evidently vary by path and timing, so a
+//     fixed vocabulary is the wrong arbiter. Posted is now decided
+//     ACTIVELY: when the passive signals don't fire within a short
+//     window (~60s after a Publish click in Full Auto; on expiry
+//     of the confirm watch when a click evidently happened), the
+//     tab navigates to the Selling page and the DELETE flow's
+//     strict matcher (year/make/model AND price, note 14) scans
+//     for the listing, read-only. Found (≥1) → posted through the
+//     normal completion path (note posted_verified_on_selling_
+//     page). Absent → up to 2 rescans ~30s apart (a fresh listing
+//     can lag in review); still absent → honest fail with reason
+//     publish_unverified and copy that no longer mentions drafts.
+//     The continuation rides the stored job (verifyPublished
+//     {tries, startedAt}) across the navigation; a 4-minute
+//     wall-clock cap makes a reload loop impossible.
+//     (b) GOAL-ACHIEVED DELETES (19:07): Matthew deleted the live
+//     listing BY HAND, then the queued Remove ran — the scan found
+//     zero matches and the job FAILED listing_not_found, leaving
+//     marketplace_posted_at set for Luna to clear by hand. But
+//     the desired end state — no live listing — was TRUE. A delete
+//     scan that ran on a demonstrably-rendered Selling page and
+//     found zero strict matches AND zero title-only matches now
+//     finishes exactly like a verified delete (JOB_DELETED →
+//     completed + stamp cleared; note delete_already_gone). The
+//     title-only guard matters: a card carrying this car's title
+//     at a DIFFERENT price means the car is still live at another
+//     price — that stays an honest listing_not_found failure and
+//     the stamp stays set. A page that never rendered its
+//     listings region (no markers) proves nothing and also stays
+//     a failure, as do login walls and ambiguous matches.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -288,7 +328,12 @@
   const pageUrl = window.location.href;
   if (jobAction === "delete" &&
       !/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(pageUrl)) return;
-  if (jobAction === "post" &&
+  // A post job normally lives only on the create pages — EXCEPT a
+  // job in post-publish verification (v2.1.7, header note 18): its
+  // tab was navigated to the Selling page to settle posted-vs-not
+  // actively, and this script must be allowed to run there (and on
+  // the create pages, where the verify routine routes it back).
+  if (jobAction === "post" && !job.verifyPublished &&
       !/facebook\.com\/marketplace\/create\//.test(pageUrl)) return;
 
   // Full Auto (v2.1.4): job.fullAuto is the user's
@@ -706,6 +751,22 @@
     const price = moneyNumber(carLike.price);
     if (price === null || price <= 0) return false; // strict: no price, no match
     return priceAmountsIn(text).some(n => n === price);
+  }
+  // Title half of the strict match, alone (v2.1.7): used by the
+  // delete flow's goal-achieved semantics — a card carrying this
+  // car's year/make/model at ANY price proves the car is still
+  // listed (at another price), which is NOT the same as gone.
+  function listingTitleMatches(text, carLike) {
+    if (!text || !carLike) return false;
+    const t = normText(text);
+    const year = String(carLike.year || "").replace(/\D/g, "");
+    const make = normText(carLike.make);
+    const model = normText(carLike.model);
+    if (!year || !make || !model) return false;
+    const joined = normText(
+      `${carLike.year || ""} ${carLike.make || ""} ${carLike.model || ""}`);
+    return t.includes(joined) ||
+      (t.includes(year) && t.includes(make) && t.includes(model));
   }
   // [PURE-DELETE-END]
 
@@ -2076,6 +2137,27 @@
     return null;
   }
 
+  // Confirm-mode watch (v2.1.7): same passive detection, but it
+  // also tracks whether the human evidently clicked Publish — the
+  // button disappearing (the flow navigated, or Facebook replaced
+  // it with a progress state) or the URL moving. Expiry then forks:
+  // clicked-but-unconfirmed escalates to active Selling-page
+  // verification instead of a blind failure; never-clicked keeps
+  // the long-standing honest failure.
+  async function watchForPublishClick(timeoutMs) {
+    const startUrl = window.location.href;
+    const deadline = Date.now() + timeoutMs;
+    let clickLikely = false;
+    while (Date.now() < deadline) {
+      const hit = detectPublished();
+      if (hit) return { hit, clickLikely: true };
+      if (!publishButton()) clickLikely = true;
+      if (window.location.href !== startUrl) clickLikely = true;
+      await sleep(3000);
+    }
+    return { hit: null, clickLikely };
+  }
+
   function checkpointShowing() {
     const t = (document.body.innerText || "").toLowerCase();
     return t.includes("checkpoint") || t.includes("confirm your identity");
@@ -2364,7 +2446,8 @@
   // strictly matches title + price (listingTextMatches): ancestors
   // aggregate many listings (their price sets would false-match), and
   // a title-only or price-only fragment proves nothing.
-  function listingCardsIn(rootEl) {
+  function listingCardsIn(rootEl, matcher) {
+    const matches = matcher || listingTextMatches;
     const scope = rootEl
       ? [rootEl].concat(Array.from(
           rootEl.querySelectorAll ? rootEl.querySelectorAll("div, article, li, section") : []))
@@ -2373,7 +2456,7 @@
       if (!isVisibleEl(el)) return false;
       const text = el.textContent || "";
       if (!text || text.length > 1500) return false;
-      return listingTextMatches(text, car);
+      return matches(text, car);
     });
     // Minimal elements only: a hit that contains another hit is a
     // wrapper (list, column), not the card.
@@ -2382,6 +2465,27 @@
   }
   function findListingCards() {
     return listingCardsIn(null);
+  }
+  // Title-only cards (v2.1.7): same minimal-card discipline, but
+  // the matcher ignores price — a hit proves this car is listed at
+  // SOME price, which is what separates "already gone" from "live
+  // at a different price" in the delete flow's zero-match branch.
+  function findListingCardsByTitle() {
+    return listingCardsIn(null, listingTitleMatches);
+  }
+  // Did the Selling page actually render its listings region?
+  // Goal-achieved delete semantics (note 18) may only conclude
+  // "gone" from a page that demonstrably loaded: the listings
+  // heading, the empty-state sentence, or the listings search box.
+  // A blank/broken render carries none of these and proves nothing.
+  function sellingPageRendered() {
+    const text = (document.body.innerText || "").toLowerCase();
+    if (text.includes("your listings") ||
+        text.includes("when you start selling")) return true;
+    const inputs = Array.from(document.querySelectorAll("input"));
+    return inputs.some(i =>
+      String((typeof i.getAttribute === "function" && i.getAttribute("placeholder")) || "")
+        .toLowerCase().includes("listings"));
   }
   // The card's ⋯ (options) button. Searched inside the card first,
   // then up the ancestor chain — but a level is only trusted while it
@@ -2478,6 +2582,28 @@
         `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()}`,
         String(cards.length));
       if (!cards.length) {
+        // GOAL-ACHIEVED (v2.1.7, header note 18): the desired end
+        // state of a delete job is "this car is not listed". When
+        // the scan genuinely ran — the listings region rendered,
+        // zero strict matches, and zero TITLE matches at any
+        // price — that state is already true (Matthew's case: he
+        // had deleted the listing by hand before this job ran).
+        // Finish exactly like a verified delete: JOB_DELETED →
+        // the worker marks the row completed and clears the car's
+        // posted stamp. A title match at another price means the
+        // car is still live — NOT achieved, honest failure, stamp
+        // untouched. A page whose listings region never rendered
+        // proves nothing — also an honest failure.
+        const titleCards = findListingCardsByTitle();
+        if (!titleCards.length && sellingPageRendered()) {
+          recordStepNote("Delete", "delete_already_gone",
+            `no listing for ${title} on the rendered selling page — ` +
+            `the removal goal was already met`, "0");
+          await cdpDetach();
+          say("That listing is already gone from Facebook ✓", "#15803d");
+          await report("AUTOLAUNCH_JOB_DELETED", {});
+          return;
+        }
         await fail(
           `Could not find the ${title} listing on your selling page — nothing was deleted. It may already be gone.`,
           "listing_not_found");
@@ -2552,9 +2678,114 @@
     }
   }
 
+  // ---- post-publish verification (v2.1.7, header note 18) ----------------
+  // The passive success vocabulary (detectPublished) is a hint,
+  // not an arbiter: post-publish screens vary by path and timing,
+  // and the first Full Auto run posted a car the detector never
+  // recognized. When the passive signals stay silent, the tab
+  // navigates to the Selling page and the question "is this car
+  // listed?" is settled by the delete flow's strict matcher in a
+  // read-only scan. The continuation state rides the stored job
+  // (verifyPublished {tries, startedAt}) because navigation
+  // restarts this script; the finish reports are the ordinary
+  // JOB_POSTED / JOB_FAILED the worker already knows.
+  const SELLING_PAGE_URL = "https://www.facebook.com/marketplace/you/selling";
+  async function escalateToSellingVerification() {
+    recordStepNote("Verify", "posted_verify_escalated",
+      "passive success signals did not fire — verifying on the Selling page", "");
+    try {
+      const cur = await chrome.storage.local.get(["current_posting_job"]);
+      const j = cur && cur.current_posting_job;
+      if (j && j.queueId === queueId) {
+        j.verifyPublished = { tries: 0, startedAt: new Date().toISOString() };
+        await chrome.storage.local.set({ current_posting_job: j });
+      }
+    } catch (e) { /* storage hiccup — the navigation is still the best next step */ }
+    say("Confirming the post on your Selling page…");
+    await sleep(600);
+    try { window.location.href = SELLING_PAGE_URL; } catch (e) { /* no-op */ }
+  }
+
+  async function runVerifyPublished() {
+    try {
+      // Routed here from any page the job's tab sits on; the scan
+      // itself only ever runs on the Selling page.
+      if (!/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) {
+        try { window.location.href = SELLING_PAGE_URL; } catch (e) { /* no-op */ }
+        return;
+      }
+      say("Checking your Selling page to confirm the listing…");
+      await sleep(3000); // let the selling page render
+
+      const pageText = (document.body.innerText || "").toLowerCase();
+      if (window.location.href.includes("/login") ||
+          pageText.includes("checkpoint") ||
+          pageText.includes("confirm your identity") ||
+          pageText.includes("log in to facebook")) {
+        await fail(
+          "Facebook is asking for login or an identity check — the post could not be verified.",
+          "facebook_checkpoint");
+        return;
+      }
+
+      const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() || "vehicle";
+      let cards = findListingCards();
+      // The selling page lazy-loads its cards; give them a moment
+      // (the same patience the delete scan uses).
+      for (let i = 0; i < 4 && !cards.length; i++) {
+        await sleep(1500);
+        cards = findListingCards();
+      }
+      recordStepNote("Verify", "posted_verify_scan",
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price || 0).toLocaleString()}`,
+        String(cards.length));
+      if (cards.length) {
+        recordStepNote("Verify", "posted_verified_on_selling_page",
+          `${title} found live on the Selling page after Publish`,
+          String(cards.length));
+        say("Listing confirmed live ✓", "#15803d");
+        await report("AUTOLAUNCH_JOB_POSTED", { listingUrl: window.location.href });
+        return;
+      }
+
+      // Absent: a listing this fresh can lag while it sits in
+      // review, so the scan retries (2 more, ~30s apart, each on a
+      // fresh page load). The startedAt wall-clock cap guarantees
+      // the retry loop terminates even if the tries counter could
+      // not be persisted.
+      const vp = job.verifyPublished || {};
+      const tries = vp.tries || 0;
+      const startedAtMs = Date.parse(vp.startedAt || "") || Date.now();
+      if (tries < 2 && Date.now() - startedAtMs < 4 * 60 * 1000) {
+        try {
+          const cur = await chrome.storage.local.get(["current_posting_job"]);
+          const j = cur && cur.current_posting_job;
+          if (j && j.queueId === queueId) {
+            j.verifyPublished = Object.assign({}, j.verifyPublished, { tries: tries + 1 });
+            await chrome.storage.local.set({ current_posting_job: j });
+          }
+        } catch (e) { /* the wall-clock cap above still bounds the loop */ }
+        say("The listing isn't visible yet — Facebook can take a moment. Rechecking…");
+        await sleep(30000);
+        try { window.location.reload(); } catch (e) { /* no-op */ }
+        return;
+      }
+      await fail(
+        "Publish was clicked but the listing could not be found on your Selling page — NOT marked posted.",
+        "publish_unverified");
+    } catch (err) {
+      console.error("[AutoLaunch] verify error:", err);
+      await fail("Unexpected error while verifying the post: " + (err && err.message ? err.message : "unknown"));
+    }
+  }
+
   // ---- main flow ----------------------------------------------------------
   if (jobAction === "delete") {
     await runDeleteListing();
+    return;
+  }
+  if (jobAction === "post" && job.verifyPublished) {
+    await runVerifyPublished();
     return;
   }
   try {
@@ -2698,10 +2929,17 @@
 
     if (confirmMode) {
       say("Everything is filled in. Review it, then click Publish — AutoLaunch will confirm the post for you.", "#b45309");
-      const hit = await watchForPublish(10 * 60 * 1000);
-      if (hit) {
+      const watch = await watchForPublishClick(10 * 60 * 1000);
+      if (watch.hit) {
         say("Listing confirmed live ✓", "#15803d");
-        await report("AUTOLAUNCH_JOB_POSTED", { listingUrl: hit });
+        await report("AUTOLAUNCH_JOB_POSTED", { listingUrl: watch.hit });
+      } else if (watch.clickLikely) {
+        // The human DID click Publish, but Facebook never showed a
+        // state the passive detector knows — the same blindness
+        // that failed the first Full Auto run. Settle it actively
+        // on the Selling page instead of failing a listing that
+        // may well be live (v2.1.7, header note 18).
+        await escalateToSellingVerification();
       } else {
         await fail("Publish was not confirmed within 10 minutes (never clicked, or Facebook did not show a success state).");
       }
@@ -2713,9 +2951,12 @@
     // Click through any remaining Next steps (human-paced), click
     // Publish with the realistic sequence, and — if the button is
     // still sitting there with no success state after a short watch —
-    // retry ONCE with a trusted CDP click. Posted is reported ONLY
-    // on the same detected success confirm mode demands; anything
-    // else fails honestly and marks nothing.
+    // retry ONCE with a trusted CDP click. The passive watch after
+    // the click is deliberately SHORT (~60s total, v2.1.7): a
+    // silent detector no longer fails the job, it escalates to
+    // active verification on the Selling page, which settles
+    // posted-vs-not with the strict matcher. Posted is reported
+    // only on a detected success or a verified live listing.
     say("Full Auto is on — publishing without waiting for a click…");
     let btn = publishButton();
     for (let hop = 0; hop < 4 && !btn; hop++) {
@@ -2738,19 +2979,19 @@
     }
     await humanPause();
     realisticClick(btn);
-    let hit = await watchForPublish(8000);
+    let hit = await watchForPublish(15000);
     if (!hit && publishButton()) {
       // The click didn't take (React shrugged it off) — one trusted
-      // retry, then the session closes again before the long watch.
+      // retry, then the session closes again before the watch.
       await cdpClickEl(publishButton());
       await cdpDetach();
-      hit = await watchForPublish(112 * 1000);
+      hit = await watchForPublish(45000);
     }
     if (hit) {
       say("Listing confirmed live ✓", "#15803d");
       await report("AUTOLAUNCH_JOB_POSTED", { listingUrl: hit });
     } else {
-      await fail("Clicked Publish but Facebook never showed a success state within 2 minutes — NOT marked posted. Check Marketplace drafts.");
+      await escalateToSellingVerification();
     }
   } catch (err) {
     console.error("[AutoLaunch] content error:", err);
