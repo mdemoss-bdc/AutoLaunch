@@ -910,19 +910,19 @@ body {
 
         <div class="space-y-2">
 
-          <button class="w-full text-left px-4 py-3 rounded-xl bg-blue-600 text-white font-bold">
+          <button data-settings-tab="dealership" onclick="switchSettingsTab('dealership')" class="w-full text-left px-4 py-3 rounded-xl bg-blue-600 text-white font-bold cursor-pointer">
             Dealership
           </button>
 
-          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+          <button data-settings-tab="facebook" onclick="switchSettingsTab('facebook')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
             Facebook
           </button>
 
-          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+          <button data-settings-tab="automation" onclick="switchSettingsTab('automation')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
             Automation
           </button>
 
-          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+          <button data-settings-tab="ai" onclick="switchSettingsTab('ai')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
             AI Settings
           </button>
 
@@ -933,6 +933,8 @@ body {
       <!-- RIGHT CONTENT -->
 
       <div class="col-span-9 space-y-6">
+
+      <div id="settingsPanelDealership" class="space-y-6">
 
         <!-- DEALERSHIP CARD -->
 
@@ -997,6 +999,10 @@ body {
           </div>
 
         </div>
+
+      </div><!-- /settingsPanelDealership -->
+
+      <div id="settingsPanelAutomation" class="space-y-6 hidden">
 
         <!-- AUTOMATION CARD -->
 
@@ -1078,6 +1084,66 @@ body {
           </div>
 
         </div>
+
+      </div><!-- /settingsPanelAutomation -->
+
+      <div id="settingsPanelFacebook" class="space-y-6 hidden">
+
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="font-bold text-lg">Facebook Marketplace</h3>
+          <p class="text-sm text-slate-500">
+            Marketplace posting runs through the AutoLaunch Chrome extension, inside your own
+            signed-in Facebook session — there is no token or key to paste here, by design.
+            Cars you queue are picked up by the extension and posted with your daily safety limit.
+          </p>
+          <div class="flex flex-wrap gap-3">
+            <button onclick="closeModal('settingsModal'); openQueueModal()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
+              Open Post Queue
+            </button>
+            <button onclick="switchSettingsTab('automation')" class="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold cursor-pointer">
+              Posting &amp; Channel Settings
+            </button>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 space-y-3">
+          <h3 class="font-bold text-lg">Facebook Page</h3>
+          <p class="text-sm text-slate-500">
+            Posting to a dealership Facebook Page uses Meta's official API from the same
+            connection as Instagram. Turn the Page channel on under
+            <button onclick="switchSettingsTab('automation')" class="text-blue-600 font-semibold underline cursor-pointer">Automation → Syndication Channels</button>;
+            account connection arrives with the Phase 6 channel setup, so Page posts stay
+            off until that connection exists — nothing posts silently in the meantime.
+          </p>
+        </div>
+
+      </div><!-- /settingsPanelFacebook -->
+
+      <div id="settingsPanelAi" class="space-y-6 hidden">
+
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="font-bold text-lg">AI Photo Tools</h3>
+          <p class="text-sm text-slate-500">
+            Background treatment and photo preferences for your listings live in the
+            photo editor settings.
+          </p>
+          <button onclick="closeModal('settingsModal'); openAutoPhotoEditsModal()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
+            Open Photo AI Settings
+          </button>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="font-bold text-lg">AI Descriptions</h3>
+          <p class="text-sm text-slate-500">
+            Turn AI-written listing descriptions on or off and add a custom prompt
+            (your warranty, delivery perks, tone) in posting preferences.
+          </p>
+          <button onclick="closeModal('settingsModal'); openPostingPreferencesModal()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
+            Open Description AI Settings
+          </button>
+        </div>
+
+      </div><!-- /settingsPanelAi -->
 
         <!-- SAVE -->
 
@@ -3441,6 +3507,18 @@ function showInventoryPage() {
 }
 function openFiltersModal() {document.getElementById("filtersModal").classList.remove("hidden"); }
 function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); }
+// Luna: Settings left-menu tabs (Dealership / Facebook / Automation / AI Settings)
+function switchSettingsTab(tab) {
+  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", automation: "settingsPanelAutomation", ai: "settingsPanelAi" };
+  Object.entries(panels).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("hidden", key !== tab);
+  });
+  document.querySelectorAll("[data-settings-tab]").forEach(btn => {
+    const active = btn.getAttribute("data-settings-tab") === tab;
+    btn.className = "w-full text-left px-4 py-3 rounded-xl cursor-pointer " + (active ? "bg-blue-600 text-white font-bold" : "bg-slate-100 text-slate-600 font-semibold");
+  });
+}
 function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
 function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
