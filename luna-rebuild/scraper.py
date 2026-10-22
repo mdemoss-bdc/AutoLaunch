@@ -117,6 +117,51 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             return null;
         }
 
+        // FINAL-PRICE HELPER (price rule, 2026-10-22): the stored price is the
+        // dealer's ADVERTISED FINAL price (DealerOn's featured price, e.g.
+        // "Moses Price" = retail - savings + doc fee), never the retail line.
+        // Key off the featured-price element + stack position, not label text:
+        // 1) .vehiclePricingHighlightAmount (the big featured headline figure)
+        // 2) the LAST .priceBlockItemPrice row in the stack (the final total
+        //    sits last; retail/doc/savings are the rows above it)
+        // Returns null when neither is present so callers fall back.
+        function finalPriceFromStack(scope) {
+            const money = (s) => {
+                if (!s) return null;
+                const m = String(s).replace(/&#x2B;/g, '+').match(/\$\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
+                if (!m) return null;
+                const v = parseInt(m[1].replace(/,/g, ''));
+                return (v >= 1000 && v <= 350000) ? v : null;
+            };
+            try {
+                const feat = scope.querySelector('.vehiclePricingHighlightAmount, [class*="vehiclePricingHighlightAmount"]');
+                if (feat) {
+                    const v = money(feat.innerText || feat.textContent);
+                    if (v) return v;
+                }
+                const featLi = scope.querySelector('.priceBlockItemFeaturedPrice, [class*="FeaturedPrice"]');
+                if (featLi && !feat) {
+                    const v = money(featLi.innerText || featLi.textContent);
+                    if (v) return v;
+                }
+                const rows = scope.querySelectorAll('.vehiclePricingStack .priceBlockItemPrice, .priceBlock .priceBlockItemPrice, [class*="priceBlockItemPrice"]');
+                if (rows && rows.length > 0) {
+                    for (let i = rows.length - 1; i >= 0; i--) {
+                        const row = rows[i];
+                        // Skip adjustment rows (doc fee / savings / discount) —
+                        // the final total is the last NON-adjustment row.
+                        const lbl = row.querySelector('[class*="priceBlocItemPriceLabel"], [class*="PriceLabel"]');
+                        const lblTxt = lbl ? (lbl.innerText || '') : '';
+                        if (/doc fee|savings|discount|rebate/i.test(lblTxt)) continue;
+                        const valEl = row.querySelector('[class*="priceBlocItemPriceValue"], [class*="PriceValue"], .do-price-emphasis');
+                        const v = money(valEl ? (valEl.innerText || valEl.textContent) : (row.innerText || row.textContent));
+                        if (v) return v;
+                    }
+                }
+            } catch (e) {}
+            return null;
+        }
+
         // STRATEGY 1: JSON-LD / SCHEMA.ORG
         try {
             const jsonScripts = document.querySelectorAll('script[type="application/ld+json"]');
@@ -209,6 +254,8 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                                     mileage: mileage,
                                     location_name: "Dealership Lot",
                                     image_url: image,
+                                    photos: image ? [image] : [],
+                                    interior_color: null,
                                     detail_url: url,
                                     color: (item.color || 'Standard'),
                                     body_type: (item.bodyType || 'Other'),
@@ -247,8 +294,11 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                     if (!vm) return;
                     const vinKey = vm[1].toUpperCase();
                     if (priceByVin[vinKey]) return;
-                    let p = null;
-                    for (const sel of fillSelectors) {
+                    // Advertised FINAL price first (featured element / last
+                    // stack row) — the generic selectors below see the retail
+                    // row first and must not win over it.
+                    let p = finalPriceFromStack(card);
+                    if (!p) for (const sel of fillSelectors) {
                         const el = card.querySelector(sel);
                         if (el) {
                             const dataP = el.getAttribute('data-price') || el.getAttribute('content');
@@ -386,8 +436,9 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 }
             }
 
-            // 4. PRICE EXTRACTION
-            let price = null;
+            // 4. PRICE EXTRACTION — advertised FINAL price (featured element /
+            // last stack row) wins; generic selectors are only a fallback.
+            let price = finalPriceFromStack(card);
             const priceSelectors = [
                 // DealerOn (Moses) price stack: big emphasized number inside the price block
                 '.vehiclePricingStack .do-price-emphasis', '.priceBlockItemPrice .do-price-emphasis',
@@ -401,7 +452,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 '[data-price]', '[itemprop="price"]', '.primary-price', '.price-value', '.value'
             ];
 
-            for (const sel of priceSelectors) {
+            if (!price) for (const sel of priceSelectors) {
                 const el = card.querySelector(sel);
                 if (el) {
                     const dataP = el.getAttribute('data-price') || el.getAttribute('content');
@@ -431,9 +482,12 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                     return (v >= 1000 && v <= 350000) ? v : null;
                 };
                 const skipLine = (s) => /per mo|\\/mo|down payment|discount|savings|rebate|doc fee|estimate|payment/i.test(s);
-                // Pass 1: label and amount on the same line
+                // Pass 1: label and amount on the same line. Retail/MSRP lines
+                // are skipped here so the stack's final-price line wins; a
+                // retail-only card is still caught by passes 2 and 3.
                 for (const line of lines) {
                     if (skipLine(line)) continue;
+                    if (/retail|msrp|list price/i.test(line)) continue;
                     if (/price|final|sale|internet|selling|our price|market price/i.test(line)) {
                         const v = moneyIn(line);
                         if (v) { price = v; break; }
@@ -548,6 +602,8 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 mileage: mileage,
                 location_name: exactLocation,
                 image_url: photoUrl,
+                photos: photoUrl ? [photoUrl] : [],
+                interior_color: null,
                 detail_url: detailUrl,
                 color: color,
                 body_type: bodyType,
@@ -576,6 +632,258 @@ def push_batch_to_supabase(records: List[dict]) -> int:
     except Exception as e:
         print(f"[!] Batch upsert error: {e}")
         return 0
+
+# ==============================================================================
+# ==================== VDP ENRICHMENT (photos + final price) ===================
+# ==============================================================================
+# SRP cards only ever expose ONE photo per vehicle and (on DealerOn) a price
+# stack whose first row is RETAIL. The detail page (VDP) has both the full
+# gallery and the advertised final price, and DealerOn serves them in the raw
+# HTML, so a plain request per vehicle (via the browser context, sharing its
+# UA/cookies) is enough — no extra page render.
+
+MAX_PHOTOS_PER_VEHICLE = 20
+VDP_FETCH_CONCURRENCY = 5
+
+
+def hi_res_photo_url(url: str, add_width: bool = False) -> str:
+    """Mirror of the app's hiResPhotoUrl(): rewrite a numeric width/w query
+    param below 1600 up to 1600. Optionally append width=1600 when the photo
+    service URL has no width param at all (DealerOn photo URLs accept it)."""
+    if not url or not isinstance(url, str):
+        return url
+    try:
+        parts = urlparse(url)
+        pairs = parse_qsl(parts.query, keep_blank_values=True)
+        out_pairs = []
+        seen_width = False
+        for k, v in pairs:
+            if k.lower() in ("width", "w"):
+                seen_width = True
+                if v.isdigit() and int(v) < 1600:
+                    out_pairs.append((k, "1600"))
+                    continue
+            out_pairs.append((k, v))
+        if add_width and not seen_width:
+            out_pairs.append(("width", "1600"))
+        # safe=":" keeps the timestamp in the dealer's canonical literal form.
+        return urlunparse(parts._replace(query=urlencode(out_pairs, safe=":")))
+    except Exception:
+        return url
+
+
+def _money_int(raw) -> int:
+    """Parse a price-ish value ('$11,327', '11327.00', 11327) to int or None."""
+    if raw is None:
+        return None
+    try:
+        v = int(float(str(raw).replace("$", "").replace(",", "").strip()))
+    except (TypeError, ValueError):
+        return None
+    return v if 1000 <= v <= 350000 else None
+
+
+def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
+    """Extract gallery photos, advertised final price, and spec colors from a
+    DealerOn VDP's raw HTML. Returns a dict; missing pieces stay None/[]."""
+    out = {
+        "photos": [],
+        "price": None,
+        "price_is_final": False,
+        "color": None,
+        "interior_color": None,
+        "body_type": None,
+    }
+    if not html or not vin:
+        return out
+
+    vin_l = vin.lower()
+    origin = ""
+    if page_url:
+        p = urlparse(page_url)
+        if p.scheme and p.netloc:
+            origin = f"{p.scheme}://{p.netloc}"
+
+    # ---- PHOTOS: /inventoryphotos/<dealerId>/<vin>/ip/<n>.jpg sequence.
+    # The /ip/thumbs/ variants (used for OTHER cars' cards) cannot match:
+    # the pattern requires digits immediately after /ip/.
+    found = {}
+    pat = re.compile(
+        r"((?:https?:)?//[^\s\"'<>,]+?/inventoryphotos/\d+/" + re.escape(vin_l) + r"/ip/(\d+)\.jpg(?:\?[^\s\"'<>,]+)?"
+        r"|/inventoryphotos/\d+/" + re.escape(vin_l) + r"/ip/(\d+)\.jpg(?:\?[^\s\"'<>,]+)?)",
+        re.IGNORECASE,
+    )
+    for m in pat.finditer(html):
+        raw = (m.group(1) or "").replace("&amp;", "&").strip()
+        num = int(m.group(2) or m.group(3))
+        if raw.startswith("//"):
+            raw = "https:" + raw
+        elif raw.startswith("/"):
+            raw = origin + raw
+        if not raw.startswith("http"):
+            continue
+        prev = found.get(num)
+        # Prefer the canonical URL carrying the timestamp query.
+        if prev is None or ("timestamp=" in raw and "timestamp=" not in prev):
+            found[num] = raw
+    photos = []
+    for num in sorted(found)[:MAX_PHOTOS_PER_VEHICLE]:
+        u = hi_res_photo_url(found[num], add_width=True)
+        if u and u not in photos:
+            photos.append(u)
+
+    # ---- JSON-LD: price / color / bodyType / fallback image list
+    jsonld_price = None
+    jsonld_images = []
+    for m in re.finditer(
+        r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', html, re.S | re.I
+    ):
+        try:
+            data = json.loads(m.group(1).strip())
+        except Exception:
+            continue
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict) and isinstance(data.get("@graph"), list):
+            items = data["@graph"]
+        elif isinstance(data, dict):
+            items = [data]
+        else:
+            items = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            t = str(item.get("@type") or "").lower()
+            if t not in ("vehicle", "car", "product") and not item.get(
+                "vehicleIdentificationNumber"
+            ):
+                continue
+            off = item.get("offers")
+            if isinstance(off, list):
+                off = off[0] if off else None
+            if isinstance(off, dict) and jsonld_price is None:
+                p = off.get("price")
+                if p is None and isinstance(off.get("priceSpecification"), dict):
+                    p = off["priceSpecification"].get("price")
+                if p is None:
+                    p = off.get("lowPrice")
+                jsonld_price = _money_int(p)
+            img = item.get("image")
+            if isinstance(img, str):
+                jsonld_images.append(img)
+            elif isinstance(img, list):
+                for e in img:
+                    if isinstance(e, str):
+                        jsonld_images.append(e)
+                    elif isinstance(e, dict) and e.get("url"):
+                        jsonld_images.append(e["url"])
+            elif isinstance(img, dict) and img.get("url"):
+                jsonld_images.append(img["url"])
+            if item.get("color") and not out["color"]:
+                out["color"] = str(item["color"]).strip()
+            if item.get("bodyType") and not out["body_type"]:
+                out["body_type"] = str(item["bodyType"]).strip()
+
+    if not photos and jsonld_images:
+        for u in jsonld_images:
+            hu = hi_res_photo_url(u)
+            if hu and hu.startswith("http") and hu not in photos:
+                photos.append(hu)
+            if len(photos) >= MAX_PHOTOS_PER_VEHICLE:
+                break
+    out["photos"] = photos
+
+    # ---- PRICE: the featured headline element is the advertised final
+    # price. On DealerOn pages the JSON-LD offers.price is that same final
+    # price (verified: Tucson 11327, Sentra 11222), so JSON-LD counts as
+    # final whenever the page carries the DealerOn pricing stack.
+    feat = re.search(
+        r"vehiclePricingHighlightAmount[^>]*>\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})",
+        html,
+    )
+    feat_price = _money_int(feat.group(1)) if feat else None
+    has_stack = (
+        feat_price is not None
+        or "vehiclePricingStack" in html
+        or "priceBlockItemPrice" in html
+    )
+    if feat_price:
+        out["price"] = feat_price
+        out["price_is_final"] = True
+    elif jsonld_price is not None:
+        out["price"] = jsonld_price
+        out["price_is_final"] = has_stack
+
+    # ---- SPEC LIST colors (DealerOn .info__value blocks), exterior first
+    for label, key in (("Exterior Color", "color"), ("Interior Color", "interior_color")):
+        if out[key]:
+            continue
+        m = re.search(
+            re.escape(label)
+            + r'</span>\s*<span class="info__value[^"]*"[^>]*>\s*([^<]+?)\s*</span>',
+            html,
+            re.S,
+        )
+        if m and m.group(1).strip():
+            out[key] = m.group(1).strip()
+
+    return out
+
+
+async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
+    """Fetch each car's VDP once and fill in the full photo gallery, the
+    advertised final price, and spec colors. Any failure leaves the SRP
+    values in place (photos fall back to the single SRP photo, hi-res).
+    Returns how many cars got a multi-photo gallery."""
+    sem = asyncio.Semaphore(VDP_FETCH_CONCURRENCY)
+    enriched = 0
+
+    async def one(car: dict):
+        nonlocal enriched
+        fallback = []
+        if car.get("image_url"):
+            fallback = [hi_res_photo_url(car["image_url"])]
+        detail_url = car.get("detail_url")
+        if not detail_url:
+            if fallback:
+                car["photos"] = fallback
+            return
+        html = None
+        async with sem:
+            try:
+                resp = await context.request.get(detail_url, timeout=20000)
+                if resp.status == 200:
+                    html = await resp.text()
+            except Exception:
+                html = None
+        if not html:
+            if fallback:
+                car["photos"] = fallback
+            return
+        d = parse_vdp_details(html, car.get("vin") or "", detail_url)
+        if d["photos"]:
+            car["photos"] = d["photos"]
+            car["image_url"] = d["photos"][0]
+            if len(d["photos"]) > 1:
+                enriched += 1
+        elif fallback:
+            car["photos"] = fallback
+        # Final price wins over the SRP stack value; a non-final VDP price
+        # only fills a gap the SRP pass left empty.
+        if d["price"] and (d["price_is_final"] or not car.get("price")):
+            car["price"] = d["price"]
+        if d["color"]:
+            car["color"] = d["color"]
+        if d["interior_color"]:
+            car["interior_color"] = d["interior_color"]
+        if d["body_type"] and (
+            not car.get("body_type") or car["body_type"] == "Other"
+        ):
+            car["body_type"] = d["body_type"]
+
+    await asyncio.gather(*(one(c) for c in cars), return_exceptions=True)
+    return enriched
+
 
 # Safety brake for the stale pass: if a single run would deactivate more than
 # this fraction of a dealer's active inventory, something is probably wrong
@@ -907,6 +1215,16 @@ async def run_scraper():
                     seen_vins.update(vins)
 
                     user_seen_vins.update(vins)
+
+                    # VDP enrichment: full photo gallery + advertised final
+                    # price + spec colors from each car's detail page.
+                    enriched = await enrich_cars_with_vdp(context, cars)
+
+                    if enriched:
+
+                        print(
+                            f"[++] VDP enrichment: {enriched}/{len(cars)} cars got full photo galleries"
+                        )
 
                     saved = push_batch_to_supabase(cars)
 
