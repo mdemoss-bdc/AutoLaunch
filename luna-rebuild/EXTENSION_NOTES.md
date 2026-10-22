@@ -44,6 +44,167 @@ The repo-root extension/ is untouched.
   permission changes — the "debugger" note above still applies.
 - Version 2.1.3 (filler v3.3): the step-2 colors + clean-title fix
   below (COLOR NORMALIZATION + STEP-2 VERIFY). No permission changes.
+- Version 2.1.4: Full Auto posting via the user's setting, the real
+  delete flow, and the preview-panel exclusion (see the v2.1.4
+  section below). One manifest change: content.js is ALSO injected
+  on https://www.facebook.com/marketplace/you/selling* (and
+  you/dashboard*) so the delete routine can run where the listings
+  live; in-script URL guards route post jobs to the create pages
+  and delete jobs to the selling pages, so neither routine can fire
+  on the other's page. No permission changes.
+
+## v2.1.4 — Full Auto, real deletes, preview exclusion
+
+DDL applied to the live database first (additive only; recorded in
+supabase/migrations_draft/full_auto_APPLIED_2026-10-22.sql):
+`user_settings.full_auto_enabled boolean DEFAULT false`;
+`auto_posting_queue.action text DEFAULT 'post'`;
+`auto_posting_queue.price integer` (mirrors scraped_inventory.price).
+Schema cache reloaded (`notify pgrst, 'reload schema'`).
+
+### FULL AUTO POSTING (Matthew asked for it directly)
+- App: Settings → Automation gains a "Full Auto posting" toggle
+  with honest helper text ("On: the helper clicks Next and Publish
+  for you. Off: it fills everything and waits for your click."). It
+  writes `user_settings.full_auto_enabled` immediately (the
+  channel-switch pattern), is restored by loadUserStoreSettings,
+  and is also included in the modal's main saveAllSettings upsert.
+- Worker: user_settings is fetched once per claim cycle
+  (daily_post_limit + full_auto_enabled together); the flag rides
+  the job payload as `current_posting_job.fullAuto`.
+- Content: confirm mode stays the default. When `job.fullAuto` is
+  true, after the verify gate passes the filler clicks through any
+  remaining Next steps itself (human-paced), clicks Publish with
+  the realistic sequence, and retries ONCE with a trusted CDP click
+  if the button is still there with no success state after a short
+  watch. It reports POSTED only on the SAME detected success
+  confirm mode demands (listing URL / "your listing is now live"
+  text). Publish unreachable → honest failure
+  `publish_button_not_found`; clicked but never confirmed → the
+  existing 2-minute failure. Posted is never marked on a timer or
+  a click alone.
+
+### REAL DELETE FLOW ("Remove from Facebook")
+- Why: the app button was local-only — it flipped the car's status
+  in AutoLaunch and alerted "✓ Successfully removed … from
+  Facebook!" while the live listing stayed up. Matthew caught it
+  live (the Tucson remained Active on his Seller dashboard). That
+  alert and the misleading confirm copy are gone.
+- Posted state derivation (checked before building): the app
+  derives "Posted" solely from `scraped_inventory.marketplace_posted_at`
+  (`isPosted = !!car.marketplace_posted_at`). The delete completion
+  therefore clears exactly that column — the car returns to
+  unposted because Facebook actually dropped the listing.
+- App: the button now (a) confirms with honest copy (the helper
+  will open Facebook and delete the listing; can take a minute;
+  the car stays marked Posted until the helper confirms it's
+  gone); (b) inserts a queue row {user_id, vin,
+  target_channel:'facebook', action:'delete', status:'pending',
+  year/make/model/stock_num, price}; (c) shows a truthful
+  "Removal queued" state (rose chip in both inventory renderers +
+  the button disabled) while a delete for that VIN is
+  pending/processing — marketplace_posted_at is NOT touched at
+  click time; (d) never claims success at click time. The Post
+  Queue shows delete jobs with an "Action: Delete listing from
+  Facebook" line and their real status (completed renders as
+  "🟢 Removed"); the no-photo block explicitly exempts deletes.
+- Contract — producer-agnostic on purpose: ANY pending
+  action='delete' row carrying vin + year/make/model/stock_num +
+  price is executable. The Remove button creates them today; an
+  inventory-lifecycle auto-removal rule (when a car leaves
+  inventory its listing should auto-delete — approved follow-on)
+  will create them tomorrow, typically AFTER the inventory row is
+  gone. That is why price is stamped on the queue row: the
+  worker's payload falls back to the row's own context, and the
+  strict matcher stays executable without scraped_inventory.
+- Worker: the claim query now takes target_channel IN
+  ('marketplace','facebook'), oldest first (limit 5). Deletes are
+  claimed under the same conditional-claim + session-token rules,
+  but the daily limit gates POSTS ONLY (a removal is not a post —
+  being at the cap must never strand a listing the user asked to
+  take down), and the no-photo rule does not apply. The job payload
+  is routed distinctly (action:'delete', car = inventory row, or
+  the queue row's stamped context when the inventory row is gone;
+  a stamped price also fills an inventory row whose price is
+  null). The tab opened is marketplace/you/selling.
+- Content (selling page): login/checkpoint = honest failure,
+  nothing touched. The listing card is the SMALLEST visible
+  element whose text STRICTLY matches — year/make/model AND a
+  dollar amount exactly equal to the car's price
+  (listingTextMatches). Zero matches → fail `listing_not_found`;
+  more than one → fail `listing_ambiguous`; either way NOTHING is
+  deleted. On a unique match: open the card's ⋯ menu (the search
+  climbs ancestors only while the level still contains exactly
+  ONE matching listing, so a neighbour's menu can't open), click
+  "Delete listing" (menu containers searched before the document),
+  click the confirmation dialog's exact "Delete" button, then
+  VERIFY — the card must be gone after a settle/poll window —
+  before reporting AUTOLAUNCH_JOB_DELETED. Clicked but still
+  present → `delete_not_verified`. Human pacing between clicks;
+  step notes (delete_match_scan / listing_deleted) ride the same
+  diagnostic channels, and the worker compacts them into
+  error_message for delete failures too.
+- Worker finish: `finishJobDeleted` patches the queue row to
+  status **'completed'** with `executed_at` set (the queue table
+  has NO check constraint on status — verified against the live
+  schema — and the app's queue view renders the value), and clears
+  the car's `marketplace_posted_at`. A token dying mid-finish
+  stashes outcome 'deleted' and replays it on the next fresh
+  token, exactly like posted/failed.
+- Statuses after 2.1.4: post jobs pending → processing →
+  posted/failed (unchanged); delete jobs pending → processing →
+  completed/failed.
+
+### PREVIEW-PANEL EXCLUSION (from the 2.1.3 live repost)
+- Live evidence: the repost filled EVERYTHING correctly (both
+  colors color_set on the real step-2 comboboxes) and then FAILED
+  on the final audience step — the per-step scan matched
+  Facebook's PREVIEW pane (its description prose contains
+  "Price: $11,327" and "Exterior color: Beige"; the nearest
+  clickable was the description's "See less" expander) and laddered
+  a phantom Price against it, reading back "See less". Matthew
+  clicked Publish himself on a perfect form.
+- Fix: field location + verification consider the FORM REGION
+  only. `isInPreview(el)` walks ancestors and rejects a candidate
+  whose chain passes through the preview pane (leading text
+  "Preview", aria-label "preview", or a direct "Preview" heading
+  child — deliberately shallow checks, so the page root, which
+  contains everything, is never flagged). Applied in findAnyField
+  (all three strategies), fillSelectOrListbox's select scan,
+  color option collection, the clean-title locators, the
+  description locator, and the form-map snapshot. A generic
+  clickable whose whole text is a UI chrome word ("See less",
+  "See more", "Learn more", "Show more/less", "Read more",
+  "See all") is never a field candidate at all (inputs/selects
+  exempt by tag).
+- The audience step has NO required vehicle fields: with preview
+  candidates excluded, required-spec construction finds nothing
+  there, fields verified on earlier steps stay verified, and the
+  step simply completes into confirm/full-auto.
+- Region bleed, second form (caught by the v2.1.4 harness): the
+  nearby-text fallback climbs ancestors and appends their text —
+  through a SHARED ancestor (page layout) that text includes the
+  preview's prose, which "located" even the audience step's real
+  Publish button as Price. nearbyText now stops climbing at the
+  first ancestor whose subtree CONTAINS the preview pane.
+- Verification (node, DOM-stub harness, 42 checks; v3.2 harness
+  40/40 and v2.1.3 harness 50/50 still pass): pure strict-match
+  cases; a three-step FB-variant flow WITH the preview pane
+  present on every step — Full Auto walks steps 1→2→audience,
+  sets both colors + clean title on the real form, never touches
+  "See less", clicks Publish itself and posts on detected
+  success; confirm mode on the same form never touches Publish
+  (a simulated human click posts it, exactly once); Publish
+  absent → publish_button_not_found with zero phantom attempts;
+  delete scenarios (unique match deletes + verifies + the other
+  listing untouched; price mismatch → listing_not_found with no
+  menu ever opened; duplicates → listing_ambiguous); and a worker
+  simulation (delete claimed at the daily post limit with the
+  payload falling back to the queue row's stamped price; post at
+  the limit not claimed; fullAuto=true riding a post claim;
+  AUTOLAUNCH_JOB_DELETED → status 'completed' + executed_at +
+  marketplace_posted_at cleared). It has NOT yet had a live
+  Facebook run.
 
 ### bridge.js (NEW)
 - Runs only on the AutoLaunch origin. Listens for the app's
@@ -365,6 +526,21 @@ The repo-root extension/ is untouched.
    car gets marketplace_posted_at in the app.
 5. To see failures honestly: queue a car while logged out of Facebook —
    the job should end Failed with the login reason, never Posted.
+6. FULL AUTO (v2.1.4): Settings → Automation → turn "Full Auto
+   posting" ON, Save. Queue a car and touch NOTHING: the helper
+   should walk the steps, click Publish itself, and the queue row
+   should end Posted (car shows Posted in the app). Turn the switch
+   OFF and repeat: it should stop at the amber banner and wait for
+   your Publish click, as before.
+7. DELETE (v2.1.4): with a car Posted (from step 6 or any earlier
+   run), press "Remove from Facebook" in the app and confirm. The
+   car shows "Removal queued"; within about a minute a Facebook
+   selling-page tab opens, the helper deletes that exact listing,
+   and afterwards the listing is gone from Facebook's Your
+   listings, the queue row reads Removed (completed), and the car
+   is back to Not Posted in the app. If two identical cars were
+   listed at the same price, it should refuse (listing_ambiguous)
+   and delete nothing.
 
 ## Live test log
 

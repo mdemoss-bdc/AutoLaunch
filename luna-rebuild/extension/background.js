@@ -93,6 +93,37 @@
 //     preserves each record's `detail` string (shed with readBack
 //     under cap pressure), and the FIELD_DIAG handler stores `note`
 //     + `detail` in autolaunch_failure_log alongside the forensics.
+// 13. FULL AUTO + DELETE JOBS (v2.1.4): the claim loop now serves
+//     the queue's `action` column. (a) FULL AUTO: user_settings is
+//     fetched once per cycle (daily_post_limit + the new
+//     full_auto_enabled); the flag rides the job payload
+//     (current_posting_job.fullAuto) so the content script can turn
+//     confirm mode off and click Publish itself. (b) DELETE JOBS
+//     (action='delete', target_channel='facebook', queued by the
+//     app's "Remove from Facebook"): claimed under the same
+//     conditional-claim + session-token rules, but the daily POST
+//     limit never blocks them (the limit counts posts, not
+//     removals), the no-photo rule does not apply (a car whose
+//     photos vanished is exactly the car you remove), and the tab
+//     opened is the selling page, not the create form. A delete
+//     whose inventory row is gone is still claimed — the payload
+//     falls back to the queue row's own stamped year/make/model and
+//     price (producers stamp all four at insert; the contract is
+//     producer-agnostic, since an inventory-lifecycle auto-removal
+//     rule will create these rows when a car leaves inventory).
+//     Only a row stamped without a price leaves the strict matcher
+//     nothing to match — and then it refuses (listing_not_found)
+//     rather than guessing. Completion is a
+//     third finish path (AUTOLAUNCH_JOB_DELETED ->
+//     finishJobDeleted): the queue row ends "completed" (the table
+//     has no status check constraint; the app's queue view renders
+//     it) with executed_at set, and the car's
+//     marketplace_posted_at is cleared — the same column the app
+//     derives "Posted" from, so the car truthfully returns to
+//     unposted. A mid-finish token death stashes outcome "deleted"
+//     alongside "posted"/"failed". Delete failures compact their
+//     diagnostics into error_message too, not just fields_unfilled
+//     ones — the delete step notes are the evidence there.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -191,12 +222,16 @@ async function todaysPostCount(userId) {
   return rows.length;
 }
 
-async function dailyLimit(userId) {
-  const rows = await sbGet(`user_settings?user_id=eq.${userId}&select=daily_post_limit`);
-  if (rows && rows.length && typeof rows[0].daily_post_limit === "number") {
-    return rows[0].daily_post_limit;
-  }
-  return 10; // matches the app's own default when nothing is saved
+// One settings fetch per claim cycle (v2.1.4): the daily post
+// limit AND the Full Auto switch both live on user_settings.
+async function userSettings(userId) {
+  const rows = await sbGet(
+    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled`);
+  const row = (rows && rows.length) ? rows[0] : {};
+  return {
+    limit: typeof row.daily_post_limit === "number" ? row.daily_post_limit : 10,
+    fullAuto: row.full_auto_enabled === true
+  };
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -225,52 +260,94 @@ async function checkQueue() {
     }
     if (activeJob) return;             // one car at a time, always
 
-    // Daily safety limit — enforced here too, not just in the UI.
-    const limit = await dailyLimit(userId);
-    if (limit < 999) {
-      const postedToday = await todaysPostCount(userId);
-      if (postedToday >= limit) {
-        console.log(`[AutoLaunch] Daily limit reached (${postedToday}/${limit}). Not claiming.`);
-        return;
-      }
-    }
+    const settings = await userSettings(userId);
 
+    // The claim set (v2.1.4): Marketplace POST rows (target_channel
+    // 'marketplace') and Facebook DELETE rows (target_channel
+    // 'facebook', action 'delete') — the two jobs this helper runs.
+    // Other channels' rows belong to other workers; never touch them.
     const queueItems = await sbGet(
       `auto_posting_queue?user_id=eq.${userId}&status=eq.pending` +
-      `&target_channel=eq.marketplace&order=created_at.asc&limit=1`
+      `&target_channel=in.(marketplace,facebook)&order=created_at.asc&limit=5`
     );
     if (!queueItems.length) return;
-    const item = queueItems[0];
+
+    // Daily safety limit — enforced here too, not just in the UI,
+    // and it gates POSTS only: a removal is not a post, and being at
+    // the cap must never strand a listing the user asked to take down.
+    let atLimit = false;
+    if (settings.limit < 999) {
+      const postedToday = await todaysPostCount(userId);
+      atLimit = postedToday >= settings.limit;
+      if (atLimit) {
+        console.log(`[AutoLaunch] Daily limit reached (${postedToday}/${settings.limit}). Posts wait; deletes still run.`);
+      }
+    }
+    let item = null;
+    for (const q of queueItems) {
+      if (q.action === "delete") { item = q; break; }
+      if (!atLimit) { item = q; break; }
+    }
+    if (!item) return; // only posts waiting, and the cap says wait
+    const isDelete = item.action === "delete";
 
     const cars = await sbGet(
       `scraped_inventory?vin=eq.${encodeURIComponent(item.vin)}&user_id=eq.${userId}&limit=1`
     );
-    if (!cars.length) {
+    let carRow = cars.length ? cars[0] : null;
+    if (!carRow && !isDelete) {
       // Queue row points at a car that no longer exists: fail it loudly
       // instead of leaving it pending forever.
       await sbPatch(`auto_posting_queue?id=eq.${item.id}&status=eq.pending`, { status: "failed" });
       await logFailure(item.id, "inventory_row_missing");
       return;
     }
+    if (!carRow && isDelete) {
+      // A delete can outlive its inventory row — by design: the
+      // delete-job contract is producer-agnostic (the Remove button
+      // today; an inventory-lifecycle auto-removal rule later, which
+      // fires exactly when the car LEAVES inventory). The payload
+      // therefore falls back to the queue row's own year/make/model
+      // AND price, which producers stamp on the row at insert. Only a
+      // row stamped without a price leaves the matcher nothing strict
+      // to match — and then it refuses (listing_not_found) rather
+      // than guessing at a twin.
+      carRow = {
+        vin: item.vin,
+        year: item.year != null ? item.year : null,
+        make: item.make || null,
+        model: item.model || null,
+        stock_num: item.stock_num || null,
+        price: item.price != null ? Number(item.price) : null
+      };
+    }
+    if (carRow && isDelete && carRow.price == null && item.price != null) {
+      // Inventory row exists but carries no price; the row's stamped
+      // price is the better evidence for the strict match.
+      carRow = Object.assign({}, carRow, { price: Number(item.price) });
+    }
 
     // NO-PHOTO RULE (mirrors hasRealPhoto in the web app): a vehicle with
     // no real photos is never posted — its photos may have vanished after
     // it was queued. Fail the row loudly, same as a missing car, instead
-    // of handing a photo-less listing to Facebook.
-    const FALLBACK_PHOTO = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
-    const usablePhoto = u => {
-      if (!u || typeof u !== "string") return false;
-      let s = u.trim();
-      if (s.startsWith("//")) s = "https:" + s;
-      return /^https?:\/\//i.test(s) && !s.includes("/static/") && s !== FALLBACK_PHOTO;
-    };
-    const carRow = cars[0];
-    const hasPhoto = usablePhoto(carRow.image_url) ||
-      (Array.isArray(carRow.custom_photo_urls) && carRow.custom_photo_urls.some(usablePhoto));
-    if (!hasPhoto) {
-      await sbPatch(`auto_posting_queue?id=eq.${item.id}&status=eq.pending`, { status: "failed" });
-      await logFailure(item.id, "no_photos");
-      return;
+    // of handing a photo-less listing to Facebook. POSTS ONLY: a delete
+    // removes a listing, and a car whose photos vanished is exactly the
+    // car whose listing should come down.
+    if (!isDelete) {
+      const FALLBACK_PHOTO = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+      const usablePhoto = u => {
+        if (!u || typeof u !== "string") return false;
+        let s = u.trim();
+        if (s.startsWith("//")) s = "https:" + s;
+        return /^https?:\/\//i.test(s) && !s.includes("/static/") && s !== FALLBACK_PHOTO;
+      };
+      const hasPhoto = usablePhoto(carRow.image_url) ||
+        (Array.isArray(carRow.custom_photo_urls) && carRow.custom_photo_urls.some(usablePhoto));
+      if (!hasPhoto) {
+        await sbPatch(`auto_posting_queue?id=eq.${item.id}&status=eq.pending`, { status: "failed" });
+        await logFailure(item.id, "no_photos");
+        return;
+      }
     }
 
     // Conditional claim: only succeeds while the row is still pending.
@@ -284,13 +361,19 @@ async function checkQueue() {
       current_posting_job: {
         queueId: item.id,
         userId,
-        car: cars[0],
+        car: carRow,
+        action: isDelete ? "delete" : "post",
+        fullAuto: settings.fullAuto,
         claimedAt: new Date().toISOString()
       }
     });
 
     await jitter(1500, 4000); // human pacing, never machine-gun tabs
-    await chrome.tabs.create({ url: "https://www.facebook.com/marketplace/create/vehicle" });
+    await chrome.tabs.create({
+      url: isDelete
+        ? "https://www.facebook.com/marketplace/you/selling"
+        : "https://www.facebook.com/marketplace/create/vehicle"
+    });
   } catch (err) {
     console.error("[AutoLaunch] Queue check error:", err);
   } finally {
@@ -556,6 +639,22 @@ async function applyPosted(queueId, vin, userId) {
   );
 }
 
+// Delete completion (v2.1.4): the queue row ends "completed" —
+// there is no check constraint on status (verified against the live
+// schema), and the app's queue view renders the value — with
+// executed_at stamped, and the car's marketplace_posted_at cleared.
+// That column is the app's ONLY derivation of "Posted", so clearing
+// it is what truthfully returns the car to unposted once the listing
+// is verifiably gone from Facebook.
+async function applyDeleted(queueId, vin, userId) {
+  await sbPatch(`auto_posting_queue?id=eq.${queueId}`,
+    { status: "completed", executed_at: new Date().toISOString() });
+  await sbPatch(
+    `scraped_inventory?vin=eq.${encodeURIComponent(vin)}&user_id=eq.${userId}`,
+    { marketplace_posted_at: null }
+  );
+}
+
 async function applyFailed(queueId, errorMessage) {
   if (errorMessage) {
     try {
@@ -581,6 +680,8 @@ async function flushPendingFinish() {
   try {
     if (pending.outcome === "posted") {
       await applyPosted(pending.queueId, pending.vin, pending.userId);
+    } else if (pending.outcome === "deleted") {
+      await applyDeleted(pending.queueId, pending.vin, pending.userId);
     } else {
       await applyFailed(pending.queueId, pending.errorMessage || null);
     }
@@ -621,14 +722,46 @@ async function finishJobPosted(queueId, listingUrl) {
   console.log("[AutoLaunch] Posted confirmed for queue item", queueId, listingUrl || "");
 }
 
+// The delete counterpart of finishJobPosted (v2.1.4). Called by the
+// content script ONLY after it verified the listing card is gone
+// from the selling page — never on a click alone.
+async function finishJobDeleted(queueId) {
+  const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
+  if (!job || job.queueId !== queueId) return;
+  try {
+    await applyDeleted(queueId, job.car.vin, job.userId);
+  } catch (err) {
+    if (err instanceof SbAuthError) {
+      // The listing really is deleted; only the bookkeeping failed.
+      // Stash + replay on the next fresh token, like the posted path.
+      await chrome.storage.local.set({
+        autolaunch_pending_finish: {
+          outcome: "deleted", queueId,
+          vin: job.car.vin, userId: job.userId
+        }
+      });
+      await chrome.storage.local.remove(["current_posting_job"]);
+      console.warn("[AutoLaunch] Delete confirmed on Facebook; the queue update is waiting on a fresh session token.");
+      return;
+    }
+    throw err;
+  }
+  await chrome.storage.local.remove(["current_posting_job"]);
+  console.log("[AutoLaunch] Delete confirmed for queue item", queueId);
+}
+
 async function finishJobFailed(queueId, reason, diags) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
   if (!job || job.queueId !== queueId) return;
   // Diag-to-DB (v3.1): the content script's forensic records arrive in
   // this message; for a fields_unfilled failure they are compacted
   // into the row's error_message in the same write that fails it.
+  // Delete jobs (v2.1.4) compact too — there the records are the
+  // delete step notes (match scan, outcome), the evidence that says
+  // WHY nothing was deleted.
   const errorMessage =
-    (typeof reason === "string" && reason.startsWith("fields_unfilled"))
+    ((typeof reason === "string" && reason.startsWith("fields_unfilled")) ||
+     (job && job.action === "delete"))
       ? compactDiagError(diags)
       : null;
   try {
@@ -748,6 +881,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "AUTOLAUNCH_JOB_POSTED") {
     finishJobPosted(message.queueId, message.listingUrl)
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_JOB_DELETED") {
+    // Only the Facebook content script reports deletes (same sender
+    // discipline as the other job-finish messages' storage contract —
+    // finishJobDeleted additionally requires the id to match the
+    // currently claimed job).
+    const senderUrl = (sender && sender.url) ||
+      (sender && sender.tab && sender.tab.url) || "";
+    if (!senderUrl.startsWith("https://www.facebook.com/")) return;
+    finishJobDeleted(message.queueId)
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;

@@ -1568,6 +1568,40 @@ body.dark-shell div.fixed.inset-0 :is(input, select, textarea):focus {
 
         </div>
 
+        <!-- FULL AUTO POSTING (extension v2.1.4) -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Full Auto posting
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                On: the helper clicks Next and Publish for you. Off: it fills everything and waits for your click.
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkFullAuto"
+                onchange="toggleFullAutoSetting(this)"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
         <!-- SYNDICATION CHANNELS (Phase 6) -->
 
         <div class="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
@@ -2691,6 +2725,12 @@ updateLastSyncDisplay();
         const ribbonRepost = document.getElementById("chkRibbonRepost");
         if (ribbonRepost) ribbonRepost.checked = !!data.enable_auto_repost;
       }
+      // Full Auto posting switch (extension v2.1.4): reflect the saved
+      // column; an absent column leaves the switch off (confirm mode).
+      if (data.full_auto_enabled !== undefined && data.full_auto_enabled !== null) {
+        const chkFullAuto = document.getElementById("chkFullAuto");
+        if (chkFullAuto) chkFullAuto.checked = !!data.full_auto_enabled;
+      }
       if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
 
@@ -2871,6 +2911,7 @@ const certifiedUrl =
   used_url: usedUrl,
   new_url: newUrl,
   certified_url: certifiedUrl,
+  full_auto_enabled: !!(document.getElementById("chkFullAuto") && document.getElementById("chkFullAuto").checked),
   theme_preset: themeState.preset,
   theme_custom: themeState.custom,
   updated_at: new Date().toISOString()
@@ -3257,8 +3298,11 @@ function renderGridRows(cars) {
     const milesText = (car.mileage || 0).toLocaleString() + " mi";
     const isPosted = !!car.marketplace_posted_at;
     const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
+    const removalPending = postingQueue.some(i => i.vin === car.vin && i.action === 'delete' && (i.status === 'pending' || i.status === 'processing'));
 
-    const statusChip = isPosted
+    const statusChip = isPosted && removalPending
+      ? '<span class="px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold shadow-sm">Removal queued</span>'
+      : isPosted
       ? '<span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold shadow-sm">Posted</span>'
       : isQueued
       ? '<span class="px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold shadow-sm">Queued</span>'
@@ -3268,9 +3312,13 @@ function renderGridRows(cars) {
       ? `<button data-action="change-price" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm">
            <i class="fa-solid fa-tag text-slate-400 text-xs"></i> Change price
          </button>
-         <button data-action="remove-fb" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
-           <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
-         </button>`
+         ${removalPending
+           ? `<button disabled class="flex-1 px-3 py-2 rounded-xl bg-rose-50 text-rose-400 font-bold text-xs flex items-center justify-center gap-1.5 border border-rose-200 cursor-not-allowed">
+                <i class="fa-solid fa-hourglass-half text-xs"></i> Removal queued
+              </button>`
+           : `<button data-action="remove-fb" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
+                <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
+              </button>`}`
       : !hasRealPhoto(car)
       ? `<span class="flex-1 px-4 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 cursor-not-allowed">
            <i class="fa-solid fa-ban text-[10px]"></i>
@@ -3339,6 +3387,10 @@ function renderTableRows(cars) {
     const milesText = (car.mileage || 0).toLocaleString() + " mi";
     const isPosted = !!car.marketplace_posted_at;
     const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
+    // A queued/in-flight DELETE job (extension v2.1.4): the listing is
+    // still live until the helper verifies it gone, so the truthful
+    // state is "Removal queued" — not Posted, not Not Posted.
+    const removalPending = postingQueue.some(i => i.vin === car.vin && i.action === 'delete' && (i.status === 'pending' || i.status === 'processing'));
 
     html += `<tr class="table-row-vibrant transition border-b border-slate-100 group">
       <td class="py-4 px-4 text-center">
@@ -3389,7 +3441,13 @@ ${car.location_name ? `
       <td class="py-4 px-4">
 
   ${
-    isPosted
+    isPosted && removalPending
+      ? `
+        <span class="px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold">
+          Removal queued
+        </span>
+      `
+      : isPosted
       ? `
         <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
           Posted
@@ -3415,9 +3473,13 @@ ${car.location_name ? `
             ? `<button data-action="change-price" data-vin="${vinAttr}" class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm">
                  <i class="fa-solid fa-tag text-slate-400 text-xs"></i> Change price
                </button>
-               <button data-action="remove-fb" data-vin="${vinAttr}" id="btnRemoveFb_${vinAttr}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
-                 <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
-               </button>`
+               ${removalPending
+                 ? `<button disabled class="px-3.5 py-1.5 rounded-xl bg-rose-50 text-rose-400 font-bold text-xs flex items-center gap-1.5 border border-rose-200 cursor-not-allowed">
+                      <i class="fa-solid fa-hourglass-half text-xs"></i> Removal queued
+                    </button>`
+                 : `<button data-action="remove-fb" data-vin="${vinAttr}" id="btnRemoveFb_${vinAttr}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
+                      <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
+                    </button>`}`
             : !hasRealPhoto(car)
             ? `<span class="px-4 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 font-bold text-xs inline-flex items-center gap-2 cursor-not-allowed">
                  <i class="fa-solid fa-ban text-[10px]"></i>
@@ -3485,55 +3547,70 @@ function handleDropdownAction(action) {
   }
 }
 
+// REAL delete flow (extension v2.1.4): this button used to flip the
+// car's status locally and claim "Successfully removed from
+// Facebook!" while the live listing stayed up — Matthew caught it
+// live. Now it queues a DELETE job for the helper: the extension
+// claims the row, opens the Facebook selling page, deletes the one
+// listing that strictly matches this car's year/make/model + price,
+// and verifies it is gone. Only THEN does the queue row complete and
+// the extension clear marketplace_posted_at — the column this app
+// derives "Posted" from — so the car returns to Not Posted on the
+// next refresh because Facebook actually dropped it, not because we
+// said so. Nothing here touches the inventory row or claims success
+// at click time.
 async function removeVehicleFromFacebook(vin) {
   if (!currentUser) return;
   const car = rawInventory.find(c => c.vin === vin);
-  const title = car ? `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}` : vin;
+  const title = car ? `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}`.trim() : vin;
 
-  if (!confirm(`Remove "${title}" from Facebook?\n\nThis will mark the listing as delisted/sold and update its status on your inventory.`)) {
+  const alreadyQueued = postingQueue.some(i =>
+    i.vin === vin && i.action === 'delete' &&
+    (i.status === 'pending' || i.status === 'processing'));
+  if (alreadyQueued) {
+    alert(`A removal for "${title}" is already queued — the helper will delete the listing shortly. You can watch it in the Post Queue.`);
+    return;
+  }
+
+  if (!confirm(`Remove "${title}" from Facebook?\n\nThe AutoLaunch helper will open Facebook and delete the listing for you — this can take a minute. The car stays marked Posted here until the helper confirms the listing is actually gone.`)) {
     return;
   }
 
   const btn = document.getElementById(`btnRemoveFb_${vin}`);
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Removing...';
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Queueing removal...';
   }
 
   try {
     const { error } = await supabaseClient
-      .from("scraped_inventory")
-      .update({
-        marketplace_posted_at: null,
-        queued_for_marketplace: false,
-        status: "Available"
-      })
-      .eq("vin", vin)
-      .eq("user_id", currentUser.id);
+      .from("auto_posting_queue")
+      .insert({
+        user_id: currentUser.id,
+        vin: vin,
+        target_channel: "facebook",
+        action: "delete",
+        status: "pending",
+        year: car ? (car.year ?? null) : null,
+        make: car ? (car.make || null) : null,
+        model: car ? (car.model || null) : null,
+        stock_num: car ? (car.stock_num || car.stock_number || null) : null,
+        // The price rides the row on purpose: the helper's strict
+        // matcher needs year/make/model AND price, and a delete job
+        // must stay executable even after the car's inventory row is
+        // gone (e.g. a future sold/stale auto-removal rule creating
+        // these rows itself — the contract is producer-agnostic).
+        price: car ? (car.price ?? null) : null,
+        created_at: new Date().toISOString()
+      });
 
     if (error) throw error;
 
-    if (car) {
-      car.marketplace_posted_at = null;
-      car.queued_for_marketplace = false;
-      car.status = "Available";
-    }
-
-    const { error: queueErr } = await supabaseClient
-      .from("auto_posting_queue")
-      .delete()
-      .eq("vin", vin)
-      .eq("user_id", currentUser.id);
-    if (queueErr) {
-      console.error("Queue cleanup after FB removal failed:", queueErr);
-      alert("Listing updated, but removing it from the post queue failed: " + (queueErr.message || "Unknown error"));
-    }
-
     await loadPostingQueue();
     applyFilters();
-    alert(`✓ Successfully removed "${title}" from Facebook!`);
+    alert(`Removal queued for "${title}".\n\nThe helper will delete the Facebook listing, and the car will switch back to Not Posted once Facebook confirms it's gone. Watch the Post Queue for the result.`);
   } catch (err) {
-    alert("Could not remove listing: " + err.message);
+    alert("Could not queue the removal: " + err.message);
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -3738,13 +3815,14 @@ async function loadPostingQueue() {
 
 const car = rawInventory.find(c => c.vin === item.vin) || null;
 
-// NO-PHOTO RULE: a pending item whose car has no real photos left is
-// blocked — it renders as "No photos — won't post" and the extension
-// fails it rather than handing it to the poster.
-const blockedNoPhoto = item.status === "pending" && !!car && !hasRealPhoto(car);
+// NO-PHOTO RULE: a pending POST item whose car has no real photos
+// left is blocked — it renders as "No photos — won't post" and the
+// extension fails it rather than handing it to the poster. Delete
+// jobs are exempt: they remove a listing, photos are irrelevant.
+const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && !!car && !hasRealPhoto(car);
 const statusChip = blockedNoPhoto
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No photos — won't post</span>`
-    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
+    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
 
     return `
 
@@ -3773,6 +3851,11 @@ const statusChip = blockedNoPhoto
                     <div class="text-xs text-slate-500">
                         Channel: ${escapeHtml(item.target_channel || 'marketplace')}
                     </div>
+
+                    ${item.action === 'delete' ? `
+                    <div class="text-xs font-semibold text-rose-600">
+                        Action: Delete listing from Facebook
+                    </div>` : ''}
 
                 </div>
 
@@ -5262,6 +5345,30 @@ async function toggleChannelSetting(channel, el) {
       "\n\nChannel switches need the Phase 6 database migration first " +
       "(supabase/channels_migration_DRAFT.sql — see CHANNELS_IMPLEMENTATION.md)."
     );
+  }
+}
+
+// Full Auto posting (extension v2.1.4): the switch writes
+// user_settings.full_auto_enabled immediately, like the channel
+// switches. The extension worker reads the column when it claims a
+// queue row and carries it in the job payload — ON means the helper
+// clicks Next and Publish itself; OFF means it fills everything and
+// waits for the user's Publish click (confirm mode).
+async function toggleFullAutoSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        full_auto_enabled: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the Full Auto setting: " + (err.message || "Unknown error"));
   }
 }
 

@@ -20,6 +20,10 @@
 //     human review and click Publish. Detection keeps watching, so the
 //     human click still produces a real posted confirmation. Turn it off
 //     in chrome.storage (autolaunch_confirm_mode = false) for full-auto.
+//     Since v2.1.4 the user-facing switch is the app's Settings →
+//     Automation → "Full Auto posting" toggle, which reaches this
+//     script as job.fullAuto (header note 14); the storage flag
+//     remains only as a local override when the setting is off.
 //     Confirm mode still advances "Next" steps itself — navigation is
 //     not publishing; it stops only before the actual Publish button.
 //  6. CHECKPOINTS STOP THE JOB: a Facebook login wall or identity
@@ -147,6 +151,53 @@
 //     note on the diagnostic channel (field name, note code, the
 //     requested/chosen values in `detail`, the read-back), so a
 //     silent miss is impossible from here on.
+// 14. FULL AUTO VIA SETTING + DELETE JOBS (v2.1.4): two features ride
+//     this script now, routed by the job payload the worker builds at
+//     claim time. (a) FULL AUTO: Matthew asked for hands-free posting
+//     — user_settings.full_auto_enabled is read by the worker and
+//     carried as job.fullAuto; when true, confirm mode is OFF and,
+//     after the verify gate passes, this script clicks through any
+//     remaining Next steps and clicks Publish itself, then demands
+//     the SAME success detection confirm mode uses before reporting
+//     posted. Absent/false keeps the long-standing default (confirm
+//     mode, human clicks Publish). (b) DELETE JOBS (job.action ===
+//     "delete", from the app's "Remove from Facebook"): the script
+//     now also runs on marketplace/you/selling, where a dedicated
+//     routine finds the ONE listing card matching the car's
+//     year/make/model AND price (strict — both required; zero or
+//     multiple matches delete NOTHING and fail honestly), deletes it
+//     through its ⋯ menu + Facebook's confirmation dialog, and only
+//     reports AUTOLAUNCH_JOB_DELETED after the card is verifiably
+//     gone. URL guards route the two routines: a post job never runs
+//     off the create pages, a delete job never runs off the selling
+//     pages.
+// 15. PREVIEW-PANEL EXCLUSION (v2.1.4 — from the 2.1.3 live repost):
+//     the Tucson filled PERFECTLY (both colors color_set on the real
+//     step-2 comboboxes) and then FAILED on the final audience step:
+//     the per-step scan matched elements inside Facebook's PREVIEW
+//     pane — its description text contains "Price: $11,327" and
+//     "Exterior color: Beige", and the nearest clickable is the
+//     description's "See less" expander — so Price was laddered
+//     against a div[role=button] reading back "See less", a phantom
+//     field. Matthew had to click Publish himself on a perfect form.
+//     Field location and verification now consider the FORM REGION
+//     ONLY: isInPreview walks a candidate's ancestors and rejects it
+//     when the chain passes through the preview pane (a container
+//     labelled "Preview" by its leading text, an aria-label, or a
+//     direct "Preview" heading child), and a generic clickable whose
+//     whole text is a UI chrome word ("See less", "See more",
+//     "Learn more", …) is treated as not-a-field at all. The
+//     audience step presents NO required fields in the form region,
+//     so required-spec construction finds nothing there and the step
+//     is simply complete — fields verified on earlier steps stay
+//     verified; nothing is resurrected from preview text. The same
+//     region discipline applies to the nearby-text fallback: it
+//     stops climbing at the first ancestor that CONTAINS the preview
+//     pane, because a shared ancestor's aggregated text spans both
+//     regions — the v2.1.4 harness caught the audience step's own
+//     Publish button being "located" as Price through exactly that
+//     bleed and laddered (it survived only because read-back kept
+//     failing honestly).
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -156,7 +207,26 @@
   if (!job || !job.car) return;
 
   const { queueId, car } = job;
-  const confirmMode = stored.autolaunch_confirm_mode !== false; // default ON
+
+  // ---- job routing (v2.1.4, header notes 14–15) -----------------------
+  // This script is injected on BOTH the create pages and the selling
+  // page now. A delete job runs only on the selling page; a post job
+  // runs only on the create pages. Without the guards, a leftover job
+  // of one kind would fire its routine on the other kind's page.
+  const jobAction = job.action === "delete" ? "delete" : "post";
+  const pageUrl = window.location.href;
+  if (jobAction === "delete" &&
+      !/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(pageUrl)) return;
+  if (jobAction === "post" &&
+      !/facebook\.com\/marketplace\/create\//.test(pageUrl)) return;
+
+  // Full Auto (v2.1.4): job.fullAuto is the user's
+  // user_settings.full_auto_enabled, read by the worker at claim time.
+  // True turns confirm mode OFF — the filler clicks Publish itself.
+  // Absent/false keeps the long-standing default: confirm mode unless
+  // the chrome.storage override says otherwise.
+  const fullAuto = job.fullAuto === true;
+  const confirmMode = !fullAuto && stored.autolaunch_confirm_mode !== false; // default ON
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const humanPause = () => sleep(900 + Math.random() * 1600);
@@ -531,6 +601,43 @@
   }
   // [PURE-COLOR-END]
 
+  // [PURE-DELETE-BEGIN] — extracted and unit-exercised by the test
+  // harness alongside the verify helpers; keep these free of
+  // DOM/chrome references (strings/plain values in, plain values
+  // out). See header note 14: a "Remove from Facebook" delete job may
+  // only ever delete the ONE listing that is certainly the queued
+  // car, so the match is STRICT — the card's text must carry the
+  // year/make/model AND a dollar amount exactly equal to the car's
+  // price. No price on the payload = no match, ever.
+  function priceAmountsIn(text) {
+    const out = [];
+    const re = /\$\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g;
+    let m;
+    const s = String(text == null ? "" : text);
+    while ((m = re.exec(s)) !== null) {
+      const n = moneyNumber(m[1]);
+      if (n !== null) out.push(n);
+    }
+    return out;
+  }
+  function listingTextMatches(text, carLike) {
+    if (!text || !carLike) return false;
+    const t = normText(text);
+    const year = String(carLike.year || "").replace(/\D/g, "");
+    const make = normText(carLike.make);
+    const model = normText(carLike.model);
+    if (!year || !make || !model) return false;
+    const joined = normText(
+      `${carLike.year || ""} ${carLike.make || ""} ${carLike.model || ""}`);
+    const titleOk = t.includes(joined) ||
+      (t.includes(year) && t.includes(make) && t.includes(model));
+    if (!titleOk) return false;
+    const price = moneyNumber(carLike.price);
+    if (price === null || price <= 0) return false; // strict: no price, no match
+    return priceAmountsIn(text).some(n => n === price);
+  }
+  // [PURE-DELETE-END]
+
   // ---- React-safe value setting -----------------------------------------
   function nativeSetValue(el, value) {
     const proto = el instanceof HTMLTextAreaElement
@@ -554,6 +661,25 @@
     return (aria + " " + ph + " " + lab).toLowerCase();
   }
 
+  // Does a subtree contain the preview pane? (Node-capped walk; the
+  // tests mirror isInPreview's: a "Preview"-labelled container or a
+  // whole-text "Preview" heading with no form control inside.)
+  function subtreeContainsPreview(root) {
+    let seen = 0;
+    const stack = [root];
+    while (stack.length) {
+      const n = stack.pop();
+      if (!n || seen++ > 400) continue;
+      if (n.nodeType === 1) {
+        if (normText(n.textContent) === "preview" && !subtreeHasFormControl(n)) return true;
+        if (labelTextMatches(containerLeadingText(n), ["preview"])) return true;
+      }
+      const kids = n.childNodes || [];
+      for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
+    }
+    return false;
+  }
+
   // Wider label context for elements whose label lives in an ancestor
   // (Facebook wraps fields in labelled containers; checkboxes especially).
   function nearbyText(el) {
@@ -561,7 +687,18 @@
     let node = el;
     for (let i = 0; i < 4 && node; i++) {
       node = node.parentElement;
-      if (node) text += " " + (node.textContent || "").slice(0, 160);
+      if (!node) break;
+      // REGION-BLEED STOP (v2.1.4, header note 15): an ancestor that
+      // CONTAINS the preview pane aggregates the preview's prose
+      // ("Price: $11,327", "Exterior color: Beige") together with the
+      // form's text — its text is evidence about the whole page, not
+      // about this element. The first harness run proved the bleed is
+      // real even for form-region elements: on the audience step the
+      // Publish button itself was "located" as Price through a shared
+      // ancestor's text and laddered. Stop before such an ancestor;
+      // everything above it spans the preview too.
+      if (subtreeContainsPreview(node)) break;
+      text += " " + (node.textContent || "").slice(0, 160);
     }
     return text.toLowerCase();
   }
@@ -581,6 +718,58 @@
     return false;
   }
 
+  // ---- form region vs preview pane (v2.1.4, header note 15) ------------
+  // Facebook renders a live PREVIEW of the listing beside the form on
+  // every step. The preview is NOT form: its text repeats the values
+  // ("Price: $11,327", "Exterior color: Beige") inside prose, and its
+  // only clickable is the description's "See less" expander — in the
+  // 2.1.3 live repost the scan located BOTH as fields and failed a
+  // perfect form on a phantom Price. A candidate is in the preview
+  // when an ancestor is the preview pane: labelled "Preview" by its
+  // leading text or aria-label, or carrying a direct child whose
+  // whole text is the "Preview" heading. The heading checks stay
+  // shallow on purpose — a deep descendant search would flag the
+  // whole page (form included) as preview, since the page contains
+  // the pane.
+  function hasPreviewHeadingChild(node) {
+    const kids = (node && node.childNodes) || [];
+    for (let i = 0; i < kids.length; i++) {
+      const k = kids[i];
+      if (!k || k.nodeType !== 1) continue;
+      if (normText(k.textContent) === "preview" && !subtreeHasFormControl(k)) return true;
+    }
+    return false;
+  }
+  function isInPreview(el) {
+    let node = el ? el.parentElement : null;
+    for (let depth = 0; depth < 8 && node; depth++) {
+      if (labelTextMatches(containerLeadingText(node), ["preview"])) return true;
+      const aria = typeof node.getAttribute === "function"
+        ? node.getAttribute("aria-label") : null;
+      if (aria && normText(aria) === "preview") return true;
+      if (hasPreviewHeadingChild(node)) return true;
+      node = node.parentElement;
+    }
+    return false;
+  }
+  // A generic clickable whose WHOLE text is a UI chrome word is page
+  // furniture, never a field — the second half of the run-6 trap (the
+  // "See less" expander was laddered as Price). Real inputs, textareas
+  // and selects are exempt by tag: their text is their value.
+  const UI_CHROME_TEXTS = new Set([
+    "see less", "see more", "learn more", "show more", "show less",
+    "read more", "view more", "see all"
+  ]);
+  function isChromeButton(el) {
+    const tag = (el && el.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return false;
+    return UI_CHROME_TEXTS.has(normText(el && el.textContent));
+  }
+  // One gate for every field-location candidate (v2.1.4).
+  function isFormCandidate(el) {
+    return !!el && !isChromeButton(el) && !isInPreview(el);
+  }
+
   // Locate a field in three tries, in an order that cannot move a
   // field that already located (header note 12):
   //   (a) the element's OWN label — aria-label / placeholder /
@@ -588,8 +777,14 @@
   //   (b) CONTAINER label text among VISIBLE candidates — the v3.2
   //       fix for labels that live as sibling text in a wrapper div;
   //   (c) the wider nearby-text context, as a last resort.
+  // Every strategy draws from the FORM REGION only (v2.1.4, header
+  // note 15): preview-pane candidates and UI-chrome clickables are
+  // filtered out up front, so the audience step — which has no form
+  // fields at all — locates nothing instead of resurrecting fields
+  // from preview prose.
   function findAnyField(keywords, selector) {
-    const all = Array.from(document.querySelectorAll(selector || FIELD_SELECTOR));
+    const all = Array.from(document.querySelectorAll(selector || FIELD_SELECTOR))
+      .filter(isFormCandidate);
     const own = all.find(el => keywords.some(k => fieldLabel(el).includes(k)));
     if (own) return own;
     const byContainer = all.filter(isVisibleEl)
@@ -914,8 +1109,10 @@
     'input, textarea, select, [role="combobox"], [role="button"], ' +
     '[aria-haspopup], [contenteditable="true"]';
   function formMapEntries(limit) {
+    // The map is evidence about the FORM — preview-pane controls are
+    // excluded (v2.1.4) so a future label change reads cleanly.
     return Array.from(document.querySelectorAll(FORM_MAP_SELECTOR))
-      .filter(isVisibleEl)
+      .filter(el => isVisibleEl(el) && !isInPreview(el))
       .slice(0, limit || 12)
       .map(el => {
         const d = describeElement(el);
@@ -991,8 +1188,10 @@
 
   async function fillSelectOrListbox(keywords, candidates) {
     // Native <select> first — located by its own label, or (v3.2) by
-    // container text when the select itself is bare.
-    const sels = Array.from(document.querySelectorAll("select"));
+    // container text when the select itself is bare. Form region
+    // only (v2.1.4): a <select> rendered inside the preview pane is
+    // not a field.
+    const sels = Array.from(document.querySelectorAll("select")).filter(isFormCandidate);
     const sel = sels.find(s => keywords.some(k => fieldLabel(s).includes(k))) ||
       sels.find(s => labelTextMatches(containerLabel(s), keywords));
     if (sel) {
@@ -1031,7 +1230,7 @@
   // else in this file.
   function colorOptionElements() {
     return Array.from(document.querySelectorAll('[role="option"], [role="menuitem"]'))
-      .filter(isVisibleEl);
+      .filter(el => isVisibleEl(el) && !isInPreview(el));
   }
   async function waitForColorOptions(timeoutMs) {
     const deadline = Date.now() + (timeoutMs || 2500);
@@ -1193,12 +1392,12 @@
   // checked state afterwards and record the outcome.
   function findCleanTitleControl() {
     const boxes = Array.from(document.querySelectorAll(
-      'input[type="checkbox"], [role="checkbox"]'));
+      'input[type="checkbox"], [role="checkbox"]')).filter(isFormCandidate);
     const box = boxes.find(b =>
       nearbyText(b).includes("clean title") || fieldLabel(b).includes("clean"));
     if (box) return { stateEl: box, clickEl: box };
     const labelled = Array.from(document.querySelectorAll("div, label, span"))
-      .filter(isVisibleEl)
+      .filter(el => isVisibleEl(el) && !isInPreview(el))
       .find(elm => {
         if (String(elm.textContent || "").length > 300) return false;
         return normText(containerLeadingText(elm)).includes("clean title") ||
@@ -1560,10 +1759,15 @@
   }
 
   function findDescriptionField() {
-    const textareas = Array.from(document.querySelectorAll("textarea"));
+    // Form region only (v2.1.4): the preview pane repeats the whole
+    // description as prose — it is not an editor and must never be
+    // "filled" or read back as one.
+    const textareas = Array.from(document.querySelectorAll("textarea"))
+      .filter(isFormCandidate);
     const byLabel = textareas.find(t => fieldLabel(t).includes("description"));
     if (byLabel) return byLabel;
-    const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+    const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'))
+      .filter(isFormCandidate);
     const ed = editables.find(t => fieldLabel(t).includes("description") || nearbyText(t).includes("description"));
     if (ed) return ed;
     return textareas[0] || null;
@@ -1789,7 +1993,205 @@
     return kw ? findAnyField(kw) : null;
   }
 
+  // ---- delete flow (v2.1.4, header note 14) ------------------------------
+  // Runs only on the selling page, only for job.action === "delete".
+  // The listing card is the SMALLEST visible element whose text
+  // strictly matches title + price (listingTextMatches): ancestors
+  // aggregate many listings (their price sets would false-match), and
+  // a title-only or price-only fragment proves nothing.
+  function listingCardsIn(rootEl) {
+    const scope = rootEl
+      ? [rootEl].concat(Array.from(
+          rootEl.querySelectorAll ? rootEl.querySelectorAll("div, article, li, section") : []))
+      : Array.from(document.querySelectorAll("div, article, li, section"));
+    const hits = scope.filter(el => {
+      if (!isVisibleEl(el)) return false;
+      const text = el.textContent || "";
+      if (!text || text.length > 1500) return false;
+      return listingTextMatches(text, car);
+    });
+    // Minimal elements only: a hit that contains another hit is a
+    // wrapper (list, column), not the card.
+    return hits.filter(el => !hits.some(o =>
+      o !== el && typeof el.contains === "function" && el.contains(o)));
+  }
+  function findListingCards() {
+    return listingCardsIn(null);
+  }
+  // The card's ⋯ (options) button. Searched inside the card first,
+  // then up the ancestor chain — but a level is only trusted while it
+  // still contains exactly ONE matching listing, so a neighbouring
+  // card's menu can never be opened by mistake.
+  function listingMenuButton(cardEl) {
+    let node = cardEl;
+    for (let depth = 0; depth < 6 && node; depth++) {
+      if (listingCardsIn(node).length !== 1) return null;
+      const btns = Array.from(
+        node.querySelectorAll ? node.querySelectorAll('[role="button"], button') : []);
+      const hit = btns.find(b => {
+        const lab = ((typeof b.getAttribute === "function" && b.getAttribute("aria-label")) || "") +
+          " " + (b.textContent || "");
+        const t = lab.trim();
+        return /more|options|menu/i.test(lab) || t === "⋯" || t === "..." || t === "•••";
+      });
+      if (hit) return hit;
+      node = node.parentElement;
+    }
+    return null;
+  }
+  // Facebook's delete entry, after the card menu opens. Menu/listbox
+  // containers are searched before the whole document, so a stray
+  // "Delete" elsewhere on the page is never the first resort.
+  function findDeleteMenuItem() {
+    const inContainers = [];
+    for (const c of Array.from(document.querySelectorAll(
+        '[role="menu"], [role="listbox"], [role="dialog"]'))) {
+      inContainers.push(...Array.from(
+        c.querySelectorAll ? c.querySelectorAll('[role="menuitem"], [role="option"], [role="button"], button, a') : []));
+    }
+    const isDeleteEntry = el => {
+      const t = normText(el.textContent);
+      return t === "delete" || t.startsWith("delete ") || t.includes("delete listing");
+    };
+    const scoped = inContainers.filter(el => isVisibleEl(el) && isDeleteEntry(el));
+    if (scoped.length) return scoped[0];
+    const anywhere = Array.from(document.querySelectorAll(
+      '[role="menuitem"], [role="option"], [role="button"], button, a'));
+    return anywhere.filter(el => isVisibleEl(el) && isDeleteEntry(el))[0] || null;
+  }
+  // Facebook's confirmation: a dialog whose button reads exactly
+  // "Delete" (the menu entry says "Delete listing" — the exact text
+  // is what separates the two steps). No dialog, no click: failing
+  // honestly beats guessing at a bare button.
+  function findDeleteConfirmButton() {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"]'));
+    for (const d of dialogs) {
+      const btns = Array.from(
+        d.querySelectorAll ? d.querySelectorAll('[role="button"], button') : []);
+      const hit = btns.find(b => normText(b.textContent) === "delete");
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  async function runDeleteListing() {
+    try {
+      say("Removing your listing from Facebook…");
+      await sleep(3000); // let the selling page render
+
+      const pageText = (document.body.innerText || "").toLowerCase();
+      if (window.location.href.includes("/login") ||
+          pageText.includes("checkpoint") ||
+          pageText.includes("confirm your identity") ||
+          pageText.includes("log in to facebook")) {
+        await fail(
+          "Facebook is asking for login or an identity check — the listing was NOT removed. Sign in normally in this browser, then remove it again.",
+          "facebook_checkpoint");
+        return;
+      }
+
+      const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() || "vehicle";
+      if (!car.price) {
+        // Strict matching needs the price. Without it there is no
+        // safe way to tell this car from a twin — delete nothing.
+        recordStepNote("Delete", "delete_price_unavailable",
+          "no price on the job payload — a strict title+price match is impossible", "");
+        await fail(
+          `Could not verify the exact ${title} listing (no price to match it by) — nothing was deleted.`,
+          "listing_not_found");
+        return;
+      }
+
+      say(`Looking for your ${title} listing…`);
+      let cards = findListingCards();
+      // The selling page lazy-loads its cards; give them a moment.
+      for (let i = 0; i < 4 && !cards.length; i++) {
+        await sleep(1500);
+        cards = findListingCards();
+      }
+      recordStepNote("Delete", "delete_match_scan",
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()}`,
+        String(cards.length));
+      if (!cards.length) {
+        await fail(
+          `Could not find the ${title} listing on your selling page — nothing was deleted. It may already be gone.`,
+          "listing_not_found");
+        return;
+      }
+      if (cards.length > 1) {
+        await fail(
+          `Found ${cards.length} listings matching ${title} at that price — deleting nothing rather than risk the wrong car. Delete the right one from Facebook's Your listings page.`,
+          "listing_ambiguous");
+        return;
+      }
+
+      const card = cards[0];
+      say("Found it — opening its menu…");
+      await humanPause();
+      const menuBtn = listingMenuButton(card);
+      if (!menuBtn) {
+        await fail("Found the listing but not its options (⋯) menu — nothing was deleted.",
+          "delete_menu_not_found");
+        return;
+      }
+      realisticClick(menuBtn);
+      await sleep(1200);
+      let deleteItem = findDeleteMenuItem();
+      if (!deleteItem) {
+        await cdpClickEl(menuBtn); // trusted click fallback, as elsewhere
+        await sleep(1200);
+        deleteItem = findDeleteMenuItem();
+      }
+      if (!deleteItem) {
+        await fail("The listing's menu did not offer a Delete entry — nothing was deleted.",
+          "delete_menu_not_found");
+        return;
+      }
+
+      say("Deleting the listing…");
+      await humanPause();
+      realisticClick(deleteItem);
+      await sleep(1500);
+      const confirmBtn = findDeleteConfirmButton();
+      if (!confirmBtn) {
+        await fail("Facebook's delete confirmation did not appear — the listing was NOT removed.",
+          "delete_confirm_not_found");
+        return;
+      }
+      realisticClick(confirmBtn);
+
+      // Verify before claiming anything: the card must be GONE.
+      let gone = false;
+      for (let i = 0; i < 8 && !gone; i++) {
+        await sleep(1500);
+        if (checkpointShowing()) {
+          await fail("Facebook showed an identity check during the removal.",
+            "facebook_checkpoint");
+          return;
+        }
+        gone = !findListingCards().length;
+      }
+      if (!gone) {
+        await fail("Clicked Delete, but the listing is still on your selling page — NOT removed.",
+          "delete_not_verified");
+        return;
+      }
+      await cdpDetach();
+      recordStepNote("Delete", "listing_deleted",
+        `${title} @ $${Number(car.price).toLocaleString()} — card verified gone`, "gone");
+      say("Listing deleted on Facebook ✓", "#15803d");
+      await report("AUTOLAUNCH_JOB_DELETED", {});
+    } catch (err) {
+      console.error("[AutoLaunch] delete error:", err);
+      await fail("Unexpected error during removal: " + (err && err.message ? err.message : "unknown"));
+    }
+  }
+
   // ---- main flow ----------------------------------------------------------
+  if (jobAction === "delete") {
+    await runDeleteListing();
+    return;
+  }
   try {
     say("Preparing your listing…");
     await sleep(3500); // let Facebook render the form
@@ -1938,16 +2340,44 @@
       return;
     }
 
-    // Full-auto mode.
-    const btn = publishButton();
+    // Full-auto mode (v2.1.4): the verify gate has passed and the
+    // user turned Full Auto on, so the filler publishes by itself.
+    // Click through any remaining Next steps (human-paced), click
+    // Publish with the realistic sequence, and — if the button is
+    // still sitting there with no success state after a short watch —
+    // retry ONCE with a trusted CDP click. Posted is reported ONLY
+    // on the same detected success confirm mode demands; anything
+    // else fails honestly and marks nothing.
+    say("Full Auto is on — publishing without waiting for a click…");
+    let btn = publishButton();
+    for (let hop = 0; hop < 4 && !btn; hop++) {
+      const next = nextButton();
+      if (!next) break;
+      await humanPause();
+      realisticClick(next);
+      await sleep(2800);
+      if (checkpointShowing()) {
+        await fail("Facebook showed an identity check mid-posting.");
+        return;
+      }
+      btn = publishButton();
+    }
     if (!btn) {
-      await fail("Could not find Facebook's Publish button — the form layout may have changed.");
+      await fail(
+        "Full Auto could not reach Facebook's Publish button — nothing was published.",
+        "publish_button_not_found");
       return;
     }
-    say("Publishing…");
     await humanPause();
-    btn.click();
-    const hit = await watchForPublish(2 * 60 * 1000);
+    realisticClick(btn);
+    let hit = await watchForPublish(8000);
+    if (!hit && publishButton()) {
+      // The click didn't take (React shrugged it off) — one trusted
+      // retry, then the session closes again before the long watch.
+      await cdpClickEl(publishButton());
+      await cdpDetach();
+      hit = await watchForPublish(112 * 1000);
+    }
     if (hit) {
       say("Listing confirmed live ✓", "#15803d");
       await report("AUTOLAUNCH_JOB_POSTED", { listingUrl: hit });
