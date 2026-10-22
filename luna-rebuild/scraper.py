@@ -367,6 +367,9 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             // 4. PRICE EXTRACTION
             let price = null;
             const priceSelectors = [
+                // DealerOn (Moses) price stack: big emphasized number inside the price block
+                '.vehiclePricingStack .do-price-emphasis', '.priceBlockItemPrice .do-price-emphasis',
+                '.do-price-emphasis', '[class*="priceBlockItemPrice"]',
                 '[class*="mosesPrice"]', '[class*="moses-price"]',
                 '[class*="finalPrice"]', '[class*="final-price"]',
                 '[class*="internetPrice"]', '[class*="internet-price"]',
@@ -395,19 +398,45 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             }
 
             if (!price) {
+                // Text fallback, 3 passes. Dealer cards print price in stacks like
+                // "$11,222" on its own line with "Moses Price" on the NEXT line —
+                // a same-line label+amount search can never see those.
                 const lines = cardText.split('\\n').map(l => l.trim()).filter(Boolean);
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    if (/per mo|\\/mo|down|discount|savings|rebate|doc fee|estimate/i.test(line)) continue;
-
+                const moneyIn = (s) => {
+                    const m = s.match(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
+                    if (!m) return null;
+                    const v = parseInt(m[1].replace(/,/g, ''));
+                    return (v >= 1000 && v <= 350000) ? v : null;
+                };
+                const skipLine = (s) => /per mo|\\/mo|down payment|discount|savings|rebate|doc fee|estimate|payment/i.test(s);
+                // Pass 1: label and amount on the same line
+                for (const line of lines) {
+                    if (skipLine(line)) continue;
                     if (/price|final|sale|internet|selling|our price|market price/i.test(line)) {
-                        const m = line.match(/\\$\\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})/);
-                        if (m) {
-                            const val = parseInt(m[1].replace(/,/g, ''));
-                            if (val >= 4000 && val <= 350000) {
-                                price = val;
-                                break;
+                        const v = moneyIn(line);
+                        if (v) { price = v; break; }
+                    }
+                }
+                // Pass 2: label line, amount on one of the next 2 lines
+                if (!price) {
+                    for (let i = 0; i < lines.length && !price; i++) {
+                        if (skipLine(lines[i])) continue;
+                        if (/price|final|sale|internet|selling|market/i.test(lines[i]) && !moneyIn(lines[i])) {
+                            for (let j = i + 1; j <= Math.min(i + 2, lines.length - 1); j++) {
+                                if (skipLine(lines[j])) continue;
+                                const v = moneyIn(lines[j]);
+                                if (v) { price = v; break; }
                             }
+                        }
+                    }
+                }
+                // Pass 3: first standalone money line in the card (the big headline price)
+                if (!price) {
+                    for (const line of lines) {
+                        if (skipLine(line)) continue;
+                        if (/^\\$\\s*[0-9]{1,3}(?:,[0-9]{3})+$/.test(line) || /^\\$\\s*[0-9]{4,6}$/.test(line)) {
+                            const v = moneyIn(line);
+                            if (v) { price = v; break; }
                         }
                     }
                 }
