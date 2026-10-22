@@ -1,0 +1,3390 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-100">
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 0: HEAD & LIGHT STYLES START ================= -->
+<!-- ============================================================================== -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoLaunch | Dealer Intelligence & Automation Suite</title>
+<link rel="icon" href="data:,">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<!-- Supabase JS Client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --ink: #0f172a;
+  --ink-row: #cbd5e1;
+  --ink-soft: #64748b;
+  --blue: #2563eb;
+  --violet: #7c3aed;
+  --cyan: #0891b2;
+  --emerald: #059669;
+  --amber: #d97706;
+  --rose: #e11d48;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f0f4f8;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.brand-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.glass-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.glass-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.nav-selected {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+.nav-selected i {
+  color: #ffffff !important;
+}
+
+.btn-gradient {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-gradient:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+.btn-gradient:active {
+  transform: scale(0.97);
+}
+
+.table-row-vibrant:hover {
+  background-color: #f8fafc !important;
+}
+</style>
+</head>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 0: HEAD & LIGHT STYLES END =================== -->
+<!-- ============================================================================== -->
+
+<body class="h-full flex select-none overflow-x-hidden text-slate-800">
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 1: AUTHENTICATION MODAL START =============== -->
+<!-- ============================================================================== -->
+<div id="authOverlay" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-md rounded-2xl p-8 space-y-6 shadow-2xl relative border border-slate-200 bg-white">
+    <div class="flex items-center gap-3 justify-center mb-2">
+      <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25 text-white font-black text-xl">
+        <i class="fa-solid fa-bolt"></i>
+      </div>
+      <div>
+        <span class="brand-title font-extrabold text-2xl tracking-tight text-slate-900 block">AutoLaunch</span>
+        <span class="text-[10px] font-bold tracking-widest text-blue-600 uppercase">Dealer Intelligence Suite</span>
+      </div>
+    </div>
+
+    <div id="authTabSwitcher" class="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold text-center text-slate-500 border border-slate-200">
+      <button id="tabSignIn" type="button" onclick="switchAuthMode('signin')" class="py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm">Sign In</button>
+      <button id="tabSignUp" type="button" onclick="switchAuthMode('signup')" class="py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer">Register</button>
+    </div>
+
+    <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+      <div>
+        <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Email</label>
+        <input type="email" id="authEmail" required placeholder="name@dealership.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+
+      <div>
+        <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Password</label>
+        <div class="relative">
+          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          <button type="button" onclick="togglePasswordVisibility('authPassword', 'passwordToggleIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition focus:outline-none cursor-pointer">
+            <i id="passwordToggleIcon" class="fa-regular fa-eye text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" id="authSubmitBtn" class="w-full py-3 rounded-xl btn-gradient text-white font-bold text-sm shadow-lg cursor-pointer">
+        Sign In
+      </button>
+
+      <p id="authErrorMsg" class="text-xs text-rose-600 text-center font-medium hidden"></p>
+    </form>
+  </div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 1: AUTHENTICATION MODAL END ================== -->
+<!-- ============================================================================== -->
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 2: LEFT NAVIGATION RAIL START ============== -->
+<!-- ============================================================================== -->
+<aside class="w-60 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30 select-none shadow-sm">
+  <div class="p-4 space-y-4 overflow-y-auto">
+    <div class="flex items-center justify-between px-2 pt-1 pb-1">
+      <div class="flex items-center gap-2.5">
+        <div class="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs shadow-md shadow-blue-500/20 font-black">
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+        <span class="brand-title font-black text-xl text-slate-900 tracking-tight">AutoLaunch</span>
+      </div>
+      <button class="text-slate-400 hover:text-slate-700 text-xs p-1 cursor-pointer">
+        <i class="fa-solid fa-bars-staggered"></i>
+      </button>
+    </div>
+
+    <!-- TODAY -->
+    <div class="space-y-0.5">
+      <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Today</div>
+      <a href="#"
+   onclick="showGetStartedPage()"
+   class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <i class="fa-regular fa-flag w-4 text-amber-500 text-xs"></i>
+        <span>Get Started</span>
+        <span class="w-2 h-2 rounded-full bg-blue-600 shadow-sm shadow-blue-400 ml-auto"></span>
+      </a>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+        <i class="fa-solid fa-chart-line w-4 text-cyan-600 text-xs"></i>
+        <span>Dashboard</span>
+      </a>
+    </div>
+
+    <!-- YOUR BUYERS -->
+    <div class="space-y-0.5">
+      <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Your Buyers</div>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-regular fa-comment-dots w-4 text-blue-600 text-xs"></i>
+          <span>Inbox</span>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-200">Elite</span>
+      </a>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-user-group w-4 text-purple-600 text-xs"></i>
+          <span>Leads</span>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-600 border border-purple-200">Elite</span>
+      </a>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-regular fa-calendar w-4 text-emerald-600 text-xs"></i>
+          <span>Calendar</span>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">Elite</span>
+      </a>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-wand-magic-sparkles w-4 text-pink-600 text-xs"></i>
+          <span>AI Training</span>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pink-50 text-pink-600 border border-pink-200">Elite</span>
+      </a>
+      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-flask w-4 text-amber-600 text-xs"></i>
+          <span>Playground</span>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200">Elite</span>
+      </a>
+    </div>
+
+    <!-- YOUR CARS -->
+    <div class="space-y-0.5">
+      <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Your Cars</div>
+      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold nav-selected transition">
+        <i class="fa-solid fa-car-side w-4 text-xs"></i>
+        <span>Inventory</span>
+      </a>
+      <a href="#" onclick="openQueueModal()" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-list-check w-4 text-cyan-600 text-xs"></i>
+          <span>Post Queue</span>
+        </div>
+        <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-cyan-500 text-[10px] font-mono font-bold text-white">0</span>
+      </a>
+    </div>
+
+    <!-- FOOTER TOOLS -->
+    <div class="space-y-0.5 pt-3 border-t border-slate-200">
+      <a href="https://chromewebstore.google.com" target="_blank" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <i class="fa-brands fa-chrome w-4 text-blue-600 text-xs"></i>
+        <span>Chrome Extension</span>
+      </a>
+      <a href="#" onclick="openSettingsModal()" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <i class="fa-solid fa-gear w-4 text-slate-500 text-xs"></i>
+        <span>Settings</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- User Account Card Footer -->
+  <div class="p-3 border-t border-slate-200 bg-slate-50">
+    <div class="flex items-center justify-between px-1">
+      <div class="flex items-center gap-2.5 overflow-hidden">
+        <div class="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm">
+          <span id="userInitial">M</span>
+        </div>
+        <div class="truncate">
+          <span id="userDisplayName" class="text-xs font-bold text-slate-900 block truncate leading-tight">Sales User</span>
+          <span class="text-[10px] text-slate-500 block leading-tight">Member</span>
+        </div>
+      </div>
+      <button onclick="handleSignOut()" title="Sign Out" class="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer">
+        <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+      </button>
+    </div>
+  </div>
+</aside>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 2: LEFT NAVIGATION RAIL END ================ -->
+<!-- ============================================================================== -->
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 3: INVENTORY WORKSPACE START =============== -->
+<!-- ============================================================================== --><!-- ============================================================================= -->
+<!-- ======================= SECTION 3A: GET STARTED PAGE START ================== -->
+<!-- ============================================================================= -->
+
+<div id="getStartedPage" class="hidden flex-1 overflow-y-auto p-8">
+
+  <div class="max-w-6xl mx-auto">
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+      <!-- MAIN CARD -->
+
+      <div class="lg:col-span-2">
+
+        <div class="glass-card rounded-3xl p-8">
+
+          <h1 class="text-3xl font-black text-slate-900">
+            Welcome To AutoLaunch
+          </h1>
+
+          <p class="text-slate-500 mt-2">
+            Let's connect your inventory and get your vehicles ready for posting.
+          </p>
+
+          <div class="space-y-5 mt-8">
+
+            <div>
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
+                Dealership Name
+              </label>
+              <input
+                type="text"
+                id="onboardingDealershipName"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3"
+                placeholder="Enter dealership name">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
+                Used Inventory URL
+              </label>
+              <input
+                type="text"
+                id="onboardingUsedUrl"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3"
+                placeholder="https://">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
+                New Inventory URL
+              </label>
+              <input
+                type="text"
+                id="onboardingNewUrl"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3"
+                placeholder="https://">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
+                Certified Inventory URL (Optional)
+              </label>
+              <input
+                type="text"
+                id="onboardingCertifiedUrl"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3"
+                placeholder="https://">
+            </div>
+
+            <button
+              id="btnTestInventory"
+              onclick="testInventory()"
+              class="btn-gradient px-8 py-3 rounded-xl text-white font-bold">
+
+              Test Inventory
+
+            </button>
+
+            <!-- TEST RESULTS -->
+
+            <div
+              id="inventoryTestResults"
+              class="hidden mt-8 p-6 rounded-2xl bg-blue-50 border border-blue-200">
+
+              <h3 class="text-lg font-bold text-slate-900 mb-4">
+                ✅ Inventory Test Results
+              </h3>
+
+              <div class="space-y-2 text-sm">
+                <div>✅ Used Inventory Found</div>
+                <div>✅ New Inventory Found</div>
+                <div>✅ Photos Detected</div>
+                <div>✅ VIN Numbers Detected</div>
+                <div>✅ Pricing Detected</div>
+              </div>
+
+              <div class="mt-6">
+                <button
+                  onclick="continueSetup()"
+                  class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
+
+                  Continue
+
+                </button>
+              </div>
+
+            </div>
+
+            <!-- SYNC PAGE -->
+
+            <div
+              id="inventorySyncPage"
+              class="hidden mt-8 p-6 rounded-2xl bg-emerald-50 border border-emerald-200">
+
+              <h3 class="text-lg font-bold text-slate-900 mb-4">
+                🚀 Inventory Sync Started
+              </h3>
+
+              <div class="space-y-3 text-sm">
+                <div>✅ Inventory Connected</div>
+                <div>✅ URLs Saved</div>
+                <div>✅ Initial Sync Started</div>
+                <div>📦 Importing first vehicles...</div>
+              </div>
+
+              <div class="mt-6">
+                <button
+                  onclick="finishSetup()"
+                  class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
+
+                  Complete Setup
+
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    <!-- PROGRESS CARD -->
+
+<div>
+
+  <div class="glass-card rounded-3xl p-6">
+
+    <div class="text-xs font-bold uppercase text-slate-400 mb-4">
+      Setup Progress
+    </div>
+
+    <div class="space-y-5">
+
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
+        <span id="stepDealership" class="font-semibold">
+          Dealership Setup
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
+        <span id="stepInventoryTest" class="text-slate-500">
+          Inventory Test
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
+        <span id="stepInventorySync" class="text-slate-500">
+          Inventory Sync
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
+        <span id="stepComplete" class="text-slate-500">
+          Complete
+        </span>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ============================================================================= -->
+<!-- ======================= SECTION 3A: GET STARTED PAGE END ==================== -->
+<!-- ============================================================================= -->
+  <main class="flex-1 min-w-0 overflow-y-auto px-8 py-6 space-y-5 h-screen">
+
+  <!-- Header Bar -->
+
+<div class="flex items-center justify-between">
+
+  <div>
+
+    <h1 class="text-2xl font-black text-slate-900 tracking-tight">
+      Inventory
+    </h1>
+
+    <div class="flex items-center gap-2 pt-0.5 text-xs text-slate-500">
+
+      <i class="fa-solid fa-globe text-blue-600 text-[11px]"></i>
+
+      <a href="#"
+         id="dealerUrlDisplay"
+         target="_blank"
+         class="hover:underline text-blue-600 font-medium">
+
+        www.dealershipinventory.com
+
+      </a>
+
+      <span>&bull;</span>
+
+      <span class="flex items-center gap-1.5 text-emerald-600 font-semibold">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
+        Inventory Connected
+      </span>
+
+      <span>&bull;</span>
+
+      <span id="topCarsCountLabel" class="text-slate-900 font-semibold">
+        0 Vehicles
+      </span>
+
+      <span>&bull;</span>
+
+      <span id="lastSyncTimeLabel" class="text-slate-500">
+          Last Refresh: Never
+      </span>
+
+    </div>
+
+  </div>
+
+  <!-- Header Actions -->
+
+  <div class="flex items-center gap-2.5">
+
+    <button
+        onclick="triggerLiveLotCrawl(event)"
+        class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+
+        <i class="fa-solid fa-rotate text-[10px]"></i>
+        <span>Refresh Inventory</span>
+
+    </button>
+
+    <button
+        onclick="bulkQueueSelectedVehicles()"
+        class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+
+        <i class="fa-solid fa-play text-[10px]"></i>
+        <span>Post Selected</span>
+
+    </button>
+
+    <button
+        onclick="openSettingsModal()"
+        class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm">
+
+        <i class="fa-solid fa-gear text-slate-500"></i>
+        <span>Configure URLs</span>
+
+    </button>
+
+  </div>
+
+</div>
+
+  <!-- 6-Card Vibrant Automation Ribbon -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+    
+    <!-- 1. Automations -->
+    <div onclick="openSettingsModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-blue-600 shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
+      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+          <i class="fa-solid fa-bolt text-blue-600 text-xs"></i> Automations
+        </span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chkRibbonAutoMain" onchange="toggleRibbonSetting('auto_main')" class="sr-only peer">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+      <div>
+        <p class="text-[10px] text-slate-500 leading-snug">Off - no auto-posting or price/sold updates</p>
+        <span class="text-[10px] text-blue-600 font-semibold pt-1 block">
+          Settings & how it works
+        </span>
+      </div>
+    </div>
+
+    <!-- 2. Auto-post new arrivals -->
+    <div onclick="openAutoPostModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-purple-600 shadow-sm space-y-2 cursor-pointer transition hover:border-purple-300">
+      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Auto-post new arrivals <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chkRibbonArrivals" onchange="toggleRibbonSetting('auto_arrivals')" class="sr-only peer">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-purple-600"></div>
+        </label>
+      </div>
+      <div>
+        <p class="text-[10px] text-slate-500">Automations off</p>
+        <span class="text-[10px] text-purple-600 flex items-center gap-1 pt-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </span>
+      </div>
+    </div>
+
+    <!-- 3. Auto delete & repost -->
+    <div onclick="openAutoRepostModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-emerald-600 shadow-sm space-y-2 cursor-pointer transition hover:border-emerald-300">
+      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Auto delete & repost <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chkRibbonRepost" checked onchange="toggleRibbonSetting('auto_repost')" class="sr-only peer">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+        </label>
+      </div>
+      <div>
+        <p id="repostFrequencyLabel" class="text-[10px] text-slate-500">Every 3 days</p>
+        <span class="text-[10px] text-emerald-600 flex items-center gap-1 pt-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </span>
+      </div>
+    </div>
+
+    <!-- 4. Automatic photo edits -->
+    <div onclick="openAutoPhotoEditsModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-pink-600 shadow-sm space-y-2 cursor-pointer transition hover:border-pink-300">
+      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chkRibbonPhotoCrop" checked onchange="toggleRibbonSetting('auto_crop')" class="sr-only peer">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-pink-600"></div>
+        </label>
+      </div>
+      <div>
+        <p id="photoEditStatusLabel" class="text-[10px] text-slate-500">On - smart crop</p>
+        <span class="text-[10px] text-pink-600 flex items-center gap-1 pt-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </span>
+      </div>
+    </div>
+
+    <!-- 5. Posting safety -->
+    <div onclick="openPostingSafetyModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-amber-600 shadow-sm space-y-2 cursor-pointer transition hover:border-amber-300">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Posting safety <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+      </div>
+      <div>
+        <p id="ribbonSafetyLimitLabel" class="text-[10px] text-slate-500">1 of 10 today</p>
+        <div class="w-full bg-slate-200 rounded-full h-1 mt-1.5 mb-1.5">
+          <div class="bg-amber-500 h-1 rounded-full w-[20%]"></div>
+        </div>
+        <span class="text-[10px] text-amber-600 flex items-center gap-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </span>
+      </div>
+    </div>
+
+    <!-- 6. Posting preferences -->
+    <div onclick="openPostingPreferencesModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-cyan-600 shadow-sm space-y-2 cursor-pointer transition hover:border-cyan-300">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
+          Posting preferences <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
+        </span>
+      </div>
+      <div>
+        <p class="text-[10px] text-slate-500 truncate">Title, emoji, AI text</p>
+        <span class="text-[10px] text-cyan-600 flex items-center gap-1 pt-1 font-semibold">
+          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        </span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Search & View Filter Bar -->
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+    <div class="relative flex-1 max-w-xl">
+      <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+      <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search name, VIN or stock #" class="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm">
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button onclick="openFiltersModal()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-sliders text-blue-600 text-xs"></i>
+        <span>Filters</span>
+      </button>
+
+      <div class="relative">
+        <select id="sortSelect" onchange="applyFilters()" class="appearance-none bg-white border border-slate-300 hover:bg-slate-50 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-slate-700 focus:outline-none shadow-sm cursor-pointer">
+          <option value="newest_first">Newest first</option>
+          <option value="price_asc">Price: Low to High</option>
+          <option value="price_desc">Price: High to Low</option>
+          <option value="miles_asc">Mileage: Lowest First</option>
+        </select>
+        <i class="fa-solid fa-arrow-down-short-wide absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[11px]"></i>
+      </div>
+
+      <div class="flex items-center border border-slate-300 rounded-xl bg-white p-0.5 shadow-sm">
+        <button class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs">
+          <i class="fa-solid fa-list"></i>
+        </button>
+        <button class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs">
+          <i class="fa-solid fa-table-cells-large"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Pills Bar -->
+  <div class="flex items-center gap-2 text-xs pt-0.5">
+    <button onclick="setPillFilter('ACTIVE')" id="pillActive" class="px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer">
+      Active <span id="pillActiveCount">0</span>
+    </button>
+    <button onclick="setPillFilter('UNPOSTED')" id="pillUnposted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
+      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Not posted yet <span id="pillUnpostedCount">0</span>
+    </button>
+    <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">0</span>
+    </button>
+    <button onclick="setPillFilter('SOLD')" id="pillSold" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
+      <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Sold <span id="pillSoldCount">0</span>
+    </button>
+    <button onclick="setPillFilter('ALL')" id="pillAll" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer shadow-sm">
+      All <span id="pillAllCount">0</span>
+    </button>
+  </div>
+
+  <!-- Selection Counter -->
+  <div class="flex items-center gap-2 text-xs text-slate-500 pt-1">
+    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllCars(this)" class="rounded text-blue-600 w-4 h-4 cursor-pointer bg-white border-slate-300">
+    <span>Showing <strong id="showingCountBold" class="text-slate-900">0</strong> cars</span>
+  </div>
+
+  <!-- Table View -->
+  <div class="glass-card rounded-2xl shadow-sm border border-slate-200 bg-white">
+    <div class="overflow-auto max-h-[70vh]">
+      <table class="w-full text-left text-xs">
+        <thead class="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px] bg-slate-50/80">
+          <tr>
+            <th class="py-3.5 px-4 w-10"></th>
+            <th class="py-3.5 px-4">CAR</th>
+            <th class="py-3.5 px-4">PRICE & MILES</th>
+            <th class="py-3.5 px-4">STATUS</th>
+            <th class="py-3.5 px-4 text-right">WHAT YOU CAN DO</th>
+          </tr>
+        </thead>
+        <tbody id="inventoryTableBody" class="divide-y divide-slate-100 text-slate-700">
+          <tr>
+            <td colspan="5" class="py-16 text-center text-slate-400">Loading showroom inventory...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 3: INVENTORY WORKSPACE END =================== -->
+<!-- ============================================================================== -->
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 4: MODALS & DROPDOWNS START ================== -->
+<!-- ============================================================================== -->
+
+<!-- 1. Floating Actions Dropdown Menu -->
+<div id="vehicleActionDropdown" class="fixed hidden z-50 w-64 glass-card rounded-2xl border border-slate-200 p-1.5 shadow-xl text-xs space-y-0.5 bg-white backdrop-blur-xl">
+  <button onclick="handleDropdownAction('view_details')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-regular fa-eye w-4 text-slate-400"></i>
+    <span>View details & photos</span>
+  </button>
+  <button onclick="handleDropdownAction('change_price')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-tag w-4 text-slate-400"></i>
+    <span>Change price</span>
+  </button>
+  <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-link w-4 text-slate-400"></i>
+    <span>Already on Facebook? Add its link</span>
+  </button>
+  <div class="h-px bg-slate-200 my-1"></div>
+  <button onclick="handleDropdownAction('remove_inventory')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer text-left font-semibold">
+    <i class="fa-regular fa-trash-can w-4 text-rose-500"></i>
+    <span>Remove from inventory</span>
+  </button>
+</div>
+
+<!-- 2. Change Price Dialog Modal -->
+<div id="changePriceModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-tag text-blue-600"></i> Change Price
+      </h3>
+      <button onclick="closeModal('changePriceModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <div>
+      <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">New Selling Price ($)</label>
+      <input type="number" id="inputNewVehiclePrice" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono font-bold">
+    </div>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+      <button onclick="closeModal('changePriceModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
+      <button onclick="saveVehicleNewPrice()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Save Price</button>
+    </div>
+  </div>
+</div>
+
+<!-- 3. Add Facebook Link Modal -->
+<div id="addFbLinkModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-md rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-brands fa-facebook text-blue-600"></i> Link Facebook Listing
+      </h3>
+      <button onclick="closeModal('addFbLinkModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <div>
+      <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Paste Facebook Marketplace or Post URL</label>
+      <input type="text" id="inputFbListingUrl" placeholder="https://www.facebook.com/marketplace/item/..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+    </div>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+      <button onclick="closeModal('addFbLinkModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
+      <button onclick="saveExistingFbLink()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Link as Posted</button>
+    </div>
+  </div>
+</div>
+
+<!-- 4. View Details & Photos Modal -->
+<div id="vehicleDetailsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-2xl rounded-2xl border border-slate-200 p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <div>
+        <h3 id="detailsModalTitle" class="text-base font-bold text-slate-900">Vehicle Details</h3>
+        <span id="detailsModalVin" class="text-[11px] font-mono text-slate-500"></span>
+      </div>
+      <button onclick="closeModal('vehicleDetailsModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-base"></i></button>
+    </div>
+    <div id="detailsModalContent" class="space-y-4"></div>
+  </div>
+</div>
+
+<!-- 5. Settings Modal -->
+
+<div id="settingsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+
+  <div class="glass-card w-full max-w-6xl rounded-3xl p-8 space-y-6 max-h-[95vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
+
+    <!-- HEADER -->
+
+    <div class="flex items-center justify-between border-b border-slate-200 pb-5">
+
+      <div>
+        <h2 class="text-2xl font-black text-slate-900">
+          Settings
+        </h2>
+
+        <p class="text-sm text-slate-500 mt-1">
+          Manage dealership settings and automation preferences.
+        </p>
+      </div>
+
+      <button
+        onclick="closeModal('settingsModal')"
+        class="text-slate-400 hover:text-slate-700">
+
+        <i class="fa-solid fa-xmark text-2xl"></i>
+
+      </button>
+
+    </div>
+
+    <div class="grid grid-cols-12 gap-8">
+
+      <!-- LEFT MENU -->
+
+      <div class="col-span-3">
+
+        <div class="space-y-2">
+
+          <button class="w-full text-left px-4 py-3 rounded-xl bg-blue-600 text-white font-bold">
+            Dealership
+          </button>
+
+          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+            Facebook
+          </button>
+
+          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+            Automation
+          </button>
+
+          <button class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold">
+            AI Settings
+          </button>
+
+        </div>
+
+      </div>
+
+      <!-- RIGHT CONTENT -->
+
+      <div class="col-span-9 space-y-6">
+
+        <!-- DEALERSHIP CARD -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <h3 class="font-bold text-lg mb-5">
+            Dealership Configuration
+          </h3>
+
+          <div class="space-y-4">
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Dealership Name
+              </label>
+
+              <input
+                type="text"
+                id="settingsStoreName"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+            </div>
+<div>
+
+    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+        Certified Inventory URL
+    </label>
+
+    <input
+        type="text"
+        id="settingsCertifiedUrl"
+        class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+</div>
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Used Inventory URL
+              </label>
+
+              <input
+                type="text"
+                id="settingsUsedUrl"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+            </div>
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                New Inventory URL
+              </label>
+
+              <input
+                type="text"
+                id="settingsNewUrl"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- AUTOMATION CARD -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Auto Posting
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                Automatically post inventory to Facebook Marketplace.
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkSettingsAutoPost"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
+        <!-- SAVE -->
+
+        <div class="flex justify-end">
+
+          <button
+            onclick="saveAllSettings()"
+            class="px-8 py-3 rounded-xl btn-gradient text-white font-bold">
+
+            Save Settings
+
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+  <!-- Inventory Filters Modal -->
+<div id="filtersModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+
+  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 bg-white">
+
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div>
+        <h3 class="text-xl font-black text-slate-900">
+          Inventory Filters
+        </h3>
+
+        <p class="text-sm text-slate-500">
+          Narrow down your inventory.
+        </p>
+      </div>
+
+      <button onclick="closeModal('filtersModal')"
+              class="text-slate-400 hover:text-slate-700">
+        <i class="fa-solid fa-xmark text-xl"></i>
+      </button>
+    </div>
+
+   <div class="grid grid-cols-2 gap-4">
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Location
+        </label>
+        <select id="filterLocation" onchange="applyFilters()"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+            <option value="">All Locations</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Year
+        </label>
+        <select id="filterYear" onchange="applyFilters()"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+            <option value="">All Years</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Make
+        </label>
+        <select id="filterMake"
+        onchange="populateFilterDropdowns(); applyFilters()"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+            <option value="">All Makes</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Model
+        </label>
+        <select id="filterModel" onchange="applyFilters()"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+            <option value="">All Models</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Condition
+        </label>
+        <select id="filterCondition" onchange="applyFilters()"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+            <option value="">All Conditions</option>
+            <option value="New">New</option>
+            <option value="Used">Used</option>
+            <option value="Certified Pre-Owned">Certified Pre-Owned</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Color
+        </label>
+        <select id="filterColor" onchange="applyFilters()"
+                class="w-full border border-slate-300 rounded-xl px-3 py-2">
+            <option value="">All Colors</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Price
+        </label>
+        <select id="filterPriceRange" onchange="applyFilters()"
+        class="w-full border border-slate-300 rounded-xl px-3 py-2">
+    <option value="">Any Price</option>
+    <option value="0-10000">Under $10,000</option>
+    <option value="10000-20000">$10,000 - $20,000</option>
+    <option value="20000-30000">$20,000 - $30,000</option>
+    <option value="30000-50000">$30,000 - $50,000</option>
+    <option value="50000+">$50,000+</option>
+</select>
+</div>
+
+<div>
+    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+        Mileage
+    </label>
+
+    <select id="filterMileageRange" onchange="applyFilters()"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2">
+
+        <option value="">Any Mileage</option>
+        <option value="0-10000">Under 10,000</option>
+        <option value="10000-30000">10,000 - 30,000</option>
+        <option value="30000-60000">30,000 - 60,000</option>
+        <option value="60000-100000">60,000 - 100,000</option>
+        <option value="100000+">100,000+</option>
+
+    </select>
+</div>
+    </div>
+</div>
+    <div class="flex justify-between gap-3 pt-3 border-t border-slate-200">
+      <button
+    onclick="clearFilters()"
+    class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold">
+
+    Clear Filters
+
+</button>
+
+      <button
+        onclick="closeModal('filtersModal')"
+        class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold">
+
+        Cancel
+
+      </button>
+
+      <button
+        onclick="applyFilters()"
+        class="px-6 py-2 rounded-xl btn-gradient text-white font-bold">
+
+        Apply Filters
+
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+  
+<!-- 6. Queue Modal -->
+<div id="queueModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-list-check text-cyan-600"></i> Active Post Queue
+      </h3>
+      <button onclick="closeModal('queueModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+    <div id="queueItemsList" class="space-y-2">
+      <p class="text-xs text-slate-400 text-center py-8">Your post queue is currently empty.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 7. Auto-Post New Arrivals Configuration Modal -->
+<div id="autoPostModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 relative text-slate-900 bg-white">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <h3 class="text-base font-bold text-slate-900">Auto-post new arrivals</h3>
+      <button onclick="closeModal('autoPostModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <p class="text-xs text-slate-600 leading-relaxed">
+      ALL new arrivals from your website get queued automatically — no review before they post. Save a filter with Auto-post on to limit which ones.
+    </p>
+
+    <div class="space-y-4 text-xs">
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">What should it post?</label>
+        <div class="space-y-2">
+          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-blue-600 cursor-pointer">
+            <input type="radio" name="autoPostType" checked class="text-blue-600">
+            <span class="font-bold text-slate-900">All new cars</span>
+          </label>
+          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+            <input type="radio" name="autoPostType" class="text-blue-600">
+            <span class="text-slate-700">Only cars in these saved filters</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Only post cars with at least</label>
+        <div class="grid grid-cols-4 gap-2 text-center font-bold">
+          <button type="button" class="py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">1 photo</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">3 photos</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">5 photos</button>
+          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">10 photos</button>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-2">Logos and "photo coming soon" pictures don't count. A car still waiting for photos posts by itself once they're on your website.</p>
+      </div>
+    </div>
+
+    <div class="pt-2">
+      <button onclick="saveAutoPostPreferences()" class="w-full py-3 rounded-2xl btn-gradient text-white font-bold text-xs shadow-lg cursor-pointer">
+        Done
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 8. Auto Delete & Repost Configuration Modal -->
+<div id="autoRepostModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 relative text-slate-900 bg-white">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <h3 class="text-base font-bold text-slate-900">Auto delete & repost</h3>
+      <button onclick="closeModal('autoRepostModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <p class="text-xs text-slate-600 leading-relaxed">
+      Automatically deletes and reposts listings that have been up too long — fresh listings rank higher in Marketplace search.
+    </p>
+
+    <div class="space-y-4 text-xs">
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Repost each listing</label>
+        <select id="autoRepostFrequencySelect" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
+          <option value="1">Every 1 day</option>
+          <option value="3" selected>Every 3 days</option>
+          <option value="7">Every 7 days</option>
+          <option value="14">Every 14 days</option>
+        </select>
+      </div>
+
+      <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 space-y-1">
+        <p><i class="fa-solid fa-circle-info text-blue-600 mr-1"></i> Runs from your browser — it must be on with Chrome open and the extension signed in. Posts respect your daily limit.</p>
+        <p>Cars that sell or leave your website are never reposted.</p>
+      </div>
+    </div>
+
+    <div class="pt-2">
+      <button onclick="saveAutoRepostPreferences()" class="w-full py-3 rounded-2xl btn-gradient text-white font-bold text-xs shadow-lg cursor-pointer">
+        Done
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 9. Automatic Photo Edits Configuration Modal -->
+<div id="autoPhotoEditsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 relative text-slate-900 bg-white max-h-[90vh] overflow-y-auto">
+    
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center text-sm font-bold border border-pink-200">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900">Automatic photo edits</h3>
+      </div>
+      <button onclick="closeModal('autoPhotoEditsModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <p class="text-xs text-slate-600 leading-relaxed">
+      Set it once — every vehicle you post gets these edits automatically. Included in your plan.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">AI background</label>
+          <p class="text-[11px] text-slate-500 mb-2">Pick a background on the right — the vehicle is cut out and placed on it automatically.</p>
+          <select id="selectAiBgMode" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
+            <option value="first_only">First photo only</option>
+            <option value="all_photos">All photos</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-900">Auto-crop</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkAutoCrop" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+          <p class="text-[11px] text-slate-500 leading-snug">Use Adjust crop above the photo to drag it — future posts get exactly that crop.</p>
+          <select id="selectAutoCropFreq" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none cursor-pointer">
+            <option value="every">Every photo</option>
+            <option value="first">First photo only</option>
+          </select>
+        </div>
+
+        <div class="pt-2 flex items-center gap-3">
+          <button onclick="saveAutoPhotoEdits()" class="flex-1 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">
+            Save settings
+          </button>
+          <button onclick="closeModal('autoPhotoEditsModal')" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-semibold cursor-pointer">
+            Cancel
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-500 font-semibold">Previewing on <strong class="text-slate-900">2018 Toyota Tacoma</strong></span>
+          <button class="text-blue-600 hover:underline text-[11px] font-medium cursor-pointer">Try another vehicle</button>
+        </div>
+
+        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200">
+          <button class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm">Background</button>
+          <button class="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition">Adjust crop</button>
+        </div>
+
+        <div class="h-48 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
+          <img id="previewPhotoEditImg" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80" class="w-full h-full object-cover">
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/60 to-transparent p-2 text-center">
+            <span class="text-[10px] text-white font-medium">Showroom Style Preview</span>
+          </div>
+        </div>
+
+        <div class="space-y-2 pt-1">
+          <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Showroom Backgrounds</span>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400')" class="p-1 rounded-xl border border-blue-600 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-slate-900 font-semibold block mt-1 text-center">Bright</span>
+            </button>
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=400')" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Dark</span>
+            </button>
+            <button onclick="setPreviewBg('https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=400')" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+              <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=100" class="w-full h-full object-cover"></div>
+              <span class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Warm wood</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- 10. Posting Safety Configuration Modal -->
+<div id="postingSafetyModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl border border-slate-200 relative text-slate-900 bg-white max-h-[90vh] overflow-y-auto">
+    
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Posting safety</h3>
+        <p class="text-[11px] text-slate-500">Limits and pacing that keep your Facebook account out of trouble.</p>
+      </div>
+      <button onclick="closeModal('postingSafetyModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <!-- Live Counter Bar -->
+    <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+      <div class="flex items-center justify-between font-semibold">
+        <span class="text-slate-600">Last 24 hours</span>
+        <span id="safetyCounterText" class="text-blue-600 font-mono">1/10</span>
+      </div>
+      <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+        <div id="safetyCounterBar" class="bg-blue-600 h-full rounded-full w-[10%] transition-all"></div>
+      </div>
+    </div>
+
+    <div class="space-y-4 text-xs">
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Daily post limit</label>
+        <div class="space-y-2">
+          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-blue-600 cursor-pointer shadow-sm">
+            <input type="radio" name="dailyLimitRadio" value="10" checked onchange="toggleCustomLimitInput(false)" class="mt-0.5 text-blue-600">
+            <div>
+              <strong class="text-slate-900 block">10 a day — recommended</strong>
+              <span class="text-[11px] text-slate-500">The limit we consider safe for Facebook Marketplace.</span>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+            <input type="radio" name="dailyLimitRadio" value="custom" onchange="toggleCustomLimitInput(true)" class="mt-0.5 text-blue-600">
+            <div class="w-full space-y-2">
+              <strong class="text-slate-900 block">Custom limit</strong>
+              <span class="text-[11px] text-slate-500 block">More than 10 needs a one-time risk confirmation.</span>
+              <input type="number" id="inputCustomDailyLimit" value="20" min="1" max="50" class="w-28 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
+            </div>
+          </label>
+          <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+            <input type="radio" name="dailyLimitRadio" value="unlimited" onchange="toggleCustomLimitInput(false)" class="mt-0.5 text-blue-600">
+            <div>
+              <strong class="text-slate-900 block">Unlimited</strong>
+              <span class="text-[11px] text-slate-500">No daily cap. Highest risk of a Facebook restriction.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Posting speed</label>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" id="speedBtnStandard" onclick="setPostingSpeed('standard')" class="p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer shadow-sm">
+            <strong class="text-slate-900 block text-xs"><i class="fa-solid fa-gauge text-blue-600 mr-1.5"></i> Standard</strong>
+            <span class="text-[10px] text-slate-600 block mt-1">Human-like gaps, slows down at volume.</span>
+          </button>
+          <button type="button" id="speedBtnCautious" onclick="setPostingSpeed('cautious')" class="p-3 rounded-xl border border-slate-200 bg-slate-50 text-left transition cursor-pointer">
+            <strong class="text-slate-900 block text-xs"><i class="fa-solid fa-shield-halved text-emerald-600 mr-1.5"></i> Cautious</strong>
+            <span class="text-[10px] text-slate-500 block mt-1">Twice the spacing. Safest choice.</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between pt-2 border-t border-slate-200">
+      <button onclick="closeModal('postingSafetyModal')" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer">Cancel</button>
+      <button onclick="savePostingSafetyPreferences()" class="px-6 py-2 rounded-xl btn-gradient text-white font-bold text-xs shadow-md cursor-pointer">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- 11. Posting Preferences Configuration Modal -->
+<div id="postingPreferencesModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl border border-slate-200 relative text-slate-900 bg-white max-h-[90vh] overflow-y-auto">
+    
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Posting</h3>
+        <p class="text-[11px] text-slate-500">The same settings as your extension. Change them here or there, they stay in sync.</p>
+      </div>
+      <button onclick="closeModal('postingPreferencesModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+      
+      <!-- Left Column: Listing Options -->
+      <div class="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+        <div>
+          <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2 mb-1">
+            <i class="fa-solid fa-car text-blue-600"></i> Listing
+          </h4>
+          <p class="text-[11px] text-slate-500">What every Marketplace post starts with.</p>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1">Vehicle type</label>
+          <select id="prefVehicleType" class="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
+            <option value="Car/Truck" selected>Car/Truck</option>
+            <option value="SUV">SUV</option>
+            <option value="Van">Van</option>
+            <option value="Motorcycle">Motorcycle</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Emoji at the start of your title</label>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="setPrefEmoji('None')" id="emojiBtn_None" class="px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold cursor-pointer text-xs shadow-sm">None</button>
+            <button type="button" onclick="setPrefEmoji('🔥')" id="emojiBtn_fire" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer text-xs">🔥</button>
+            <button type="button" onclick="setPrefEmoji('⚡')" id="emojiBtn_bolt" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer text-xs">⚡</button>
+            <button type="button" onclick="setPrefEmoji('⭐')" id="emojiBtn_star" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer text-xs">⭐</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Distance</label>
+          <div class="grid grid-cols-2 gap-2 font-bold text-center">
+            <button type="button" id="distBtnMiles" onclick="setPrefDistance('Miles')" class="py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">Miles</button>
+            <button type="button" id="distBtnKm" onclick="setPrefDistance('KM')" class="py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer">KM</button>
+          </div>
+        </div>
+
+        <div class="space-y-3 pt-2 border-t border-slate-200">
+          <span class="block font-bold text-slate-600 uppercase tracking-wider text-[10px]">Put in every post</span>
+          
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-slate-900 block">Clean title</strong>
+              <span class="text-[11px] text-slate-500">Say the car has a clean title</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefCleanTitle" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-slate-900 block">New or used</strong>
+              <span class="text-[11px] text-slate-500">Say New or Used in the description</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefNewOrUsed" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-slate-900 block">Mileage in the title</strong>
+              <span class="text-[11px] text-slate-500">Include vehicle mileage in title</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefMileageTitle" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-slate-900 block">VIN in the description</strong>
+              <span class="text-[11px] text-slate-500">Display full vehicle VIN</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefVinDesc" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <strong class="text-slate-900 block">Stock number in the description</strong>
+              <span class="text-[11px] text-slate-500">Display dealership stock #</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="prefStockNum" checked class="sr-only peer">
+              <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Description & AI -->
+      <div class="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+        <div class="flex items-center justify-between">
+          <div>
+            <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-wand-magic-sparkles text-pink-600"></i> Description
+            </h4>
+            <p class="text-[11px] text-slate-500">What buyers read under the photos.</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="prefAiDescToggle" checked class="sr-only peer">
+            <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <div>
+          <strong class="text-slate-900 block mb-1">Write descriptions with AI</strong>
+          <span class="text-[11px] text-slate-500 block mb-2">Off = use one fixed description on every post.</span>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1">Tell the AI anything to always mention (optional)</label>
+          <textarea id="prefAiPromptCustom" rows="4" placeholder="e.g. Always mention our 90-day warranty and free delivery within 50 miles" class="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm"></textarea>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Length</label>
+          <div class="grid grid-cols-3 gap-2 font-bold text-center">
+            <button type="button" id="lenBtnShort" onclick="setPrefLength('Short')" class="py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer">Short</button>
+            <button type="button" id="lenBtnMedium" onclick="setPrefLength('Medium')" class="py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">Medium</button>
+            <button type="button" id="lenBtnLong" onclick="setPrefLength('Long')" class="py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer">Long</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="flex items-center justify-between pt-3 border-t border-slate-200">
+      <button onclick="closeModal('postingPreferencesModal')" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer">Cancel</button>
+      <button onclick="savePostingPreferences()" class="px-6 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-md cursor-pointer">Save preferences</button>
+    </div>
+  </div>
+</div>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 4: MODALS & DROPDOWNS END ==================== -->
+<!-- ============================================================================== -->
+
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 5: JAVASCRIPT LOGIC START ==================== -->
+<!-- ============================================================================== -->
+<script>
+const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
+const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let authMode = "signin";
+let currentUser = null;
+let activePillFilter = "ACTIVE";
+let selectedPostingSpeed = "standard";
+let selectedPrefEmoji = "None";
+let selectedPrefDistance = "Miles";
+let selectedPrefLength = "Medium";
+
+let currentStore = {
+  name: "Dealership Inventory",
+  usedUrl: "",
+  newUrl: "",
+  cpoUrl: ""
+};
+
+let rawInventory = [];
+let activeLocationFilter = "";
+let activeYearFilter = "";
+let activeMakeFilter = "";
+let activeModelFilter = "";
+let activeConditionFilter = "";
+let postingQueue = [];
+let activeDropdownVin = null;
+const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+
+function switchAuthMode(mode) {
+  authMode = mode;
+  const tabIn = document.getElementById("tabSignIn");
+  const tabUp = document.getElementById("tabSignUp");
+  const submitBtn = document.getElementById("authSubmitBtn");
+  document.getElementById("authErrorMsg").classList.add("hidden");
+
+  if (mode === 'signin') {
+    tabIn.className = "py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm";
+    tabUp.className = "py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer";
+    submitBtn.innerText = "Sign In";
+  } else {
+    tabUp.className = "py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm";
+    tabIn.className = "py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer";
+    submitBtn.innerText = "Register";
+  }
+}
+
+function togglePasswordVisibility(inputId, iconId) {
+  const passInput = document.getElementById(inputId);
+  const toggleIcon = document.getElementById(iconId);
+  if (passInput.type === "password") {
+    passInput.type = "text";
+    toggleIcon.className = "fa-regular fa-eye-slash text-sm";
+  } else {
+    passInput.type = "password";
+    toggleIcon.className = "fa-regular fa-eye text-sm";
+  }
+}
+
+async function handleAuthSubmit(e) {
+  e.preventDefault();
+  const errBox = document.getElementById("authErrorMsg");
+  const submitBtn = document.getElementById("authSubmitBtn");
+  errBox.classList.add("hidden");
+  submitBtn.disabled = true;
+
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+
+  try {
+    if (authMode === "signup") {
+      submitBtn.innerText = "Registering...";
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) throw error;
+      if (data && data.session) await initAppSession(data.session.user);
+      else if (data && data.user) {
+        const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (signInErr) throw signInErr;
+        await initAppSession(signInData.user);
+      }
+    } else {
+      submitBtn.innerText = "Signing In...";
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      await initAppSession(data.user);
+    }
+  } catch (err) {
+    errBox.innerText = err.message || "Authentication failed.";
+    errBox.classList.remove("hidden");
+    submitBtn.disabled = false;
+    submitBtn.innerText = authMode === "signup" ? "Register" : "Sign In";
+  }
+}
+
+async function handleSignOut() {
+  await supabaseClient.auth.signOut();
+  window.location.reload();
+}
+
+async function initAppSession(user) {
+  currentUser = user;
+  document.getElementById("authOverlay").classList.add("hidden");
+  const userPrefix = user.email.split("@")[0];
+  document.getElementById("userDisplayName").innerText = userPrefix;
+  document.getElementById("userInitial").innerText = userPrefix.charAt(0).toUpperCase();
+
+  try {
+    window.postMessage({ type: "AUTOLAUNCH_EXT_LOGIN", userId: user.id }, "*");
+  } catch (e) {}
+
+  await loadUserStoreSettings();
+  await fetchLiveInventory(true);
+  await loadPostingQueue();
+}
+
+async function loadUserStoreSettings() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("user_settings")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) {
+
+      if (data.onboarding_complete === true) {
+
+    showInventoryPage();
+
+}
+      currentStore.name = data.dealership_name || data.store_name || "Dealership Inventory";
+      currentStore.usedUrl = data.used_url || "";
+      currentStore.newUrl = data.new_url || "";
+      currentStore.cpoUrl = data.certified_url || "";
+
+      document.getElementById("settingsStoreName").value = currentStore.name;
+      document.getElementById("settingsUsedUrl").value = currentStore.usedUrl;
+      document.getElementById("settingsNewUrl").value = currentStore.newUrl;
+      const certField =
+    document.getElementById("settingsCertifiedUrl");
+
+if (certField)
+    certField.value = currentStore.cpoUrl || "";
+      const domain = currentStore.usedUrl
+    ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0]
+    : "www.dealershipinventory.com";
+
+document.getElementById("dealerUrlDisplay").innerText = "www." + domain;
+document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
+
+updateLastSyncDisplay();
+
+      if (data.repost_frequency_days) {
+        const freqLabel = document.getElementById("repostFrequencyLabel");
+        if (freqLabel) freqLabel.innerText = `Every ${data.repost_frequency_days} days`;
+        const selectEl = document.getElementById("autoRepostFrequencySelect");
+        if (selectEl) selectEl.value = String(data.repost_frequency_days);
+      }
+
+      if (data.auto_crop_enabled !== undefined) {
+        const statusLbl = document.getElementById("photoEditStatusLabel");
+        if (statusLbl) statusLbl.innerText = data.auto_crop_enabled ? "On - smart crop" : "Off";
+        const chkCrop = document.getElementById("chkAutoCrop");
+        if (chkCrop) chkCrop.checked = data.auto_crop_enabled;
+      }
+
+      if (data.ai_background_mode) {
+        const aiSel = document.getElementById("selectAiBgMode");
+        if (aiSel) aiSel.value = data.ai_background_mode;
+      }
+
+      if (data.daily_post_limit !== undefined) {
+        const limitVal = data.daily_post_limit;
+        const limitLabel = document.getElementById("ribbonSafetyLimitLabel");
+        const safetyText = document.getElementById("safetyCounterText");
+        const safetyBar = document.getElementById("safetyCounterBar");
+
+        let limitDisplay = limitVal === 999 ? "Unlimited" : limitVal;
+        if (limitLabel) limitLabel.innerText = `1 of ${limitDisplay} today`;
+        if (safetyText) safetyText.innerText = `1/${limitDisplay}`;
+        if (safetyBar && limitVal !== 999) {
+          const pct = Math.min(100, Math.max(10, (1 / limitVal) * 100));
+          safetyBar.style.width = `${pct}%`;
+        } else if (safetyBar) {
+          safetyBar.style.width = `5%`;
+        }
+      }
+
+      if (data.posting_speed) {
+        setPostingSpeed(data.posting_speed);
+      }
+
+      if (data.vehicle_type) document.getElementById("prefVehicleType").value = data.vehicle_type;
+      if (data.pref_emoji) setPrefEmoji(data.pref_emoji);
+      if (data.pref_distance) setPrefDistance(data.pref_distance);
+      if (data.pref_length) setPrefLength(data.pref_length);
+      if (data.ai_prompt_custom) document.getElementById("prefAiPromptCustom").value = data.ai_prompt_custom;
+
+      if (data.include_clean_title !== undefined) document.getElementById("prefCleanTitle").checked = data.include_clean_title;
+      if (data.include_new_used !== undefined) document.getElementById("prefNewOrUsed").checked = data.include_new_used;
+      if (data.include_mileage_title !== undefined) document.getElementById("prefMileageTitle").checked = data.include_mileage_title;
+      if (data.include_vin !== undefined) document.getElementById("prefVinDesc").checked = data.include_vin;
+      if (data.include_stock !== undefined) document.getElementById("prefStockNum").checked = data.include_stock;
+      if (data.ai_desc_enabled !== undefined) document.getElementById("prefAiDescToggle").checked = data.ai_desc_enabled;
+    }
+  } catch (e) {}
+}
+// ==============================================================================
+// ====================== LAST SYNC DISPLAY START ===============================
+// ==============================================================================
+
+async function updateLastSyncDisplay() {
+
+    if (!currentUser) return;
+
+    try {
+
+        const syncLabel =
+            document.getElementById(
+                "lastSyncTimeLabel"
+            );
+
+        if (!syncLabel) return;
+
+        const { data: jobs } =
+            await supabaseClient
+                .from("scrape_jobs")
+                .select("*")
+                .eq("user_id", currentUser.id)
+                .order("started_at", {
+                    ascending: false
+                })
+                .limit(1);
+
+        if (
+            jobs &&
+            jobs.length &&
+            jobs[0].status === "pending"
+        ) {
+
+            syncLabel.innerText =
+                "Refresh In Progress...";
+
+            return;
+
+        }
+
+        const { data } =
+            await supabaseClient
+                .from("scraped_inventory")
+                .select("last_updated")
+                .eq("user_id", currentUser.id)
+                .order("last_updated", {
+                    ascending: false
+                })
+                .limit(1);
+
+        if (
+            !data ||
+            !data.length ||
+            !data[0].last_updated
+        ) {
+
+            syncLabel.innerText =
+                "Never Synced";
+
+            return;
+
+        }
+
+        const syncTime =
+            new Date(
+                data[0].last_updated
+            );
+
+        syncLabel.innerText =
+            "Last Sync: " +
+            syncTime.toLocaleString();
+
+    } catch (err) {
+
+        console.error(
+            "Last Sync error:",
+            err
+        );
+
+    }
+
+}
+
+// ==============================================================================
+// ====================== LAST SYNC DISPLAY END =================================
+// ==============================================================================
+  
+  async function saveAllSettings() {
+  if (!currentUser) return;
+  const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
+  const usedUrl = document.getElementById("settingsUsedUrl").value.trim();
+  const newUrl = document.getElementById("settingsNewUrl").value.trim();
+const certifiedUrl =
+    document.getElementById("settingsCertifiedUrl").value.trim();
+  try {
+    await supabaseClient.from("user_settings").upsert({
+  user_id: currentUser.id,
+  dealership_name: storeName,
+  store_name: storeName,
+  used_url: usedUrl,
+  new_url: newUrl,
+  certified_url: certifiedUrl,
+  updated_at: new Date().toISOString()
+}, { onConflict: "user_id" });
+
+    currentStore.name = storeName;
+currentStore.usedUrl = usedUrl;
+currentStore.newUrl = newUrl;
+currentStore.cpoUrl = certifiedUrl;
+    closeModal("settingsModal");
+    alert("✓ Settings saved successfully!");
+    await loadUserStoreSettings();
+  } catch (err) {
+    alert("Save error: " + err.message);
+  }
+}
+
+async function fetchLiveInventory(isManual) {
+  if (!currentUser) return;
+  const tbody = document.getElementById("inventoryTableBody");
+  try {
+    let allCars = [];
+    let from = 0;
+    const step = 1000;
+    let keepFetching = true;
+
+    while (keepFetching) {
+      const { data, error } = await supabaseClient
+        .from("scraped_inventory")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .order("price", { ascending: true })
+        .range(from, from + step - 1);
+
+      if (error) throw error;
+      if (data && data.length > 0) {
+        allCars = allCars.concat(data);
+        if (data.length < step) keepFetching = false;
+        else from += step;
+      } else {
+        keepFetching = false;
+      }
+    }
+
+    rawInventory = allCars.filter(c => c.is_active !== false);
+    populateFilterDropdowns();
+    const postedCount = rawInventory.filter(c => c.marketplace_posted_at).length;
+    const unpostedCount = rawInventory.length - postedCount;
+    
+    document.getElementById("topCarsCountLabel").innerText = `${rawInventory.length} Vehicles`;
+    document.getElementById("showingCountBold").innerText = rawInventory.length;
+    document.getElementById("pillActiveCount").innerText = rawInventory.length;
+    document.getElementById("pillUnpostedCount").innerText = unpostedCount;
+    document.getElementById("pillPostedCount").innerText = postedCount;
+    document.getElementById("pillSoldCount").innerText = rawInventory.filter(c => (c.status || "").toLowerCase() === "sold").length;
+    document.getElementById("pillAllCount").innerText = rawInventory.length;
+
+    applyFilters();
+  } catch (err) {
+    console.error("Fetch error:", err);
+    tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
+  }
+}
+
+function setPillFilter(filter) {
+  activePillFilter = filter;
+  const pills = {
+    ACTIVE: "pillActive",
+    UNPOSTED: "pillUnposted",
+    POSTED: "pillPosted",
+    SOLD: "pillSold",
+    ALL: "pillAll"
+  };
+
+  Object.keys(pills).forEach(k => {
+    const el = document.getElementById(pills[k]);
+    if (k === filter) {
+      el.className = "px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer";
+    } else {
+      el.className = "px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm";
+    }
+  });
+
+  applyFilters();
+}
+function populateFilterDropdowns() {
+
+    const locationSelect = document.getElementById("filterLocation");
+    const yearSelect = document.getElementById("filterYear");
+    const makeSelect = document.getElementById("filterMake");
+    const modelSelect = document.getElementById("filterModel");
+    const colorSelect = document.getElementById("filterColor");
+
+    if (!locationSelect || !yearSelect || !makeSelect || !modelSelect) return;
+
+    const currentLocation = locationSelect.value;
+    const currentYear = yearSelect.value;
+    const currentMake = makeSelect.value;
+    const currentModel = modelSelect.value;
+    const currentColor = colorSelect ? colorSelect.value : "";
+
+    const locations = [...new Set(
+        rawInventory
+            .map(c => c.location_name)
+            .filter(Boolean)
+    )].sort();
+
+    const years = [...new Set(
+        rawInventory
+            .map(c => c.year)
+            .filter(Boolean)
+    )].sort((a, b) => b - a);
+
+    const makes = [...new Set(
+        rawInventory
+            .map(c => c.make)
+            .filter(Boolean)
+    )].sort();
+
+    const modelSource = currentMake
+        ? rawInventory.filter(c => c.make === currentMake)
+        : rawInventory;
+
+    const models = [...new Set(
+    modelSource
+        .map(c => {
+
+            if (c.model === "Hr") return "HR-V";
+            if (c.model === "Cr") return "CR-V";
+
+            return c.model;
+
+        })
+        .filter(m =>
+            m &&
+            m.toLowerCase() !== "vin"
+        )
+)].sort();
+
+    const colors = [...new Set(
+        rawInventory
+            .map(c => c.color)
+            .filter(Boolean)
+    )].sort();
+
+    locationSelect.innerHTML =
+        '<option value="">All Locations</option>' +
+        locations.map(v => `<option value="${v}">${v}</option>`).join("");
+
+    yearSelect.innerHTML =
+        '<option value="">All Years</option>' +
+        years.map(v => `<option value="${v}">${v}</option>`).join("");
+
+    makeSelect.innerHTML =
+        '<option value="">All Makes</option>' +
+        makes.map(v => `<option value="${v}">${v}</option>`).join("");
+
+    modelSelect.innerHTML =
+        '<option value="">All Models</option>' +
+        models.map(v => `<option value="${v}">${v}</option>`).join("");
+
+    if (colorSelect) {
+        colorSelect.innerHTML =
+            '<option value="">All Colors</option>' +
+            colors.map(v => `<option value="${v}">${v}</option>`).join("");
+    }
+
+    if (locations.includes(currentLocation)) {
+        locationSelect.value = currentLocation;
+    }
+
+    if (years.map(String).includes(String(currentYear))) {
+        yearSelect.value = currentYear;
+    }
+
+    if (makes.includes(currentMake)) {
+        makeSelect.value = currentMake;
+    }
+
+    if (models.includes(currentModel)) {
+        modelSelect.value = currentModel;
+    } else {
+        modelSelect.value = "";
+    }
+
+    if (colorSelect && colors.includes(currentColor)) {
+        colorSelect.value = currentColor;
+    }
+
+}
+function applyFilters() {
+  const query = (document.getElementById("searchInput").value || "").toLowerCase();
+  const sort = document.getElementById("sortSelect").value;
+
+  let filtered = rawInventory.filter(car => {
+const filterLocation =
+    document.getElementById("filterLocation")?.value || "";
+const filterYear =
+    document.getElementById("filterYear")?.value || "";
+const filterMake =
+    document.getElementById("filterMake")?.value || "";
+const filterModel =
+    document.getElementById("filterModel")?.value || "";
+const filterCondition =
+    document.getElementById("filterCondition")?.value || "";
+const filterColor =
+    document.getElementById("filterColor")?.value || "";
+const filterPriceRange =
+    document.getElementById("filterPriceRange")?.value || "";
+const filterMileageRange =
+    document.getElementById("filterMileageRange")?.value || "";
+
+    if (
+        filterLocation &&
+        car.location_name !== filterLocation
+    ) return false;
+    if (
+        filterYear &&
+        String(car.year) !== filterYear
+    ) return false;
+    if (
+        filterMake &&
+        car.make !== filterMake
+    ) return false;
+    if (
+        filterModel &&
+        car.model !== filterModel
+    ) return false;
+    if (
+        filterCondition &&
+        car.condition !== filterCondition
+    ) return false;
+    if (
+    filterColor &&
+    car.color !== filterColor
+) return false;
+
+if (filterPriceRange) {
+
+    const price = car.price || 0;
+
+    if (
+        filterPriceRange === "0-10000" &&
+        price >= 10000
+    ) return false;
+
+    if (
+        filterPriceRange === "10000-20000" &&
+        (price < 10000 || price > 20000)
+    ) return false;
+
+    if (
+        filterPriceRange === "20000-30000" &&
+        (price < 20000 || price > 30000)
+    ) return false;
+
+    if (
+        filterPriceRange === "30000-50000" &&
+        (price < 30000 || price > 50000)
+    ) return false;
+
+    if (
+    filterPriceRange === "50000+" &&
+    price < 50000
+) return false;
+}
+if (filterMileageRange) {
+    const mileage = car.mileage || 0;
+    if (
+        filterMileageRange === "0-10000" &&
+        mileage >= 10000
+    ) return false;
+    if (
+        filterMileageRange === "10000-30000" &&
+        (mileage < 10000 || mileage > 30000)
+    ) return false;
+    if (
+        filterMileageRange === "30000-60000" &&
+        (mileage < 30000 || mileage > 60000)
+    ) return false;
+    if (
+        filterMileageRange === "60000-100000" &&
+        (mileage < 60000 || mileage > 100000)
+    ) return false;
+    if (
+        filterMileageRange === "100000+" &&
+        mileage < 100000
+    ) return false;
+}
+const isPosted = !!car.marketplace_posted_at;
+    if (activePillFilter === 'POSTED' && !isPosted) return false;
+    if (activePillFilter === 'UNPOSTED' && isPosted) return false;
+    const isSold = (car.status || "").toLowerCase() === "sold";
+    if (activePillFilter === 'SOLD' && !isSold) return false;
+    if (activePillFilter !== 'SOLD' && activePillFilter !== 'ALL' && isSold) return false;
+
+    const title = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.trim || ''} ${car.vin || ''} ${car.stock_num || ''}`.toLowerCase();
+    return !query || title.includes(query);
+  });
+  filtered.sort((a, b) => {
+    if (sort === "price_asc") return (a.price || 999999) - (b.price || 999999);
+    if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
+    if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
+    return (b.year || 0) - (a.year || 0);
+  });
+  window.currentFilteredInventory = filtered;
+
+document.getElementById("showingCountBold").innerText = filtered.length;
+renderTableRows(filtered);
+}
+function renderTableRows(cars) {
+  const tbody = document.getElementById("inventoryTableBody");
+  if (!tbody) return;
+
+  if (!cars.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">No vehicles match your search.</td></tr>';
+    return;
+  }
+
+  let html = "";
+  cars.forEach(car => {
+    let photoUrl = car.image_url;
+    if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+    if (!photoUrl || photoUrl.includes('/static/')) photoUrl = FALLBACK_IMAGE;
+
+    const priceText = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
+    const milesText = (car.mileage || 0).toLocaleString() + " mi";
+    const isPosted = !!car.marketplace_posted_at;
+    const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
+
+    html += `<tr class="table-row-vibrant transition border-b border-slate-100 group">
+      <td class="py-4 px-4 text-center">
+        <input type="checkbox" class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
+      </td>
+      
+<td class="py-4 px-4">
+  <div
+    onclick="openVehicleDetailsModal(rawInventory.find(c => c.vin === '${car.vin}'))"
+    class="flex items-center gap-3.5 cursor-pointer hover:bg-slate-50 rounded-xl p-2 transition"
+  >
+    <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-16 h-12 rounded-xl object-cover border border-slate-200 shrink-0 shadow-sm">
+
+    <div>
+  <strong class="text-xs font-bold text-slate-950 block leading-tight">
+    ${car.year || ''} ${car.make || ''} ${car.model || ''}
+  </strong>
+
+  <div class="text-[10px] text-slate-500 mt-1">
+    Stock: ${car.stock_num || car.stock_number || 'N/A'}
+  </div>
+
+  <div class="text-[10px] text-slate-500">
+    VIN: ${car.vin || 'N/A'}
+</div>
+
+${car.location_name ? `
+<div class="mt-1">
+    <span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+        ${car.location_name}
+    </span>
+</div>
+` : ''}
+
+  <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 inline-block mt-1">
+    New arrival
+  </span>
+</div>
+
+  </div>
+</td>
+
+      <td class="py-4 px-4 font-sans">
+        <span class="text-xs font-bold text-blue-600 block leading-tight">${priceText}</span>
+        <span class="text-[11px] text-slate-500 block">${milesText}</span>
+      </td>
+
+      <td class="py-4 px-4">
+
+  ${
+    isPosted
+      ? `
+        <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+          Posted
+        </span>
+      `
+      : isQueued
+      ? `
+        <span class="px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">
+          Queued
+        </span>
+      `
+      : `
+        <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold">
+          Not Posted
+        </span>
+      `
+  }
+
+</td>
+      <td class="py-4 px-4 text-right">
+        <div class="flex items-center justify-end gap-2 relative">
+          ${isPosted
+            ? `<button onclick="openChangePriceModal('${car.vin}', ${car.price || 0})" class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm">
+                 <i class="fa-solid fa-tag text-slate-400 text-xs"></i> Change price
+               </button>
+               <button onclick="removeVehicleFromFacebook('${car.vin}')" id="btnRemoveFb_${car.vin}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
+                 <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
+               </button>`
+            : `<button onclick="enqueueMarketplaceCar('${car.vin}')" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
+                 <i class="fa-solid fa-paper-plane text-[10px]"></i>
+                 <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
+               </button>`
+          }
+          <button onclick="toggleRowDropdown(event, '${car.vin}')" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+            <i class="fa-solid fa-ellipsis text-xs"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+}
+
+function toggleRowDropdown(event, vin) {
+  event.stopPropagation();
+  const dropdown = document.getElementById("vehicleActionDropdown");
+  if (!dropdown) return;
+
+  if (activeDropdownVin === vin && !dropdown.classList.contains("hidden")) {
+    dropdown.classList.add("hidden");
+    activeDropdownVin = null;
+    return;
+  }
+
+  activeDropdownVin = vin;
+  const rect = event.currentTarget.getBoundingClientRect();
+  dropdown.style.top = `${rect.bottom + window.scrollY + 6}px`;
+  dropdown.style.left = `${Math.min(window.innerWidth - 270, rect.right - 240 + window.scrollX)}px`;
+  dropdown.classList.remove("hidden");
+}
+
+document.addEventListener("click", function(e) {
+  const dropdown = document.getElementById("vehicleActionDropdown");
+  if (dropdown && !dropdown.contains(e.target)) {
+    dropdown.classList.add("hidden");
+    activeDropdownVin = null;
+  }
+});
+
+function handleDropdownAction(action) {
+  const vin = activeDropdownVin;
+  const dropdown = document.getElementById("vehicleActionDropdown");
+  if (dropdown) dropdown.classList.add("hidden");
+  if (!vin) return;
+
+  const car = rawInventory.find(c => c.vin === vin);
+  if (!car) return;
+
+  switch (action) {
+    case "view_details": openVehicleDetailsModal(car); break;
+    case "change_price": openChangePriceModal(car.vin, car.price || 0); break;
+    case "add_link": openAddFbLinkModal(car.vin); break;
+    case "remove_inventory": removeVehicleFromInventory(car.vin); break;
+  }
+}
+
+async function removeVehicleFromFacebook(vin) {
+  if (!currentUser) return;
+  const car = rawInventory.find(c => c.vin === vin);
+  const title = car ? `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}` : vin;
+
+  if (!confirm(`Remove "${title}" from Facebook?\n\nThis will mark the listing as delisted/sold and update its status on your inventory.`)) {
+    return;
+  }
+
+  const btn = document.getElementById(`btnRemoveFb_${vin}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Removing...';
+  }
+
+  try {
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({
+        marketplace_posted_at: null,
+        queued_for_marketplace: false,
+        status: "Available"
+      })
+      .eq("vin", vin)
+      .eq("user_id", currentUser.id);
+
+    if (error) throw error;
+
+    if (car) {
+      car.marketplace_posted_at = null;
+      car.queued_for_marketplace = false;
+      car.status = "Available";
+    }
+
+    await supabaseClient
+      .from("auto_posting_queue")
+      .delete()
+      .eq("vin", vin)
+      .eq("user_id", currentUser.id);
+
+    await loadPostingQueue();
+    applyFilters();
+    alert(`✓ Successfully removed "${title}" from Facebook!`);
+  } catch (err) {
+    alert("Could not remove listing: " + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook';
+    }
+  }
+}
+
+let targetPriceVin = null;
+function openChangePriceModal(vin, currentPrice) {
+  targetPriceVin = vin;
+  const input = document.getElementById("inputNewVehiclePrice");
+  if (input) input.value = currentPrice || "";
+  document.getElementById("changePriceModal").classList.remove("hidden");
+}
+
+async function saveVehicleNewPrice() {
+  if (!currentUser || !targetPriceVin) return;
+  const newPrice = parseInt(document.getElementById("inputNewVehiclePrice").value);
+
+  if (isNaN(newPrice) || newPrice < 500) {
+    alert("Please enter a valid selling price greater than $500.");
+    return;
+  }
+
+  try {
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({ price: newPrice })
+      .eq("vin", targetPriceVin)
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+
+    const car = rawInventory.find(c => c.vin === targetPriceVin);
+    if (car) car.price = newPrice;
+
+    closeModal("changePriceModal");
+    applyFilters();
+    alert("✓ Vehicle price updated successfully!");
+  } catch (err) {
+    alert("Could not update price: " + err.message);
+  }
+}
+
+let targetLinkVin = null;
+function openAddFbLinkModal(vin) {
+  targetLinkVin = vin;
+  document.getElementById("inputFbListingUrl").value = "";
+  document.getElementById("addFbLinkModal").classList.remove("hidden");
+}
+
+async function saveExistingFbLink() {
+  if (!currentUser || !targetLinkVin) return;
+  const url = document.getElementById("inputFbListingUrl").value.trim();
+
+  if (!url || !url.includes("facebook.com")) {
+    alert("Please enter a valid Facebook listing URL.");
+    return;
+  }
+
+  try {
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({
+        marketplace_posted_at: new Date().toISOString(),
+        detail_url: url
+      })
+      .eq("vin", targetLinkVin)
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+
+    const car = rawInventory.find(c => c.vin === targetLinkVin);
+    if (car) {
+      car.marketplace_posted_at = new Date().toISOString();
+      car.detail_url = url;
+    }
+
+    closeModal("addFbLinkModal");
+    applyFilters();
+    alert("✓ Facebook listing linked! Status marked as Posted.");
+  } catch (err) {
+    alert("Could not link Facebook URL: " + err.message);
+  }
+}
+
+function openVehicleDetailsModal(car) {
+  document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}`;
+  document.getElementById("detailsModalVin").innerText = `VIN: ${car.vin || 'N/A'} • Stock: ${car.stock_num || car.stock_number || 'N/A'}`;
+
+  let photoUrl = car.image_url;
+  if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+  if (!photoUrl) photoUrl = FALLBACK_IMAGE;
+
+  document.getElementById("detailsModalContent").innerHTML = `
+    <div class="h-64 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+      <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-full h-full object-cover">
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <span class="text-slate-500 block text-[10px] uppercase font-bold">Price</span>
+        <strong class="text-slate-900 text-sm">${car.price ? '$' + car.price.toLocaleString() : 'Call'}</strong>
+      </div>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <span class="text-slate-500 block text-[10px] uppercase font-bold">Mileage</span>
+        <strong class="text-slate-900 text-sm">${(car.mileage || 0).toLocaleString()} mi</strong>
+      </div>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <span class="text-slate-500 block text-[10px] uppercase font-bold">Exterior</span>
+        <strong class="text-slate-900 text-sm">${car.color || 'Standard'}</strong>
+      </div>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <span class="text-slate-500 block text-[10px] uppercase font-bold">Condition</span>
+        <strong class="text-slate-900 text-sm">${car.condition || 'Used'}</strong>
+      </div>
+    </div>
+    <div class="pt-2 flex justify-end">
+      <a href="${car.detail_url || '#'}" target="_blank" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+        <span>View on Dealer Website</span>
+        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+      </a>
+    </div>
+  `;
+
+  document.getElementById("vehicleDetailsModal").classList.remove("hidden");
+}
+
+async function removeVehicleFromInventory(vin) {
+  if (!currentUser) return;
+  const car = rawInventory.find(c => c.vin === vin);
+  const title = car ? `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}` : vin;
+
+  if (!confirm(`Are you sure you want to remove "${title}" from your active inventory?`)) return;
+
+  try {
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({ is_active: false })
+      .eq("vin", vin)
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+
+    rawInventory = rawInventory.filter(c => c.vin !== vin);
+    applyFilters();
+    alert("✓ Vehicle removed from active showroom inventory.");
+  } catch (err) {
+    alert("Could not remove vehicle: " + err.message);
+  }
+}
+
+async function loadPostingQueue() {
+
+    if (!currentUser) return;
+
+    try {
+
+        const { data } = await supabaseClient
+            .from("auto_posting_queue")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("created_at", { ascending: true });
+
+        postingQueue = data || [];
+
+        const pendingCount = postingQueue.filter(
+            i => i.status === "pending"
+        ).length;
+
+        const badge =
+            document.getElementById("navQueueBadge");
+
+        if (badge) {
+
+            badge.innerText = pendingCount;
+
+            badge.classList.toggle(
+                "hidden",
+                pendingCount === 0
+            );
+
+        }
+
+        const queueList =
+            document.getElementById("queueItemsList");
+
+        if (!queueList) return;
+
+        if (!postingQueue.length) {
+
+            queueList.innerHTML = `
+                <p class="text-xs text-slate-400 text-center py-8">
+                    Your post queue is currently empty.
+                </p>
+            `;
+
+            return;
+        }
+
+        queueList.innerHTML = postingQueue.map(item => {
+
+const car = rawInventory.find(c => c.vin === item.vin) || null;
+
+    return `
+
+        <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+
+            <div class="flex items-start justify-between">
+
+                <div>
+
+                    <div class="text-sm font-bold text-slate-900">
+                        ${
+    car
+    ? `${car.year || ''} ${car.make || ''} ${car.model || ''}`.trim()
+    : `${item.year || ''} ${item.make || ''} ${item.model || ''}`.trim() || 'Vehicle'
+}
+                    </div>
+
+                    <div class="text-xs text-slate-500 mt-1">
+                        Stock: ${item.stock_num || item.stock_number || 'N/A'}
+                    </div>
+
+                    <div class="text-xs text-slate-500">
+                        VIN: ${item.vin}
+                    </div>
+
+                </div>
+
+                <div class="flex flex-col items-end gap-2">
+
+                    <span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">
+                        ${
+                            item.status === "pending"
+                                ? "🟡 Pending"
+                                : item.status === "processing"
+                                ? "🔵 Processing"
+                                : item.status === "posted"
+                                ? "🟢 Posted"
+                                : item.status
+                        }
+                    </span>
+
+                    <button
+                        onclick="removeQueueItem('${item.id}')"
+                        class="text-xs text-red-600 hover:text-red-700 font-semibold">
+
+                        Remove
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    `;
+
+}).join("");
+
+    } catch (e) {
+
+        console.error(e);
+
+    }
+
+}
+  async function bulkQueueSelectedVehicles() {
+
+    if (!currentUser) return;
+
+    const selectedVehicles = [];
+
+    document.querySelectorAll(".car-select-chk").forEach((chk, index) => {
+
+        if (
+            chk.checked &&
+            window.currentFilteredInventory?.[index]
+        ) {
+            selectedVehicles.push(
+                window.currentFilteredInventory[index]
+            );
+        }
+
+    });
+
+    if (!selectedVehicles.length) {
+        alert("Please select at least one vehicle.");
+        return;
+    }
+
+    try {
+
+        const existingVins = new Set(
+    postingQueue
+        .filter(i => i.status === "pending")
+        .map(i => i.vin)
+);
+
+const rows = selectedVehicles
+    .filter(car => !existingVins.has(car.vin))
+    .map(car => ({
+        user_id: currentUser.id,
+        vin: car.vin,
+        year: car.year,
+        make: car.make,
+        model: car.model,
+        stock_num: car.stock_num || car.stock_number,
+        status: "pending",
+        target_channel: "marketplace",
+        created_at: new Date().toISOString()
+    }));
+
+if (!rows.length) {
+
+    alert(
+        "Selected vehicles are already queued."
+    );
+
+    return;
+}
+
+        const { error } = await supabaseClient
+            .from("auto_posting_queue")
+            .insert(rows);
+
+        if (error) throw error;
+
+        await loadPostingQueue();
+
+        applyFilters();
+
+        alert(`${selectedVehicles.length} vehicle(s) queued.`);
+
+    } catch (err) {
+
+        console.error(err);
+
+        alert(
+            "Queue error: " +
+            (err.message || "Unknown error")
+        );
+
+    }
+
+}
+async function removeQueueItem(id) {
+
+    if (!confirm(
+        "Remove this vehicle from the queue?"
+    )) return;
+
+    try {
+
+        const { error } = await supabaseClient
+            .from("auto_posting_queue")
+            .delete()
+            .eq("id", id);
+
+        if (error) throw error;
+
+        await loadPostingQueue();
+
+        applyFilters();
+
+    } catch (err) {
+
+        console.error(err);
+
+        alert(
+            "Remove failed: " +
+            (err.message || "Unknown error")
+        );
+
+    }
+
+}
+  
+async function enqueueMarketplaceCar(vin) {
+  if (!currentUser) return;
+  try {
+    await supabaseClient.from("auto_posting_queue").insert({
+      user_id: currentUser.id,
+      vin: vin,
+      target_channel: 'marketplace',
+      status: 'pending'
+    });
+
+    await loadPostingQueue();
+    applyFilters();
+    alert("✓ Vehicle scheduled in Post Queue!");
+  } catch (err) {
+    alert("Could not queue vehicle: " + err.message);
+  }
+}
+// ==============================================================================
+// ====================== SYNC INVENTORY START ==================================
+// ==============================================================================
+
+async function triggerLiveLotCrawl(event) {
+
+    if (!currentUser) return;
+
+    const btn =
+        event.currentTarget;
+
+    btn.disabled = true;
+    btn.classList.add("opacity-60");
+
+    btn.innerHTML =
+    '<i class="fa-solid fa-arrows-rotate fa-spin"></i><span>Refreshing...</span>';
+
+    try {
+
+        await supabaseClient
+            .from("scrape_jobs")
+            .insert({
+                user_id: currentUser.id,
+                status: "pending",
+                triggered_by: currentUser.email
+            });
+
+        alert(
+            "✓ Inventory refresh started. Inventory will begin updating shortly!"
+        );
+
+        setTimeout(() => {
+
+            updateLastSyncDisplay();
+
+        }, 1000);
+
+    } catch (e) {
+
+        alert(
+            "Inventory refresh failed."
+        );
+
+    } finally {
+
+        btn.disabled = false;
+        btn.classList.remove("opacity-60");
+
+        btn.innerHTML =
+            '<i class="fa-solid fa-rotate"></i><span>Refresh Inventory</span>';
+
+    }
+
+}
+
+// ==============================================================================
+// ====================== SYNC INVENTORY END ====================================
+// ==============================================================================
+  
+  function continueSetup() {
+
+    document
+        .getElementById(
+            "inventoryTestResults"
+        )
+        .classList.add("hidden");
+
+    document
+        .getElementById(
+            "inventorySyncPage"
+        )
+        .classList.remove("hidden");
+
+    const testStep =
+        document.getElementById(
+            "stepInventoryTest"
+        );
+
+    if (testStep) {
+        testStep.classList.remove(
+            "text-slate-500"
+        );
+
+        testStep.classList.add(
+            "text-emerald-600",
+            "font-semibold"
+        );
+    }
+
+    const syncStep =
+        document.getElementById(
+            "stepInventorySync"
+        );
+
+    if (syncStep) {
+        syncStep.classList.remove(
+            "text-slate-500"
+        );
+
+        syncStep.classList.add(
+            "text-blue-600",
+            "font-semibold"
+        );
+    }
+
+}
+
+async function finishSetup() {
+
+  if (currentUser) {
+
+    const dealershipName =
+        document.getElementById("onboardingDealershipName").value.trim();
+
+    const usedUrl =
+        document.getElementById("onboardingUsedUrl").value.trim();
+
+    const newUrl =
+        document.getElementById("onboardingNewUrl").value.trim();
+
+    const certifiedUrl =
+        document.getElementById("onboardingCertifiedUrl").value.trim();
+
+    const { error } = await supabaseClient
+        .from("user_settings")
+        .upsert({
+            user_id: currentUser.id,
+            store_name: dealershipName,
+            used_url: usedUrl,
+            new_url: newUrl,
+            certified_url: certifiedUrl,
+            onboarding_complete: true,
+            updated_at: new Date().toISOString()
+        });
+
+    if (error) {
+        console.error(error);
+    }
+
+}
+
+    const syncStep =
+        document.getElementById(
+            "stepInventorySync"
+        );
+
+    if (syncStep) {
+        syncStep.classList.remove(
+            "text-blue-600"
+        );
+
+        syncStep.classList.add(
+            "text-emerald-600"
+        );
+    }
+const completeStep =
+    document.getElementById(
+        "stepComplete"
+    );
+
+if (completeStep) {
+
+    completeStep.classList.remove(
+        "text-slate-500"
+    );
+
+    completeStep.classList.add(
+        "text-emerald-600",
+        "font-semibold"
+    );
+
+}
+    document
+        .getElementById(
+            "getStartedPage"
+        )
+        .classList.add("hidden");
+
+    document
+        .querySelector("main")
+        .classList.remove("hidden");
+
+    alert("🎉 Setup Complete");
+
+}
+
+function populateOnboardingFields() {
+
+    const storeField =
+        document.getElementById("onboardingDealershipName");
+
+    const usedField =
+        document.getElementById("onboardingUsedUrl");
+
+    const newField =
+        document.getElementById("onboardingNewUrl");
+
+    const certField =
+        document.getElementById("onboardingCertifiedUrl");
+
+    if (storeField)
+        storeField.value = currentStore.name || "";
+
+    if (usedField)
+        usedField.value = currentStore.usedUrl || "";
+
+    if (newField)
+        newField.value = currentStore.newUrl || "";
+
+    if (certField)
+        certField.value = currentStore.cpoUrl || "";
+
+}
+  function testInventory() {
+
+    const dealerName =
+        document.getElementById(
+            "onboardingDealershipName"
+        ).value.trim();
+
+    const usedUrl =
+        document.getElementById(
+            "onboardingUsedUrl"
+        ).value.trim();
+
+    const newUrl =
+        document.getElementById(
+            "onboardingNewUrl"
+        ).value.trim();
+
+    if (!dealerName) {
+        alert("Please enter a dealership name.");
+        return;
+    }
+
+    if (!usedUrl) {
+        alert("Please enter a Used Inventory URL.");
+        return;
+    }
+
+    if (!newUrl) {
+        alert("Please enter a New Inventory URL.");
+        return;
+    }
+
+    const btn =
+        document.getElementById(
+            "btnTestInventory"
+        );
+
+    btn.disabled = true;
+
+    btn.innerHTML =
+        "Testing Inventory...";
+
+setTimeout(() => {
+
+    document
+        .getElementById(
+            "inventoryTestResults"
+        )
+        .classList.remove("hidden");
+
+    const testStep =
+        document.getElementById(
+            "stepInventoryTest"
+        );
+
+    if (testStep) {
+
+        testStep.classList.remove(
+            "text-slate-500"
+        );
+
+        testStep.classList.add(
+            "text-blue-600",
+            "font-semibold"
+        );
+
+    }
+
+    btn.disabled = false;
+
+    btn.innerHTML =
+        "Test Inventory";
+
+}, 1500);
+
+}   //
+
+function showGetStartedPage() {
+    populateOnboardingFields();
+
+    document.querySelector("main")
+        .classList.add("hidden");
+
+    document.getElementById("getStartedPage")
+        .classList.remove("hidden");
+
+}
+function showInventoryPage() {
+
+    document
+        .getElementById("getStartedPage")
+        .classList.add("hidden");
+
+    document
+        .querySelector("main")
+        .classList.remove("hidden");
+
+}
+function openFiltersModal() {document.getElementById("filtersModal").classList.remove("hidden"); }
+function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); }
+function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
+function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
+function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
+function openAutoPhotoEditsModal() { document.getElementById("autoPhotoEditsModal").classList.remove("hidden"); }
+function openPostingSafetyModal() { document.getElementById("postingSafetyModal").classList.remove("hidden"); }
+function openPostingPreferencesModal() { document.getElementById("postingPreferencesModal").classList.remove("hidden"); }
+function clearFilters() {
+    document.getElementById("filterLocation").value = "";
+    document.getElementById("filterYear").value = "";
+    document.getElementById("filterMake").value = "";
+    document.getElementById("filterModel").value = "";
+    document.getElementById("filterCondition").value = "";
+    document.getElementById("filterColor").value = "";
+    document.getElementById("filterPriceRange").value = "";
+    document.getElementById("filterMileageRange").value = "";
+    applyFilters();
+    closeModal('filtersModal');
+}
+function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+function toggleRibbonSetting(k) {
+    console.log("clicked:", k);
+}
+function toggleSelectAllCars(master) {
+  document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
+}
+
+function setPreviewBg(url) {
+  const img = document.getElementById("previewPhotoEditImg");
+  if (img) img.src = url;
+}
+
+function toggleCustomLimitInput(isCustom) {
+  const customInput = document.getElementById("inputCustomDailyLimit");
+  if (customInput) customInput.disabled = !isCustom;
+}
+
+function setPostingSpeed(speed) {
+  selectedPostingSpeed = speed;
+  const btnStd = document.getElementById("speedBtnStandard");
+  const btnCaut = document.getElementById("speedBtnCautious");
+  if (speed === "cautious") {
+    btnCaut.className = "p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer shadow-sm";
+    btnStd.className = "p-3 rounded-xl border border-slate-200 bg-slate-50 text-left transition cursor-pointer";
+  } else {
+    btnStd.className = "p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer";
+    btnCaut.className = "p-3 rounded-xl border border-slate-200 bg-slate-50 text-left transition cursor-pointer";
+  }
+}
+
+function setPrefEmoji(emoji) {
+  selectedPrefEmoji = emoji;
+  ['None', 'fire', 'bolt', 'star'].forEach(k => {
+    const btn = document.getElementById(`emojiBtn_${k}`);
+    if (btn) {
+      if ((k === 'None' && emoji === 'None') || (k !== 'None' && btn.innerText === emoji)) {
+        btn.className = "px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white font-bold cursor-pointer text-xs shadow-sm";
+      } else {
+        btn.className = "px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer text-xs";
+      }
+    }
+  });
+}
+
+function setPrefDistance(dist) {
+  selectedPrefDistance = dist;
+  const bMiles = document.getElementById("distBtnMiles");
+  const bKm = document.getElementById("distBtnKm");
+  if (dist === 'Miles') {
+    bMiles.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm";
+    bKm.className = "py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer";
+  } else {
+    bKm.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm";
+    bMiles.className = "py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer";
+  }
+}
+
+function setPrefLength(len) {
+  selectedPrefLength = len;
+  ['Short', 'Medium', 'Long'].forEach(l => {
+    const btn = document.getElementById(`lenBtn${l}`);
+    if (btn) {
+      if (l === len) {
+        btn.className = "py-2 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer font-bold shadow-sm";
+      } else {
+        btn.className = "py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 cursor-pointer";
+      }
+    }
+  });
+}
+
+async function saveAutoPostPreferences() {
+  if (!currentUser) return;
+  const isAllNew = document.querySelector('input[name="autoPostType"]:checked') !== null;
+  
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      auto_post_enabled: true,
+      auto_post_mode: isAllNew ? "all" : "filtered",
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+    closeModal('autoPostModal');
+    alert("✓ Auto-post new arrivals preferences saved and activated!");
+  } catch (err) {
+    alert("Could not save preferences: " + err.message);
+  }
+}
+
+async function saveAutoRepostPreferences() {
+  if (!currentUser) return;
+  const days = parseInt(document.getElementById("autoRepostFrequencySelect").value) || 3;
+
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      enable_auto_repost: true,
+      repost_frequency_days: days,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+    
+    const freqLabel = document.getElementById("repostFrequencyLabel");
+    if (freqLabel) freqLabel.innerText = `Every ${days} days`;
+
+    closeModal('autoRepostModal');
+    alert("✓ Auto delete & repost schedule saved successfully!");
+  } catch (err) {
+    alert("Could not save repost settings: " + err.message);
+  }
+}
+
+async function saveAutoPhotoEdits() {
+  if (!currentUser) return;
+  const aiMode = document.getElementById("selectAiBgMode").value;
+  const autoCrop = document.getElementById("chkAutoCrop").checked;
+
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      ai_background_mode: aiMode,
+      auto_crop_enabled: autoCrop,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+    
+    const statusLbl = document.getElementById("photoEditStatusLabel");
+    if (statusLbl) statusLbl.innerText = autoCrop ? "On - smart crop" : "Off";
+
+    closeModal('autoPhotoEditsModal');
+    alert("✓ Automatic photo edits settings saved successfully!");
+  } catch (err) {
+    alert("Could not save photo edit preferences: " + err.message);
+  }
+}
+
+async function savePostingSafetyPreferences() {
+  if (!currentUser) return;
+  const selectedRadio = document.querySelector('input[name="dailyLimitRadio"]:checked');
+  let limitValue = 10;
+  if (selectedRadio) {
+    if (selectedRadio.value === "custom") {
+      limitValue = parseInt(document.getElementById("inputCustomDailyLimit").value) || 20;
+    } else if (selectedRadio.value === "unlimited") {
+      limitValue = 999;
+    } else {
+      limitValue = parseInt(selectedRadio.value) || 10;
+    }
+  }
+
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      daily_post_limit: limitValue,
+      posting_speed: selectedPostingSpeed,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+
+    const limitLabel = document.getElementById("ribbonSafetyLimitLabel");
+    const safetyText = document.getElementById("safetyCounterText");
+    const safetyBar = document.getElementById("safetyCounterBar");
+    const displayCap = limitValue === 999 ? "Unlimited" : limitValue;
+
+    if (limitLabel) limitLabel.innerText = `1 of ${displayCap} today`;
+    if (safetyText) safetyText.innerText = `1/${displayCap}`;
+    if (safetyBar && limitValue !== 999) {
+      safetyBar.style.width = `${Math.min(100, (1 / limitValue) * 100)}%`;
+    } else if (safetyBar) {
+      safetyBar.style.width = "5%";
+    }
+
+    closeModal('postingSafetyModal');
+    alert("✓ Posting safety rules saved successfully!");
+  } catch (err) {
+    alert("Could not save safety preferences: " + err.message);
+  }
+}
+
+async function savePostingPreferences() {
+  if (!currentUser) return;
+  const vehicleType = document.getElementById("prefVehicleType").value;
+  const aiEnabled = document.getElementById("prefAiDescToggle").checked;
+  const aiPrompt = document.getElementById("prefAiPromptCustom").value.trim();
+
+  const cleanTitle = document.getElementById("prefCleanTitle").checked;
+  const newOrUsed = document.getElementById("prefNewOrUsed").checked;
+  const mileageTitle = document.getElementById("prefMileageTitle").checked;
+  const vinDesc = document.getElementById("prefVinDesc").checked;
+  const stockNum = document.getElementById("prefStockNum").checked;
+
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      vehicle_type: vehicleType,
+      pref_emoji: selectedPrefEmoji,
+      pref_distance: selectedPrefDistance,
+      pref_length: selectedPrefLength,
+      ai_desc_enabled: aiEnabled,
+      ai_prompt_custom: aiPrompt,
+      include_clean_title: cleanTitle,
+      include_new_used: newOrUsed,
+      include_mileage_title: mileageTitle,
+      include_vin: vinDesc,
+      include_stock: stockNum,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+
+    if (error) throw error;
+
+    closeModal('postingPreferencesModal');
+    alert("✓ Posting preferences saved successfully!");
+  } catch (err) {
+    alert("Could not save posting preferences: " + err.message);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async function() {
+
+  const { data: { session } } =
+      await supabaseClient.auth.getSession();
+
+  if (session && session.user) {
+
+    await initAppSession(
+        session.user
+    );
+
+    setInterval(() => {
+
+        updateLastSyncDisplay();
+
+    }, 10000);
+
+  } else {
+
+    document
+        .getElementById(
+            "authOverlay"
+        )
+        .classList.remove("hidden");
+
+  }
+
+});
+</script>
+<!-- ============================================================================== -->
+<!-- ======================= SECTION 5: JAVASCRIPT LOGIC END ====================== -->
+<!-- ============================================================================== -->
+</body>
+</html>

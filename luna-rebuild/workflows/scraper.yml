@@ -1,0 +1,40 @@
+name: AutoLaunch Scraper Runner
+
+on:
+  schedule:
+    # Full sync for ALL configured users, nightly at 06:00 UTC (2:00 AM EDT)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Optional: User UUID to crawl for just that user. Leave blank to crawl ALL users.'
+        required: false
+        default: ''
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright supabase
+          playwright install --with-deps chromium
+
+      - name: Run Scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # Blank on scheduled runs and on blank manual runs:
+          # scraper.py already treats an empty USER_ID as "scrape every
+          # user in user_settings" — the old workflow could never reach
+          # that branch because it forced one hardcoded UUID.
+          USER_ID: ${{ github.event.inputs.user_id }}
+        run: python scraper.py
