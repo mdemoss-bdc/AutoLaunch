@@ -4543,17 +4543,32 @@ async function getOrCreateCutout(photoUrl, onProgress) {
     if (typeof mod.removeBackground !== "function") {
       throw new Error("Background engine module loaded without removeBackground()");
     }
-    // Dealer CDNs usually send CORS headers, so fetch -> Blob first and hand
-    // the library raw bytes. If the fetch itself is blocked, fall back to
-    // handing the library the URL and letting it fetch its own way.
+    // Photo bytes, three ways: (1) direct fetch (works when the dealer's
+    // photo server sends CORS headers); (2) via our photo-proxy Edge
+    // Function (servers like mosescars.com send NO CORS headers, so the
+    // browser blocks direct reads — the proxy relays the bytes back with
+    // permission headers); (3) hand the library the URL as a last resort.
     let source = photoUrl;
+    let gotBlob = false;
     try {
       const resp = await fetch(photoUrl, { mode: "cors" });
       if (!resp.ok) throw new Error("photo fetch HTTP " + resp.status);
       source = await resp.blob();
+      gotBlob = true;
     } catch (fetchErr) {
-      console.warn("[PhotoEngine] fetch->blob failed for photo; passing URL to engine instead:", fetchErr);
-      source = photoUrl;
+      console.warn("[PhotoEngine] direct fetch blocked; trying photo proxy:", fetchErr);
+    }
+    if (!gotBlob) {
+      try {
+        const proxyUrl = SUPABASE_URL + "/functions/v1/photo-proxy?url=" + encodeURIComponent(photoUrl);
+        const resp = await fetch(proxyUrl, { headers: { apikey: SUPABASE_KEY } });
+        if (!resp.ok) throw new Error("photo proxy HTTP " + resp.status);
+        source = await resp.blob();
+        gotBlob = true;
+      } catch (proxyErr) {
+        console.warn("[PhotoEngine] photo proxy failed; passing URL to engine instead:", proxyErr);
+        source = photoUrl;
+      }
     }
     const cutoutBlob = await mod.removeBackground(source, {
       model: "medium",
