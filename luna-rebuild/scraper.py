@@ -890,6 +890,118 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
 # with the feed itself, so we skip stale marking and log instead.
 STALE_MAX_FRACTION = 0.5
 
+# Auto-delete on exit: second belt under the stale brake. Even on a
+# healthy crawl, one run never queues more than this many listing
+# removals for a user — anything beyond it waits for a later run.
+AUTO_DELETE_MAX_PER_RUN = 25
+
+
+def _auto_delete_on_exit_enabled(uid: str) -> bool:
+    """user_settings.auto_delete_on_exit_enabled; default ON.
+
+    Only an explicit False disables auto-delete (the app treats the
+    flag the same way). A missing column (the additive migration not
+    applied yet) or any read error leaves the feature ON.
+    """
+    try:
+        res = (
+            db.table("user_settings")
+            .select("auto_delete_on_exit_enabled")
+            .eq("user_id", uid)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if rows and rows[0].get("auto_delete_on_exit_enabled") is False:
+            return False
+    except Exception as e:
+        print(
+            f"[*] Auto-delete flag unreadable for user {uid[:8]} ({e}); "
+            "defaulting to ON."
+        )
+    return True
+
+
+def _queue_exit_listing_removals(uid: str, posted_rows: list) -> int:
+    """Queue ONE Facebook delete job per exited car whose listing is
+    still live (marketplace_posted_at set).
+
+    Writes the exact contract every other producer writes and the
+    extension claims: target_channel "facebook", action "delete",
+    status "pending", with year/make/model/stock + price stamped on
+    the row so the job stays executable now that the inventory row
+    is inactive. DEDUPE: a VIN with a pending/processing delete row
+    never gets a second one. Capped at AUTO_DELETE_MAX_PER_RUN.
+    Failures are logged and swallowed — queueing removals must never
+    break the scrape. Returns the number of rows queued.
+    """
+    if not posted_rows:
+        return 0
+    if not _auto_delete_on_exit_enabled(uid):
+        print(
+            f"[*] Auto-delete on exit is OFF for user {uid[:8]}: "
+            f"{len(posted_rows)} exited car(s) keep their live listings."
+        )
+        return 0
+    try:
+        existing = (
+            db.table("auto_posting_queue")
+            .select("vin")
+            .eq("user_id", uid)
+            .eq("action", "delete")
+            .in_("status", ["pending", "processing"])
+            .execute()
+        ).data or []
+        blocked = {r["vin"] for r in existing if r.get("vin")}
+    except Exception as e:
+        # Without the dedupe read we cannot prove a row is new —
+        # skip rather than risk a duplicate delete job.
+        print(f"[!] Auto-delete dedupe check failed for user {uid[:8]}: {e}")
+        return 0
+
+    rows = []
+    skipped_cap = 0
+    for r in posted_rows:
+        vin = r.get("vin")
+        if not vin or vin in blocked:
+            continue
+        if len(rows) >= AUTO_DELETE_MAX_PER_RUN:
+            skipped_cap += 1
+            continue
+        rows.append(
+            {
+                "user_id": uid,
+                "vin": vin,
+                "target_channel": "facebook",
+                "action": "delete",
+                "status": "pending",
+                "year": r.get("year"),
+                "make": r.get("make"),
+                "model": r.get("model"),
+                "stock_num": r.get("stock_number") or r.get("stock_num"),
+                "price": r.get("price"),
+            }
+        )
+        blocked.add(vin)
+    if skipped_cap:
+        print(
+            f"[!] Auto-delete cap for user {uid[:8]}: {skipped_cap} exited "
+            f"listing(s) NOT queued (max {AUTO_DELETE_MAX_PER_RUN} per run). "
+            "They will be queued by a later run."
+        )
+    if not rows:
+        return 0
+    try:
+        db.table("auto_posting_queue").insert(rows).execute()
+    except Exception as e:
+        print(f"[!] Auto-delete queue insert failed for user {uid[:8]}: {e}")
+        return 0
+    print(
+        f"[✓] Auto-delete for user {uid[:8]}: queued {len(rows)} listing "
+        "removal(s) for exited cars."
+    )
+    return len(rows)
+
 def mark_stale_inventory(uid: str, seen_vins: set) -> int:
     """Flag inventory that a fully successful crawl did not see.
 
@@ -906,28 +1018,32 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
     if not uid or not seen_vins:
         return 0
     try:
-        active_vins = []
+        active_rows = []
         page_size = 1000
         offset = 0
         while True:
             res = (
                 db.table("scraped_inventory")
-                .select("vin")
+                .select("vin, marketplace_posted_at, year, make, model, price, stock_number")
                 .eq("user_id", uid)
                 .eq("is_active", True)
                 .range(offset, offset + page_size - 1)
                 .execute()
             )
             rows = res.data or []
-            active_vins.extend(r["vin"] for r in rows if r.get("vin"))
+            active_rows.extend(r for r in rows if r.get("vin"))
             if len(rows) < page_size:
                 break
             offset += page_size
 
+        active_vins = [r["vin"] for r in active_rows]
         stale = [v for v in active_vins if v not in seen_vins]
         if not stale:
             return 0
 
+        # MASS-EXIT SAFETY BRAKE: past the threshold we mark NOTHING
+        # and queue NOTHING — a broken feed must never mass-delete
+        # live listings.
         if len(active_vins) >= 20 and len(stale) > STALE_MAX_FRACTION * len(active_vins):
             print(
                 f"[!] Stale pass skipped for user {uid[:8]}: {len(stale)} of "
@@ -944,6 +1060,17 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
             ).eq("user_id", uid).in_("vin", chunk).execute()
             flagged += len(chunk)
         print(f"[✓] Stale pass for user {uid[:8]}: flagged {flagged} unseen unit(s) inactive.")
+
+        # Auto-delete on exit: the cars that just left AND still have
+        # a live listing get one delete job each (deduped + capped
+        # inside the helper).
+        stale_set = set(stale)
+        posted_exits = [
+            r for r in active_rows
+            if r["vin"] in stale_set and r.get("marketplace_posted_at")
+        ]
+        if posted_exits:
+            _queue_exit_listing_removals(uid, posted_exits)
         return flagged
     except Exception as e:
         print(f"[!] Stale pass warning (non-fatal): {e}")

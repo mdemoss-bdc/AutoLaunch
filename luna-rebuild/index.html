@@ -1173,6 +1173,10 @@ body.dark-shell div.fixed.inset-0 :is(input, select, textarea):focus {
     <i class="fa-solid fa-link w-4 text-slate-400"></i>
     <span>Already on Facebook? Add its link</span>
   </button>
+  <button onclick="handleDropdownAction('mark_sold')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-handshake w-4 text-slate-400"></i>
+    <span>Mark as sold</span>
+  </button>
   <div class="h-px bg-slate-200 my-1"></div>
   <button onclick="handleDropdownAction('remove_inventory')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer text-left font-semibold">
     <i class="fa-regular fa-trash-can w-4 text-rose-500"></i>
@@ -1592,6 +1596,41 @@ body.dark-shell div.fixed.inset-0 :is(input, select, textarea):focus {
                 type="checkbox"
                 id="chkFullAuto"
                 onchange="toggleFullAutoSetting(this)"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
+        <!-- AUTO-DELETE ON EXIT (sold / leaves inventory) -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Auto-remove sold &amp; exited cars
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                On: when a posted car is marked sold, removed, or drops off your feed, its Facebook listing is queued for removal automatically. Off: listings stay up until you remove them by hand.
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkAutoDeleteOnExit"
+                checked
+                onchange="toggleAutoDeleteOnExitSetting(this)"
                 class="sr-only peer">
 
               <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
@@ -2496,6 +2535,11 @@ let activeMakeFilter = "";
 let activeModelFilter = "";
 let activeConditionFilter = "";
 let postingQueue = [];
+// Auto-delete on exit (sold / removed / stale): user_settings
+// .auto_delete_on_exit_enabled. DEFAULT ON — an absent column (the
+// additive migration not applied yet) means the feature is enabled;
+// only an explicit false turns it off.
+let autoDeleteOnExitEnabled = true;
 let userDailyPostLimit = 10;
 // Phase 6: per-channel syndication switches (persisted in user_settings
 // once the channels migration draft is applied — see
@@ -2732,6 +2776,12 @@ updateLastSyncDisplay();
       if (data.full_auto_enabled !== undefined && data.full_auto_enabled !== null) {
         const chkFullAuto = document.getElementById("chkFullAuto");
         if (chkFullAuto) chkFullAuto.checked = !!data.full_auto_enabled;
+      }
+      // Auto-delete on exit: absent column leaves the default (ON).
+      if (data.auto_delete_on_exit_enabled !== undefined && data.auto_delete_on_exit_enabled !== null) {
+        autoDeleteOnExitEnabled = !!data.auto_delete_on_exit_enabled;
+        const chkExit = document.getElementById("chkAutoDeleteOnExit");
+        if (chkExit) chkExit.checked = autoDeleteOnExitEnabled;
       }
       if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
@@ -3302,7 +3352,12 @@ function renderGridRows(cars) {
     const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
     const removalPending = postingQueue.some(i => i.vin === car.vin && i.action === 'delete' && (i.status === 'pending' || i.status === 'processing'));
 
-    const statusChip = isPosted && removalPending
+    const isSold = (car.status || "").toLowerCase() === "sold";
+    const statusChip = isSold && removalPending
+      ? '<span class="px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold shadow-sm">Sold — removal queued</span>'
+      : isSold
+      ? '<span class="px-3 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold shadow-sm">Sold</span>'
+      : isPosted && removalPending
       ? '<span class="px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold shadow-sm">Removal queued</span>'
       : isPosted
       ? '<span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold shadow-sm">Posted</span>'
@@ -3321,6 +3376,11 @@ function renderGridRows(cars) {
            : `<button data-action="remove-fb" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
                 <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
               </button>`}`
+      : isSold
+      ? `<span class="flex-1 px-4 py-2 rounded-xl bg-violet-50 text-violet-500 border border-violet-200 font-bold text-xs flex items-center justify-center gap-2 cursor-not-allowed">
+           <i class="fa-solid fa-handshake text-[10px]"></i>
+           <span>Sold</span>
+         </span>`
       : !hasRealPhoto(car)
       ? `<span class="flex-1 px-4 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 cursor-not-allowed">
            <i class="fa-solid fa-ban text-[10px]"></i>
@@ -3388,6 +3448,7 @@ function renderTableRows(cars) {
     const priceText = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
     const milesText = (car.mileage || 0).toLocaleString() + " mi";
     const isPosted = !!car.marketplace_posted_at;
+    const isSold = (car.status || "").toLowerCase() === "sold";
     const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
     // A queued/in-flight DELETE job (extension v2.1.4): the listing is
     // still live until the helper verifies it gone, so the truthful
@@ -3443,7 +3504,19 @@ ${car.location_name ? `
       <td class="py-4 px-4">
 
   ${
-    isPosted && removalPending
+    isSold && removalPending
+      ? `
+        <span class="px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold">
+          Sold — removal queued
+        </span>
+      `
+      : isSold
+      ? `
+        <span class="px-3 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold">
+          Sold
+        </span>
+      `
+      : isPosted && removalPending
       ? `
         <span class="px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold">
           Removal queued
@@ -3482,6 +3555,11 @@ ${car.location_name ? `
                  : `<button data-action="remove-fb" data-vin="${vinAttr}" id="btnRemoveFb_${vinAttr}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
                       <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
                     </button>`}`
+            : isSold
+            ? `<span class="px-4 py-2 rounded-xl bg-violet-50 text-violet-500 border border-violet-200 font-bold text-xs inline-flex items-center gap-2 cursor-not-allowed">
+                 <i class="fa-solid fa-handshake text-[10px]"></i>
+                 <span>Sold</span>
+               </span>`
             : !hasRealPhoto(car)
             ? `<span class="px-4 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 font-bold text-xs inline-flex items-center gap-2 cursor-not-allowed">
                  <i class="fa-solid fa-ban text-[10px]"></i>
@@ -3543,9 +3621,102 @@ function handleDropdownAction(action) {
 
   switch (action) {
     case "view_details": openVehicleDetailsModal(car); break;
+    case "mark_sold": markVehicleSold(car.vin); break;
     case "change_price": openChangePriceModal(car.vin, car.price || 0); break;
     case "add_link": openAddFbLinkModal(car.vin); break;
     case "remove_inventory": removeVehicleFromInventory(car.vin); break;
+  }
+}
+
+// AUTO-DELETE ON EXIT — shared producer for listing-removal jobs.
+// Every trigger that takes a live listing down (the Remove button,
+// Mark as sold, Remove from inventory, and the scraper's stale pass
+// server-side) writes the SAME delete-job contract the extension
+// claims: target_channel "facebook", action "delete", status
+// "pending", with the car's year/make/model/stock + price stamped on
+// the row so the job stays executable even after the inventory row
+// is gone. DEDUPE: a VIN that already has a pending/processing
+// delete row never gets a second one.
+// Returns "queued" | "already". Throws on a failed insert.
+async function queueListingRemoval(car) {
+  const vin = car.vin;
+  const alreadyQueued = postingQueue.some(i =>
+    i.vin === vin && i.action === 'delete' &&
+    (i.status === 'pending' || i.status === 'processing'));
+  if (alreadyQueued) return "already";
+
+  const { error } = await supabaseClient
+    .from("auto_posting_queue")
+    .insert({
+      user_id: currentUser.id,
+      vin: vin,
+      target_channel: "facebook",
+      action: "delete",
+      status: "pending",
+      year: car.year ?? null,
+      make: car.make || null,
+      model: car.model || null,
+      stock_num: car.stock_num || car.stock_number || null,
+      // The price rides the row on purpose: the helper's strict
+      // matcher needs year/make/model AND price.
+      price: car.price ?? null,
+      created_at: new Date().toISOString()
+    });
+  if (error) throw error;
+  return "queued";
+}
+
+// MARK SOLD (auto-delete trigger 1): flips the car's status to Sold
+// and, when the car has a live listing and auto-remove is on,
+// immediately queues its removal — the helper takes the listing
+// down and clears marketplace_posted_at when Facebook confirms.
+// Not posted -> just mark sold, no queue row.
+async function markVehicleSold(vin) {
+  if (!currentUser) return;
+  const car = rawInventory.find(c => c.vin === vin);
+  if (!car) return;
+  const title = `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}`.trim();
+
+  if ((car.status || "").toLowerCase() === "sold") {
+    alert(`"${title}" is already marked sold.`);
+    return;
+  }
+
+  const isPosted = !!car.marketplace_posted_at;
+  const note = !isPosted
+    ? ""
+    : autoDeleteOnExitEnabled
+    ? "\n\nIts Facebook listing will be queued for removal — the helper will take it down."
+    : "\n\nAuto-remove is off in Settings, so its Facebook listing will stay up until you remove it by hand.";
+  if (!confirm(`Mark "${title}" as sold?${note}`)) return;
+
+  try {
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({ status: "Sold" })
+      .eq("vin", vin)
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+    car.status = "Sold";
+
+    let removal = null;
+    if (isPosted && autoDeleteOnExitEnabled) {
+      removal = await queueListingRemoval(car);
+      await loadPostingQueue();
+    }
+    applyFilters();
+
+    if (!isPosted) {
+      alert(`"${title}" marked sold.`);
+    } else if (!autoDeleteOnExitEnabled) {
+      alert(`"${title}" marked sold.\n\nAuto-remove is off, so the Facebook listing was left up — use "Remove from Facebook" to take it down.`);
+    } else if (removal === "already") {
+      alert(`"${title}" marked sold.\n\nA listing removal was already queued — the helper will take the listing down. Watch the Post Queue.`);
+    } else {
+      alert(`"${title}" marked sold.\n\nListing removal queued — the helper will take the Facebook listing down. Watch the Post Queue.`);
+    }
+  } catch (err) {
+    alert("Could not mark the car sold: " + err.message);
   }
 }
 
@@ -3585,28 +3756,13 @@ async function removeVehicleFromFacebook(vin) {
   }
 
   try {
-    const { error } = await supabaseClient
-      .from("auto_posting_queue")
-      .insert({
-        user_id: currentUser.id,
-        vin: vin,
-        target_channel: "facebook",
-        action: "delete",
-        status: "pending",
-        year: car ? (car.year ?? null) : null,
-        make: car ? (car.make || null) : null,
-        model: car ? (car.model || null) : null,
-        stock_num: car ? (car.stock_num || car.stock_number || null) : null,
-        // The price rides the row on purpose: the helper's strict
-        // matcher needs year/make/model AND price, and a delete job
-        // must stay executable even after the car's inventory row is
-        // gone (e.g. a future sold/stale auto-removal rule creating
-        // these rows itself — the contract is producer-agnostic).
-        price: car ? (car.price ?? null) : null,
-        created_at: new Date().toISOString()
-      });
-
-    if (error) throw error;
+    // Same producer the sold/exit triggers use (identical row shape,
+    // same dedupe) — see queueListingRemoval.
+    const queued = await queueListingRemoval(car || { vin });
+    if (queued === "already") {
+      alert(`A removal for "${title}" is already queued — the helper will delete the listing shortly. You can watch it in the Post Queue.`);
+      return;
+    }
 
     await loadPostingQueue();
     applyFilters();
@@ -3745,7 +3901,11 @@ async function removeVehicleFromInventory(vin) {
   const car = rawInventory.find(c => c.vin === vin);
   const title = car ? `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}` : vin;
 
-  if (!confirm(`Are you sure you want to remove "${title}" from your active inventory?`)) return;
+  const wasPosted = !!(car && car.marketplace_posted_at);
+  const removalNote = wasPosted && autoDeleteOnExitEnabled
+    ? "\n\nIts Facebook listing will also be queued for removal — the helper will take it down."
+    : "";
+  if (!confirm(`Are you sure you want to remove "${title}" from your active inventory?${removalNote}`)) return;
 
   try {
     const { error } = await supabaseClient
@@ -3755,9 +3915,30 @@ async function removeVehicleFromInventory(vin) {
       .eq("user_id", currentUser.id);
     if (error) throw error;
 
+    // Auto-delete on exit (app side): a posted car leaving inventory
+    // takes its listing down with it. Same producer + dedupe as the
+    // Remove button and Mark as sold.
+    let removal = null;
+    if (wasPosted && autoDeleteOnExitEnabled) {
+      try {
+        removal = await queueListingRemoval(car);
+        await loadPostingQueue();
+      } catch (qErr) {
+        removal = "failed";
+      }
+    }
+
     rawInventory = rawInventory.filter(c => c.vin !== vin);
     applyFilters();
-    alert("✓ Vehicle removed from active showroom inventory.");
+    if (removal === "queued") {
+      alert("✓ Vehicle removed from active showroom inventory.\n\nListing removal queued — the helper will take the Facebook listing down. Watch the Post Queue.");
+    } else if (removal === "already") {
+      alert("✓ Vehicle removed from active showroom inventory.\n\nA listing removal was already queued — the helper will take the Facebook listing down.");
+    } else if (removal === "failed") {
+      alert("✓ Vehicle removed from active showroom inventory.\n\nBut its listing removal could not be queued, so the Facebook listing is still live — it will need to be deleted on Facebook.");
+    } else {
+      alert("✓ Vehicle removed from active showroom inventory.");
+    }
   } catch (err) {
     alert("Could not remove vehicle: " + err.message);
   }
@@ -5476,6 +5657,32 @@ async function toggleFullAutoSetting(el) {
   } catch (err) {
     el.checked = !value;
     alert("Could not save the Full Auto setting: " + (err.message || "Unknown error"));
+  }
+}
+
+// Auto-delete on exit: the switch writes
+// user_settings.auto_delete_on_exit_enabled immediately, like Full
+// Auto. The column is additive (see supabase/migrations_draft/
+// auto_delete_on_exit_DRAFT.sql); until it is applied the write
+// fails, the switch flips back, and the feature simply stays at its
+// default (on) — the triggers read autoDeleteOnExitEnabled, which
+// only an explicit saved false turns off.
+async function toggleAutoDeleteOnExitSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        auto_delete_on_exit_enabled: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    autoDeleteOnExitEnabled = value;
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the auto-remove setting: " + (err.message || "Unknown error"));
   }
 }
 
