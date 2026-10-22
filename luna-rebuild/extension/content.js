@@ -246,6 +246,29 @@
 //           price AND a photo <img>. Candidates inside a tagged
 //           card are excluded everywhere; the nearby-text climb
 //           also stops at any ancestor containing a tagged card.
+// 17. THE VIN HELP MODAL (v2.1.6 — the 2.1.5 live run's papercut):
+//     the first fully-clean run (everything set, both colors, the
+//     audience step walked with no phantom) still needed Matthew's
+//     hand: Facebook's "Finding your vehicle's VIN" informational
+//     modal — a heading, a paragraph about dashboards and door
+//     jambs, a blue Close button and an X — kept popping up over
+//     the form around the VIN step, and he closed it himself every
+//     time. On an unattended Full Auto run that modal would sit
+//     over the form intercepting clicks. Two changes: (a) the VIN
+//     fill now targets the input element itself, never the labelled
+//     wrapper that carries the ⓘ help icon — poking the container
+//     is what summons the modal; (b) a modal swatter —
+//     dismissInfoModals() — runs before each step's fill, right
+//     after the VIN fill + decoder settle, and once more before
+//     the final verify/Publish phase. It dismisses ONLY whitelisted
+//     informational dialogs: the text must match a known pattern
+//     ("Finding your vehicle…"), the dialog must contain no form
+//     inputs, and none of its buttons may be a primary or
+//     destructive action (Publish / Delete / Confirm / …). Unknown
+//     dialogs are never touched — the delete flow's confirmation
+//     dialog fails every gate and is left exactly alone. Each
+//     dismissal is recorded as a non-fatal step note
+//     (info_modal_dismissed, the heading in `detail`).
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -1324,6 +1347,92 @@
     } catch (e) { /* the console + job-payload records above still stand */ }
   }
 
+  // ---- informational-modal swatter (v2.1.6, header note 17) ----------
+  // Facebook hangs an informational modal off the VIN field —
+  // "Finding your vehicle's VIN": a heading, a paragraph about
+  // dashboards and door jambs, a blue Close button and an X. During
+  // the 2.1.5 live run it kept re-appearing over the form and
+  // Matthew closed it by hand each time; unattended, it would sit
+  // there intercepting clicks. WHITELIST DISCIPLINE: a dialog is
+  // dismissed ONLY when (1) it contains no form inputs, (2) none of
+  // its buttons is a primary/destructive action, and (3) its
+  // heading or opening text matches a known informational pattern.
+  // Unknown dialogs are never touched — the delete flow's
+  // confirmation dialog (a "Delete" button under a delete heading)
+  // fails every gate and is left exactly alone, as is any dialog
+  // either flow uses on purpose.
+  const INFO_MODAL_PATTERNS = [/finding your vehicle/];
+  const PROTECTED_DIALOG_ACTIONS = [
+    "publish", "delete", "confirm", "post", "submit", "save",
+    "continue", "next", "send", "mark as sold", "mark as pending"
+  ];
+  function dialogHeadingText(d) {
+    try {
+      const heads = Array.from(d.querySelectorAll(
+        "h1, h2, h3, h4, h5, h6, [role='heading']"));
+      for (const h of heads) {
+        const t = String(h.textContent || "").trim();
+        if (t) return t;
+      }
+    } catch (e) { /* fall through to the leading-text probe */ }
+    const lead = containerLeadingText(d);
+    if (lead) return lead;
+    return String((d && d.textContent) || "").trim().slice(0, 120);
+  }
+  // {heading, closeBtn} when d is a dismissible informational
+  // dialog, else null. Pure gate-keeping — the caller clicks.
+  function infoDialogDismissal(d) {
+    if (!d || !isVisibleEl(d)) return null;
+    // Gate 1: an informational dialog never asks for input.
+    try {
+      if (typeof d.querySelector === "function" &&
+          d.querySelector('input, textarea, select, [contenteditable="true"]')) {
+        return null;
+      }
+    } catch (e) { return null; }
+    const btns = Array.from(typeof d.querySelectorAll === "function"
+      ? d.querySelectorAll('[role="button"], button, a') : []);
+    // Gate 2: no primary/destructive action among its buttons.
+    const btnTexts = btns.map(b => normText(b.textContent));
+    if (btnTexts.some(t => PROTECTED_DIALOG_ACTIONS.some(p =>
+        t === p || t.startsWith(p + " ")))) return null;
+    // Gate 3: the whitelist itself — a known informational pattern
+    // in the heading or the dialog's opening text.
+    const heading = dialogHeadingText(d);
+    const opening = normText(String(d.textContent || "").slice(0, 200));
+    if (!INFO_MODAL_PATTERNS.some(re =>
+        re.test(normText(heading)) || re.test(opening))) return null;
+    // Dismissal control: the "Close" button first, the X (aria-label
+    // "Close") second — the two shapes the VIN modal ships.
+    const closeBtn = btns.find(b => normText(b.textContent) === "close") ||
+      btns.find(b => normText((typeof b.getAttribute === "function" &&
+        b.getAttribute("aria-label")) || "") === "close");
+    if (!closeBtn) return null;
+    return { heading, closeBtn };
+  }
+  async function dismissInfoModals() {
+    let dismissed = 0;
+    // A dismissed modal can be replaced by a sibling (Facebook
+    // stacks these), so re-scan a few times; the cap keeps a
+    // pathological page from looping the filler forever.
+    for (let round = 0; round < 3; round++) {
+      const dialogs = Array.from(document.querySelectorAll(
+        '[role="dialog"], [role="alertdialog"], [aria-modal="true"]'));
+      let target = null, info = null;
+      for (const d of dialogs) {
+        const r = infoDialogDismissal(d);
+        if (r) { target = d; info = r; break; }
+      }
+      if (!target) break;
+      realisticClick(info.closeBtn);
+      recordStepNote("InfoModal", "info_modal_dismissed",
+        info.heading, "", target);
+      dismissed++;
+      await sleep(500);
+    }
+    return dismissed;
+  }
+
   // ---- form map (v3.2): the never-empty-diagnostics companion -------
   // When a required field fails without ever being located, a bare
   // "not found" teaches nothing. The form map snapshots the first ~12
@@ -2028,6 +2137,12 @@
   // Everything here is presence-guarded: Facebook serves layout variants
   // and steps, so each filler only acts when its field is on this step.
   async function fillCurrentStepFields(isFirstStep) {
+    // Swat any informational modal Facebook hung over the form (the
+    // VIN help modal, v2.1.6 header note 17) BEFORE touching fields —
+    // it overlays the form and eats clicks. This runs ahead of the
+    // real-controls gate: an overlay matters even on a step with
+    // nothing to fill.
+    await dismissInfoModals();
     // A step with no real form control has nothing to fill (v2.1.5,
     // header note 16) — the audience step is the case that matters:
     // prose, checkboxes and the preview card, but no fields. Skip
@@ -2038,13 +2153,23 @@
     // to fire and settle, THEN overwrite with payload truth below.
     if (isFirstStep && car.vin && fieldPresent(["vin"])) {
       const vinField = findAnyField(["vin"]);
-      if (vinField && !valueMatches(extractValue(vinField), car.vin, "text")) {
-        if (vinField.tagName === "INPUT" || vinField.tagName === "TEXTAREA") {
-          nativeSetValue(vinField, String(car.vin));
-        }
+      // Fill the INPUT element itself, never the labelled wrapper
+      // around it: in this variant the wrapper carries the ⓘ help
+      // icon, and poking the container is what summons Facebook's
+      // "Finding your vehicle's VIN" modal (v2.1.6).
+      const vinInput = !vinField ? null
+        : (vinField.tagName === "INPUT" || vinField.tagName === "TEXTAREA")
+          ? vinField
+          : (typeof vinField.querySelector === "function"
+              ? vinField.querySelector("input, textarea") : null);
+      if (vinInput && !valueMatches(extractValue(vinInput), car.vin, "text")) {
+        nativeSetValue(vinInput, String(car.vin));
         say("VIN entered — waiting for Facebook's auto-fill to settle, then setting the real details…");
         await sleep(3000); // decoder settles inside this window
       }
+      // The modal typically appears as the decoder engages — clear
+      // it before the cascade below starts clicking (v2.1.6).
+      await dismissInfoModals();
     }
 
     // Vehicle type (step 1): Car/Truck for cars/SUVs/pickups.
@@ -2502,6 +2627,9 @@
     // Final verification pass — the LAST thing before confirm-watch, so
     // a mid-fill React re-render (photo attach, step change, VIN decode)
     // that wiped a field is caught here and repaired by the refill.
+    // One last modal swat first (v2.1.6): nothing informational may be
+    // sitting over the form when the verify/Publish phase begins.
+    await dismissInfoModals();
     await sleep(800);
     const finalSpec = requiredSpecForStep();
     const finalMissing = await verifyFieldsWithRefill(finalSpec);

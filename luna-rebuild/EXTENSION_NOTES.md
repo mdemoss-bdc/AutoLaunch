@@ -602,6 +602,58 @@ controls are listbox dropdown triggers — the v2.1.3 stub's step
 2 — must still count as a form step, so [aria-haspopup="listbox"]
 is a real control; plain [role="button"] is not.)
 
+## v2.1.6 — the VIN help-modal swatter (a papercut, closed)
+
+The 2.1.5 live run filled cleanly — no ghost — but one papercut
+remained: Facebook's "Finding your vehicle's VIN" informational
+modal (heading, a paragraph about dashboards and door jambs, a
+blue Close button and an X) kept popping up over the form around
+the VIN step, and Matthew had to keep clicking Close himself
+(his photo of the modal is the spec). On an unattended Full Auto
+run that modal would sit over the form intercepting clicks.
+Two changes, both in content.js (header note 17):
+
+1. **Stop summoning it.** The VIN fill now targets the input
+   element itself, never the labelled wrapper around it — in
+   this variant the wrapper carries the ⓘ help icon, and poking
+   the container is what opens the modal. If location returns a
+   wrapper, the fill descends to the input/textarea inside it.
+   The fill otherwise behaves exactly as before (native setter,
+   decoder settle wait, payload overwrites the decoder's guess).
+2. **Swat it on sight.** `dismissInfoModals()` runs before each
+   step's fill, immediately after the VIN fill + settle wait
+   (when the modal appears), and once more before the final
+   verify/Publish phase. Dismissal is by whitelist, default-deny:
+   a dialog qualifies ONLY when it contains no form inputs, none
+   of its buttons is a primary/destructive action (Publish /
+   Delete / Confirm / Post / Submit / Save / Continue / Next /
+   Send / Mark as sold / Mark as pending), AND its heading or
+   opening text matches a known informational pattern (today:
+   "Finding your vehicle…"). It is then closed via its "Close"
+   button, falling back to the X (aria-label "Close"), and each
+   dismissal is recorded as a non-fatal step note
+   (info_modal_dismissed, the heading in `detail`). Unknown
+   dialogs are never touched — the delete flow's confirmation
+   dialog fails every gate and is left exactly alone, and the
+   delete routine never calls the swatter at all.
+
+Verification (node, DOM-stub harnesses): new v36 harness — an
+FB-variant details step where focusing/filling the VIN input
+raises the modal and advancing to step 2 raises it again, with
+a delete-confirmation dialog and an unknown Close-button dialog
+sitting in the document the whole time: 19/19 — both modal
+instances dismissed (two info_modal_dismissed notes, heading in
+detail), the delete-confirm dialog never clicked and still
+present at the end, the unknown dialog left alone, and the run
+still completes the full fill + verify and publishes itself in
+Full Auto mode. Regressions: v2.1.5 harness 22/22, v2.1.4
+42/42, v2.1.3 50/50, v3.2 40/40 — 173 checks total, node
+--check clean. No dedicated live test is needed for this one:
+it proves itself on the next post run (a run with zero
+info_modal_dismissed notes where Matthew also never saw the
+modal is the other good outcome — it means the input narrowing
+stopped it appearing at all).
+
 ## How to test it (Matthew)
 
 1. In Chrome: chrome://extensions -> Developer mode ON -> Load unpacked ->
