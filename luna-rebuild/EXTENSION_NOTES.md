@@ -120,8 +120,42 @@ The repo-root extension/ is untouched.
 - CONFIRM MODE (default ON): fills everything, then stops. The human
   reviews and clicks Publish; the script watches up to 10 minutes for a
   real success state. Full-auto: set autolaunch_confirm_mode=false in the
-  extension's chrome.storage; then the script advances "Next" steps and
-  clicks Publish itself.
+  extension's chrome.storage; then the script clicks Publish itself.
+  BOTH modes now walk the form's steps with "Next" — advancing a step
+  is navigation, not publishing; confirm mode stops only at Publish.
+- MULTI-STEP FLOW + STEP-2 FIELDS: Facebook's vehicle form is stepped.
+  Step 1 carries VIN, vehicle type, photos, year/make/model, price and
+  a description; step 2 ("Vehicle appearance and features" / "Vehicle
+  details") carries body style, exterior/interior color, clean-title
+  checkbox, condition, fuel, transmission — and a SECOND description
+  box that starts EMPTY even though step 1's was filled. The filler is
+  presence-guarded per step and fills whichever fields the current step
+  shows, re-filling the description wherever it appears.
+- THE VIN TRAP: the VIN is filled FIRST, then the filler waits ~3s for
+  Facebook's VIN decoder auto-populate to settle, then overwrites
+  year/make/model (and everything else) with payload values. (Observed
+  live: the decoder rewrote a 2016 Hyundai Tucson as a 2020 Honda
+  Accord.) The final read-back compares DOM values against the payload,
+  so a decoder lie that survives refills fails the job honestly.
+- VERIFY-OR-REPORT: after filling, every REQUIRED field — Photos ≥1,
+  Year, Make, Model, Price, Description (at the final step) — is read
+  back from the DOM and compared to the payload (year by digits, price
+  by parsed amount, text by containment). A mismatch gets ONE re-fill
+  and a re-verify; the whole verification runs AGAIN as the last step
+  before confirm-watch, so a mid-fill React re-render that wiped a
+  field is caught and repaired. Only when everything verifies may the
+  banner say "Everything is filled in". Otherwise the banner names the
+  fields ("Stopped — could not fill: Price, Model.") and the job fails
+  with reason fields_unfilled:<comma-list>. Step-2 extras (body style,
+  colors, condition, fuel, clean title) are best-effort and never
+  job-fatal. Clean title is checked only when the user's
+  include_clean_title preference (if it ever reaches the job payload)
+  or the payload itself says the title is clean; otherwise untouched.
+- PHOTOS UP TO 12: the filler uploads up to 12 photos (payload `photos`
+  array first-class), one at a time, assigning the cumulative file list
+  after each and watching preview thumbnails increment; a URL that
+  fails both fetch stages is skipped, not fatal. ≥1 attached preview
+  remains required.
 - POSTED only on detected success: navigation to a marketplace item /
   selling URL, or on-page text like "your listing is now live". Timeout
   or anything else = FAILED with the reason. There is no timer that
@@ -159,6 +193,27 @@ The repo-root extension/ is untouched.
   the extension at the same folder (Reload on its card; same folder =
   same extension ID), hard-refresh the app tab, re-queue the car (a
   FAILED row can be queued again).
+- 2026-10-22, second run (relay build): photos attached ✓, description
+  ✓, location ✓, transmission ✓ — but Year, Make, Model and Price were
+  left EMPTY (preview showed placeholder "Title"/"Price", Next stayed
+  disabled) while the banner falsely claimed "Everything is filled in".
+  Matthew's hand-exploration of the same form then mapped the current
+  multi-step variant (see Multi-step flow / VIN trap above) — including
+  the VIN decoder rewriting the car as a different year/make/model. The
+  verify-or-report + multi-step + VIN-safe build is the fix; it has NOT
+  yet had a live Facebook run. Its pure helpers were unit-exercised in
+  node against hand-built element stubs (29 checks), including a
+  VIN-corruption simulation (form pre-corrupted to 2020/Honda/Accord →
+  refill → read-back year equals the payload year) and the stubborn-
+  failure path producing reason fields_unfilled:Year,Price. Re-test:
+  overwrite the extension folder with the fresh copy at the SAME path,
+  Reload on the card, hard-refresh the app tab, re-queue the car. On
+  the Facebook tab expect: VIN + a short settle pause, photos, details
+  filled, the filler clicking Next ITSELF to step 2 (colors / condition
+  / description again), a final "this step verified ✓" banner, and
+  only then the amber "Everything is filled in. Review it, then click
+  Publish" banner — if anything can't be filled, the banner names it
+  and the queue row goes Failed instead of lying.
 
 ## Honest limits (untested overnight)
 
