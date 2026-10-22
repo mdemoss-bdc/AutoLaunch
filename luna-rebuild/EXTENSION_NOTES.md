@@ -23,7 +23,7 @@ The repo-root extension/ is untouched.
 
 ## What changed
 
-### manifest.json (v2.1.0)
+### manifest.json (v2.1.1)
 - Added "alarms" permission.
 - Added content script bridge.js on https://mdemoss-bdc.github.io/AutoLaunch/*
 - Added externally_connectable for https://mdemoss-bdc.github.io/*
@@ -86,8 +86,9 @@ The repo-root extension/ is untouched.
 - The worker NEVER marks posted. Only the content script's confirmed
   success can (via AUTOLAUNCH_JOB_POSTED). Failures are recorded
   (status=failed) with a reason kept in chrome.storage
-  (autolaunch_last_error / autolaunch_failure_log) because the queue table
-  has no reason column we can rely on.
+  (autolaunch_last_error / autolaunch_failure_log). Since v3.1 a
+  fields_unfilled failure ALSO writes its per-field diagnostics into
+  the queue row's error_message column (see DIAG-TO-DB below).
 - Queue rows whose inventory row has vanished are marked failed instead
   of pending forever.
 - PHOTO RELAY (fixes the first live test's only failure): the content
@@ -120,6 +121,22 @@ The repo-root extension/ is untouched.
   element snapshot (tag/type/role/aria-label/outerHTML head), the rungs
   attempted, the value read back, and any CDP attach error — so a field
   that defeats every fill technique leaves evidence, not a mystery.
+- DIAG-TO-DB (v3.1 — the run-4 evidence fix): the storage path above
+  failed live (run 4's log held only the two bare job entries), so the
+  diagnostics now ALSO ride the AUTOLAUNCH_JOB_FAILED message itself.
+  For a fields_unfilled failure the worker compacts them — per field:
+  tag, type, role, ariaLabel, outerHTML (≤160 chars), rungsAttempted,
+  readBack, cdpError; the whole string ≤3500 chars — into the queue
+  row's error_message in the same PATCH that marks it failed. Read the
+  evidence with a plain SELECT on auto_posting_queue; no console
+  archaeology. If the error_message write is rejected, the row still
+  ends failed (status-only PATCH); an auth failure keeps the
+  stash-and-replay behavior, diagnostics included. logFailure's
+  storage writes are serialized through a promise chain (concurrent
+  get-modify-write cycles from the diag + failure writes landing
+  together could overwrite each other). CDP attach refused with
+  "Another debugger is already attached" is retried ONCE after 3s —
+  the browser's exact reason is preserved in cdpError either way.
 
 ### content.js (rewritten)
 - React-safe fill: native prototype value setter + input/change events.
@@ -176,11 +193,22 @@ The repo-root extension/ is untouched.
   job-fatal. Clean title is checked only when the user's
   include_clean_title preference (if it ever reaches the job payload)
   or the payload itself says the title is clean; otherwise untouched.
-- PHOTOS UP TO 12: the filler uploads up to 12 photos (payload `photos`
-  array first-class), one at a time, assigning the cumulative file list
-  after each and watching preview thumbnails increment; a URL that
-  fails both fetch stages is skipped, not fatal. ≥1 attached preview
-  remains required.
+- PHOTOS UP TO 12, SINGLE-SHOT (v3.1): the filler uploads up to 12
+  photos (payload `photos` array first-class). Run 4 exposed a
+  multiplication bug in the old one-at-a-time flow: Facebook MERGES
+  every input.files assignment into its uploader's internal list, so
+  assigning a growing DataTransfer per photo re-added earlier photos
+  on every pass (1+2+…+12 ≈ 70 attachments). URLs are now deduped by
+  normalized key — the width parameter is ignored, so the same image
+  at width=500 (image_url) and width=1600 (photos[]) counts once and
+  the widest variant is kept — all bytes are fetched first (a URL that
+  fails both fetch stages is skipped, not fatal), and the finished set
+  is assigned to input.files EXACTLY ONCE. The preview-tile count
+  (distinct blob srcs) is verified afterwards: ≥1 real preview remains
+  required; more previews than were sent (merge leftovers) is a banner
+  warning, not a failure; past Facebook's 20-photo ceiling the filler
+  clicks the tiles' remove buttons to trim, or fails honestly with
+  photo_overflow.
 - ESCALATION LADDER (filler v3 — the third live test's fix): Year, Make,
   Model and Price are Facebook's stubborn fields — on the current form
   variant they render as plain inputs / a chevron dropdown, yet values
@@ -209,12 +237,17 @@ The repo-root extension/ is untouched.
   finishes/fails, and the infobar goes with it. If attach fails, the
   error is recorded and read-back still governs the outcome.
   Cooperative forms never leave rung 1 — no CDP, no infobar.
-- FIELD DIAGNOSTICS (filler v3): when a stubborn field exhausts the
-  ladder, the filler records — once per field per job — its tag, type,
-  role, aria-label and the first 200 chars of its outerHTML, the rungs
-  attempted, the value read back and any CDP error, both to the console
-  and (via AUTOLAUNCH_FIELD_DIAG) into autolaunch_failure_log in
-  chrome.storage. A fourth failure can no longer be blind.
+- FIELD DIAGNOSTICS (filler v3, hardened v3.1): when a stubborn field
+  exhausts the ladder, the filler records — once per field per job —
+  its tag, type, role, aria-label and the first 200 chars of its
+  outerHTML, the rungs attempted, the value read back and any CDP
+  error. Three records are kept: ONE JSON line on the page console
+  ("[AutoLaunch] field_diag {...}"), the AUTOLAUNCH_FIELD_DIAG message
+  into autolaunch_failure_log, and — the reliable channel since v3.1 —
+  the record rides the AUTOLAUNCH_JOB_FAILED message so the worker can
+  write it into the queue row's error_message (see DIAG-TO-DB under
+  background.js). Run 4 proved the storage-only path could silently
+  lose them; the database copy cannot.
 - POSTED only on detected success: navigation to a marketplace item /
   selling URL, or on-page text like "your listing is now live". Timeout
   or anything else = FAILED with the reason. There is no timer that
@@ -304,6 +337,42 @@ The repo-root extension/ is untouched.
   on its own when filling finishes. If a field still fails, its
   autolaunch_failure_log entry (field_diag:<Field>) now carries the
   element's outerHTML and the rungs attempted.
+- 2026-10-22, fourth run (escalation-ladder build, v2.1.0 — card
+  version verified on chrome://extensions): both attempts failed
+  honestly again, fields_unfilled:Year,Make,Model,Price — the ladder
+  did not crack the four fields either. Two NEW facts: (1) the
+  field_diag forensics NEVER appeared in autolaunch_failure_log
+  (Matthew pulled it from the worker console: exactly two bare
+  {at, queueId, reason} entries, no diag extras) — the evidence
+  channel itself was broken, so the failure stayed blind; (2) ~70
+  photos attached — Facebook's uploader merges every input.files
+  assignment, and the sequential cumulative assignment multiplied
+  them (compounded by w500/w1600 dedupe misses). The v3.1 build
+  (2.1.1) is the fix for both: single-shot photo assignment after
+  normalized dedupe, and diagnostics riding the JOB_FAILED message
+  into the queue row's error_message (plus a serialized storage log
+  and a one-time 3s retry when CDP attach is refused with "Another
+  debugger is already attached" — DevTools open on the Facebook tab
+  is the prime suspect for rung 3 never engaging). Unit-exercised in
+  node: photo dedupe (w500 vs w1600 → 1, widest kept, cap 12) and a
+  single-assignment attach against a mocked file input (exactly one
+  files assignment, overshoot = warning, overflow = photo_overflow or
+  trimmed to 20) — 14 checks; diag compaction (≤3500 chars, outerHTML
+  ≤160, cdpError carried) — within 28 pure checks; and a full worker
+  simulation with mocked chrome/fetch: a fields_unfilled JOB_FAILED
+  carrying four diag records produces exactly one queue PATCH whose
+  error_message contains the field_diag data for all four fields
+  including the cdpError string, four concurrent FIELD_DIAG writes
+  all survive in the log, and the CDP attach retry waits ~3s and
+  preserves the browser's exact refusal reason (20 checks). Re-test:
+  overwrite the extension folder with the fresh copy at the SAME path
+  (card must read version 2.1.1), Reload, hard-refresh the app tab,
+  re-queue — and do NOT open DevTools/F12 on the Facebook tab while
+  it runs: an attached DevTools is itself a debugger and blocks the
+  trusted-input rung (that may be exactly what run 4 measured). The
+  results — including the full per-field diagnostics on any failure —
+  land in the database (auto_posting_queue.error_message), where Luna
+  reads them directly.
 
 ## Honest limits (untested overnight)
 

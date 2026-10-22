@@ -54,6 +54,25 @@
 //     the content script's verify-or-report still decides the outcome.
 //     Field diagnostics (AUTOLAUNCH_FIELD_DIAG) ride the same path into
 //     autolaunch_failure_log when a field defeats every rung.
+// 10. DIAG-TO-DB (v3.1, fourth live test): run 4's installed build WAS
+//     2.1.0 (card verified) and both attempts failed honestly with
+//     fields_unfilled:Year,Make,Model,Price — but the field_diag
+//     forensics NEVER appeared in autolaunch_failure_log: Matthew pulled
+//     exactly two bare {at, queueId, reason} entries. The separate
+//     diag-message → storage path could not be trusted, so the records
+//     now ride the AUTOLAUNCH_JOB_FAILED message itself, and this
+//     worker compacts them into the queue row's error_message column
+//     in the same PATCH that marks the row failed (outerHTML ≤160
+//     chars per field, whole string ≤3500) — the evidence lives in the
+//     database, readable with a plain SELECT, no console archaeology.
+//     If the error_message write is rejected, the row still ends
+//     failed via a status-only PATCH. logFailure's storage writes are
+//     also serialized through a promise chain now: the old
+//     get-modify-write cycles from near-simultaneous callers (four
+//     field diags + the job failure) could overwrite each other. And a
+//     CDP attach refused with "Another debugger is already attached"
+//     is retried ONCE after 3s before the reason is recorded — a
+//     transient DevTools attach shouldn't cost the rung.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -320,8 +339,7 @@ async function fetchPhotoForContent(url) {
 // onDetach (tab closed, user cancels the infobar) cleans the map.
 const cdpSessions = new Map(); // tabId -> protocol version
 
-function cdpAttach(tabId) {
-  if (cdpSessions.has(tabId)) return Promise.resolve({ ok: true, already: true });
+function cdpAttachOnce(tabId) {
   return new Promise(resolve => {
     chrome.debugger.attach({ tabId }, "1.3", () => {
       const err = chrome.runtime.lastError;
@@ -333,6 +351,20 @@ function cdpAttach(tabId) {
       resolve({ ok: true });
     });
   });
+}
+
+async function cdpAttach(tabId) {
+  if (cdpSessions.has(tabId)) return { ok: true, already: true };
+  let res = await cdpAttachOnce(tabId);
+  // The classic refusal is the user having DevTools (or another
+  // debugger) on the same tab. That can be transient — retry ONCE
+  // after a pause before giving the rung up; the error string keeps
+  // the browser's exact reason either way (v3.1).
+  if (!res.ok && /another debugger is already attached/i.test(res.error || "")) {
+    await sleep(3000);
+    res = await cdpAttachOnce(tabId);
+  }
+  return res;
 }
 
 function cdpSendCommand(tabId, method, params) {
@@ -406,7 +438,18 @@ chrome.tabs.onRemoved.addListener(tabId => {
   cdpSessions.delete(tabId);
 });
 
-async function logFailure(queueId, reason, extra) {
+// Failure-log writes are serialized through this chain (v3.1): the
+// get-modify-write cycle is not atomic, and near-simultaneous callers
+// (four field diags landing alongside the job failure) could read the
+// same base log and overwrite each other's entries.
+let failureLogChain = Promise.resolve();
+function logFailure(queueId, reason, extra) {
+  const run = failureLogChain.then(() => logFailureNow(queueId, reason, extra));
+  failureLogChain = run.catch(() => {});
+  return run;
+}
+
+async function logFailureNow(queueId, reason, extra) {
   const { autolaunch_failure_log: log = [] } = await chrome.storage.local.get(["autolaunch_failure_log"]);
   const entry = Object.assign(
     { queueId, reason, at: new Date().toISOString() },
@@ -419,6 +462,44 @@ async function logFailure(queueId, reason, extra) {
   });
 }
 
+// [PURE-DIAG-BEGIN] — extracted and unit-exercised by the test harness;
+// keep free of chrome/fetch references.
+// Compact the content script's per-field forensic records into the
+// JSON string stored in the queue row's error_message (diag-to-DB,
+// v3.1): per field {field, tag, type, role, ariaLabel, outerHTML
+// (≤160 chars), rungsAttempted, readBack, cdpError}, the whole string
+// capped at 3500 chars — shed outerHTML first, then readBack, then
+// hard-truncate, so the field names + rungs + cdpError survive.
+function compactDiagError(diags) {
+  if (!Array.isArray(diags) || !diags.length) return null;
+  const fields = diags.map(d => {
+    const el = (d && d.element) || {};
+    return {
+      field: (d && d.field) || null,
+      tag: el.tag || null,
+      type: el.type || null,
+      role: el.role || null,
+      ariaLabel: el.ariaLabel || null,
+      outerHTML: el.outerHTML ? String(el.outerHTML).slice(0, 160) : null,
+      rungsAttempted: (d && Array.isArray(d.rungsAttempted)) ? d.rungsAttempted.slice() : [],
+      readBack: (d && d.readBack != null) ? String(d.readBack).slice(0, 120) : null,
+      cdpError: (d && d.cdpError) || null
+    };
+  });
+  let out = JSON.stringify({ field_diag: fields });
+  if (out.length > 3500) {
+    fields.forEach(f => { f.outerHTML = null; });
+    out = JSON.stringify({ field_diag: fields });
+  }
+  if (out.length > 3500) {
+    fields.forEach(f => { f.readBack = null; });
+    out = JSON.stringify({ field_diag: fields });
+  }
+  if (out.length > 3500) out = out.slice(0, 3500);
+  return out;
+}
+// [PURE-DIAG-END]
+
 // The DB writes that end a job, split out so a finish that collides with
 // a dead token can be stashed and replayed when a fresh token arrives
 // (see autolaunch_pending_finish below) instead of being lost.
@@ -430,7 +511,21 @@ async function applyPosted(queueId, vin, userId) {
   );
 }
 
-async function applyFailed(queueId) {
+async function applyFailed(queueId, errorMessage) {
+  if (errorMessage) {
+    try {
+      await sbPatch(`auto_posting_queue?id=eq.${queueId}`,
+        { status: "failed", error_message: errorMessage });
+      return;
+    } catch (err) {
+      // An auth failure would doom the retry too — rethrow so the
+      // caller stashes the finish for the next token. Any other
+      // rejection (e.g. the diagnostics write itself) must NOT cost
+      // the failure state: fall through to the status-only write.
+      if (err instanceof SbAuthError) throw err;
+      console.warn("[AutoLaunch] error_message write rejected; failing the row without diagnostics.");
+    }
+  }
   await sbPatch(`auto_posting_queue?id=eq.${queueId}`, { status: "failed" });
 }
 
@@ -442,7 +537,7 @@ async function flushPendingFinish() {
     if (pending.outcome === "posted") {
       await applyPosted(pending.queueId, pending.vin, pending.userId);
     } else {
-      await applyFailed(pending.queueId);
+      await applyFailed(pending.queueId, pending.errorMessage || null);
     }
     await chrome.storage.local.remove(["autolaunch_pending_finish"]);
     console.log("[AutoLaunch] Replayed a job finish that was waiting on a fresh session token.");
@@ -481,17 +576,25 @@ async function finishJobPosted(queueId, listingUrl) {
   console.log("[AutoLaunch] Posted confirmed for queue item", queueId, listingUrl || "");
 }
 
-async function finishJobFailed(queueId, reason) {
+async function finishJobFailed(queueId, reason, diags) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
   if (!job || job.queueId !== queueId) return;
+  // Diag-to-DB (v3.1): the content script's forensic records arrive in
+  // this message; for a fields_unfilled failure they are compacted
+  // into the row's error_message in the same write that fails it.
+  const errorMessage =
+    (typeof reason === "string" && reason.startsWith("fields_unfilled"))
+      ? compactDiagError(diags)
+      : null;
   try {
-    await applyFailed(queueId);
+    await applyFailed(queueId, errorMessage);
   } catch (err) {
     if (err instanceof SbAuthError) {
       // Same stash-and-replay as the posted path, so the row doesn't
-      // sit in "processing" forever behind a dead token.
+      // sit in "processing" forever behind a dead token. The compacted
+      // diagnostics ride the stash so the replay keeps them.
       await chrome.storage.local.set({
-        autolaunch_pending_finish: { outcome: "failed", queueId }
+        autolaunch_pending_finish: { outcome: "failed", queueId, errorMessage }
       });
     } else {
       throw err; // the finally below still logs + clears, as before
@@ -604,7 +707,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "AUTOLAUNCH_JOB_FAILED") {
-    finishJobFailed(message.queueId, message.reason)
+    finishJobFailed(message.queueId, message.reason, message.diags)
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;

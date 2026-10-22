@@ -71,6 +71,29 @@
 //     blind. While rung 3 is attached, Chrome shows a "…is debugging
 //     this browser" infobar; it disappears on detach, which happens
 //     when the fill sequence ends or the job finishes/fails.
+// 11. DIAG-TO-DB + SINGLE-SHOT PHOTOS (v3.1, fourth live test): run 4
+//     proved the installed build really was 2.1.0 (extensions card) and
+//     the honesty layer held — yet the field_diag records NEVER
+//     surfaced in autolaunch_failure_log where Matthew went to read
+//     them (two bare {at, queueId, reason} entries, no diag extras),
+//     so the failure stayed blind. The records now also ride the
+//     AUTOLAUNCH_JOB_FAILED message itself, and the worker writes them
+//     into the queue row's error_message column — evidence readable
+//     straight from the database, no console archaeology. Each record
+//     is also printed as ONE JSON line to this page's console:
+//     "[AutoLaunch] field_diag {...}". And the photo step had a
+//     multiplication bug: Facebook MERGES every input.files assignment
+//     into its uploader's internal list, and the old code assigned a
+//     GROWING DataTransfer once per photo — 1+2+…+12 ≈ 70 photos —
+//     compounded by dedupe treating the same image at width=500
+//     (image_url) and width=1600 (photos[]) as two different photos.
+//     Photos are now deduped by normalized URL (the width parameter is
+//     ignored; the widest variant wins), all bytes are fetched first,
+//     and the finished set is assigned EXACTLY ONCE. The preview count
+//     is verified afterwards: more previews than intended is a banner
+//     warning, not a failure; past Facebook's 20-photo ceiling the
+//     filler removes extras via the tiles' remove buttons, or fails
+//     honestly with photo_overflow.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -111,7 +134,15 @@
   const fail = async (bannerText, storedReason) => {
     await cdpDetach(); // a trusted-input session never outlives its job
     say("Stopped — " + bannerText + " This car was marked FAILED in your queue, not posted.", "#b91c1c");
-    await report("AUTOLAUNCH_JOB_FAILED", { reason: storedReason || bannerText });
+    // The per-field forensic records ride THIS message (v3.1): the
+    // worker writes them into the queue row's error_message, where
+    // they can be read from the database. jobDiags is declared with
+    // the ladder state below and filled by recordFieldDiagnostic —
+    // fail() only ever runs after those declarations execute.
+    await report("AUTOLAUNCH_JOB_FAILED", {
+      reason: storedReason || bannerText,
+      diags: jobDiags.slice()
+    });
   };
   const failUnfilled = async names => {
     await fail(
@@ -328,6 +359,7 @@
   // whether the forensic record for it has already been written.
   const fieldAttempts = {};   // name -> { rungs: [...], cdpError: null }
   const diagRecorded = new Set();
+  const jobDiags = [];        // forensic records, sent with JOB_FAILED (v3.1)
   let cdpAttached = false;
 
   function attemptsFor(name) {
@@ -551,12 +583,18 @@
       expected: String(field.expected),
       cdpError: att.cdpError || null
     };
-    console.warn("[AutoLaunch] Field could not be filled:", JSON.stringify(entry));
+    // Three records of the same evidence (v3.1): (1) ONE JSON line on
+    // this page's console, greppable as "field_diag"; (2) the job-level
+    // array that rides the AUTOLAUNCH_JOB_FAILED message into the
+    // queue row's error_message in the database — the channel that
+    // cannot be lost; (3) the storage-log message, kept as before.
+    console.log("[AutoLaunch] field_diag " + JSON.stringify(entry));
+    jobDiags.push(entry);
     try {
       chrome.runtime.sendMessage(
         { type: "AUTOLAUNCH_FIELD_DIAG", queueId, diag: entry },
         () => { void chrome.runtime.lastError; });
-    } catch (e) { /* the console record above still stands */ }
+    } catch (e) { /* the console + job-payload records above still stand */ }
   }
 
   // Climb the ladder for one stubborn field; true only when a READ-BACK
@@ -708,6 +746,46 @@
     return res.blob();
   }
 
+  // [PURE-PHOTOS-BEGIN] — extracted and unit-exercised by the test
+  // harness; keep these free of DOM/chrome references.
+  // The same dealer photo arrives at several sizes (image_url is the
+  // width=500 variant, photos[] entries are width=1600). The dedupe key
+  // therefore ignores the width parameter entirely: origin + pathname
+  // (+ any remaining query) identifies the photo; among variants of
+  // one photo the WIDEST wins (no width parameter = original = widest).
+  function photoUrlKey(u) {
+    try {
+      const url = new URL(u);
+      url.searchParams.delete("width");
+      const rest = url.searchParams.toString();
+      return url.origin + url.pathname + (rest ? "?" + rest : "");
+    } catch (e) {
+      return String(u).replace(/([?&])width=\d+/g, "$1").replace(/[?&]$/, "");
+    }
+  }
+  function photoUrlWidth(u) {
+    try {
+      const w = new URL(u).searchParams.get("width");
+      return w == null ? Infinity : (parseInt(w, 10) || 0);
+    } catch (e) {
+      const m = /[?&]width=(\d+)/.exec(String(u));
+      return m ? parseInt(m[1], 10) : Infinity;
+    }
+  }
+  function dedupePhotoUrls(urls, cap) {
+    const byKey = new Map(); // key -> best URL, in first-seen order
+    for (const u of urls) {
+      if (typeof u !== "string" || !u.startsWith("http")) continue;
+      const key = photoUrlKey(u);
+      const prev = byKey.get(key);
+      if (prev === undefined || photoUrlWidth(u) > photoUrlWidth(prev)) {
+        byKey.set(key, u);
+      }
+    }
+    return [...byKey.values()].slice(0, cap || 12);
+  }
+  // [PURE-PHOTOS-END]
+
   function photoUrls() {
     const urls = [];
     if (car.image_url) urls.push(car.image_url);
@@ -719,50 +797,102 @@
     if (Array.isArray(car.custom_photo_urls)) {
       car.custom_photo_urls.forEach(u => { if (typeof u === "string" && u.startsWith("http")) urls.push(u); });
     }
-    // Matthew's target: up to 12 photos per listing.
-    return [...new Set(urls)].slice(0, 12);
+    // Matthew's target: up to 12 photos per listing — counted AFTER
+    // normalization dedupe, so a photo at two sizes counts once (v3.1).
+    return dedupePhotoUrls(urls, 12);
   }
 
+  // Preview tiles = the distinct photo previews Facebook rendered.
+  // The same object URL is reused across a tile and the big preview,
+  // so count distinct srcs, not <img> elements.
   function photoPreviewCount() {
-    return document.querySelectorAll('img[src^="blob:"], img[src^="data:"]').length;
+    const srcs = new Set();
+    document.querySelectorAll('img[src^="blob:"], img[src^="data:"]')
+      .forEach(im => { if (im.src) srcs.add(im.src); });
+    return srcs.size;
+  }
+
+  // The remove (×) button of the LAST photo tile: a "remove"-labelled
+  // button sitting in a container that also holds a blob preview img.
+  function lastPhotoRemoveButton() {
+    const btns = Array.from(document.querySelectorAll('button, [role="button"]')).filter(b => {
+      const lab = (b.getAttribute("aria-label") || "").toLowerCase();
+      if (!lab.includes("remove")) return false;
+      let node = b;
+      for (let i = 0; i < 6 && node; i++) {
+        node = node.parentElement;
+        if (node && node.querySelector && node.querySelector('img[src^="blob:"]')) return true;
+      }
+      return false;
+    });
+    return btns[btns.length - 1] || null;
+  }
+
+  // Facebook caps vehicle listings at 20 photos. If its uploader merged
+  // in leftovers (a prior attempt in the same tab), trim back to the cap
+  // with the tiles' own remove buttons. False = could not get under it.
+  async function trimPhotoPreviews(max) {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      if (photoPreviewCount() <= max) return true;
+      const btn = lastPhotoRemoveButton();
+      if (!btn) return false;
+      realisticClick(btn);
+      await sleep(700);
+    }
+    return photoPreviewCount() <= max;
   }
 
   async function attachPhotos(urls) {
     const input = document.querySelector('input[type="file"][accept*="image"], input[type="file"]');
     if (!input) return { ok: false, reason: "photo_input_not_found" };
     const before = photoPreviewCount();
-    const dt = new DataTransfer();
-    let added = 0;
-    // Sequential, one at a time: assign the cumulative file list after
-    // each photo and watch the preview count, so one dead URL costs one
-    // skip — not the whole upload — and progress is actually observed.
+    // Fetch EVERY photo first (relay → photo-proxy per URL; a URL dead
+    // both ways costs one skip, exactly as before). A direct fetch of
+    // the dealer URL from this page is CORS-blocked by design of the
+    // photo servers — never add one back here.
+    const files = [];
     for (const url of urls) {
       let blob;
-      try {
-        // Relay → photo-proxy (fetchPhotoBlob). A direct fetch of the
-        // dealer URL from this page is CORS-blocked by design of the
-        // photo servers — never add one back here.
-        blob = await fetchPhotoBlob(url);
-      } catch (e) { continue; } // this URL is dead both ways — next photo
-      const name = (url.split("/").pop() || `photo-${added}.jpg`).split("?")[0];
-      dt.items.add(new File([blob], name, { type: blob.type || "image/jpeg" }));
-      added++;
-      const previewsBeforeAdd = photoPreviewCount();
-      input.files = dt.files;
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      for (let i = 0; i < 4; i++) {
-        await sleep(700);
-        if (photoPreviewCount() > previewsBeforeAdd) break;
-      }
+      try { blob = await fetchPhotoBlob(url); } catch (e) { continue; }
+      const name = (url.split("/").pop() || `photo-${files.length}.jpg`).split("?")[0];
+      files.push(new File([blob], name, { type: blob.type || "image/jpeg" }));
     }
-    if (!added) return { ok: false, reason: "photo_download_failed" };
-    // Verify at least one preview actually appeared — the old code
-    // checked this too; a listing with zero visible photos is a failure.
-    for (let i = 0; i < 10; i++) {
-      if (photoPreviewCount() > before) return { ok: true, count: added };
-      await sleep(1000);
+    if (!files.length) return { ok: false, reason: "photo_download_failed" };
+    // Assign the finished set EXACTLY ONCE (v3.1): Facebook MERGES
+    // every input.files assignment into its uploader's internal list,
+    // so the old per-photo cumulative assignment re-added earlier
+    // photos on every pass (1+2+…+12 ≈ 70 attachments in run 4).
+    const dt = new DataTransfer();
+    files.forEach(f => dt.items.add(f));
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    // Verify via preview tiles: wait for the count to show up and
+    // settle (two equal reads in a row), capped at ~16s.
+    let count = before, stableReads = 0;
+    for (let i = 0; i < 20; i++) {
+      await sleep(800);
+      const now = photoPreviewCount();
+      if (now === count && now > before) { stableReads++; if (stableReads >= 2) break; }
+      else stableReads = 0;
+      count = now;
+      if (count - before >= files.length && i >= 2) break;
     }
-    return { ok: false, reason: "photo_preview_never_appeared" };
+    const attached = count - before;
+    if (attached <= 0) return { ok: false, reason: "photo_preview_never_appeared" };
+    if (count > 20) {
+      // Over Facebook's hard ceiling — trim, or fail honestly.
+      const trimmed = await trimPhotoPreviews(20);
+      count = photoPreviewCount();
+      if (!trimmed || count > 20) return { ok: false, reason: "photo_overflow" };
+    }
+    const result = { ok: true, count: Math.max(attached, 0) };
+    if (attached > files.length) {
+      // Facebook kept extras (merge leftovers) but we are within its
+      // limits — a warning for the banner, not a failure.
+      result.warning = "photo_overshoot:" + attached + "_of_" + files.length;
+      result.shownCount = count;
+    }
+    return result;
   }
 
   function publishButton() {
@@ -1061,6 +1191,13 @@
         return;
       }
       photoOk = true;
+      if (res.warning) {
+        // Soft warning only (v3.1): Facebook is showing more previews
+        // than we sent (its uploader merged leftovers), still within
+        // its 20-photo limit — say so, then carry on.
+        say(`Photos attached — Facebook is showing ${res.shownCount || res.count} (some duplicates from its uploader). Continuing…`);
+        await sleep(2000);
+      }
       await humanPause();
     }
 
