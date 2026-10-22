@@ -1497,24 +1497,10 @@ body {
     </div>
 
     <p class="text-xs text-slate-600 leading-relaxed">
-      ALL new arrivals from your website get queued automatically — no review before they post. Save a filter with Auto-post on to limit which ones.
+      Every new arrival from your website gets queued automatically — no review before they post. That's the whole idea: every car, in front of buyers, fast.
     </p>
 
     <div class="space-y-4 text-xs">
-      <div>
-        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">What should it post?</label>
-        <div class="space-y-2">
-          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-blue-600 cursor-pointer">
-            <input type="radio" name="autoPostType" checked class="text-blue-600">
-            <span class="font-bold text-slate-900">All new cars</span>
-          </label>
-          <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <input type="radio" name="autoPostType" class="text-blue-600">
-            <span class="text-slate-700">Only cars in these saved filters</span>
-          </label>
-        </div>
-      </div>
-
       <div>
         <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Only post cars with at least</label>
         <div class="grid grid-cols-4 gap-2 text-center font-bold">
@@ -4672,7 +4658,7 @@ const GUIDES = {
     what: "When a vehicle first shows up in your website feed, AutoLaunch queues it for posting automatically — no picking cars one by one. Queued cars go to Facebook Marketplace, plus Instagram, TikTok or your Facebook Page if you have switched those channels on.",
     steps: [
       "Flip the switch on this card — or open the card and press Done, because saving turns it on.",
-      "Choose 'All new cars', or limit it to saved filters.",
+      "Every new arrival is queued — Auto-post covers all new cars.",
       "Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.",
       "Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels."
     ],
@@ -4829,9 +4815,7 @@ function renderRibbonStatuses() {
   if (apLbl) {
     apLbl.innerText = !arrivalsOn
       ? "Off"
-      : ribbonState.autoPostMode === "filtered"
-        ? "On — saved filters only"
-        : "On — all new arrivals";
+      : "On — all new arrivals";
   }
 
   const rpLbl = document.getElementById("repostFrequencyLabel");
@@ -5863,13 +5847,14 @@ function setMinPhotos(n) {
 
 async function saveAutoPostPreferences() {
   if (!currentUser) return;
-  const isAllNew = document.querySelector('input[name="autoPostType"]:checked') !== null;
-
+  // One honest mode: auto-post queues ALL new arrivals. (Saved-filter
+  // presets are a roadmap item — they return as saved filter-bar presets
+  // if dealers ask for subset posting.)
   try {
     const { error } = await supabaseClient.from("user_settings").upsert({
       user_id: currentUser.id,
       auto_post_enabled: true,
-      auto_post_mode: isAllNew ? "all" : "filtered",
+      auto_post_mode: "all",
       updated_at: new Date().toISOString()
     }, { onConflict: "user_id" });
 
@@ -5877,7 +5862,7 @@ async function saveAutoPostPreferences() {
 
     // This save switches auto-post ON in the database — the ribbon switch,
     // the Settings switch and the status line must say the same thing.
-    ribbonState.autoPostMode = isAllNew ? "all" : "filtered";
+    ribbonState.autoPostMode = "all";
     const ribbonArrivals = document.getElementById("chkRibbonArrivals");
     if (ribbonArrivals) ribbonArrivals.checked = true;
     const settingsAutoPost = document.getElementById("chkSettingsAutoPost");
