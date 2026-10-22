@@ -1248,6 +1248,46 @@ body {
 
         </div>
 
+        <!-- LOCATION GROUPS CARD -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <h3 class="font-bold text-lg mb-2">
+            Location Groups
+          </h3>
+
+          <p class="text-xs text-slate-400 mb-5">
+            Two stores in the same building? Merge their location names into one. Cars keep their original location in the data — a group only changes what's shown on the car cards and how the Location filter works.
+          </p>
+
+          <div id="locationGroupsList" class="space-y-3 mb-6"></div>
+
+          <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            New group name
+          </label>
+
+          <input
+            type="text"
+            id="newLocationGroupName"
+            placeholder="e.g. Moses Honda &amp; VW"
+            class="w-full border border-slate-300 rounded-xl px-4 py-3 mb-4">
+
+          <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Locations to merge
+          </label>
+
+          <div id="locationGroupMembers" class="space-y-2 mb-2"></div>
+
+          <p class="text-xs text-slate-400 mb-4">
+            This list comes from your synced inventory and grows as more inventory syncs. Locations already in a group can't be picked again.
+          </p>
+
+          <button type="button" onclick="createLocationGroup()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl px-4 py-3 cursor-pointer">
+            Create group
+          </button>
+
+        </div>
+
       </div><!-- /settingsPanelDealership -->
 
       <div id="settingsPanelAutomation" class="space-y-6 hidden">
@@ -2044,6 +2084,125 @@ let currentStore = {
 };
 
 let rawInventory = [];
+
+// ---------- Location groups (merge co-located stores) ----------
+// Raw location_name values from the scraper are never modified; groups are
+// a display/filter layer saved on user_settings.location_groups as
+// [{ name, members: [rawName, ...] }].
+let locationGroups = [];
+
+function displayLocation(rawName) {
+  if (!rawName) return rawName;
+  for (const g of locationGroups) {
+    if (g && Array.isArray(g.members) && g.members.includes(rawName)) return g.name;
+  }
+  return rawName;
+}
+
+function rawLocationsForDisplay(displayName) {
+  for (const g of locationGroups) {
+    if (g && g.name === displayName) return (g.members || []).slice();
+  }
+  return [displayName];
+}
+
+function rawLocationNames() {
+  return [...new Set(rawInventory.map(c => c.location_name).filter(Boolean))].sort();
+}
+
+function groupNameForRaw(rawName) {
+  for (const g of locationGroups) {
+    if (g && Array.isArray(g.members) && g.members.includes(rawName)) return g.name;
+  }
+  return null;
+}
+
+async function persistLocationGroups() {
+  if (!currentUser) return;
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      location_groups: locationGroups,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+    if (error) console.warn("Location groups not persisted yet:", error.message);
+  } catch (e) { /* non-fatal: groups still apply for this session */ }
+}
+
+function renderLocationGroupsSettings() {
+  const listEl = document.getElementById("locationGroupsList");
+  const membersEl = document.getElementById("locationGroupMembers");
+  if (!listEl || !membersEl) return;
+
+  // Preserve in-progress checklist ticks across re-renders.
+  const ticked = new Set(
+    [...membersEl.querySelectorAll("input[type=checkbox]:checked")].map(i => i.value)
+  );
+
+  if (!locationGroups.length) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">No location groups yet. Create one below to merge stores that share a building.</p>';
+  } else {
+    listEl.innerHTML = locationGroups.map((g, idx) => `
+      <div class="flex items-start justify-between gap-3 border border-slate-200 rounded-xl px-4 py-3 bg-slate-50">
+        <div class="min-w-0">
+          <div class="text-sm font-bold text-slate-900">${escapeHtml(g.name || "")}</div>
+          <div class="flex flex-wrap gap-1.5 mt-1.5">
+            ${(g.members || []).map(m => `<span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(m)}</span>`).join("")}
+          </div>
+        </div>
+        <button type="button" onclick="deleteLocationGroup(${idx})" class="shrink-0 text-xs font-semibold text-rose-600 hover:text-rose-800 border border-rose-200 hover:bg-rose-50 rounded-lg px-2.5 py-1.5 cursor-pointer">Delete</button>
+      </div>`).join("");
+  }
+
+  const raws = rawLocationNames();
+  if (!raws.length) {
+    membersEl.innerHTML = '<p class="text-xs text-slate-400">No locations yet — this list fills in from your synced inventory and grows as more inventory syncs.</p>';
+  } else {
+    membersEl.innerHTML = raws.map(raw => {
+      const owner = groupNameForRaw(raw);
+      const disabled = !!owner;
+      const checked = !disabled && ticked.has(raw) ? "checked" : "";
+      return `
+      <label class="flex items-center gap-2.5 border border-slate-200 rounded-xl px-3 py-2 ${disabled ? "opacity-50 bg-slate-50" : "cursor-pointer hover:bg-slate-50"}">
+        <input type="checkbox" class="location-group-member rounded text-blue-600 border-slate-300 w-4 h-4 cursor-pointer" value="${escapeHtml(raw)}" ${disabled ? "disabled" : ""} ${checked}>
+        <span class="text-xs font-semibold text-slate-700">${escapeHtml(raw)}</span>
+        ${disabled ? `<span class="text-[10px] text-slate-400 ml-auto">in &ldquo;${escapeHtml(owner)}&rdquo;</span>` : ""}
+      </label>`;
+    }).join("");
+  }
+}
+
+async function createLocationGroup() {
+  const nameEl = document.getElementById("newLocationGroupName");
+  const name = nameEl ? nameEl.value.trim() : "";
+  const members = [...document.querySelectorAll(".location-group-member:checked")].map(i => i.value);
+  if (!name) { alert("Give the group a name first (e.g. \"Moses Honda & VW\")."); return; }
+  if (locationGroups.some(g => (g.name || "").toLowerCase() === name.toLowerCase())) {
+    alert("A group with that name already exists.");
+    return;
+  }
+  if (members.length < 2) { alert("Pick at least two locations to merge."); return; }
+  const taken = members.filter(m => groupNameForRaw(m));
+  if (taken.length) { alert("Already grouped: " + taken.join(", ")); return; }
+  locationGroups.push({ name, members });
+  await persistLocationGroups();
+  if (nameEl) nameEl.value = "";
+  renderLocationGroupsSettings();
+  populateFilterDropdowns();
+  applyFilters();
+}
+
+async function deleteLocationGroup(idx) {
+  const g = locationGroups[idx];
+  if (!g) return;
+  if (!confirm(`Remove the "${g.name}" group? Its locations go back to showing separately.`)) return;
+  locationGroups.splice(idx, 1);
+  await persistLocationGroups();
+  renderLocationGroupsSettings();
+  populateFilterDropdowns();
+  applyFilters();
+}
+
 let activeLocationFilter = "";
 let activeYearFilter = "";
 let activeMakeFilter = "";
@@ -2277,6 +2436,10 @@ updateLastSyncDisplay();
         if (aiSel) aiSel.value = data.ai_background_mode;
       }
 
+      // Location groups: restore the merge layer before inventory renders.
+      locationGroups = Array.isArray(data.location_groups) ? data.location_groups : [];
+      renderLocationGroupsSettings();
+
       // Photo pipeline v1.1: branding frame + custom background restore.
       // Runs BEFORE the ai_background_choice restore below so the custom
       // tile carries its URL when the selection ring is matched.
@@ -2479,6 +2642,7 @@ async function fetchLiveInventory(isManual) {
 
     rawInventory = allCars.filter(c => c.is_active !== false);
     populateFilterDropdowns();
+    renderLocationGroupsSettings();
     const postedCount = rawInventory.filter(c => c.marketplace_posted_at).length;
     const unpostedCount = rawInventory.length - postedCount;
     
@@ -2535,7 +2699,7 @@ function populateFilterDropdowns() {
 
     const locations = [...new Set(
         rawInventory
-            .map(c => c.location_name)
+            .map(c => displayLocation(c.location_name))
             .filter(Boolean)
     )].sort();
 
@@ -2646,7 +2810,7 @@ const filterMileageRange =
 
     if (
         filterLocation &&
-        car.location_name !== filterLocation
+        displayLocation(car.location_name) !== filterLocation
     ) return false;
     if (
         filterYear &&
@@ -2817,7 +2981,7 @@ function renderGridRows(cars) {
           <strong class="text-sm font-bold text-slate-950 block leading-tight">${escapeHtml(car.year || '')} ${escapeHtml(car.make || '')} ${escapeHtml(car.model || '')}</strong>
         </div>
         <div class="text-[11px] text-slate-500 mt-1">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')} &bull; VIN: ${escapeHtml(car.vin || 'N/A')}</div>
-        ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(car.location_name)}</span></div>` : ''}
+        ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(displayLocation(car.location_name))}</span></div>` : ''}
         <div class="flex items-baseline gap-2.5 pt-2">
           <span class="text-sm font-bold text-blue-600">${priceText}</span>
           <span class="text-[11px] text-slate-500">${milesText}</span>
@@ -2889,7 +3053,7 @@ function renderTableRows(cars) {
 ${car.location_name ? `
 <div class="mt-1">
     <span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-        ${escapeHtml(car.location_name)}
+        ${escapeHtml(displayLocation(car.location_name))}
     </span>
 </div>
 ` : ''}
@@ -4280,7 +4444,7 @@ async function saveWishlistForm() {
   }
 }
 
-function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); }
+function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); renderLocationGroupsSettings(); }
 function renderUserId() { const el = document.getElementById("settingsUserId"); if (el) el.textContent = (currentUser && currentUser.id) ? currentUser.id : "—"; }
 async function copyUserId() {
   const id = (currentUser && currentUser.id) ? currentUser.id : "";
