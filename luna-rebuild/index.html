@@ -81,8 +81,14 @@ body {
 }
 
 .btn-gradient {
+  /* Theme-driven: the literal first declarations are the Midnight Blue
+     values (fallback); the token versions win wherever the theme tokens
+     exist (body.dark-shell always carries them, and Settings → Appearance
+     overrides them inline), so primary buttons wear the user's accent. */
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: linear-gradient(135deg, rgb(var(--btn-rgb, 37, 99, 235)), var(--d-electric-deep, #1d4ed8));
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 4px 12px rgba(var(--btn-rgb, 37, 99, 235), 0.25);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .btn-gradient:hover {
@@ -310,6 +316,56 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
+}
+
+/* ---- Interactive elements follow the theme accent ---------------------------
+   Buttons are tokenized in the base .btn-gradient rule above; this block
+   re-points every OTHER hard-coded blue interactive affordance at the same
+   tokens, GLOBALLY (not just :is(aside, main)) so the user's accent follows
+   them into the light modals too. Modal surfaces themselves stay light.
+   Midnight defaults make every value below identical to the old literals.
+   Specificity notes are per rule: each must beat the Tailwind utility it
+   overrides no matter where the CDN sheet lands in source order. */
+/* Toggle switches, ON state. Tailwind's generated rule is
+   .peer:checked ~ .peer-checked\:bg-blue-600 (0,3,0); the body.dark-shell
+   prefix makes this 0,4,1, and the selector mirrors the real DOM (the
+   .peer input and the track div are siblings inside the <label>), so the
+   peer mechanics are untouched. OFF track + white knob unchanged. */
+body.dark-shell .peer:checked ~ .peer-checked\:bg-blue-600 {
+  background-color: rgb(var(--btn-rgb));
+}
+/* Solid blue-600 fills: settings-tab + auth-tab active states, segmented
+   selected buttons (posting prefs / min-photos), Settings modal primary
+   buttons (Copy ID, Create group), queue badge, sidebar dots, safety
+   counter fill. Tailwind .bg-blue-600 is 0,1,0; this is 0,2,0. The active
+   filter pills keep their electric gradient (painted over this by the
+   higher-specificity #pill*.bg-blue-600 rule above). */
+body.dark-shell .bg-blue-600 { background-color: rgb(var(--btn-rgb)); }
+body.dark-shell .border-blue-600 { border-color: rgb(var(--btn-rgb)); }
+/* The two modal buttons that darken on hover (blue-700 = #1D4ED8, exactly
+   Midnight's --d-electric-deep). Tailwind hover utility is 0,2,0; 0,3,0. */
+body.dark-shell .hover\:bg-blue-700:hover { background-color: var(--d-electric-deep); }
+/* Queued-for-posting buttons (JS renderers emit .bg-indigo-600; these are
+   the ONLY .bg-indigo-600 elements in the app): flat deep accent, so Post
+   (gradient) vs Queued (flat, deeper) stay distinguishable in any theme. */
+body.dark-shell .bg-indigo-600 { background-color: var(--d-electric-deep); }
+/* Native checkboxes + radios (no forms plugin in this build, so the UA
+   paints them from accent-color): car select boxes, select-all, location
+   group checklist, safety-limit radios. The sr-only toggle inputs are
+   clipped invisible, so including them here is a no-op. */
+body.dark-shell input[type="checkbox"],
+body.dark-shell input[type="radio"] { accent-color: rgb(var(--accent-rgb)); }
+/* Text selection inside the themed shell (inputs/textareas stay selectable
+   even though body is select-none). Background only — the browser keeps
+   the foreground readable. */
+body.dark-shell ::selection { background-color: rgba(var(--accent-rgb), 0.32); }
+/* Focus rings inside modals (overlays are body-level div.fixed.inset-0;
+   their fields carry focus:ring-blue-600, a 0,2,0 utility setting
+   --tw-ring-color). Full-strength button color keeps Midnight pixel-exact
+   (#2563EB). The shell's own fields keep the softer glow ring from the
+   main-scoped rule above — this selector can't match inside <main>. */
+body.dark-shell div.fixed.inset-0 :is(input, select, textarea):focus {
+  --tw-ring-color: rgb(var(--btn-rgb));
 }
 </style>
 </head>

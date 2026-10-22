@@ -128,6 +128,21 @@ Scope note: themes recolor the shell + Inventory (the surfaces the dark
 template covers). Modals stay light and Get Started / Wishlist stay
 pinned until the rollout pass; they will consume the same tokens then.
 
+Interactive elements follow the accent everywhere, modals included
+(2026-10-22): the base `.btn-gradient` builds its gradient + shadow from
+`--btn-rgb` / `--d-electric-deep`, and a CSS block at the end of the
+dark-shell section re-points the remaining hard-coded blue affordances
+at the same tokens — toggle ON tracks (a `body.dark-shell`-prefixed
+mirror of Tailwind's peer-checked selector, 0,4,1 over its 0,3,0),
+`.bg-blue-600` / `.border-blue-600` solid fills (active tabs, segmented
+selected states, modal primary buttons, badges), `hover:bg-blue-700`
+(→ `--d-electric-deep`), the renderers' `.bg-indigo-600` queued state
+(flat deep accent, distinct from the Post gradient), native checkbox /
+radio `accent-color`, `::selection`, and focus rings inside modal
+overlays. Semantic status colors (emerald / amber / rose chips, the
+amber safety meter) deliberately stay fixed. Under Midnight Blue every
+one of these values equals the literal it replaced.
+
 ## Rollout notes (for the next pass)
 
 - `#getStartedPage` and `#wishlistPage` are temporarily pinned to the old light
