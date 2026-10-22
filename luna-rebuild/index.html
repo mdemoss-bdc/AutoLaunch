@@ -209,7 +209,7 @@ body {
         <span>Get Started</span>
         <span class="w-2 h-2 rounded-full bg-blue-600 shadow-sm shadow-blue-400 ml-auto"></span>
       </a>
-      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+      <a href="#" onclick="showInventoryPage(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <i class="fa-solid fa-chart-line w-4 text-cyan-600 text-xs"></i>
         <span>Dashboard</span>
       </a>
@@ -218,35 +218,35 @@ body {
     <!-- YOUR BUYERS -->
     <div class="space-y-0.5">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Your Buyers</div>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+      <a href="#" onclick="showEliteInfo('Inbox'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
           <i class="fa-regular fa-comment-dots w-4 text-blue-600 text-xs"></i>
           <span>Inbox</span>
         </div>
         <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-200">Elite</span>
       </a>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+      <a href="#" onclick="showWishlistPage(); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-user-group w-4 text-purple-600 text-xs"></i>
-          <span>Leads</span>
+          <i class="fa-solid fa-heart w-4 text-purple-600 text-xs"></i>
+          <span>Customer Wishlist</span>
         </div>
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-600 border border-purple-200">Elite</span>
+        <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full bg-rose-500 text-[10px] font-mono font-bold text-white">0</span>
       </a>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+      <a href="#" onclick="showEliteInfo('Calendar'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
           <i class="fa-regular fa-calendar w-4 text-emerald-600 text-xs"></i>
           <span>Calendar</span>
         </div>
         <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">Elite</span>
       </a>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+      <a href="#" onclick="showEliteInfo('AI Training'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
           <i class="fa-solid fa-wand-magic-sparkles w-4 text-pink-600 text-xs"></i>
           <span>AI Training</span>
         </div>
         <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pink-50 text-pink-600 border border-pink-200">Elite</span>
       </a>
-      <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+      <a href="#" onclick="showEliteInfo('Playground'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
           <i class="fa-solid fa-flask w-4 text-amber-600 text-xs"></i>
           <span>Playground</span>
@@ -258,7 +258,7 @@ body {
     <!-- YOUR CARS -->
     <div class="space-y-0.5">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Your Cars</div>
-      <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold nav-selected transition">
+      <a href="#" onclick="showInventoryPage(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold nav-selected transition cursor-pointer">
         <i class="fa-solid fa-car-side w-4 text-xs"></i>
         <span>Inventory</span>
       </a>
@@ -504,6 +504,51 @@ body {
 </div>
 
 <!-- ============================================================================= -->
+<!-- ======================= CUSTOMER WISHLIST PAGE ============================== -->
+<!-- ============================================================================= -->
+<div id="wishlistPage" class="hidden flex-1 overflow-y-auto p-8">
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 class="text-3xl font-black text-slate-900">Customer Wishlist</h1>
+        <p class="text-slate-500 mt-1">Tell AutoLaunch what your customers are hunting for — it watches every arrival on your lot and flags the matches.</p>
+      </div>
+      <div class="flex items-center gap-2.5">
+        <button onclick="checkWishlistMatchesNow()" class="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm">
+          <i class="fa-solid fa-magnifying-glass text-slate-500"></i>
+          <span>Check for matches now</span>
+        </button>
+        <button onclick="openWishlistForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+          <i class="fa-solid fa-plus text-[10px]"></i>
+          <span>Add Customer Want</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="wishlistStorageNotice" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed">
+      📱 <strong>Saved on this device for now.</strong> Your wishlist is stored in this browser until the wishlist table is enabled in Supabase (one step — applying <span class="font-mono">supabase/wishlist_migration_DRAFT.sql</span>). Nothing is lost; entries just won't sync to your other devices yet.
+    </div>
+
+    <p id="wishlistCheckResult" class="hidden text-sm font-semibold text-slate-700"></p>
+
+    <div id="wishlistList" class="space-y-5">
+      <p class="text-sm text-slate-400">Loading your wishlist…</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- Wishlist new-match toast -->
+<div id="wishlistToast" class="hidden fixed bottom-5 right-5 z-50 max-w-sm glass-card rounded-2xl border border-slate-200 bg-white shadow-2xl p-4">
+  <div class="flex items-start gap-3">
+    <span id="wishlistToastText" class="text-xs font-semibold text-slate-800 leading-relaxed flex-1"></span>
+    <button onclick="hideWishlistToast(); showWishlistPage();" class="shrink-0 px-3 py-1.5 rounded-lg btn-gradient text-white text-[11px] font-bold cursor-pointer">View</button>
+    <button onclick="hideWishlistToast()" class="shrink-0 text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+</div>
+
+<!-- ============================================================================= -->
 <!-- ======================= SECTION 3A: GET STARTED PAGE END ==================== -->
 <!-- ============================================================================= -->
   <main class="flex-1 min-w-0 overflow-y-auto px-8 py-6 space-y-5 h-screen">
@@ -529,6 +574,7 @@ body {
       <a href="#"
          id="dealerUrlDisplay"
          target="_blank"
+         onclick="return handleDealerUrlClick(event)"
          class="hover:underline text-blue-600 font-medium">
 
         www.dealershipinventory.com
@@ -598,18 +644,18 @@ body {
     
     <!-- 1. Automations -->
     <div onclick="openSettingsModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-blue-600 shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
-      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+      <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
           <i class="fa-solid fa-bolt text-blue-600 text-xs"></i> Automations
         </span>
-        <label class="relative inline-flex items-center cursor-pointer">
+        <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonAutoMain" onchange="toggleRibbonSetting('auto_main')" class="sr-only peer">
           <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
       <div>
         <p class="text-[10px] text-slate-500 leading-snug">Off - no auto-posting or price/sold updates</p>
-        <span class="text-[10px] text-blue-600 font-semibold pt-1 block">
+        <span class="text-[10px] text-blue-600 font-semibold pt-1 block" onclick="openSettingsModal()">
           Settings & how it works
         </span>
       </div>
@@ -617,18 +663,18 @@ body {
 
     <!-- 2. Auto-post new arrivals -->
     <div onclick="openAutoPostModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-purple-600 shadow-sm space-y-2 cursor-pointer transition hover:border-purple-300">
-      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+      <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
           Auto-post new arrivals <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
-        <label class="relative inline-flex items-center cursor-pointer">
+        <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonArrivals" onchange="toggleRibbonSetting('auto_arrivals')" class="sr-only peer">
           <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-purple-600"></div>
         </label>
       </div>
       <div>
         <p class="text-[10px] text-slate-500">Automations off</p>
-        <span class="text-[10px] text-purple-600 flex items-center gap-1 pt-1 font-semibold">
+        <span class="text-[10px] text-purple-600 flex items-center gap-1 pt-1 font-semibold" onclick="openAutoPostModal()">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </span>
       </div>
@@ -636,18 +682,18 @@ body {
 
     <!-- 3. Auto delete & repost -->
     <div onclick="openAutoRepostModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-emerald-600 shadow-sm space-y-2 cursor-pointer transition hover:border-emerald-300">
-      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+      <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
           Auto delete & repost <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
-        <label class="relative inline-flex items-center cursor-pointer">
+        <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonRepost" checked onchange="toggleRibbonSetting('auto_repost')" class="sr-only peer">
           <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
         </label>
       </div>
       <div>
         <p id="repostFrequencyLabel" class="text-[10px] text-slate-500">Every 3 days</p>
-        <span class="text-[10px] text-emerald-600 flex items-center gap-1 pt-1 font-semibold">
+        <span class="text-[10px] text-emerald-600 flex items-center gap-1 pt-1 font-semibold" onclick="openAutoRepostModal()">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </span>
       </div>
@@ -655,18 +701,18 @@ body {
 
     <!-- 4. Automatic photo edits -->
     <div onclick="openAutoPhotoEditsModal()" class="glass-card rounded-xl p-3.5 flex flex-col justify-between border-t-2 border-t-pink-600 shadow-sm space-y-2 cursor-pointer transition hover:border-pink-300">
-      <div class="flex items-start justify-between" onclick="event.stopPropagation()">
+      <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
           Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
-        <label class="relative inline-flex items-center cursor-pointer">
+        <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="chkRibbonPhotoCrop" checked onchange="toggleRibbonSetting('auto_crop')" class="sr-only peer">
           <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-pink-600"></div>
         </label>
       </div>
       <div>
         <p id="photoEditStatusLabel" class="text-[10px] text-slate-500">On - smart crop</p>
-        <span class="text-[10px] text-pink-600 flex items-center gap-1 pt-1 font-semibold">
+        <span class="text-[10px] text-pink-600 flex items-center gap-1 pt-1 font-semibold" onclick="openAutoPhotoEditsModal()">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </span>
       </div>
@@ -684,7 +730,7 @@ body {
         <div class="w-full bg-slate-200 rounded-full h-1 mt-1.5 mb-1.5">
           <div class="bg-amber-500 h-1 rounded-full w-[20%]"></div>
         </div>
-        <span class="text-[10px] text-amber-600 flex items-center gap-1 font-semibold">
+        <span class="text-[10px] text-amber-600 flex items-center gap-1 font-semibold" onclick="openPostingSafetyModal()">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </span>
       </div>
@@ -699,7 +745,7 @@ body {
       </div>
       <div>
         <p class="text-[10px] text-slate-500 truncate">Title, emoji, AI text</p>
-        <span class="text-[10px] text-cyan-600 flex items-center gap-1 pt-1 font-semibold">
+        <span class="text-[10px] text-cyan-600 flex items-center gap-1 pt-1 font-semibold" onclick="openPostingPreferencesModal()">
           <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
         </span>
       </div>
@@ -731,10 +777,10 @@ body {
       </div>
 
       <div class="flex items-center border border-slate-300 rounded-xl bg-white p-0.5 shadow-sm">
-        <button class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs">
+        <button id="viewBtnList" onclick="setViewMode('list')" title="List view" class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs cursor-pointer">
           <i class="fa-solid fa-list"></i>
         </button>
-        <button class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs">
+        <button id="viewBtnGrid" onclick="setViewMode('grid')" title="Grid view" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs cursor-pointer">
           <i class="fa-solid fa-table-cells-large"></i>
         </button>
       </div>
@@ -767,7 +813,7 @@ body {
   </div>
 
   <!-- Table View -->
-  <div class="glass-card rounded-2xl shadow-sm border border-slate-200 bg-white">
+  <div id="inventoryTableWrap" class="glass-card rounded-2xl shadow-sm border border-slate-200 bg-white">
     <div class="overflow-auto max-h-[70vh]">
       <table class="w-full text-left text-xs">
         <thead class="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px] bg-slate-50/80">
@@ -787,6 +833,9 @@ body {
       </table>
     </div>
   </div>
+
+  <!-- Grid View (Button Audit: view toggle) -->
+  <div id="inventoryGridView" class="hidden grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
 
 </main>
 <!-- ============================================================================== -->
@@ -816,6 +865,87 @@ body {
     <i class="fa-regular fa-trash-can w-4 text-rose-500"></i>
     <span>Remove from inventory</span>
   </button>
+</div>
+
+<!-- 1b. Elite Feature Info Modal (Button Audit: sidebar Elite items) -->
+<div id="eliteInfoModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-crown text-amber-500"></i>
+        <span id="eliteInfoFeatureName">Elite Feature</span>
+      </h3>
+      <button onclick="closeModal('eliteInfoModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+    <p id="eliteInfoDesc" class="text-xs text-slate-600 leading-relaxed"></p>
+    <p class="text-xs text-slate-600 leading-relaxed">
+      This is part of <strong class="text-slate-900">AutoLaunch Elite</strong> — it's on the roadmap and isn't available yet.
+      Your current tools (inventory, automatic posting and syndication) are unaffected. We'll let you know the moment Elite opens.
+    </p>
+    <button onclick="closeModal('eliteInfoModal')" class="w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Got it</button>
+  </div>
+</div>
+
+<!-- 1c. Customer Wishlist: Add/Edit Form Modal -->
+<div id="wishlistFormModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 id="wishlistFormTitle" class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-heart text-purple-600"></i> Add Customer Want
+      </h3>
+      <button onclick="closeModal('wishlistFormModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="col-span-2">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Customer name *</label>
+        <input type="text" id="wlName" placeholder="e.g. James R." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Phone</label>
+        <input type="tel" id="wlPhone" placeholder="(555) 123-4567" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Email</label>
+        <input type="email" id="wlEmail" placeholder="name@email.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Make</label>
+        <input type="text" id="wlMake" placeholder="e.g. Ford" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Model / keyword</label>
+        <input type="text" id="wlModel" placeholder="e.g. F-150" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Year from</label>
+        <input type="number" id="wlYearMin" placeholder="2018" min="1950" max="2100" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Year to</label>
+        <input type="number" id="wlYearMax" placeholder="2026" min="1950" max="2100" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Max price ($)</label>
+        <input type="number" id="wlMaxPrice" placeholder="45000" min="0" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Max mileage</label>
+        <input type="number" id="wlMaxMiles" placeholder="80000" min="0" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div class="col-span-2">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Notes</label>
+        <textarea id="wlNotes" rows="2" placeholder="e.g. Wants the V8, no red, ready to buy this month" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
+      </div>
+    </div>
+
+    <p class="text-[11px] text-slate-500">Only the name is required. Leave any "want" field blank and it matches anything.</p>
+
+    <div class="flex gap-2.5 pt-1">
+      <button onclick="saveWishlistForm()" class="flex-1 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Save Want</button>
+      <button onclick="closeModal('wishlistFormModal')" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <!-- 2. Change Price Dialog Modal -->
@@ -1307,7 +1437,7 @@ body {
       </button>
 
       <button
-        onclick="applyFilters()"
+        onclick="applyFilters(); closeModal('filtersModal')"
         class="px-6 py-2 rounded-xl btn-gradient text-white font-bold">
 
         Apply Filters
@@ -1365,10 +1495,10 @@ body {
       <div>
         <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Only post cars with at least</label>
         <div class="grid grid-cols-4 gap-2 text-center font-bold">
-          <button type="button" class="py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">1 photo</button>
-          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">3 photos</button>
-          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">5 photos</button>
-          <button type="button" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">10 photos</button>
+          <button type="button" data-min-photos="1" onclick="setMinPhotos(1)" class="py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">1 photo</button>
+          <button type="button" data-min-photos="3" onclick="setMinPhotos(3)" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">3 photos</button>
+          <button type="button" data-min-photos="5" onclick="setMinPhotos(5)" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">5 photos</button>
+          <button type="button" data-min-photos="10" onclick="setMinPhotos(10)" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">10 photos</button>
         </div>
         <p class="text-[11px] text-slate-500 mt-2">Logos and "photo coming soon" pictures don't count. A car still waiting for photos posts by itself once they're on your website.</p>
       </div>
@@ -1477,23 +1607,23 @@ body {
 
       <div class="space-y-3">
         <div class="flex items-center justify-between text-xs">
-          <span class="text-slate-500 font-semibold">Previewing on <strong class="text-slate-900">2018 Toyota Tacoma</strong></span>
-          <button class="text-blue-600 hover:underline text-[11px] font-medium cursor-pointer">Try another vehicle</button>
+          <span class="text-slate-500 font-semibold">Previewing on <strong id="previewVehicleName" class="text-slate-900">2018 Toyota Tacoma</strong></span>
+          <button onclick="cyclePreviewVehicle()" class="text-blue-600 hover:underline text-[11px] font-medium cursor-pointer">Try another vehicle</button>
         </div>
 
         <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200">
-          <button class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm">Background</button>
-          <button class="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition">Adjust crop</button>
+          <button id="photoTabBackground" onclick="switchPhotoEditTab('background')" class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm cursor-pointer">Background</button>
+          <button id="photoTabCrop" onclick="switchPhotoEditTab('crop')" class="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">Adjust crop</button>
         </div>
 
-        <div class="h-48 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
-          <img id="previewPhotoEditImg" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80" class="w-full h-full object-cover">
+        <div id="previewPhotoWrap" class="h-48 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
+          <img id="previewPhotoEditImg" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80" class="w-full h-full object-cover" draggable="false">
           <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/60 to-transparent p-2 text-center">
             <span class="text-[10px] text-white font-medium">Showroom Style Preview</span>
           </div>
         </div>
 
-        <div class="space-y-2 pt-1">
+        <div id="photoBgPanel" class="space-y-2 pt-1">
           <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Showroom Backgrounds</span>
           <div class="grid grid-cols-3 gap-2">
             <button onclick="setPreviewBg('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400')" class="p-1 rounded-xl border border-blue-600 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
@@ -1509,6 +1639,12 @@ body {
               <span class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Warm wood</span>
             </button>
           </div>
+        </div>
+
+        <div id="photoCropPanel" class="hidden space-y-2 pt-1">
+          <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Adjust Crop</span>
+          <p class="text-[11px] text-slate-500 leading-snug">Drag the photo above to choose which part stays in frame. When Auto-crop is on, future posts use exactly this crop.</p>
+          <button type="button" onclick="resetPhotoCrop()" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[11px] font-semibold cursor-pointer">Reset to center</button>
         </div>
       </div>
 
@@ -1818,7 +1954,12 @@ document.addEventListener("click", function (e) {
 let authMode = "signin";
 let currentUser = null;
 let activePillFilter = "ACTIVE";
+let inventoryViewMode = "list";
 let selectedPostingSpeed = "standard";
+let selectedMinPhotos = 1;
+let previewVehicleIndex = -1;
+let photoCropPos = { x: 50, y: 50 };
+let photoEditTab = "background";
 let selectedPrefEmoji = "None";
 let selectedPrefDistance = "Miles";
 let selectedPrefLength = "Medium";
@@ -2023,6 +2164,19 @@ updateLastSyncDisplay();
         if (ribbonCrop) ribbonCrop.checked = !!data.auto_crop_enabled;
       }
 
+      if (data.photo_crop_position) {
+        const parts = String(data.photo_crop_position).match(/(\d+)%\s+(\d+)%/);
+        if (parts) {
+          photoCropPos = { x: parseInt(parts[1], 10), y: parseInt(parts[2], 10) };
+          const pimg = document.getElementById("previewPhotoEditImg");
+          if (pimg) pimg.style.objectPosition = photoCropPos.x + "% " + photoCropPos.y + "%";
+        }
+      }
+      if (data.auto_crop_frequency) {
+        const freqSel = document.getElementById("selectAutoCropFreq");
+        if (freqSel) freqSel.value = data.auto_crop_frequency;
+      }
+
       // Phase 4: ribbon switches reflect the saved settings on load
       if (data.auto_post_enabled !== undefined && data.auto_post_enabled !== null) {
         const ribbonArrivals = document.getElementById("chkRibbonArrivals");
@@ -2034,6 +2188,7 @@ updateLastSyncDisplay();
         const ribbonRepost = document.getElementById("chkRibbonRepost");
         if (ribbonRepost) ribbonRepost.checked = !!data.enable_auto_repost;
       }
+      if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
 
       // Phase 6: channel switches (columns arrive with the channels
@@ -2237,6 +2392,7 @@ async function fetchLiveInventory(isManual) {
     document.getElementById("pillAllCount").innerText = rawInventory.length;
 
     applyFilters();
+    checkWishlistMatches(); // Customer Wishlist: flag new matches (badge + toast)
   } catch (err) {
     console.error("Fetch error:", err);
     tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
@@ -2489,9 +2645,106 @@ const isPosted = !!car.marketplace_posted_at;
 document.getElementById("showingCountBold").innerText = filtered.length;
 renderTableRows(filtered);
 }
+// Button Audit: list/grid view toggle. Only ONE view is rendered at a time
+// so .car-select-chk checkboxes always line up 1:1 (by DOM order) with
+// window.currentFilteredInventory — bulkQueueSelectedVehicles depends on it.
+function setViewMode(mode) {
+  inventoryViewMode = mode === "grid" ? "grid" : "list";
+  const on = "w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs cursor-pointer";
+  const off = "w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs cursor-pointer";
+  const listBtn = document.getElementById("viewBtnList");
+  const gridBtn = document.getElementById("viewBtnGrid");
+  if (listBtn) listBtn.className = inventoryViewMode === "list" ? on : off;
+  if (gridBtn) gridBtn.className = inventoryViewMode === "grid" ? on : off;
+  const wrap = document.getElementById("inventoryTableWrap");
+  const grid = document.getElementById("inventoryGridView");
+  if (wrap) wrap.classList.toggle("hidden", inventoryViewMode === "grid");
+  if (grid) grid.classList.toggle("hidden", inventoryViewMode !== "grid");
+  applyFilters();
+}
+
+function renderGridRows(cars) {
+  const grid = document.getElementById("inventoryGridView");
+  const tbody = document.getElementById("inventoryTableBody");
+  if (!grid) return;
+  if (tbody) tbody.innerHTML = ""; // keep checkbox indexing 1:1 with the grid
+
+  if (!cars.length) {
+    grid.innerHTML = '<div class="col-span-full py-16 text-center text-slate-400 text-xs">No vehicles match your search.</div>';
+    return;
+  }
+
+  let html = "";
+  cars.forEach(car => {
+    let photoUrl = car.image_url;
+    if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+    if (!photoUrl || photoUrl.includes('/static/') || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
+    photoUrl = escapeHtml(photoUrl);
+    const vinAttr = escapeHtml(car.vin || '');
+
+    const priceText = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
+    const milesText = (car.mileage || 0).toLocaleString() + " mi";
+    const isPosted = !!car.marketplace_posted_at;
+    const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
+
+    const statusChip = isPosted
+      ? '<span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold shadow-sm">Posted</span>'
+      : isQueued
+      ? '<span class="px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold shadow-sm">Queued</span>'
+      : '<span class="px-3 py-1 rounded-full bg-white/95 text-slate-700 border border-slate-200 text-xs font-semibold shadow-sm">Not Posted</span>';
+
+    const actions = isPosted
+      ? `<button data-action="change-price" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm">
+           <i class="fa-solid fa-tag text-slate-400 text-xs"></i> Change price
+         </button>
+         <button data-action="remove-fb" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
+           <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
+         </button>`
+      : `<button data-action="enqueue" data-vin="${vinAttr}" class="flex-1 px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
+           <i class="fa-solid fa-paper-plane text-[10px]"></i>
+           <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
+         </button>`;
+
+    html += `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+      <div class="relative">
+        <div data-action="details" data-vin="${vinAttr}" class="cursor-pointer">
+          <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-full h-44 object-cover">
+        </div>
+        <label class="absolute top-2 left-2 bg-white/95 rounded-lg px-1.5 py-1 shadow-sm cursor-pointer flex items-center">
+          <input type="checkbox" class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
+        </label>
+        <div class="absolute top-2 right-2">${statusChip}</div>
+      </div>
+      <div class="p-4 pb-2 flex-1">
+        <div data-action="details" data-vin="${vinAttr}" class="cursor-pointer">
+          <strong class="text-sm font-bold text-slate-950 block leading-tight">${escapeHtml(car.year || '')} ${escapeHtml(car.make || '')} ${escapeHtml(car.model || '')}</strong>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-1">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')} &bull; VIN: ${escapeHtml(car.vin || 'N/A')}</div>
+        ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(car.location_name)}</span></div>` : ''}
+        <div class="flex items-baseline gap-2.5 pt-2">
+          <span class="text-sm font-bold text-blue-600">${priceText}</span>
+          <span class="text-[11px] text-slate-500">${milesText}</span>
+        </div>
+      </div>
+      <div class="px-4 pb-4 pt-1 flex items-center gap-2">
+        ${actions}
+        <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+          <i class="fa-solid fa-ellipsis text-xs"></i>
+        </button>
+      </div>
+    </div>`;
+  });
+
+  grid.innerHTML = html;
+}
+
 function renderTableRows(cars) {
   const tbody = document.getElementById("inventoryTableBody");
   if (!tbody) return;
+
+  if (inventoryViewMode === "grid") { renderGridRows(cars); return; }
+  const gridEl = document.getElementById("inventoryGridView");
+  if (gridEl) gridEl.innerHTML = "";
 
   if (!cars.length) {
     tbody.innerHTML = '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">No vehicles match your search.</td></tr>';
@@ -3490,21 +3743,446 @@ function showGetStartedPage() {
     document.querySelector("main")
         .classList.add("hidden");
 
+    const wp = document.getElementById("wishlistPage");
+    if (wp) wp.classList.add("hidden");
+
     document.getElementById("getStartedPage")
         .classList.remove("hidden");
 
 }
+// Button Audit: the header dealer-site link points at "#" until settings
+// load assigns the real URL. If no inventory URL is configured yet, send
+// the user to Settings instead of a dead jump to the top of the page.
+function handleDealerUrlClick(event) {
+  if (currentStore && currentStore.usedUrl) return true;
+  if (event) event.preventDefault();
+  openSettingsModal();
+  return false;
+}
+
 function showInventoryPage() {
 
     document
         .getElementById("getStartedPage")
         .classList.add("hidden");
 
+    const wp = document.getElementById("wishlistPage");
+    if (wp) wp.classList.add("hidden");
+
     document
         .querySelector("main")
         .classList.remove("hidden");
 
 }
+// Button Audit: sidebar Elite items (Inbox / Calendar / AI Training /
+// Playground) are roadmap features. Give them an honest, polished response
+// instead of a dead click. (Leads is NOT here — Matthew replaced it with
+// the real Customer Wishlist feature, below.)
+const ELITE_FEATURE_INFO = {
+  "Inbox": "Every Marketplace conversation in one inbox — reply to buyers without opening Facebook.",
+  "Calendar": "Your posting schedule, reposts and follow-ups on one calendar.",
+  "AI Training": "Train the AI writer on your best listings so every description sounds like you wrote it.",
+  "Playground": "A safe sandbox to preview posts, photos and AI descriptions before they go live."
+};
+function showEliteInfo(feature) {
+  const nameEl = document.getElementById("eliteInfoFeatureName");
+  const descEl = document.getElementById("eliteInfoDesc");
+  if (nameEl) nameEl.innerText = feature;
+  if (descEl) descEl.innerText = ELITE_FEATURE_INFO[feature] || "";
+  document.getElementById("eliteInfoModal").classList.remove("hidden");
+}
+
+/* =====================================================================
+   Customer Wishlist (replaces the "Leads" placeholder — Matthew's spec)
+   Reps record what a customer is hunting for; the app matches that list
+   against loaded inventory (rawInventory) and flags NEW matches with a
+   sidebar badge + toast. Storage: Supabase table `customer_wishlist`
+   when it exists (see supabase/wishlist_migration_DRAFT.sql), otherwise
+   a localStorage fallback on this device with an honest notice — an
+   entry is never silently lost and a server save is never faked.
+   ===================================================================== */
+const WISHLIST_TABLE = "customer_wishlist";
+let wishlistEntries = [];
+let wishlistStorageMode = "server"; // flips to "local" if the table is missing
+let editingWishlistId = null;
+let wishlistToastTimer = null;
+
+function wishlistLocalKey() { return "autolaunch_wishlist_" + (currentUser ? currentUser.id : "anon"); }
+function wishlistSeenKey() { return "autolaunch_wishlist_seen_" + (currentUser ? currentUser.id : "anon"); }
+
+function loadLocalWishlist() {
+  try { return JSON.parse(localStorage.getItem(wishlistLocalKey())) || []; }
+  catch (e) { return []; }
+}
+function saveLocalWishlist() {
+  try { localStorage.setItem(wishlistLocalKey(), JSON.stringify(wishlistEntries)); }
+  catch (e) { console.warn("Could not persist local wishlist:", e); }
+}
+function getWishlistSeen() {
+  try { return JSON.parse(localStorage.getItem(wishlistSeenKey())) || {}; }
+  catch (e) { return {}; }
+}
+
+function isMissingTableError(err) {
+  if (!err) return false;
+  const msg = ((err.message || "") + " " + (err.code || "")).toLowerCase();
+  return err.code === "42P01" || msg.includes("42p01") || msg.includes("pgrst205") ||
+    msg.includes("does not exist") || msg.includes("could not find the table");
+}
+
+async function loadWishlist() {
+  if (!currentUser) { wishlistEntries = []; return; }
+  if (wishlistStorageMode === "local") { wishlistEntries = loadLocalWishlist(); return; }
+  try {
+    const { data, error } = await supabaseClient
+      .from(WISHLIST_TABLE)
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    wishlistEntries = data || [];
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      wishlistStorageMode = "local";
+      wishlistEntries = loadLocalWishlist();
+    } else {
+      console.warn("Wishlist load failed:", err);
+      wishlistEntries = loadLocalWishlist();
+    }
+  }
+}
+
+async function persistWishlistEntry(payload, id) {
+  if (wishlistStorageMode !== "local" && currentUser) {
+    try {
+      if (id && !String(id).startsWith("local-")) {
+        const { error } = await supabaseClient.from(WISHLIST_TABLE)
+          .update(payload).eq("id", id).eq("user_id", currentUser.id);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabaseClient.from(WISHLIST_TABLE)
+        .insert({ ...payload, user_id: currentUser.id });
+      if (error) throw error;
+      return;
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
+      wishlistStorageMode = "local"; // fall through to the local save below
+    }
+  }
+  if (id) {
+    const idx = wishlistEntries.findIndex(x => String(x.id) === String(id));
+    if (idx >= 0) wishlistEntries[idx] = { ...wishlistEntries[idx], ...payload };
+    else wishlistEntries.unshift({ id: "local-" + Date.now(), created_at: new Date().toISOString(), ...payload });
+  } else {
+    wishlistEntries.unshift({ id: "local-" + Date.now(), created_at: new Date().toISOString(), ...payload });
+  }
+  saveLocalWishlist();
+}
+
+async function deleteWishlistEntry(id) {
+  const entry = wishlistEntries.find(x => String(x.id) === String(id));
+  if (!entry) return;
+  if (!confirm(`Remove ${entry.customer_name}'s wishlist entry? This can't be undone.`)) return;
+  if (wishlistStorageMode !== "local" && !String(id).startsWith("local-")) {
+    const { error } = await supabaseClient.from(WISHLIST_TABLE)
+      .delete().eq("id", id).eq("user_id", currentUser.id);
+    if (error && !isMissingTableError(error)) { alert("Could not delete that entry: " + error.message); return; }
+    if (error) wishlistStorageMode = "local";
+  }
+  wishlistEntries = wishlistEntries.filter(x => String(x.id) !== String(id));
+  if (wishlistStorageMode === "local") saveLocalWishlist();
+  renderWishlist(null);
+}
+
+// Pure matcher. Rules: make keyword is a case-insensitive substring of the
+// car's make; model keyword is a substring of make+model+trim; year inside
+// [year_min, year_max] when set; price/mileage at or under the caps when
+// set; only active, not-Sold cars count.
+function matchWishlistEntry(entry, cars) {
+  if (!entry || !Array.isArray(cars)) return [];
+  const makeKw = (entry.make || "").trim().toLowerCase();
+  const modelKw = (entry.model || "").trim().toLowerCase();
+  return cars.filter(car => {
+    if (!car) return false;
+    if (car.is_active === false) return false;
+    if ((car.status || "").toLowerCase() === "sold") return false;
+    if (makeKw && !(car.make || "").toLowerCase().includes(makeKw)) return false;
+    if (modelKw) {
+      const hay = `${car.make || ""} ${car.model || ""} ${car.trim || ""}`.toLowerCase();
+      if (!hay.includes(modelKw)) return false;
+    }
+    const yr = parseInt(car.year, 10);
+    if (entry.year_min && (!yr || yr < Number(entry.year_min))) return false;
+    if (entry.year_max && (!yr || yr > Number(entry.year_max))) return false;
+    if (entry.max_price && car.price != null && car.price !== "" && Number(car.price) > Number(entry.max_price)) return false;
+    if (entry.max_miles && car.mileage != null && car.mileage !== "" && Number(car.mileage) > Number(entry.max_miles)) return false;
+    return true;
+  });
+}
+
+function describeWishlistWant(e) {
+  const parts = [];
+  if (e.year_min && e.year_max) parts.push(`${e.year_min}–${e.year_max}`);
+  else if (e.year_min) parts.push(`${e.year_min} or newer`);
+  else if (e.year_max) parts.push(`up to ${e.year_max}`);
+  const veh = [e.make, e.model].filter(Boolean).join(" ");
+  parts.push(veh || "Any vehicle");
+  if (e.max_price) parts.push("under $" + Number(e.max_price).toLocaleString());
+  if (e.max_miles) parts.push("under " + Number(e.max_miles).toLocaleString() + " mi");
+  return parts.join(" • ");
+}
+
+function computeFreshMatches() {
+  const seen = getWishlistSeen();
+  const fresh = {};
+  wishlistEntries.forEach(e => {
+    const seenSet = new Set(seen[e.id] || []);
+    fresh[e.id] = new Set(
+      matchWishlistEntry(e, rawInventory).map(c => c.vin).filter(v => v && !seenSet.has(v))
+    );
+  });
+  return fresh;
+}
+
+function markWishlistSeen() {
+  const seen = getWishlistSeen();
+  wishlistEntries.forEach(e => {
+    seen[e.id] = matchWishlistEntry(e, rawInventory).map(c => c.vin).filter(Boolean);
+  });
+  try { localStorage.setItem(wishlistSeenKey(), JSON.stringify(seen)); }
+  catch (e) { /* storage full/blocked — badge may re-flag, never fatal */ }
+}
+
+function updateWishlistBadge(n) {
+  const b = document.getElementById("wishlistMatchBadge");
+  if (!b) return;
+  b.innerText = n;
+  b.classList.toggle("hidden", !n);
+}
+
+function showWishlistToast(totalNew, example) {
+  const toast = document.getElementById("wishlistToast");
+  const text = document.getElementById("wishlistToastText");
+  if (!toast || !text) return;
+  let msg = `🎉 ${totalNew} new wishlist match${totalNew === 1 ? "" : "es"}`;
+  if (example && example.car) {
+    const c = example.car;
+    msg += ` — ${c.year || ""} ${c.make || ""} ${c.model || ""} for ${example.entry.customer_name}`;
+  }
+  text.innerText = msg;
+  toast.classList.remove("hidden");
+  if (wishlistToastTimer) clearTimeout(wishlistToastTimer);
+  wishlistToastTimer = setTimeout(hideWishlistToast, 10000);
+}
+function hideWishlistToast() {
+  const t = document.getElementById("wishlistToast");
+  if (t) t.classList.add("hidden");
+}
+
+// Background check: runs after inventory loads. Flags NEW matches with the
+// sidebar badge + toast, but does NOT mark them seen — that happens when
+// the user actually opens the Wishlist view.
+async function checkWishlistMatches() {
+  if (!currentUser) return;
+  try {
+    if (!wishlistEntries.length) await loadWishlist();
+    if (!wishlistEntries.length) { updateWishlistBadge(0); return; }
+    const seen = getWishlistSeen();
+    let totalNew = 0;
+    let firstExample = null;
+    wishlistEntries.forEach(e => {
+      const seenSet = new Set(seen[e.id] || []);
+      matchWishlistEntry(e, rawInventory).forEach(car => {
+        if (car.vin && !seenSet.has(car.vin)) {
+          totalNew++;
+          if (!firstExample) firstExample = { car, entry: e };
+        }
+      });
+    });
+    updateWishlistBadge(totalNew);
+    const page = document.getElementById("wishlistPage");
+    const viewOpen = page && !page.classList.contains("hidden");
+    if (totalNew > 0 && !viewOpen) showWishlistToast(totalNew, firstExample);
+  } catch (err) {
+    console.warn("Wishlist match check failed:", err);
+  }
+}
+
+async function checkWishlistMatchesNow() {
+  await loadWishlist();
+  const fresh = computeFreshMatches();
+  let totalNew = 0;
+  let totalMatches = 0;
+  wishlistEntries.forEach(e => {
+    totalMatches += matchWishlistEntry(e, rawInventory).length;
+    totalNew += fresh[e.id] ? fresh[e.id].size : 0;
+  });
+  renderWishlist(fresh);
+  markWishlistSeen();
+  updateWishlistBadge(0);
+  const el = document.getElementById("wishlistCheckResult");
+  if (el) {
+    el.classList.remove("hidden");
+    el.innerText = totalNew > 0
+      ? `🎉 ${totalNew} new match${totalNew === 1 ? "" : "es"} found — highlighted below.`
+      : `No new matches right now — ${totalMatches} car${totalMatches === 1 ? "" : "s"} on your lot already match${totalMatches === 1 ? "es" : ""} your wishlist.`;
+  }
+}
+
+async function showWishlistPage() {
+  document.querySelector("main").classList.add("hidden");
+  document.getElementById("getStartedPage").classList.add("hidden");
+  document.getElementById("wishlistPage").classList.remove("hidden");
+  await loadWishlist();
+  const fresh = computeFreshMatches();
+  renderWishlist(fresh);
+  markWishlistSeen();
+  updateWishlistBadge(0);
+}
+
+function renderWishlist(fresh) {
+  const list = document.getElementById("wishlistList");
+  if (!list) return;
+  const notice = document.getElementById("wishlistStorageNotice");
+  if (notice) notice.classList.toggle("hidden", wishlistStorageMode !== "local");
+
+  if (!wishlistEntries.length) {
+    list.innerHTML = `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-10 text-center space-y-3">
+      <i class="fa-solid fa-heart text-3xl text-purple-300"></i>
+      <p class="text-sm font-bold text-slate-900">No customer wants yet</p>
+      <p class="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">Add what a customer is hunting for and AutoLaunch will flag every car that lands on your lot matching it — no more trying to remember who wanted what.</p>
+      <button onclick="openWishlistForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Add your first Customer Want</button>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = wishlistEntries.map(entry => {
+    const matches = matchWishlistEntry(entry, rawInventory);
+    const freshSet = fresh && fresh[entry.id] ? fresh[entry.id] : new Set();
+    const contact = [entry.phone, entry.email].filter(Boolean).map(x => escapeHtml(x)).join(" • ");
+
+    const carsHtml = matches.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      ${matches.map(car => {
+        let photoUrl = car.image_url;
+        if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+        if (!photoUrl || photoUrl.includes('/static/') || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
+        photoUrl = escapeHtml(photoUrl);
+        const vinAttr = escapeHtml(car.vin || '');
+        const priceText = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
+        const milesText = (car.mileage || 0).toLocaleString() + " mi";
+        const isPosted = !!car.marketplace_posted_at;
+        const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
+        const actions = isPosted
+          ? `<button data-action="change-price" data-vin="${vinAttr}" class="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[11px] cursor-pointer">Change price</button>
+             <button data-action="remove-fb" data-vin="${vinAttr}" class="flex-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] border border-rose-200 cursor-pointer">Remove from Facebook</button>`
+          : `<button data-action="enqueue" data-vin="${vinAttr}" class="flex-1 px-2.5 py-1.5 rounded-lg ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-[11px] cursor-pointer">${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</button>`;
+        return `<div class="rounded-xl border border-slate-200 overflow-hidden bg-white">
+          <div class="relative">
+            <div data-action="details" data-vin="${vinAttr}" class="cursor-pointer">
+              <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-full h-28 object-cover">
+            </div>
+            ${freshSet.has(car.vin) ? '<span class="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black shadow">NEW</span>' : ''}
+          </div>
+          <div class="p-3 space-y-1">
+            <div data-action="details" data-vin="${vinAttr}" class="cursor-pointer">
+              <strong class="text-xs font-bold text-slate-950 block leading-tight">${escapeHtml(car.year || '')} ${escapeHtml(car.make || '')} ${escapeHtml(car.model || '')}</strong>
+            </div>
+            <div class="text-[10px] text-slate-500">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')}</div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs font-bold text-blue-600">${priceText}</span>
+              <span class="text-[10px] text-slate-500">${milesText}</span>
+            </div>
+            <div class="flex items-center gap-1.5 pt-1.5">${actions}</div>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>` : `<p class="text-xs text-slate-400">No matches on the lot right now — AutoLaunch keeps watching every sync.</p>`;
+
+    return `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+            ${escapeHtml(entry.customer_name || "Customer")}
+            <span class="px-2 py-0.5 rounded-full ${matches.length ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'} text-[10px] font-bold">${matches.length} match${matches.length === 1 ? "" : "es"}</span>
+          </h3>
+          ${contact ? `<p class="text-xs text-slate-500 mt-0.5">${contact}</p>` : ""}
+          <p class="text-xs text-slate-600 mt-1"><span class="font-semibold text-slate-900">Wants:</span> ${escapeHtml(describeWishlistWant(entry))}</p>
+          ${entry.notes ? `<p class="text-xs text-slate-500 mt-0.5 italic">"${escapeHtml(entry.notes)}"</p>` : ""}
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button data-wishlist-action="edit" data-wishlist-id="${escapeHtml(String(entry.id))}" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer">Edit</button>
+          <button data-wishlist-action="delete" data-wishlist-id="${escapeHtml(String(entry.id))}" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold cursor-pointer">Delete</button>
+        </div>
+      </div>
+      ${carsHtml}
+    </div>`;
+  }).join("");
+}
+
+// Edit/Delete buttons inside the wishlist (delegated, like row actions)
+document.addEventListener("click", function (e) {
+  const el = e.target && e.target.closest ? e.target.closest("[data-wishlist-action]") : null;
+  if (!el) return;
+  const id = el.getAttribute("data-wishlist-id");
+  const act = el.getAttribute("data-wishlist-action");
+  if (act === "edit") openWishlistForm(id);
+  else if (act === "delete") deleteWishlistEntry(id);
+});
+
+function openWishlistForm(entryId) {
+  editingWishlistId = entryId || null;
+  const e = entryId ? wishlistEntries.find(x => String(x.id) === String(entryId)) : null;
+  const title = document.getElementById("wishlistFormTitle");
+  if (title) title.innerHTML = `<i class="fa-solid fa-heart text-purple-600"></i> ${e ? "Edit Customer Want" : "Add Customer Want"}`;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : v; };
+  set("wlName", e ? e.customer_name : "");
+  set("wlPhone", e ? e.phone : "");
+  set("wlEmail", e ? e.email : "");
+  set("wlMake", e ? e.make : "");
+  set("wlModel", e ? e.model : "");
+  set("wlYearMin", e ? e.year_min : "");
+  set("wlYearMax", e ? e.year_max : "");
+  set("wlMaxPrice", e ? e.max_price : "");
+  set("wlMaxMiles", e ? e.max_miles : "");
+  set("wlNotes", e ? e.notes : "");
+  document.getElementById("wishlistFormModal").classList.remove("hidden");
+}
+
+async function saveWishlistForm() {
+  const name = document.getElementById("wlName").value.trim();
+  if (!name) { alert("Please add the customer's name — that's the one required field."); return; }
+  const numOrNull = (id) => {
+    const v = document.getElementById(id).value.trim();
+    if (!v) return null;
+    const n = parseInt(v.replace(/[^0-9]/g, ""), 10);
+    return isNaN(n) ? null : n;
+  };
+  const payload = {
+    customer_name: name,
+    phone: document.getElementById("wlPhone").value.trim() || null,
+    email: document.getElementById("wlEmail").value.trim() || null,
+    make: document.getElementById("wlMake").value.trim() || null,
+    model: document.getElementById("wlModel").value.trim() || null,
+    year_min: numOrNull("wlYearMin"),
+    year_max: numOrNull("wlYearMax"),
+    max_price: numOrNull("wlMaxPrice"),
+    max_miles: numOrNull("wlMaxMiles"),
+    notes: document.getElementById("wlNotes").value.trim() || null
+  };
+  try {
+    await persistWishlistEntry(payload, editingWishlistId);
+    closeModal('wishlistFormModal');
+    await loadWishlist();
+    const fresh = computeFreshMatches();
+    renderWishlist(fresh);
+    markWishlistSeen();
+    updateWishlistBadge(0);
+  } catch (err) {
+    alert("Could not save that wishlist entry: " + (err.message || err));
+  }
+}
+
 function openFiltersModal() {document.getElementById("filtersModal").classList.remove("hidden"); }
 function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); }
 // Luna: Settings left-menu tabs (Dealership / Facebook / Automation / AI Settings)
@@ -3733,6 +4411,82 @@ function setPreviewBg(url) {
   if (img) img.src = url;
 }
 
+// Button Audit: the photo-edits modal had three dead controls — "Try another
+// vehicle", and the Background / Adjust crop tabs. All three are wired now.
+function normalizePhotoUrl(url) {
+  let u = url;
+  if (u && u.startsWith('//')) u = 'https:' + u;
+  if (!u || u.includes('/static/') || !/^https?:\/\//i.test(u)) u = FALLBACK_IMAGE;
+  return u;
+}
+
+function cyclePreviewVehicle() {
+  const cars = (window.currentFilteredInventory && window.currentFilteredInventory.length)
+    ? window.currentFilteredInventory
+    : rawInventory;
+  if (!cars || !cars.length) {
+    alert("No vehicles loaded yet — refresh your inventory first, then try again.");
+    return;
+  }
+  previewVehicleIndex = (previewVehicleIndex + 1) % cars.length;
+  const car = cars[previewVehicleIndex];
+  const img = document.getElementById("previewPhotoEditImg");
+  if (img) img.src = normalizePhotoUrl(car.image_url);
+  const nameEl = document.getElementById("previewVehicleName");
+  if (nameEl) nameEl.innerText = (`${car.year || ''} ${car.make || ''} ${car.model || ''}`).trim() || "Vehicle";
+}
+
+function switchPhotoEditTab(tab) {
+  photoEditTab = tab === "crop" ? "crop" : "background";
+  const on = "px-3 py-1 rounded-lg bg-white text-slate-900 shadow-sm cursor-pointer";
+  const off = "px-3 py-1 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer";
+  const bgBtn = document.getElementById("photoTabBackground");
+  const cropBtn = document.getElementById("photoTabCrop");
+  if (bgBtn) bgBtn.className = photoEditTab === "background" ? on : off;
+  if (cropBtn) cropBtn.className = photoEditTab === "crop" ? on : off;
+  const bgPanel = document.getElementById("photoBgPanel");
+  const cropPanel = document.getElementById("photoCropPanel");
+  if (bgPanel) bgPanel.classList.toggle("hidden", photoEditTab !== "background");
+  if (cropPanel) cropPanel.classList.toggle("hidden", photoEditTab !== "crop");
+  const img = document.getElementById("previewPhotoEditImg");
+  if (img) img.style.cursor = photoEditTab === "crop" ? "grab" : "";
+}
+
+function resetPhotoCrop() {
+  photoCropPos = { x: 50, y: 50 };
+  const img = document.getElementById("previewPhotoEditImg");
+  if (img) img.style.objectPosition = "50% 50%";
+}
+
+// Drag on the preview photo (Adjust crop tab) sets the crop focal point.
+(function initPhotoCropDrag() {
+  const attach = () => {
+    const wrap = document.getElementById("previewPhotoWrap");
+    const img = document.getElementById("previewPhotoEditImg");
+    if (!wrap || !img) return;
+    let dragging = false;
+    const applyPos = (clientX, clientY) => {
+      const rect = wrap.getBoundingClientRect();
+      const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+      const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
+      photoCropPos = { x: Math.round(x), y: Math.round(y) };
+      img.style.objectPosition = photoCropPos.x + "% " + photoCropPos.y + "%";
+    };
+    wrap.addEventListener("pointerdown", (e) => {
+      if (photoEditTab !== "crop") return;
+      dragging = true;
+      if (wrap.setPointerCapture) { try { wrap.setPointerCapture(e.pointerId); } catch (err) {} }
+      applyPos(e.clientX, e.clientY);
+      e.preventDefault();
+    });
+    wrap.addEventListener("pointermove", (e) => { if (dragging) applyPos(e.clientX, e.clientY); });
+    wrap.addEventListener("pointerup", () => { dragging = false; });
+    wrap.addEventListener("pointercancel", () => { dragging = false; });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", attach);
+  else attach();
+})();
+
 function toggleCustomLimitInput(isCustom) {
   const customInput = document.getElementById("inputCustomDailyLimit");
   if (customInput) customInput.disabled = !isCustom;
@@ -3792,10 +4546,21 @@ function setPrefLength(len) {
   });
 }
 
+// Button Audit: the "at least N photos" selector in the Auto-Post modal was
+// decorative — the choice was never tracked or saved. It is now real state.
+function setMinPhotos(n) {
+  selectedMinPhotos = [1, 3, 5, 10].includes(n) ? n : 1;
+  const on = "py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm";
+  const off = "py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer";
+  document.querySelectorAll("[data-min-photos]").forEach(btn => {
+    btn.className = parseInt(btn.getAttribute("data-min-photos"), 10) === selectedMinPhotos ? on : off;
+  });
+}
+
 async function saveAutoPostPreferences() {
   if (!currentUser) return;
   const isAllNew = document.querySelector('input[name="autoPostType"]:checked') !== null;
-  
+
   try {
     const { error } = await supabaseClient.from("user_settings").upsert({
       user_id: currentUser.id,
@@ -3805,8 +4570,22 @@ async function saveAutoPostPreferences() {
     }, { onConflict: "user_id" });
 
     if (error) throw error;
+
+    // Persist the minimum-photos choice in its own write so a database that
+    // has not applied the small draft migration yet cannot fail the main
+    // save. The choice applies for this session either way.
+    let extraNote = "";
+    try {
+      const { error: mpError } = await supabaseClient.from("user_settings").upsert({
+        user_id: currentUser.id,
+        auto_post_min_photos: selectedMinPhotos,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+      if (mpError) extraNote = "\n\nNote: your minimum-photos choice applies now, but needs a small database update (see BUTTON_AUDIT.md) to stick between visits.";
+    } catch (e) { /* non-fatal: session state already holds the choice */ }
+
     closeModal('autoPostModal');
-    alert("✓ Auto-post new arrivals preferences saved and activated!");
+    alert("✓ Auto-post new arrivals preferences saved and activated!" + extraNote);
   } catch (err) {
     alert("Could not save preferences: " + err.message);
   }
@@ -3850,7 +4629,23 @@ async function saveAutoPhotoEdits() {
     }, { onConflict: "user_id" });
 
     if (error) throw error;
-    
+
+    // Button Audit bycatch: the crop-frequency select was never read by any
+    // save, and the Adjust-crop focal point had nowhere to go. Persist both
+    // in a separate best-effort write — the columns arrive with a small
+    // database update (see BUTTON_AUDIT.md) and the main save above must not
+    // fail in the meantime.
+    try {
+      const freqEl = document.getElementById("selectAutoCropFreq");
+      const { error: extraError } = await supabaseClient.from("user_settings").upsert({
+        user_id: currentUser.id,
+        photo_crop_position: photoCropPos.x + "% " + photoCropPos.y + "%",
+        auto_crop_frequency: freqEl ? freqEl.value : "every",
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+      if (extraError) console.warn("Crop position/frequency not persisted yet:", extraError.message);
+    } catch (e) { /* non-fatal: values still apply for this session */ }
+
     const statusLbl = document.getElementById("photoEditStatusLabel");
     if (statusLbl) statusLbl.innerText = autoCrop ? "On - smart crop" : "Off";
 

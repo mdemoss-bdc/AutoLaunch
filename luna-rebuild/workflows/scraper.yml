@@ -10,6 +10,10 @@ on:
         description: 'Optional: User UUID to crawl for just that user. Leave blank to crawl ALL users.'
         required: false
         default: ''
+      scrape_limit:
+        description: 'TEST MODE: max vehicles to sync per user (e.g. 15). Leave 0 for a full crawl.'
+        required: false
+        default: '0'
 
 jobs:
   scrape:
@@ -37,4 +41,7 @@ jobs:
           # user in user_settings" — the old workflow could never reach
           # that branch because it forced one hardcoded UUID.
           USER_ID: ${{ github.event.inputs.user_id }}
+          # 0 / blank = full crawl. Scheduled runs never set this input,
+          # so nightly syncs are always uncapped.
+          SCRAPE_LIMIT: ${{ github.event.inputs.scrape_limit }}
         run: python scraper.py

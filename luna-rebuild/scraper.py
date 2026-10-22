@@ -15,6 +15,15 @@ db = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 MAX_PAGES_PER_FEED = 500
 
+# Test mode: SCRAPE_LIMIT caps how many vehicles are synced per user in one
+# run (0 = no cap, normal production behavior). A capped run is a SAMPLE —
+# it must never trigger the stale-inventory pass, because it deliberately
+# did not see the dealer's whole lot.
+try:
+    SCRAPE_LIMIT = int(os.environ.get("SCRAPE_LIMIT") or 0)
+except ValueError:
+    SCRAPE_LIMIT = 0
+
 def get_user_configuration(uid: str):
     if not uid:
         print("[!] No USER_ID passed to scraper.")
@@ -529,6 +538,10 @@ async def run_scraper():
 
     print(f"USER_ID => {target_uid}")
 
+    if SCRAPE_LIMIT:
+
+        print(f"[*] TEST MODE: SCRAPE_LIMIT={SCRAPE_LIMIT} vehicles per user. Stale pass disabled for capped runs.")
+
     if target_uid and target_uid.strip():
 
         pending_job = (
@@ -665,6 +678,14 @@ async def run_scraper():
 
             for feed in feeds_to_crawl:
 
+                if SCRAPE_LIMIT and user_units_synced >= SCRAPE_LIMIT:
+
+                    print(
+                        f"[*] SCRAPE_LIMIT of {SCRAPE_LIMIT} reached. Skipping remaining feeds for this user."
+                    )
+
+                    break
+
                 base_url = feed["url"]
                 condition = feed["condition"]
 
@@ -739,6 +760,22 @@ async def run_scraper():
 
                         break
 
+                    if SCRAPE_LIMIT:
+
+                        remaining = SCRAPE_LIMIT - user_units_synced
+
+                        if remaining <= 0:
+
+                            print(
+                                f"[*] SCRAPE_LIMIT of {SCRAPE_LIMIT} reached for this user. Stopping test crawl."
+                            )
+
+                            break
+
+                        if len(cars) > remaining:
+
+                            cars = cars[:remaining]
+
                     vins = {
                         c["vin"]
                         for c in cars
@@ -773,7 +810,13 @@ async def run_scraper():
             # cars. Any navigation/extraction error, or an empty result,
             # means "we don't know" — and "don't know" never deactivates
             # a dealer's inventory.
-            if user_seen_vins and not user_had_error:
+            if SCRAPE_LIMIT:
+
+                print(
+                    f"[!] Stale pass skipped for {store_name}: capped test run (SCRAPE_LIMIT={SCRAPE_LIMIT}) never deactivates inventory."
+                )
+
+            elif user_seen_vins and not user_had_error:
 
                 mark_stale_inventory(active_uid, user_seen_vins)
 
