@@ -1,4 +1,4 @@
-// AutoLaunch Vehicle Assistant — Marketplace form filler (v2)
+// AutoLaunch Vehicle Assistant — Marketplace form filler (v3)
 //
 // Phase 3 changes vs the original:
 //  1. REACT-SAFE VALUES: the old code set element.value directly, which
@@ -50,6 +50,27 @@
 //     rewriting a 2016 Hyundai Tucson as a "2020 Honda Accord" — so the
 //     VIN goes in FIRST, the decoder is given time to settle, and every
 //     other field is then set from the payload and verified against it.
+// 10. ESCALATION LADDER + DIAGNOSTICS (third live test): verify-or-
+//     report worked exactly as designed — the photos (12) and the rich
+//     description landed, and the job FAILED honestly because Year,
+//     Make, Model and Price STILL would not stick: Facebook commits
+//     those four only through its suggestion-listbox selection /
+//     trusted input pipeline, and React resets DOM-set values. Those
+//     fields now climb a ladder until a read-back matches — rung 1: the
+//     v2 native-setter / combobox logic; rung 2: synthetic keyboard
+//     (select-all + Delete, execCommand insertText, then a per-character
+//     keydown/keypress/beforeinput/input/keyup flurry, with comboboxes
+//     committed by clicking the exact-match suggestion option); rung 3:
+//     CDP trusted input driven by the background worker
+//     (chrome.debugger: real mouse clicks, Input.insertText, real key
+//     events). Verify-or-report remains the final arbiter after the
+//     ladder. A field that defeats all three rungs leaves a forensic
+//     record — element tag/type/role/aria-label + outerHTML head, the
+//     rungs attempted, the value read back — in autolaunch_failure_log
+//     (via AUTOLAUNCH_FIELD_DIAG), so a fourth failure can never be
+//     blind. While rung 3 is attached, Chrome shows a "…is debugging
+//     this browser" infobar; it disappears on detach, which happens
+//     when the fill sequence ends or the job finishes/fails.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -88,6 +109,7 @@
   // reason defaults to the banner text, but machine-readable reasons
   // (fields_unfilled:…) can differ from the human wording.
   const fail = async (bannerText, storedReason) => {
+    await cdpDetach(); // a trusted-input session never outlives its job
     say("Stopped — " + bannerText + " This car was marked FAILED in your queue, not posted.", "#b91c1c");
     await report("AUTOLAUNCH_JOB_FAILED", { reason: storedReason || bannerText });
   };
@@ -198,6 +220,56 @@
   }
   // [PURE-VERIFY-END]
 
+  // [PURE-LADDER-BEGIN] — extracted and unit-exercised by the test
+  // harness alongside the verify helpers; keep these free of DOM/chrome
+  // references (element-likes and plain values in, plain values out).
+  function keyEventInitForChar(ch) {
+    let code = "";
+    if (/[a-zA-Z]/.test(ch)) code = "Key" + ch.toUpperCase();
+    else if (/[0-9]/.test(ch)) code = "Digit" + ch;
+    else if (ch === " ") code = "Space";
+    return { key: ch, code };
+  }
+  // The per-character event flurry of rung 2, as data: for each char —
+  // keydown, keypress, beforeinput, input, keyup (the order a real
+  // keystroke produces, and the one per-keystroke validators expect).
+  function typingEventPlan(text) {
+    const plan = [];
+    for (const ch of String(text)) {
+      const init = keyEventInitForChar(ch);
+      plan.push({ type: "keydown", key: init.key, code: init.code });
+      plan.push({ type: "keypress", key: init.key, code: init.code });
+      plan.push({ type: "beforeinput", inputType: "insertText", data: ch });
+      plan.push({ type: "input", inputType: "insertText", data: ch });
+      plan.push({ type: "keyup", key: init.key, code: init.code });
+    }
+    return plan;
+  }
+  // Forensic snapshot of a field element for the failure log.
+  function describeElement(el) {
+    if (!el) return { tag: null, type: null, role: null, ariaLabel: null, outerHTML: null };
+    const get = n => (typeof el.getAttribute === "function" ? el.getAttribute(n) : null);
+    return {
+      tag: String(el.tagName || "").toLowerCase() || null,
+      type: get("type"),
+      role: get("role"),
+      ariaLabel: get("aria-label"),
+      outerHTML: String(el.outerHTML || "").slice(0, 200) || null
+    };
+  }
+  // The CDP wire protocol with the background worker, as data.
+  function buildCdpAttach() { return { action: "attach" }; }
+  function buildCdpDetach() { return { action: "detach" }; }
+  function buildCdpClick(x, y) { return { action: "click", x, y }; }
+  function buildCdpInsertText(text) { return { action: "insertText", text: String(text) }; }
+  function buildCdpKey(key, code, opts) {
+    const cmd = { action: "key", key: String(key), code: String(code || key) };
+    if (opts && opts.text) cmd.text = String(opts.text);
+    if (opts && opts.modifiers) cmd.modifiers = Number(opts.modifiers) || 0;
+    return cmd;
+  }
+  // [PURE-LADDER-END]
+
   // ---- React-safe value setting -----------------------------------------
   function nativeSetValue(el, value) {
     const proto = el instanceof HTMLTextAreaElement
@@ -249,6 +321,265 @@
 
   function readField(keywords) {
     return extractValue(findAnyField(keywords));
+  }
+
+  // ---- fill escalation ladder (v3, see header note 10) ------------------
+  // State is per-job: which rungs each stubborn field has climbed, and
+  // whether the forensic record for it has already been written.
+  const fieldAttempts = {};   // name -> { rungs: [...], cdpError: null }
+  const diagRecorded = new Set();
+  let cdpAttached = false;
+
+  function attemptsFor(name) {
+    return (fieldAttempts[name] = fieldAttempts[name] || { rungs: [], cdpError: null });
+  }
+  function noteRung(name, rung) {
+    const att = attemptsFor(name);
+    if (!att.rungs.includes(rung)) att.rungs.push(rung);
+  }
+
+  function dispatchKeyboard(el, type, init) {
+    el.dispatchEvent(new KeyboardEvent(type, Object.assign(
+      { bubbles: true, cancelable: true, composed: true }, init || {})));
+  }
+
+  // A bare .click() is easy for React wrappers to shrug off; walk the
+  // full pointer/mouse sequence a real press produces.
+  function realisticClick(el) {
+    try { el.scrollIntoView({ block: "center" }); } catch (e) {}
+    const r = el.getBoundingClientRect();
+    const init = {
+      bubbles: true, cancelable: true, composed: true, button: 0,
+      clientX: Math.round(r.left + r.width / 2),
+      clientY: Math.round(r.top + r.height / 2)
+    };
+    try { el.dispatchEvent(new PointerEvent("pointerdown", init)); } catch (e) {}
+    el.dispatchEvent(new MouseEvent("mousedown", init));
+    try { el.dispatchEvent(new PointerEvent("pointerup", init)); } catch (e) {}
+    el.dispatchEvent(new MouseEvent("mouseup", init));
+    el.dispatchEvent(new MouseEvent("click", init));
+  }
+
+  // The suggestion option Facebook would commit: exact text first,
+  // then prefix, then containment.
+  function findOptionExact(value) {
+    const wanted = normText(value);
+    if (!wanted) return null;
+    const opts = Array.from(document.querySelectorAll('[role="option"]'));
+    return opts.find(o => normText(o.textContent) === wanted) ||
+      opts.find(o => normText(o.textContent).startsWith(wanted)) ||
+      opts.find(o => normText(o.textContent).includes(wanted)) || null;
+  }
+
+  // Rung 2's typing engine: follow typingEventPlan literally, committing
+  // each character with the native setter between beforeinput and input
+  // (synthetic key events alone never mutate a value — but the flurry
+  // around the mutation is what per-keystroke validators listen to).
+  async function rung2TypeText(el, text) {
+    let acc = "";
+    try { acc = extractValue(el); } catch (e) { acc = ""; }
+    for (const stepEv of typingEventPlan(text)) {
+      if (stepEv.type === "keydown" || stepEv.type === "keypress" || stepEv.type === "keyup") {
+        dispatchKeyboard(el, stepEv.type, { key: stepEv.key, code: stepEv.code });
+      } else {
+        if (stepEv.type === "input") {
+          acc += stepEv.data;
+          const proto = el instanceof HTMLTextAreaElement
+            ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+          setter.call(el, acc);
+        }
+        el.dispatchEvent(new InputEvent(stepEv.type, {
+          inputType: stepEv.inputType, data: stepEv.data,
+          bubbles: true, cancelable: true, composed: true
+        }));
+      }
+      if (stepEv.type === "keyup") await sleep(30);
+    }
+  }
+
+  async function rung2Fill(field) {
+    const el = findAnyField(field.keywords);
+    if (!el) return false;
+    const value = String(field.expected);
+    const tag = (el.tagName || "").toUpperCase();
+    if (tag === "SELECT") {
+      // Type-ahead by trusted-looking key flurry; best-effort (the CDP
+      // rung is the one with real keys) — read-back decides.
+      el.focus();
+      for (const ch of value) {
+        const init = keyEventInitForChar(ch);
+        dispatchKeyboard(el, "keydown", init);
+        dispatchKeyboard(el, "keyup", init);
+        await sleep(40);
+      }
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      await sleep(400);
+      return true;
+    }
+    if (tag !== "INPUT" && tag !== "TEXTAREA") {
+      // Listbox trigger (a div/button that opens options): open it and
+      // pick the exact option — the click is the commit.
+      realisticClick(el);
+      await sleep(900);
+      const opt = findOptionExact(value);
+      if (opt) { realisticClick(opt); await sleep(500); }
+      return true;
+    }
+    el.focus();
+    // Clear first: select-all + Delete through the keyboard pipeline,
+    // with execCommand doing the actual edit where it can.
+    dispatchKeyboard(el, "keydown", { key: "a", code: "KeyA", ctrlKey: true });
+    try { document.execCommand("selectAll"); } catch (e) {}
+    dispatchKeyboard(el, "keyup", { key: "a", code: "KeyA", ctrlKey: true });
+    dispatchKeyboard(el, "keydown", { key: "Delete", code: "Delete" });
+    try { document.execCommand("delete"); } catch (e) {}
+    dispatchKeyboard(el, "keyup", { key: "Delete", code: "Delete" });
+    // execCommand insertText performs a REAL edit in Chrome (proper
+    // beforeinput/input with inputType=insertText) — try it before the
+    // manual per-character climb.
+    let inserted = false;
+    try { inserted = document.execCommand("insertText", false, value); } catch (e) {}
+    if (!inserted || !valueMatches(extractValue(el), field.expected, field.kind)) {
+      if (extractValue(el)) { try { nativeSetValue(el, ""); } catch (e) {} }
+      await rung2TypeText(el, field.kind === "price" ? value.replace(/\D/g, "") : value);
+    }
+    await sleep(300);
+    // Combobox commit: if a suggestion listbox is open, clicking the
+    // exact-match option is what Facebook actually records.
+    const opt = findOptionExact(value);
+    if (opt) { realisticClick(opt); await sleep(500); }
+    return true;
+  }
+
+  // ---- rung 3: CDP trusted input via the background worker --------------
+  function cdpRequest(payload) {
+    return new Promise(resolve => {
+      try {
+        chrome.runtime.sendMessage(
+          Object.assign({ type: "AUTOLAUNCH_CDP" }, payload),
+          resp => {
+            void chrome.runtime.lastError;
+            resolve(resp && typeof resp === "object" ? resp
+              : { ok: false, error: "cdp_no_response" });
+          });
+      } catch (e) { resolve({ ok: false, error: "cdp_send_failed" }); }
+    });
+  }
+
+  async function cdpEnsure(fieldName) {
+    if (cdpAttached) return true;
+    const res = await cdpRequest(buildCdpAttach());
+    if (res && res.ok) { cdpAttached = true; return true; }
+    // Remember WHY rung 3 could not run — it lands in the diagnostics.
+    attemptsFor(fieldName).cdpError = (res && res.error) || "cdp_attach_failed";
+    return false;
+  }
+
+  async function cdpDetach() {
+    if (!cdpAttached) return;
+    cdpAttached = false;
+    await cdpRequest(buildCdpDetach());
+  }
+
+  async function cdpClickEl(el) {
+    try { el.scrollIntoView({ block: "center" }); } catch (e) {}
+    await sleep(150);
+    const r = el.getBoundingClientRect();
+    return cdpRequest(buildCdpClick(
+      Math.round(r.left + r.width / 2),
+      Math.round(r.top + r.height / 2)));
+  }
+
+  async function rung3Fill(field) {
+    const el = findAnyField(field.keywords);
+    if (!el) return false;
+    if (!(await cdpEnsure(field.name))) return false;
+    const value = String(field.expected);
+    const tag = (el.tagName || "").toUpperCase();
+    if (tag === "SELECT") {
+      // Trusted keys: click to focus/open, type-ahead the digits, Enter.
+      await cdpClickEl(el);
+      await sleep(300);
+      for (const ch of value.replace(/\D/g, "")) {
+        await cdpRequest(buildCdpKey(ch, "Digit" + ch, { text: ch }));
+        await sleep(60);
+      }
+      await cdpRequest(buildCdpKey("Enter", "Enter"));
+      await sleep(400);
+      return true;
+    }
+    if (tag !== "INPUT" && tag !== "TEXTAREA") {
+      // Listbox trigger: trusted click opens it, trusted click commits.
+      await cdpClickEl(el);
+      await sleep(900);
+      const opt = findOptionExact(value);
+      if (opt) { await cdpClickEl(opt); await sleep(500); }
+      return true;
+    }
+    // Text/combobox input: trusted click focuses, select-all + delete,
+    // then Input.insertText injects the text through the trusted
+    // pipeline React actually listens to.
+    await cdpClickEl(el);
+    await sleep(250);
+    await cdpRequest(buildCdpKey("a", "KeyA", { modifiers: 2 })); // Ctrl+A
+    await cdpRequest(buildCdpKey("Backspace", "Backspace"));
+    await cdpRequest(buildCdpInsertText(
+      field.kind === "price" ? value.replace(/\D/g, "") : value));
+    await sleep(900); // let a suggestion listbox render, if this field has one
+    const opt = findOptionExact(value);
+    if (opt) { await cdpClickEl(opt); await sleep(500); }
+    else if (el.getAttribute("role") === "combobox") {
+      // No clickable option materialised — keyboard commit instead.
+      await cdpRequest(buildCdpKey("ArrowDown", "ArrowDown"));
+      await cdpRequest(buildCdpKey("Enter", "Enter"));
+      await sleep(400);
+    }
+    return true;
+  }
+
+  // ---- ladder driver + diagnostics ---------------------------------------
+  function recordFieldDiagnostic(field, readBack) {
+    if (diagRecorded.has(field.name)) return;
+    diagRecorded.add(field.name);
+    const att = attemptsFor(field.name);
+    const entry = {
+      field: field.name,
+      element: describeElement(findAnyField(field.keywords)),
+      rungsAttempted: att.rungs.slice(),
+      readBack: String(readBack == null ? "" : readBack).slice(0, 200),
+      expected: String(field.expected),
+      cdpError: att.cdpError || null
+    };
+    console.warn("[AutoLaunch] Field could not be filled:", JSON.stringify(entry));
+    try {
+      chrome.runtime.sendMessage(
+        { type: "AUTOLAUNCH_FIELD_DIAG", queueId, diag: entry },
+        () => { void chrome.runtime.lastError; });
+    } catch (e) { /* the console record above still stands */ }
+  }
+
+  // Climb the ladder for one stubborn field; true only when a READ-BACK
+  // matches the payload (verify-or-report stays the arbiter). On total
+  // exhaustion the forensic record is written here, once per field.
+  async function escalatedRefill(field) {
+    const readNow = () => { try { return field.read(); } catch (e) { return ""; } };
+    const settled = () => valueMatches(readNow(), field.expected, field.kind);
+
+    noteRung(field.name, "rung1");
+    try { await field.rung1(); } catch (e) {}
+    if (settled()) return true;
+
+    noteRung(field.name, "rung2");
+    try { await rung2Fill(field); } catch (e) {}
+    if (settled()) return true;
+
+    noteRung(field.name, "rung3");
+    try { await rung3Fill(field); } catch (e) {}
+    if (settled()) return true;
+
+    recordFieldDiagnostic(field, readNow());
+    return false;
   }
 
   // Combobox/dropdown-style fields: open, type the value, then click the
@@ -630,51 +961,62 @@
   // Price, Description. Everything else is best-effort.
   function requiredSpecForStep() {
     const spec = [];
+    // The four stubborn fields (Year/Make/Model/Price) refill via the
+    // escalation ladder; their `refill` only reports success when a
+    // read-back matches, and verifyFieldsWithRefill re-checks anyway.
     if (fieldPresent(["year"]) && car.year) {
-      spec.push({
-        name: "Year", kind: "year", expected: car.year,
+      const f = {
+        name: "Year", kind: "year", expected: car.year, keywords: ["year"],
         read: () => readField(["year"]),
-        refill: async () => {
+        rung1: async () => {
           await fillSelectOrListbox(["year"], [String(car.year)]) ||
             await fillCombobox(["year"], car.year);
           await sleep(600);
         }
-      });
+      };
+      f.refill = () => escalatedRefill(f);
+      spec.push(f);
     }
     if (fieldPresent(["make"]) && car.make) {
-      spec.push({
-        name: "Make", kind: "text", expected: car.make,
+      const f = {
+        name: "Make", kind: "text", expected: car.make, keywords: ["make"],
         read: () => readField(["make"]),
-        refill: async () => {
+        rung1: async () => {
           await waitForEnabled(["make"]);
           await fillSelectOrListbox(["make"], [car.make]) ||
             await fillCombobox(["make"], car.make);
           await sleep(600);
         }
-      });
+      };
+      f.refill = () => escalatedRefill(f);
+      spec.push(f);
     }
     if (fieldPresent(["model"]) && car.model) {
-      spec.push({
-        name: "Model", kind: "text", expected: car.model,
+      const f = {
+        name: "Model", kind: "text", expected: car.model, keywords: ["model"],
         read: () => readField(["model"]),
-        refill: async () => {
+        rung1: async () => {
           await waitForEnabled(["model"]);
           await fillSelectOrListbox(["model"], [car.model]) ||
             await fillCombobox(["model"], car.model);
           await sleep(600);
         }
-      });
+      };
+      f.refill = () => escalatedRefill(f);
+      spec.push(f);
     }
     if (fieldPresent(["price"]) && car.price) {
-      spec.push({
-        name: "Price", kind: "price", expected: car.price,
+      const f = {
+        name: "Price", kind: "price", expected: car.price, keywords: ["price"],
         read: () => readField(["price"]),
-        refill: async () => {
-          const f = findField(["price"]);
-          if (f) nativeSetValue(f, String(car.price));
+        rung1: async () => {
+          const pf = findField(["price"]);
+          if (pf) nativeSetValue(pf, String(car.price));
           await sleep(400);
         }
-      });
+      };
+      f.refill = () => escalatedRefill(f);
+      spec.push(f);
     }
     if (findDescriptionField()) {
       spec.push({
@@ -781,6 +1123,11 @@
       await failUnfilled([...missing]);
       return;
     }
+
+    // The fill sequence is over and everything verified — end the
+    // trusted-input session (Chrome's debugging infobar goes with it)
+    // before the confirm watch / publish step.
+    await cdpDetach();
 
     const already = detectPublished();
     if (already) {

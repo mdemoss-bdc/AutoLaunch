@@ -23,7 +23,7 @@ The repo-root extension/ is untouched.
 
 ## What changed
 
-### manifest.json (v2.0.0)
+### manifest.json (v2.1.0)
 - Added "alarms" permission.
 - Added content script bridge.js on https://mdemoss-bdc.github.io/AutoLaunch/*
 - Added externally_connectable for https://mdemoss-bdc.github.io/*
@@ -33,6 +33,13 @@ The repo-root extension/ is untouched.
   worker needs host access to fetch their photos around CORS. The
   worker only fetches a URL when the Facebook content script asks for
   one photo, and only http(s) URLs at that.
+- Added "debugger" permission (filler v3, rung 3 below): lets the
+  background worker drive trusted CDP input on the Facebook tab when
+  Facebook's four structured fields refuse every DOM technique. While
+  attached, Chrome shows a "…is debugging this browser" infobar on the
+  tab — it disappears when the worker detaches, which happens when the
+  fill sequence ends or the job finishes/fails. It only ever appears
+  during a posting run, never while idle.
 
 ### bridge.js (NEW)
 - Runs only on the AutoLaunch origin. Listens for the app's
@@ -95,6 +102,24 @@ The repo-root extension/ is untouched.
   bodies are structured errors), and the handler only serves senders on
   facebook.com. A failed relay falls through to the photo-proxy in the
   content script; only if both fail does the job fail, as before.
+- CDP TRUSTED INPUT (filler v3): {type:"AUTOLAUNCH_CDP", action} from the
+  Facebook content script drives chrome.debugger on the sender's own
+  tab. Actions: attach (protocol "1.3"), click {x, y} (mousePressed +
+  mouseReleased at content-supplied element-center coordinates),
+  insertText {text}, key {key, code, text?, modifiers?} (keyDown +
+  keyUp), detach. Every reply is structured ({ok:true} /
+  {ok:false, error}) — an attach failure (another debugger is attached,
+  e.g. the user's own DevTools on that tab) comes back as
+  cdp_attach_failed with the browser's reason instead of throwing, and
+  the content script's verify-or-report decides what happens next.
+  Sessions are tracked per tab and cleaned up on chrome.debugger
+  onDetach / tab close.
+- FIELD DIAGNOSTICS (filler v3): {type:"AUTOLAUNCH_FIELD_DIAG", queueId,
+  diag} from the Facebook content script is written into
+  autolaunch_failure_log as reason "field_diag:<Field>" with the
+  element snapshot (tag/type/role/aria-label/outerHTML head), the rungs
+  attempted, the value read back, and any CDP attach error — so a field
+  that defeats every fill technique leaves evidence, not a mystery.
 
 ### content.js (rewritten)
 - React-safe fill: native prototype value setter + input/change events.
@@ -156,6 +181,40 @@ The repo-root extension/ is untouched.
   after each and watching preview thumbnails increment; a URL that
   fails both fetch stages is skipped, not fatal. ≥1 attached preview
   remains required.
+- ESCALATION LADDER (filler v3 — the third live test's fix): Year, Make,
+  Model and Price are Facebook's stubborn fields — on the current form
+  variant they render as plain inputs / a chevron dropdown, yet values
+  set by DOM techniques don't stick; Facebook commits them only through
+  its suggestion-listbox selection / trusted input pipeline (and the
+  price input validates per keystroke). Those four fields' refill is
+  now an escalation ladder, with a read-back check after every rung —
+  a rung only "worked" when the DOM value matches the payload, and the
+  verify-or-report gate remains the final arbiter:
+  Rung 1: the v2 native-setter / cascade combobox logic, unchanged.
+  Rung 2: synthetic keyboard — focus, select-all + Delete dispatched as
+  keyboard events, document.execCommand('insertText') (a real edit in
+  Chrome), then a per-character keydown/keypress/beforeinput/input/
+  keyup flurry committing each character via the native setter; if a
+  suggestion listbox is open, the exact-match option is clicked with a
+  full pointer/mouse sequence (that click is the commit). Listbox-
+  trigger fields (non-input dropdowns) are opened and their exact
+  option clicked; native selects get a type-ahead key flurry.
+  Rung 3: CDP trusted input via the background worker — real mouse
+  click at the element's center (focus), select-all + Backspace,
+  Input.insertText, then the exact-match suggestion option clicked
+  with trusted mouse input (keyboard ArrowDown/Enter fallback for
+  comboboxes); native selects get trusted digit keys + Enter. Chrome
+  shows a "…is debugging this browser" infobar while attached; the
+  worker detaches when the fill sequence ends or the job
+  finishes/fails, and the infobar goes with it. If attach fails, the
+  error is recorded and read-back still governs the outcome.
+  Cooperative forms never leave rung 1 — no CDP, no infobar.
+- FIELD DIAGNOSTICS (filler v3): when a stubborn field exhausts the
+  ladder, the filler records — once per field per job — its tag, type,
+  role, aria-label and the first 200 chars of its outerHTML, the rungs
+  attempted, the value read back and any CDP error, both to the console
+  and (via AUTOLAUNCH_FIELD_DIAG) into autolaunch_failure_log in
+  chrome.storage. A fourth failure can no longer be blind.
 - POSTED only on detected success: navigation to a marketplace item /
   selling URL, or on-page text like "your listing is now live". Timeout
   or anything else = FAILED with the reason. There is no timer that
@@ -214,6 +273,37 @@ The repo-root extension/ is untouched.
   only then the amber "Everything is filled in. Review it, then click
   Publish" banner — if anything can't be filled, the banner names it
   and the queue row goes Failed instead of lying.
+- 2026-10-22, third run (verify-or-report build): the honesty layer
+  worked PERFECTLY — 12+ photos attached (carousel full), description
+  rich and correct ($11,327 Moses Price, Mojave Sand color, VIN), and
+  the banner failed the job in plain language: "could not fill: Year,
+  Make, Model, Price". Those same four structured fields resisted the
+  v2 techniques (native-setter fills, cascade combobox handling): on
+  this form variant Year renders as a chevron dropdown and Make/Model/
+  Price as plain inputs, but Facebook commits them only through its
+  suggestion-listbox selection / trusted input pipeline and resets
+  DOM-set values (the currency input also validates per keystroke).
+  The escalation-ladder build (this version) is the fix; it has NOT yet
+  had a live Facebook run. Its pieces were unit-exercised in node:
+  the rung-2 event-plan + CDP message builders (26 checks), the
+  background CDP protocol against a mocked chrome.debugger —
+  attach → Input commands in order → detach, attach-failure and
+  foreign-sender handling, diagnostic writes landing in
+  autolaunch_failure_log (28 checks), and a full content-script flow
+  against React-stubborn fake fields whose setters ignore every write:
+  all four fields climbed rung1 → rung2 → rung3, each left exactly one
+  forensic record, CDP detached before the failure report, and the job
+  failed with fields_unfilled:Year,Make,Model,Price (34 checks), plus a
+  cooperative-form flow that fills at rung 1, never touches CDP and
+  posts on detected success (5 checks). Re-test: overwrite the
+  extension folder with the fresh copy at the SAME path (card should
+  now read version 2.1.0), Reload, hard-refresh the app tab, re-queue
+  the Tucson. Expect an extra sight this time: if any of the four
+  fields resists the DOM rungs, Chrome shows a "…is debugging this
+  browser" infobar while the trusted-input rung works — it disappears
+  on its own when filling finishes. If a field still fails, its
+  autolaunch_failure_log entry (field_diag:<Field>) now carries the
+  element's outerHTML and the rungs attempted.
 
 ## Honest limits (untested overnight)
 
@@ -231,3 +321,11 @@ The repo-root extension/ is untouched.
   chrome.storage.local on the user's machine, never on a server of ours.
 - Facebook may treat any automation as a policy risk. Confirm mode +
   daily caps + human pacing reduce, not eliminate, that risk.
+- The "debugger" permission (rung 3) is the heaviest permission an
+  extension can carry: Chrome warns about it at install, the
+  debugging infobar is visible during fills, and a future Web Store
+  listing would need a strong justification for it. It is engaged only
+  when the two DOM rungs have demonstrably failed on a field, and the
+  worker detaches as soon as filling ends. If a fourth live run shows
+  rung 2 alone cracking the fields, rung 3 — and the permission — can
+  be removed.

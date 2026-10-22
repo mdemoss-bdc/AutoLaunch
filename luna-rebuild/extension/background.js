@@ -40,6 +40,20 @@
 //     (AUTOLAUNCH_FETCH_PHOTO) and rebuilds the File itself; its
 //     fallback is the photo-proxy Edge Function, and only if both fail
 //     does the job fail honestly — a photoless car is never posted.
+//  9. CDP TRUSTED INPUT (filler v3): Year/Make/Model/Price resisted two
+//     generations of DOM fills — Facebook commits those fields only
+//     through its suggestion-listbox selection / trusted input pipeline,
+//     and React resets values set any other way. The content script's
+//     last-resort rung now asks this worker to drive REAL input through
+//     the DevTools protocol (AUTOLAUNCH_CDP: attach / click /
+//     insertText / key / detach via chrome.debugger on the Facebook
+//     tab). While attached Chrome shows a "…is debugging this browser"
+//     infobar; it disappears on detach, which happens when the fill
+//     sequence ends or the job finishes/fails. An attach failure (e.g.
+//     the user has DevTools open on the tab) is a structured error, and
+//     the content script's verify-or-report still decides the outcome.
+//     Field diagnostics (AUTOLAUNCH_FIELD_DIAG) ride the same path into
+//     autolaunch_failure_log when a field defeats every rung.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -292,12 +306,116 @@ async function fetchPhotoForContent(url) {
   };
 }
 
-async function logFailure(queueId, reason) {
+// --- CDP trusted input (filler v3) ---------------------------------------
+// Minimal protocol the content script drives:
+//   { type: "AUTOLAUNCH_CDP", action: "attach" }
+//   { type: "AUTOLAUNCH_CDP", action: "click", x, y }
+//   { type: "AUTOLAUNCH_CDP", action: "insertText", text }
+//   { type: "AUTOLAUNCH_CDP", action: "key", key, code, text?, modifiers? }
+//   { type: "AUTOLAUNCH_CDP", action: "detach" }
+// Every reply is { ok: true, ... } or { ok: false, error } — an attach
+// failure (another debugger, e.g. the user's own DevTools, is attached)
+// surfaces as an error, never a throw, so the caller's verify-or-report
+// remains the arbiter. Sessions are tracked per tab; Chrome's own
+// onDetach (tab closed, user cancels the infobar) cleans the map.
+const cdpSessions = new Map(); // tabId -> protocol version
+
+function cdpAttach(tabId) {
+  if (cdpSessions.has(tabId)) return Promise.resolve({ ok: true, already: true });
+  return new Promise(resolve => {
+    chrome.debugger.attach({ tabId }, "1.3", () => {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        resolve({ ok: false, error: "cdp_attach_failed: " + (err.message || "unknown") });
+        return;
+      }
+      cdpSessions.set(tabId, "1.3");
+      resolve({ ok: true });
+    });
+  });
+}
+
+function cdpSendCommand(tabId, method, params) {
+  return new Promise((resolve, reject) => {
+    chrome.debugger.sendCommand({ tabId }, method, params || {}, result => {
+      const err = chrome.runtime.lastError;
+      if (err) reject(new Error(err.message || "cdp_command_failed"));
+      else resolve(result);
+    });
+  });
+}
+
+function cdpDetach(tabId) {
+  if (!cdpSessions.has(tabId)) return Promise.resolve({ ok: true, already: false });
+  return new Promise(resolve => {
+    chrome.debugger.detach({ tabId }, () => {
+      void chrome.runtime.lastError; // detaching a dead session is fine
+      cdpSessions.delete(tabId);
+      resolve({ ok: true });
+    });
+  });
+}
+
+async function handleCdp(message, tabId) {
+  switch (message.action) {
+    case "attach":
+      return cdpAttach(tabId);
+    case "detach":
+      return cdpDetach(tabId);
+    case "click": {
+      if (!cdpSessions.has(tabId)) return { ok: false, error: "cdp_not_attached" };
+      const x = Number(message.x), y = Number(message.y);
+      if (!isFinite(x) || !isFinite(y)) return { ok: false, error: "cdp_bad_coordinates" };
+      await cdpSendCommand(tabId, "Input.dispatchMouseEvent",
+        { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+      await cdpSendCommand(tabId, "Input.dispatchMouseEvent",
+        { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+      return { ok: true };
+    }
+    case "insertText": {
+      if (!cdpSessions.has(tabId)) return { ok: false, error: "cdp_not_attached" };
+      await cdpSendCommand(tabId, "Input.insertText", { text: String(message.text || "") });
+      return { ok: true };
+    }
+    case "key": {
+      if (!cdpSessions.has(tabId)) return { ok: false, error: "cdp_not_attached" };
+      if (!message.key) return { ok: false, error: "cdp_key_missing" };
+      const base = {
+        key: String(message.key),
+        code: String(message.code || message.key),
+        modifiers: Number(message.modifiers) || 0
+      };
+      // `text` makes printable keys actually produce characters in
+      // fields that read it from the key event (native selects do).
+      if (message.text) base.text = String(message.text);
+      await cdpSendCommand(tabId, "Input.dispatchKeyEvent",
+        Object.assign({ type: "keyDown" }, base));
+      await cdpSendCommand(tabId, "Input.dispatchKeyEvent",
+        Object.assign({ type: "keyUp" }, base));
+      return { ok: true };
+    }
+    default:
+      return { ok: false, error: "cdp_unknown_action" };
+  }
+}
+
+chrome.debugger.onDetach.addListener(source => {
+  if (source && source.tabId != null) cdpSessions.delete(source.tabId);
+});
+chrome.tabs.onRemoved.addListener(tabId => {
+  cdpSessions.delete(tabId);
+});
+
+async function logFailure(queueId, reason, extra) {
   const { autolaunch_failure_log: log = [] } = await chrome.storage.local.get(["autolaunch_failure_log"]);
-  log.unshift({ queueId, reason, at: new Date().toISOString() });
+  const entry = Object.assign(
+    { queueId, reason, at: new Date().toISOString() },
+    extra || {}
+  );
+  log.unshift(entry);
   await chrome.storage.local.set({
     autolaunch_failure_log: log.slice(0, 25),
-    autolaunch_last_error: { queueId, reason, at: new Date().toISOString() }
+    autolaunch_last_error: { queueId, reason, at: entry.at }
   });
 }
 
@@ -439,6 +557,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     fetchPhotoForContent(message.url)
       .then(result => sendResponse(result))
       .catch(() => sendResponse({ ok: false, error: "photo_relay_failed" }));
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_CDP") {
+    // Only the Facebook content script may drive trusted input, and only
+    // on its own tab (sender.tab is authoritative — content scripts
+    // cannot spoof another tab's id).
+    const tabId = sender && sender.tab && sender.tab.id;
+    const senderUrl = (sender && sender.url) ||
+      (sender && sender.tab && sender.tab.url) || "";
+    if (tabId == null || !senderUrl.startsWith("https://www.facebook.com/")) return;
+    handleCdp(message, tabId)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ ok: false, error: "cdp_error: " + (err && err.message || "unknown") }));
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_FIELD_DIAG") {
+    // A required field defeated every fill rung. Record the forensics
+    // (element identity, rungs attempted, value read back) in the same
+    // failure log the job reasons land in, so the NEXT failure is never
+    // a guessing game. Reason strings + element metadata only.
+    const senderUrl = (sender && sender.url) ||
+      (sender && sender.tab && sender.tab.url) || "";
+    if (!senderUrl.startsWith("https://www.facebook.com/")) return;
+    const diag = message.diag || {};
+    logFailure(message.queueId || null, "field_diag:" + (diag.field || "unknown"), {
+      field: diag.field || null,
+      element: diag.element || null,
+      rungsAttempted: Array.isArray(diag.rungsAttempted) ? diag.rungsAttempted : [],
+      readBack: diag.readBack != null ? String(diag.readBack) : null,
+      expected: diag.expected != null ? String(diag.expected) : null,
+      cdpError: diag.cdpError || null
+    })
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
     return true;
   }
 
