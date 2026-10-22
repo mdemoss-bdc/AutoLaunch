@@ -2719,6 +2719,8 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
                                 ? "🔵 Processing"
                                 : item.status === "posted"
                                 ? "🟢 Posted"
+                                : item.status === "failed"
+                                ? "🔴 Failed"
                                 : item.status
                         }
                     </span>

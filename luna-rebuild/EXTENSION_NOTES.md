@@ -1,0 +1,109 @@
+# Extension — Phases 2 + 3 (test copy)
+
+Owner: Matthew DeMoss — Private / confidential. Do not share.
+Location: luna-rebuild/extension/ (rewritten copy of the repo's extension/).
+The repo-root extension/ is untouched.
+
+## What was broken (recap)
+
+1. Handshake mismatch: the app sends window.postMessage
+   ({type:"AUTOLAUNCH_EXT_LOGIN"}) into the page; the extension waited for
+   chrome.runtime.onMessageExternal ({type:"SET_USER_ID"}) — a message a
+   web page cannot even address to an extension — and the manifest had no
+   content script on the AutoLaunch origin and no externally_connectable.
+   Result: the extension never learned the user id; checkQueue always
+   exited early. Nothing ever posted.
+2. setInterval in an MV3 service worker: workers are killed when idle,
+   so the 20s poll died silently.
+3. Status mismatch: content.js wrote queue status "completed"; the UI
+   knows pending / processing / posted.
+4. Dishonest success: content.js waited a fixed 2s and marked the car
+   posted regardless of what Facebook did, and set form values with plain
+   .value, which React controlled inputs ignore.
+
+## What changed
+
+### manifest.json (v2.0.0)
+- Added "alarms" permission.
+- Added content script bridge.js on https://mdemoss-bdc.github.io/AutoLaunch/*
+- Added externally_connectable for https://mdemoss-bdc.github.io/*
+- host_permissions now include the AutoLaunch origin.
+
+### bridge.js (NEW)
+- Runs only on the AutoLaunch origin. Listens for the app's existing
+  AUTOLAUNCH_EXT_LOGIN window message (same-window, same-origin only),
+  forwards the userId to the background worker. The app side needed no
+  change to its message — the bridge meets it where it already speaks.
+
+### background.js (rewritten)
+- User id arrives via the bridge (onMessage); the legacy onMessageExternal
+  SET_USER_ID path is kept as a secondary route.
+- Polling via chrome.alarms (1 minute) created on install/startup, plus an
+  immediate check on install/startup and whenever a user id arrives.
+- One status vocabulary with the UI: pending -> processing -> posted/failed.
+- Claiming is conditional (PATCH only while status=pending, using
+  return=representation) so duplicate claims cannot happen.
+- Daily limit enforced in the worker too: counts today's
+  marketplace_posted_at on scraped_inventory vs user_settings.daily_post_limit
+  before claiming anything (999 = unlimited, matching the app convention).
+- One job at a time; human-paced tab opening (1.5–4s jitter).
+- The worker NEVER marks posted. Only the content script's confirmed
+  success can (via AUTOLAUNCH_JOB_POSTED). Failures are recorded
+  (status=failed) with a reason kept in chrome.storage
+  (autolaunch_last_error / autolaunch_failure_log) because the queue table
+  has no reason column we can rely on.
+- Queue rows whose inventory row has vanished are marked failed instead
+  of pending forever.
+
+### content.js (rewritten)
+- React-safe fill: native prototype value setter + input/change events.
+- Fields attempted, by label/aria text with a combobox path for
+  Facebook's dropdown fields: photos (first), year, make, model, price,
+  mileage, condition (New / Certified / Used mapped to FB's labels),
+  transmission, body style, description (includes title, price, miles,
+  color, transmission, VIN).
+- Photos: all known URL fields on the car (image_url, photos, images,
+  image_urls, photo_urls; max 10). An upload only counts if a preview
+  image actually appears. Failure = banner + job FAILED with reason.
+  No more silent continue, and no posting photoless cars by accident.
+- Visible banner at the top of the page narrates every step.
+- Login wall / checkpoint / "confirm your identity" = immediate FAILED
+  with a plain-language reason. The script never types into a checkpoint.
+- CONFIRM MODE (default ON): fills everything, then stops. The human
+  reviews and clicks Publish; the script watches up to 10 minutes for a
+  real success state. Full-auto: set autolaunch_confirm_mode=false in the
+  extension's chrome.storage; then the script advances "Next" steps and
+  clicks Publish itself.
+- POSTED only on detected success: navigation to a marketplace item /
+  selling URL, or on-page text like "your listing is now live". Timeout
+  or anything else = FAILED with the reason. There is no timer that
+  declares success.
+
+## How to test it (Matthew)
+
+1. In Chrome: chrome://extensions -> Developer mode ON -> Load unpacked ->
+   select this folder once it is in your local clone of the repo
+   (luna-rebuild/extension/).
+2. Open the AutoLaunch TEST app (…/AutoLaunch/luna-rebuild/) and sign in.
+   The bridge hands your user id to the extension automatically.
+3. Queue one car (marketplace channel). Within about a minute a Facebook
+   "Create vehicle" tab opens and the filler runs with the blue banner.
+4. Review the filled form. In confirm mode, click Publish yourself; the
+   queue row should flip to Posted only after Facebook confirms, and the
+   car gets marketplace_posted_at in the app.
+5. To see failures honestly: queue a car while logged out of Facebook —
+   the job should end Failed with the login reason, never Posted.
+
+## Honest limits (untested overnight)
+
+- Not run against live Facebook: DOM selectors/labels are best-effort
+  heuristics against Facebook's current vehicle-create flow, which changes
+  often. First real test may need selector tweaks — the failure reasons
+  and banner will say exactly where it got stuck.
+- Supabase calls from the extension still use the publishable key without
+  a user JWT (same as the original design). RLS on auto_posting_queue /
+  scraped_inventory decides what that key may touch; the Phase 2 design
+  goal (pass the user's session through the bridge) remains future work —
+  the bridge is where that token would travel.
+- Facebook may treat any automation as a policy risk. Confirm mode +
+  daily caps + human pacing reduce, not eliminate, that risk.
