@@ -667,10 +667,12 @@ body {
         </label>
       </div>
       <div>
-        <p class="text-[10px] text-slate-500 leading-snug">Off - no auto-posting or price/sold updates</p>
-        <span class="text-[10px] text-blue-600 font-semibold pt-1 block" onclick="openSettingsModal()">
-          Settings & how it works
-        </span>
+        <p id="ribbonMasterStatusLabel" class="text-[10px] text-slate-500 leading-snug">Some automations on — see below</p>
+        <div class="flex items-center gap-1.5 pt-1">
+          <span class="text-[10px] text-blue-600 font-semibold" onclick="event.stopPropagation(); openSettingsModal()">Settings</span>
+          <span class="text-[10px] text-slate-300">·</span>
+          <span class="text-[10px] text-blue-600 font-semibold" onclick="event.stopPropagation(); openGuide('automations')">How it works</span>
+        </div>
       </div>
     </div>
 
@@ -686,9 +688,9 @@ body {
         </label>
       </div>
       <div>
-        <p class="text-[10px] text-slate-500">Automations off</p>
-        <span class="text-[10px] text-purple-600 flex items-center gap-1 pt-1 font-semibold" onclick="openAutoPostModal()">
-          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        <p id="ribbonAutoPostStatusLabel" class="text-[10px] text-slate-500">Off</p>
+        <span class="text-[10px] text-purple-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('autopost')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
         </span>
       </div>
     </div>
@@ -706,8 +708,8 @@ body {
       </div>
       <div>
         <p id="repostFrequencyLabel" class="text-[10px] text-slate-500">Every 3 days</p>
-        <span class="text-[10px] text-emerald-600 flex items-center gap-1 pt-1 font-semibold" onclick="openAutoRepostModal()">
-          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        <span class="text-[10px] text-emerald-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('repost')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
         </span>
       </div>
     </div>
@@ -724,9 +726,9 @@ body {
         </label>
       </div>
       <div>
-        <p id="photoEditStatusLabel" class="text-[10px] text-slate-500">On - smart crop</p>
-        <span class="text-[10px] text-pink-600 flex items-center gap-1 pt-1 font-semibold" onclick="openAutoPhotoEditsModal()">
-          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        <p id="photoEditStatusLabel" class="text-[10px] text-slate-500">On — first photo · smart crop</p>
+        <span class="text-[10px] text-pink-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('photoedits')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
         </span>
       </div>
     </div>
@@ -741,10 +743,10 @@ body {
       <div>
         <p id="ribbonSafetyLimitLabel" class="text-[10px] text-slate-500">1 of 10 today</p>
         <div class="w-full bg-slate-200 rounded-full h-1 mt-1.5 mb-1.5">
-          <div class="bg-amber-500 h-1 rounded-full w-[20%]"></div>
+          <div id="ribbonSafetyBar" class="bg-amber-500 h-1 rounded-full w-[20%]"></div>
         </div>
-        <span class="text-[10px] text-amber-600 flex items-center gap-1 font-semibold" onclick="openPostingSafetyModal()">
-          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        <span class="text-[10px] text-amber-600 flex items-center gap-1 font-semibold" onclick="event.stopPropagation(); openGuide('safety')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
         </span>
       </div>
     </div>
@@ -757,9 +759,9 @@ body {
         </span>
       </div>
       <div>
-        <p class="text-[10px] text-slate-500 truncate">Title, emoji, AI text</p>
-        <span class="text-[10px] text-cyan-600 flex items-center gap-1 pt-1 font-semibold" onclick="openPostingPreferencesModal()">
-          <i class="fa-regular fa-circle-play text-[9px]"></i> How to use
+        <p id="ribbonPrefsStatusLabel" class="text-[10px] text-slate-500 truncate">AI text · Medium</p>
+        <span class="text-[10px] text-cyan-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('preferences')">
+          <i class="fa-solid fa-circle-info text-[9px]"></i> How to use
         </span>
       </div>
     </div>
@@ -1839,6 +1841,41 @@ body {
     </div>
   </div>
 </div>
+
+<!-- 12. Feature Guide Modal (reusable — content filled by openGuide()) -->
+<div id="guideModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl border border-slate-200 relative text-slate-900 bg-white max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div class="flex items-center gap-2.5">
+        <div id="guideIconWrap" class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm font-bold border border-blue-200">
+          <i id="guideIcon" class="fa-solid fa-bolt"></i>
+        </div>
+        <h3 id="guideTitle" class="text-base font-bold text-slate-900">How it works</h3>
+      </div>
+      <button onclick="closeModal('guideModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <div>
+      <h4 class="font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">What it does</h4>
+      <p id="guideWhat" class="text-xs text-slate-600 leading-relaxed"></p>
+    </div>
+
+    <div>
+      <h4 class="font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Set it up</h4>
+      <ol id="guideSteps" class="list-decimal list-outside pl-4 space-y-1.5 text-xs text-slate-600 leading-relaxed"></ol>
+    </div>
+
+    <div>
+      <h4 class="font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Good to know</h4>
+      <ul id="guideNotes" class="list-disc list-outside pl-4 space-y-1.5 text-xs text-slate-600 leading-relaxed"></ul>
+    </div>
+
+    <div class="flex items-center justify-between pt-3 border-t border-slate-200">
+      <button onclick="closeModal('guideModal')" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer">Got it</button>
+      <button id="guideOpenBtn" onclick="openGuideFeature()" class="px-5 py-2 rounded-xl btn-gradient text-white font-bold text-xs shadow-md cursor-pointer">Open these settings</button>
+    </div>
+  </div>
+</div>
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 4: MODALS & DROPDOWNS END ==================== -->
 <!-- ============================================================================== -->
@@ -2108,15 +2145,12 @@ document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
 updateLastSyncDisplay();
 
       if (data.repost_frequency_days) {
-        const freqLabel = document.getElementById("repostFrequencyLabel");
-        if (freqLabel) freqLabel.innerText = `Every ${data.repost_frequency_days} days`;
         const selectEl = document.getElementById("autoRepostFrequencySelect");
         if (selectEl) selectEl.value = String(data.repost_frequency_days);
       }
+      if (data.auto_post_mode) ribbonState.autoPostMode = data.auto_post_mode;
 
       if (data.auto_crop_enabled !== undefined) {
-        const statusLbl = document.getElementById("photoEditStatusLabel");
-        if (statusLbl) statusLbl.innerText = data.auto_crop_enabled ? "On - smart crop" : "Off";
         const chkCrop = document.getElementById("chkAutoCrop");
         if (chkCrop) chkCrop.checked = data.auto_crop_enabled;
         const ribbonCrop = document.getElementById("chkRibbonPhotoCrop");
@@ -2195,6 +2229,10 @@ updateLastSyncDisplay();
       if (data.include_vin !== undefined) document.getElementById("prefVinDesc").checked = data.include_vin;
       if (data.include_stock !== undefined) document.getElementById("prefStockNum").checked = data.include_stock;
       if (data.ai_desc_enabled !== undefined) document.getElementById("prefAiDescToggle").checked = data.ai_desc_enabled;
+
+      // Every ribbon status line renders from the state just applied —
+      // one render, no per-field label writes scattered through this load.
+      renderRibbonStatuses();
     }
   } catch (e) {}
 }
@@ -4262,12 +4300,11 @@ async function toggleRibbonSetting(k) {
     if (arrivalsChk && k === "auto_main") arrivalsChk.checked = value;
   }
   if (fields.includes("auto_crop_enabled")) {
-    const statusLbl = document.getElementById("photoEditStatusLabel");
-    if (statusLbl) statusLbl.innerText = value ? "On - smart crop" : "Off";
     const modalChk = document.getElementById("chkAutoCrop");
     if (modalChk) modalChk.checked = value;
   }
   syncRibbonMasterCheckbox();
+  renderRibbonStatuses();
 }
 
 // Phase 6: per-channel switches. Columns live in user_settings once the
@@ -4316,6 +4353,234 @@ function syncRibbonMasterCheckbox() {
     .map(id => document.getElementById(id));
   if (parts.every(el => el)) {
     master.checked = parts.every(el => el.checked);
+  }
+}
+
+// ==============================================================================
+// ===================== FEATURE GUIDES (How to use) ============================
+// ==============================================================================
+// The ribbon cards' "How to use" links open ONE reusable modal (guideModal)
+// filled from this map. Copy is written against what the rebuild actually
+// does today — saved settings, the Post Queue, the Chrome extension, the
+// on-device photo engine — and says plainly where a step is still queued.
+
+const GUIDES = {
+  automations: {
+    title: "Automations",
+    icon: "fa-solid fa-bolt",
+    iconClasses: "bg-blue-50 text-blue-600 border-blue-200",
+    modal: "settingsModal",
+    what: "This is the master switch for the three automations next to it: auto-posting new arrivals, auto delete & repost, and automatic photo edits. Flip it and all three flip with it.",
+    steps: [
+      "Flip the Automations switch on — the three cards beside it turn on with it.",
+      "Set each one up on its own card (frequency, background, limits). The master switch never changes their settings.",
+      "Turn a single card off anytime without touching the others.",
+      "The same Auto Posting switch also lives in Settings, under the Automation tab."
+    ],
+    notes: [
+      "The master switch only shows on when all three cards are on. If just some are on, this card says so instead of pretending.",
+      "Automations work through the Post Queue and the Chrome extension, and every post counts against your daily safety limit."
+    ]
+  },
+  autopost: {
+    title: "Auto-post new arrivals",
+    icon: "fa-solid fa-paper-plane",
+    iconClasses: "bg-purple-50 text-purple-600 border-purple-200",
+    modal: "autoPostModal",
+    what: "When a vehicle first shows up in your website feed, AutoLaunch queues it for posting automatically — no picking cars one by one. Queued cars go to Facebook Marketplace, plus Instagram, TikTok or your Facebook Page if you have switched those channels on.",
+    steps: [
+      "Flip the switch on this card — or open the card and press Done, because saving turns it on.",
+      "Choose 'All new cars', or limit it to saved filters.",
+      "Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.",
+      "Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels."
+    ],
+    notes: [
+      "New arrivals are picked up when your inventory syncs from your website feed.",
+      "Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.",
+      "Every auto-posted car counts against your daily safety limit, same as cars you queue by hand.",
+      "A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website."
+    ]
+  },
+  repost: {
+    title: "Auto delete & repost",
+    icon: "fa-solid fa-arrows-rotate",
+    iconClasses: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    modal: "autoRepostModal",
+    what: "Listings that sit on Marketplace too long sink in search. This deletes the tired listing and posts the car again fresh, on the schedule you pick, so it ranks like a new arrival.",
+    steps: [
+      "Flip the switch on this card.",
+      "Open the card and pick how often: every 1, 3, 7 or 14 days.",
+      "Press Done — saving turns the schedule on.",
+      "Keep Chrome open with the extension installed and signed in, and stay signed in to Facebook. Reposts run from your browser."
+    ],
+    notes: [
+      "Confirm mode is the extension default: it fills the listing in and waits for you to click Publish, so nothing posts without you seeing it first.",
+      "Reposts count against your daily safety limit.",
+      "Cars that sell or leave your website are never reposted.",
+      "If Facebook asks you to log in or confirm your identity, the job stops and is marked failed — the extension never types into those screens."
+    ]
+  },
+  photoedits: {
+    title: "Automatic photo edits",
+    icon: "fa-solid fa-wand-magic-sparkles",
+    iconClasses: "bg-pink-50 text-pink-600 border-pink-200",
+    modal: "autoPhotoEditsModal",
+    what: "Pick a showroom background once, and your vehicle photos get the same treatment every time: the car is cut out of its dealer photo and placed on your background, and auto-crop keeps the part of the photo you choose in frame.",
+    steps: [
+      "Open this card and pick a background: Bright, Dark or Clean lot.",
+      "Choose 'First photo only' (fastest), 'All photos', or 'Disabled'.",
+      "Turn Auto-crop on, open the 'Adjust crop' tab and drag the photo to set what stays in frame, then pick 'Every photo' or 'First photo only' underneath.",
+      "Press Save settings — the background you picked saves to your account too."
+    ],
+    notes: [
+      "The cut-out runs on your own device, right in the preview — your photos are not uploaded for it. The first preview downloads the AI model once (it is sizeable); your browser keeps it for next time.",
+      "In this popup only the preview vehicle's first photo is processed. Using the edited photos automatically when a car posts is the next wiring step — for now you can download the finished preview from the popup.",
+      "If a photo cannot be processed, you see the original photo with a note — never a broken image."
+    ]
+  },
+  safety: {
+    title: "Posting safety",
+    icon: "fa-solid fa-shield-halved",
+    iconClasses: "bg-amber-50 text-amber-600 border-amber-200",
+    modal: "postingSafetyModal",
+    what: "A daily cap and human-like pacing for your posts. Facebook restricts accounts that post like robots — this keeps your posting looking like a person, and stops you at the number you set.",
+    steps: [
+      "Open this card.",
+      "Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.",
+      "Pick a posting speed: Standard, or Cautious for twice the spacing between posts.",
+      "Press Save. The counter on this card shows how much of today's limit you have used."
+    ],
+    notes: [
+      "The counter counts today's Marketplace queue items that did not fail, plus cars already marked posted today.",
+      "The Chrome extension checks the same limit before it posts. Hit the cap and queueing stops with a message — nothing is queued past it.",
+      "Unlimited means no cap at all. It is offered, but it is the fastest way to earn a Facebook restriction."
+    ]
+  },
+  preferences: {
+    title: "Posting preferences",
+    icon: "fa-solid fa-sliders",
+    iconClasses: "bg-cyan-50 text-cyan-600 border-cyan-200",
+    modal: "postingPreferencesModal",
+    what: "The recipe every Marketplace post is built from: vehicle type, a title emoji, miles or kilometres, the details that go into every post, and how your descriptions get written.",
+    steps: [
+      "Open this card and set the listing options: vehicle type, title emoji, distance in Miles or KM.",
+      "Choose what goes in every post: clean title, new or used, mileage in the title, VIN and stock number in the description.",
+      "For descriptions, leave AI writing on and add anything it should always mention (warranty, delivery, financing), then pick Short, Medium or Long — or turn AI off to use a standard description.",
+      "Press Save preferences."
+    ],
+    notes: [
+      "Changes save to your account and apply to posts made after you save. Posts already live on Marketplace do not change.",
+      "These are the same settings the posting flow uses, so what you set here is what buyers see."
+    ]
+  }
+};
+
+let currentGuideKey = null;
+
+function openGuide(key) {
+  const g = GUIDES[key];
+  if (!g) return;
+  currentGuideKey = key;
+  document.getElementById("guideTitle").innerText = g.title;
+  const wrap = document.getElementById("guideIconWrap");
+  if (wrap) wrap.className = "w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold border " + g.iconClasses;
+  const icon = document.getElementById("guideIcon");
+  if (icon) icon.className = g.icon;
+  document.getElementById("guideWhat").innerText = g.what;
+  document.getElementById("guideSteps").innerHTML = g.steps.map(s => "<li>" + s + "</li>").join("");
+  document.getElementById("guideNotes").innerHTML = g.notes.map(s => "<li>" + s + "</li>").join("");
+  const openBtn = document.getElementById("guideOpenBtn");
+  if (openBtn) openBtn.classList.toggle("hidden", !g.modal);
+  document.getElementById("guideModal").classList.remove("hidden");
+}
+
+function openGuideFeature() {
+  const g = GUIDES[currentGuideKey];
+  closeModal("guideModal");
+  if (!g || !g.modal) return;
+  const openers = {
+    settingsModal: openSettingsModal,
+    autoPostModal: openAutoPostModal,
+    autoRepostModal: openAutoRepostModal,
+    autoPhotoEditsModal: openAutoPhotoEditsModal,
+    postingSafetyModal: openPostingSafetyModal,
+    postingPreferencesModal: openPostingPreferencesModal
+  };
+  const open = openers[g.modal];
+  if (open) open();
+}
+
+// ==============================================================================
+// ===================== RIBBON STATUS TEXT (ONE TRUTH) =========================
+// ==============================================================================
+// The words under each ribbon card render HERE and only here, derived from
+// the same controls the settings save to — the ribbon switches, the modal
+// selects and the preference state — so a card can never say "Off" while
+// its switch is on (the old hardcoded labels did exactly that). Called
+// after settings load, after every ribbon toggle, and after every save
+// that touches these settings.
+
+const ribbonState = { autoPostMode: "all" };
+
+function renderRibbonStatuses() {
+  const arrivalsEl = document.getElementById("chkRibbonArrivals");
+  const repostEl = document.getElementById("chkRibbonRepost");
+  const cropEl = document.getElementById("chkRibbonPhotoCrop");
+  const arrivalsOn = !!(arrivalsEl && arrivalsEl.checked);
+  const repostOn = !!(repostEl && repostEl.checked);
+  const cropOn = !!(cropEl && cropEl.checked);
+
+  // Master card: its switch is the AND of the three below (see
+  // syncRibbonMasterCheckbox), so the words count what is really running.
+  const masterLbl = document.getElementById("ribbonMasterStatusLabel");
+  if (masterLbl) {
+    const onCount = [arrivalsOn, repostOn, cropOn].filter(Boolean).length;
+    masterLbl.innerText = onCount === 3
+      ? "On — all automations running"
+      : onCount === 0
+        ? "Off — no auto-posting or updates"
+        : "Some automations on — see below";
+  }
+
+  const apLbl = document.getElementById("ribbonAutoPostStatusLabel");
+  if (apLbl) {
+    apLbl.innerText = !arrivalsOn
+      ? "Off"
+      : ribbonState.autoPostMode === "filtered"
+        ? "On — saved filters only"
+        : "On — all new arrivals";
+  }
+
+  const rpLbl = document.getElementById("repostFrequencyLabel");
+  if (rpLbl) {
+    if (!repostOn) {
+      rpLbl.innerText = "Off";
+    } else {
+      const sel = document.getElementById("autoRepostFrequencySelect");
+      const days = sel ? (parseInt(sel.value, 10) || 3) : 3;
+      rpLbl.innerText = days === 1 ? "Every 1 day" : "Every " + days + " days";
+    }
+  }
+
+  const peLbl = document.getElementById("photoEditStatusLabel");
+  if (peLbl) {
+    const aiSel = document.getElementById("selectAiBgMode");
+    const aiMode = aiSel ? aiSel.value : "first_only";
+    const parts = [];
+    if (aiMode === "all_photos") parts.push("all photos");
+    else if (aiMode !== "disabled") parts.push("first photo");
+    if (cropOn) parts.push("smart crop");
+    peLbl.innerText = parts.length ? "On — " + parts.join(" · ") : "Off";
+  }
+
+  const prefLbl = document.getElementById("ribbonPrefsStatusLabel");
+  if (prefLbl) {
+    const parts = [];
+    if (selectedPrefEmoji && selectedPrefEmoji !== "None") parts.push(selectedPrefEmoji);
+    const aiChk = document.getElementById("prefAiDescToggle");
+    const aiOn = aiChk ? aiChk.checked : true;
+    parts.push(aiOn ? "AI text · " + selectedPrefLength : "Fixed description");
+    prefLbl.innerText = parts.join(" · ");
   }
 }
 
@@ -4374,14 +4639,15 @@ function updateSafetyCounterUI(used, limit) {
   const limitLabel = document.getElementById("ribbonSafetyLimitLabel");
   const safetyText = document.getElementById("safetyCounterText");
   const safetyBar = document.getElementById("safetyCounterBar");
+  const ribbonBar = document.getElementById("ribbonSafetyBar");
   const displayCap = (!limit || limit >= 999) ? "Unlimited" : limit;
+  const pct = (!limit || limit >= 999)
+    ? "5%"
+    : `${Math.min(100, Math.max(2, (used / limit) * 100))}%`;
   if (limitLabel) limitLabel.innerText = `${used} of ${displayCap} today`;
   if (safetyText) safetyText.innerText = `${used}/${displayCap}`;
-  if (safetyBar) {
-    safetyBar.style.width = (!limit || limit >= 999)
-      ? "5%"
-      : `${Math.min(100, Math.max(2, (used / limit) * 100))}%`;
-  }
+  if (safetyBar) safetyBar.style.width = pct;
+  if (ribbonBar) ribbonBar.style.width = pct;
 }
 
 async function refreshSafetyCounter() {
@@ -4917,6 +5183,16 @@ async function saveAutoPostPreferences() {
 
     if (error) throw error;
 
+    // This save switches auto-post ON in the database — the ribbon switch,
+    // the Settings switch and the status line must say the same thing.
+    ribbonState.autoPostMode = isAllNew ? "all" : "filtered";
+    const ribbonArrivals = document.getElementById("chkRibbonArrivals");
+    if (ribbonArrivals) ribbonArrivals.checked = true;
+    const settingsAutoPost = document.getElementById("chkSettingsAutoPost");
+    if (settingsAutoPost) settingsAutoPost.checked = true;
+    syncRibbonMasterCheckbox();
+    renderRibbonStatuses();
+
     // Persist the minimum-photos choice in its own write so a database that
     // has not applied the small draft migration yet cannot fail the main
     // save. The choice applies for this session either way.
@@ -4950,9 +5226,12 @@ async function saveAutoRepostPreferences() {
     }, { onConflict: "user_id" });
 
     if (error) throw error;
-    
-    const freqLabel = document.getElementById("repostFrequencyLabel");
-    if (freqLabel) freqLabel.innerText = `Every ${days} days`;
+
+    // Saving here switches repost ON in the database — sync the ribbon.
+    const ribbonRepost = document.getElementById("chkRibbonRepost");
+    if (ribbonRepost) ribbonRepost.checked = true;
+    syncRibbonMasterCheckbox();
+    renderRibbonStatuses();
 
     closeModal('autoRepostModal');
     alert("✓ Auto delete & repost schedule saved successfully!");
@@ -5002,8 +5281,12 @@ async function saveAutoPhotoEdits() {
       if (bgError) console.warn("Background choice not persisted yet:", bgError.message);
     } catch (e) { /* non-fatal: selection still applies for this session */ }
 
-    const statusLbl = document.getElementById("photoEditStatusLabel");
-    if (statusLbl) statusLbl.innerText = autoCrop ? "On - smart crop" : "Off";
+    // The modal's Auto-crop switch and the ribbon switch are the same
+    // setting — keep them in sync, then re-render the status line.
+    const ribbonCrop = document.getElementById("chkRibbonPhotoCrop");
+    if (ribbonCrop) ribbonCrop.checked = autoCrop;
+    syncRibbonMasterCheckbox();
+    renderRibbonStatuses();
 
     closeModal('autoPhotoEditsModal');
     alert("✓ Automatic photo edits settings saved successfully!");
@@ -5076,6 +5359,8 @@ async function savePostingPreferences() {
     }, { onConflict: "user_id" });
 
     if (error) throw error;
+
+    renderRibbonStatuses();
 
     closeModal('postingPreferencesModal');
     alert("✓ Posting preferences saved successfully!");
