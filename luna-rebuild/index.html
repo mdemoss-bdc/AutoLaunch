@@ -4702,7 +4702,7 @@ const GUIDES = {
     ],
     notes: [
       "The 'Branding' tab stamps your store logo plus a strip with your dealership name, address and email onto every edited photo — upload the logo once and it saves to your account.",
-      "The cut-out runs on your own device, right in the preview — your photos are not uploaded for it. The first preview downloads the AI model once (it is sizeable); your browser keeps it for next time.",
+      "The cut-out runs on your own device, right in the preview — your photos are not uploaded for it. It uses the full-quality AI model and your photos' full-size originals, so the first preview downloads the model once (about 176 MB); your browser keeps it for next time.",
       "In this popup only the preview vehicle's first photo is processed. Using the edited photos automatically when a car posts is the next wiring step — for now you can download the finished preview from the popup.",
       "If a photo cannot be processed, you see the original photo with a note — never a broken image."
     ]
@@ -5250,25 +5250,58 @@ function computeAlphaBBox(img) {
   }
 }
 
-// Fetch a photo's bytes as a Blob: direct CORS fetch first, then the
-// photo-proxy Edge Function. Returns null when both routes fail.
+// DealerOn-style image services serve the size named in the URL, and the
+// inventory URLs ask for width=500 — a 500x375 thumbnail. The cut-out
+// engine composites onto a 1600x1200 canvas, so a thumbnail car stretched
+// 3.2x reads as pasted-on no matter how good the shadow is. Rewrite any
+// small numeric width / w sizing param to 1600 (the service's own cap:
+// width=2048 still returns 1600x1200) so the engine always works from
+// the full-size original. The cache key stays the ORIGINAL photo URL —
+// this only changes which bytes get fetched, never a photo's identity.
+function hiResPhotoUrl(photoUrl) {
+  try {
+    const u = new URL(photoUrl);
+    let changed = false;
+    for (const key of ["width", "w"]) {
+      const v = u.searchParams.get(key);
+      if (v !== null && /^\d+$/.test(v) && parseInt(v, 10) < 1600) {
+        u.searchParams.set(key, "1600");
+        changed = true;
+      }
+    }
+    return changed ? u.toString() : photoUrl;
+  } catch (e) {
+    return photoUrl;
+  }
+}
+
+// Fetch a photo's bytes as a Blob for the engine. Order: hi-res direct,
+// hi-res via the photo-proxy Edge Function, then the original URL the
+// same two ways as a last resort. Display <img> tags elsewhere in the
+// app keep using the normal (thumbnail) URL — only the engine fetches
+// hi-res. Returns null when every route fails.
 async function fetchPhotoBlob(photoUrl) {
-  try {
-    const resp = await fetch(photoUrl, { mode: "cors" });
-    if (!resp.ok) throw new Error("photo fetch HTTP " + resp.status);
-    return await resp.blob();
-  } catch (fetchErr) {
-    console.warn("[PhotoEngine] direct fetch blocked; trying photo proxy:", fetchErr);
+  const hiRes = hiResPhotoUrl(photoUrl);
+  const attempts = hiRes !== photoUrl ? [hiRes, photoUrl] : [photoUrl];
+  for (const url of attempts) {
+    const label = url === attempts[0] && attempts.length > 1 ? "hi-res" : "original";
+    try {
+      const resp = await fetch(url, { mode: "cors" });
+      if (!resp.ok) throw new Error("photo fetch HTTP " + resp.status);
+      return await resp.blob();
+    } catch (fetchErr) {
+      console.warn("[PhotoEngine] direct fetch failed (" + label + "); trying photo proxy:", fetchErr);
+    }
+    try {
+      const proxyUrl = SUPABASE_URL + "/functions/v1/photo-proxy?url=" + encodeURIComponent(url);
+      const resp = await fetch(proxyUrl, { headers: { apikey: SUPABASE_KEY } });
+      if (!resp.ok) throw new Error("photo proxy HTTP " + resp.status);
+      return await resp.blob();
+    } catch (proxyErr) {
+      console.warn("[PhotoEngine] photo proxy failed (" + label + "):", proxyErr);
+    }
   }
-  try {
-    const proxyUrl = SUPABASE_URL + "/functions/v1/photo-proxy?url=" + encodeURIComponent(photoUrl);
-    const resp = await fetch(proxyUrl, { headers: { apikey: SUPABASE_KEY } });
-    if (!resp.ok) throw new Error("photo proxy HTTP " + resp.status);
-    return await resp.blob();
-  } catch (proxyErr) {
-    console.warn("[PhotoEngine] photo proxy failed:", proxyErr);
-    return null;
-  }
+  return null;
 }
 
 // Average luminance + saturation of an image, sampled tiny. For a cut-out
@@ -5387,8 +5420,10 @@ async function applyBrandingFrame(ctx, W, H) {
 
 // Render the ORIGINAL photo (cover-fit, 1600x1200) with the branding frame
 // baked in — used when the preview is showing the original (AI disabled or
-// the cut-out failed) but the frame is on. Returns a JPEG data URL, or
-// null when the photo bytes can't be read (caller keeps the plain photo).
+// the cut-out failed) but the frame is on. Bytes come through
+// fetchPhotoBlob, so the framed render uses the hi-res source too, not
+// the 500px thumbnail. Returns a JPEG data URL, or null when the photo
+// bytes can't be read (caller keeps the plain photo).
 async function renderOriginalFramed(photoUrl) {
   const blob = await fetchPhotoBlob(photoUrl);
   if (!blob) return null;
@@ -5409,6 +5444,80 @@ async function renderOriginalFramed(photoUrl) {
   }
 }
 
+// Refine a raw cut-out's alpha matte before compositing. The model's edge
+// pixels carry a faint halo of the original background (light fringe on
+// bright paint, dark fringe on dark paint) that screams "pasted on". Three
+// cheap, deterministic passes on the alpha channel only:
+//   1. Erode ~1px (3x3 min filter) — chokes the fringe inward.
+//   2. Levels (black point 12, white point 243) — leftover halo alpha goes
+//      to 0, the true silhouette firms up.
+//   3. Feather ~1px (3x3 box blur) — so the choked edge isn't crunchy.
+// Runs once per photo at native resolution; the alpha bbox is computed
+// AFTER refinement, so placement uses the cleaned silhouette. Returns a
+// canvas, or null when anything fails (caller keeps the raw cut-out).
+function refineCutoutMatte(img) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  if (!w || !h) return null;
+  try {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const cx = c.getContext("2d", { willReadFrequently: true });
+    cx.drawImage(img, 0, 0);
+    const imageData = cx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    const n = w * h;
+    const src = new Uint8Array(n);
+    for (let i = 0, j = 3; i < n; i++, j += 4) src[i] = data[j];
+
+    // Pass 1 — erode (min over the 3x3 neighbourhood).
+    const eroded = new Uint8Array(n);
+    for (let y = 0; y < h; y++) {
+      const y0 = y > 0 ? y - 1 : 0, y1 = y < h - 1 ? y + 1 : h - 1;
+      for (let x = 0; x < w; x++) {
+        const x0 = x > 0 ? x - 1 : 0, x1 = x < w - 1 ? x + 1 : w - 1;
+        let m = 255;
+        for (let yy = y0; yy <= y1 && m > 0; yy++) {
+          const row = yy * w;
+          for (let xx = x0; xx <= x1; xx++) {
+            const v = src[row + xx];
+            if (v < m) m = v;
+          }
+        }
+        eroded[y * w + x] = m;
+      }
+    }
+
+    // Pass 2 — levels.
+    const leveled = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const v = eroded[i];
+      leveled[i] = v <= 12 ? 0 : v >= 243 ? 255 : Math.round((v - 12) * 255 / 231);
+    }
+
+    // Pass 3 — feather (3x3 box blur).
+    const out = new Uint8Array(n);
+    for (let y = 0; y < h; y++) {
+      const y0 = y > 0 ? y - 1 : 0, y1 = y < h - 1 ? y + 1 : h - 1;
+      for (let x = 0; x < w; x++) {
+        const x0 = x > 0 ? x - 1 : 0, x1 = x < w - 1 ? x + 1 : w - 1;
+        let sum = 0, cnt = 0;
+        for (let yy = y0; yy <= y1; yy++) {
+          const row = yy * w;
+          for (let xx = x0; xx <= x1; xx++) { sum += leveled[row + xx]; cnt++; }
+        }
+        out[y * w + x] = Math.round(sum / cnt);
+      }
+    }
+
+    for (let i = 0, j = 3; i < n; i++, j += 4) data[j] = out[i];
+    cx.putImageData(imageData, 0, 0);
+    return c;
+  } catch (e) {
+    console.warn("[PhotoEngine] Matte refinement failed, using raw cut-out:", e);
+    return null;
+  }
+}
+
 // Run background removal for one photo URL (or reuse the cached / in-flight
 // result). Returns the cutout cache entry.
 async function getOrCreateCutout(photoUrl, onProgress) {
@@ -5420,24 +5529,43 @@ async function getOrCreateCutout(photoUrl, onProgress) {
     if (typeof mod.removeBackground !== "function") {
       throw new Error("Background engine module loaded without removeBackground()");
     }
-    // Photo bytes via fetchPhotoBlob: direct fetch first (works when the
-    // dealer's photo server sends CORS headers), then our photo-proxy Edge
-    // Function (servers like mosescars.com send NO CORS headers, so the
-    // browser blocks direct reads — the proxy relays the bytes back with
-    // permission headers). If both fail, hand the library the URL as a
-    // last resort and let it fetch its own way.
+    // Photo bytes via fetchPhotoBlob: the HI-RES variant of the photo
+    // first (see hiResPhotoUrl — inventory URLs are 500px thumbnails),
+    // direct fetch (works when the dealer's photo server sends CORS
+    // headers), then our photo-proxy Edge Function (servers like
+    // mosescars.com send NO CORS headers, so the browser blocks direct
+    // reads — the proxy relays the bytes back with permission headers),
+    // then the original URL the same two ways. If every fetch fails,
+    // hand the library the URL as a last resort and let it fetch its
+    // own way.
     let source = await fetchPhotoBlob(photoUrl);
     if (!source) {
       console.warn("[PhotoEngine] fetch->blob failed for photo; passing URL to engine instead");
       source = photoUrl;
     }
     const cutoutBlob = await mod.removeBackground(source, {
-      model: "medium",
+      // "large" = the full-precision ISNet model in @imgly/background-
+      // removal 1.7.0 (schema maps large->isnet, medium->isnet_fp16,
+      // small->isnet_quint8; manifest sizes 176 MB / 88 MB / 44 MB).
+      // Matte quality is the whole product here, so we pay the bigger
+      // one-time download; the browser caches it like before.
+      model: "large",
       output: { format: "image/png", quality: 1 },
       progress: (key, current, total) => { if (onProgress) onProgress(key, current, total); }
     });
-    const blobUrl = URL.createObjectURL(cutoutBlob);
-    const img = await loadEngineImage(blobUrl);
+    let blobUrl = URL.createObjectURL(cutoutBlob);
+    let img = await loadEngineImage(blobUrl);
+    // Edge cleanup: choke/feather the matte so no fringe of the original
+    // background survives around the silhouette. Best-effort — on any
+    // failure the raw cut-out is used.
+    const refined = refineCutoutMatte(img);
+    if (refined) {
+      const refinedBlob = await new Promise(res => refined.toBlob(res, "image/png"));
+      if (refinedBlob) {
+        blobUrl = URL.createObjectURL(refinedBlob);
+        img = await loadEngineImage(blobUrl);
+      }
+    }
     const entry = {
       blobUrl: blobUrl,
       img: img,

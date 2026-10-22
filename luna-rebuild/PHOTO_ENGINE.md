@@ -4,9 +4,11 @@ Powers the live preview in **Settings → Automatic photo edits**: the preview
 vehicle is cut out of its dealer photo and composited onto the selected
 showroom background (Bright / Dark / Clean lot), entirely in the browser.
 
-Built 2026-10-22. Status: **v1.1 — preview only** (realism pass, branding
-frame, custom backgrounds — see the v1.1 section below). Posting with edited
-photos is deliberately NOT wired yet (see "Remaining wiring" below).
+Built 2026-10-22. Status: **v1.2 — preview only** (hi-res source photos,
+full-precision model, matte edge refinement — see the v1.2 section below;
+v1.1 added the realism pass, branding frame, custom backgrounds). Posting
+with edited photos is deliberately NOT wired yet (see "Remaining wiring"
+below).
 
 ## How it works
 
@@ -24,9 +26,10 @@ photos is deliberately NOT wired yet (see "Remaining wiring" below).
    "Removing background — n%") and tells the user the first download is
    one-time.
 3. **Removal** — `@imgly/background-removal` (`removeBackground`, ISNet
-   "medium" model) runs on-device via onnxruntime-web. No API keys, no
-   server, no photo uploads — this matches AutoLaunch's local-first
-   principle: the user's machine does the work.
+   full-precision model — the library's `model: "large"`) runs on-device
+   via onnxruntime-web, fed the photo's full-size original (see v1.2).
+   No API keys, no server, no photo uploads — this matches AutoLaunch's
+   local-first principle: the user's machine does the work.
 4. **Cut-out cache** — results are kept in a `Map` keyed by photo URL
    (transparent PNG blob + dimensions + alpha bounding box). Switching
    backgrounds re-composites from the cached cut-out instantly; the removal
@@ -147,6 +150,44 @@ through the exact same defocus/grade/harmonisation pipeline as built-ins.
 Restoring a saved choice (`ai_background_choice` = the custom URL) lights
 up the custom tile, because the settings load restores the custom tile
 before matching the selection.
+
+## v1.2 — hi-res source, full-precision model, matte refinement (2026-10-22)
+
+Matthew's verdict on v1.1 was still "looks like trash" — and the main
+cause turned out not to be the compositing at all:
+
+- **The engine was cutting out a thumbnail.** Inventory `image_url`s come
+  from the DealerOn image service with a `width=500` parameter, so every
+  photo the engine received was a 500×375 thumbnail (~50 KB), stretched
+  3.2× onto the 1600×1200 canvas. A soft, low-detail car on a crisp
+  generated background reads as pasted-on no matter how good the shadow,
+  defocus, and harmonisation are. Verified directly: the same URL at
+  `width=1600` returns the full 1600×1200 original (~372 KB), and
+  `width=2048` is capped at 1600×1200 by the service.
+- **Hi-res fetch (`hiResPhotoUrl` + `fetchPhotoBlob`).** Engine fetches
+  now rewrite a small numeric `width`/`w` query param to 1600 and try, in
+  order: hi-res direct → hi-res via photo-proxy → original direct →
+  original via proxy → (in `getOrCreateCutout`) the library fetching the
+  URL itself. The cut-out cache key stays the **original** photo URL —
+  only the fetched bytes change. Display `<img>` tags everywhere else in
+  the app keep using the fast thumbnail URL. `renderOriginalFramed` goes
+  through the same `fetchPhotoBlob`, so branding-framed originals are
+  full-res too.
+- **Full-precision model.** v1/v1.1 used `model: "medium"`. In
+  @imgly/background-removal 1.7.0 the config schema maps `large` →
+  `isnet` (full precision, 176,149,806 bytes in the resources manifest),
+  `medium` → `isnet_fp16` (88 MB), `small` → `isnet_quint8` (44 MB).
+  Matte quality is the product, so the engine now requests `"large"`;
+  the one-time download grows to ~176 MB and the guide note says so.
+  The browser caches it exactly as before.
+- **Matte edge refinement (`refineCutoutMatte`).** After removal, the
+  alpha channel gets three deterministic passes at native resolution:
+  erode ~1px (3×3 min filter) to choke the fringe the original
+  background leaves around the silhouette, a levels adjustment (black
+  point 12, white point 243) so leftover halo alpha goes to 0, and a
+  ~1px feather (3×3 box blur) so the edge isn't crunchy. The alpha
+  bounding box is computed after refinement, so placement uses the
+  cleaned silhouette. Any failure falls back to the raw cut-out.
 
 ## Remaining wiring (v2 — explicitly out of scope for v1)
 
