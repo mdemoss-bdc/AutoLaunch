@@ -7,7 +7,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#2563eb">
+<meta name="theme-color" content="#070D1A">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>AutoLaunch — Intelligence Suite</title>
@@ -158,13 +158,167 @@ body {
   /* Header title scales down so the bar fits small screens */
   main h1 { font-size: 1.35rem !important; }
 }
+
+/* =============================================================================
+   DARK COMMAND-CENTER TEMPLATE — Inventory screen only (body.dark-shell)
+   Deep-navy shell + electric-blue accent ("BDC Manager energy", AutoLaunch
+   blue instead of gold). Scoped to the app shell (aside) and the Inventory
+   workspace (main) ONLY: modals, the auth screen, and the Get Started /
+   Wishlist views keep their current light surfaces until rollout.
+   Tokens are documented in DESIGN_DARK.md — reuse them, don't reinvent.
+   ========================================================================== */
+body.dark-shell {
+  --d-page: #070D1A;
+  --d-page-top: #0B1424;
+  --d-sidebar: #0A1220;
+  --d-deep: #0C1730;
+  --d-card: #101B30;
+  --d-field: #0E1930;
+  --d-track: #22345A;
+  --d-edge: rgba(59, 130, 246, 0.16);
+  --d-edge-strong: rgba(96, 165, 250, 0.45);
+  --d-field-edge: #2A3D5F;
+  --d-line: rgba(255, 255, 255, 0.055);
+  --d-h: #E9EFF8;
+  --d-body: #CBD5E1;
+  --d-soft: #9FB0C7;
+  --d-micro: #8698B5;
+  --d-faint: #7A90AC;
+  --d-link: #58A6FF;
+  --d-electric: #2E7CF6;
+  background: var(--d-page);
+}
+html:has(> body.dark-shell) { background: #070D1A; }
+
+/* Inventory canvas: navy gradient with a soft electric glow near the top */
+body.dark-shell main {
+  background:
+    radial-gradient(1100px 480px at 72% -8%, rgba(46, 124, 246, 0.13), rgba(46, 124, 246, 0) 60%),
+    linear-gradient(180deg, var(--d-page-top) 0%, var(--d-page) 55%);
+}
+/* Views not yet rolled out keep the exact light canvas they have today */
+body.dark-shell #getStartedPage,
+body.dark-shell #wishlistPage { background: #f0f4f8; }
+
+/* ---- Sidebar ------------------------------------------------------------ */
+body.dark-shell aside {
+  background: var(--d-sidebar);
+  border-right-color: rgba(59, 130, 246, 0.14);
+  box-shadow: 0 0 32px rgba(0, 0, 0, 0.35);
+}
+body.dark-shell .nav-selected {
+  background: linear-gradient(135deg, #2E7CF6, #1D4ED8) !important;
+  box-shadow: 0 6px 18px rgba(46, 124, 246, 0.45) !important;
+}
+
+/* ---- Surfaces ------------------------------------------------------------ */
+/* Order matters: .glass-card comes after .bg-white so cards win the tie. */
+body.dark-shell :is(aside, main) .bg-white { background-color: var(--d-field); }
+body.dark-shell :is(aside, main) .bg-white\/95 { background-color: rgba(13, 24, 44, 0.92); }
+body.dark-shell :is(aside, main) .bg-slate-50 { background-color: var(--d-deep); }
+body.dark-shell :is(aside, main) .bg-slate-50\/80 { background-color: var(--d-deep); }
+body.dark-shell :is(aside, main) .bg-slate-100 { background-color: rgba(148, 163, 184, 0.12); }
+body.dark-shell :is(aside, main) .bg-slate-200 { background-color: var(--d-track); }
+body.dark-shell :is(aside, main) .bg-blue-50 { background-color: rgba(59, 130, 246, 0.14); }
+body.dark-shell :is(aside, main) .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.16); }
+body.dark-shell :is(aside, main) .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.13); }
+body.dark-shell :is(aside, main) .bg-amber-50 { background-color: rgba(245, 158, 11, 0.13); }
+body.dark-shell :is(aside, main) .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
+body.dark-shell :is(aside, main) .glass-card {
+  background-color: var(--d-card);
+  border-color: var(--d-edge);
+  box-shadow: 0 10px 24px rgba(2, 6, 17, 0.45);
+}
+body.dark-shell :is(aside, main) .glass-card:hover {
+  border-color: rgba(96, 165, 250, 0.35);
+  box-shadow: 0 14px 30px rgba(2, 6, 17, 0.55);
+}
+
+/* Ribbon cards: deepen the brand wash for dark; hairline stays blue→sky */
+body.dark-shell main .ribbon-card {
+  background-image: linear-gradient(180deg, rgba(59, 130, 246, 0.10), rgba(59, 130, 246, 0) 55%);
+}
+body.dark-shell main #ribbonSafetyBar { box-shadow: 0 0 8px rgba(245, 158, 11, 0.55); }
+
+/* ---- Text ---------------------------------------------------------------- */
+body.dark-shell :is(aside, main) .text-slate-950,
+body.dark-shell :is(aside, main) .text-slate-900 { color: var(--d-h); }
+body.dark-shell :is(aside, main) .text-slate-800,
+body.dark-shell :is(aside, main) .text-slate-700 { color: var(--d-body); }
+body.dark-shell :is(aside, main) .text-slate-600 { color: var(--d-soft); }
+body.dark-shell :is(aside, main) .text-slate-500 { color: var(--d-micro); }
+body.dark-shell :is(aside, main) .text-slate-400 { color: var(--d-faint); }
+body.dark-shell :is(aside, main) .text-slate-300 { color: #54687F; }
+body.dark-shell :is(aside, main) .text-blue-600 { color: var(--d-link); }
+body.dark-shell :is(aside, main) .text-indigo-700 { color: #A5B4FF; }
+body.dark-shell :is(aside, main) .text-sky-600 { color: #38BDF8; }
+body.dark-shell :is(aside, main) .text-purple-600 { color: #C09BFF; }
+body.dark-shell :is(aside, main) .text-emerald-700 { color: #34D399; }
+body.dark-shell :is(aside, main) .text-amber-700 { color: #FBBF24; }
+body.dark-shell :is(aside, main) .text-rose-700 { color: #FB7185; }
+
+/* ---- Borders & dividers --------------------------------------------------- */
+body.dark-shell :is(aside, main) .border-slate-200 { border-color: var(--d-edge); }
+body.dark-shell :is(aside, main) .border-slate-300 { border-color: var(--d-field-edge); }
+body.dark-shell :is(aside, main) .border-slate-100 { border-color: var(--d-line); }
+body.dark-shell :is(aside, main) .border-blue-200 { border-color: rgba(59, 130, 246, 0.35); }
+body.dark-shell :is(aside, main) .border-indigo-200 { border-color: rgba(99, 102, 241, 0.38); }
+body.dark-shell :is(aside, main) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.35); }
+body.dark-shell :is(aside, main) .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
+body.dark-shell :is(aside, main) .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
+body.dark-shell main .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--d-line); }
+
+/* ---- Hover / focus states -------------------------------------------------- */
+body.dark-shell :is(aside, main) .hover\:bg-slate-50:hover { background-color: rgba(59, 130, 246, 0.07); }
+body.dark-shell :is(aside, main) .hover\:bg-slate-100:hover { background-color: rgba(59, 130, 246, 0.09); }
+body.dark-shell :is(aside, main) .hover\:bg-rose-100:hover { background-color: rgba(244, 63, 94, 0.20); }
+body.dark-shell :is(aside, main) .hover\:text-slate-900:hover,
+body.dark-shell :is(aside, main) .hover\:text-slate-700:hover { color: var(--d-h); }
+body.dark-shell :is(aside, main) .hover\:text-blue-800:hover { color: #93C5FD; }
+body.dark-shell :is(aside, main) .hover\:text-rose-600:hover { color: #FB7185; }
+body.dark-shell main .hover\:border-blue-300:hover { border-color: var(--d-edge-strong); }
+body.dark-shell main :is(input, select):focus { --tw-ring-color: rgba(46, 124, 246, 0.55); }
+body.dark-shell main input::placeholder { color: #7186A3; }
+
+/* ---- Buttons, pills, toggles ------------------------------------------------ */
+body.dark-shell main .btn-gradient {
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45), inset 0 0 0 1px rgba(96, 165, 250, 0.25);
+}
+/* Whichever pill is active (JS swaps in .bg-blue-600) gets the electric fill */
+body.dark-shell main #pillActive.bg-blue-600,
+body.dark-shell main #pillUnposted.bg-blue-600,
+body.dark-shell main #pillPosted.bg-blue-600,
+body.dark-shell main #pillAll.bg-blue-600 {
+  background-image: linear-gradient(135deg, #2E7CF6, #1D4ED8);
+  box-shadow: 0 4px 16px rgba(46, 124, 246, 0.45);
+  border-color: transparent;
+}
+/* Table rows: deep hover wash instead of the light theme's #f8fafc */
+body.dark-shell main .table-row-vibrant:hover { background-color: rgba(59, 130, 246, 0.06) !important; }
+
+/* ---- Scrollbars (inventory + sidebar scrollers) ------------------------------ */
+body.dark-shell :is(aside, main) * { scrollbar-width: thin; scrollbar-color: var(--d-track) transparent; }
+body.dark-shell main::-webkit-scrollbar,
+body.dark-shell aside::-webkit-scrollbar,
+body.dark-shell :is(aside, main) ::-webkit-scrollbar { width: 10px; height: 10px; }
+body.dark-shell main::-webkit-scrollbar-track,
+body.dark-shell aside::-webkit-scrollbar-track,
+body.dark-shell :is(aside, main) ::-webkit-scrollbar-track { background: transparent; }
+body.dark-shell main::-webkit-scrollbar-thumb,
+body.dark-shell aside::-webkit-scrollbar-thumb,
+body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
+  background: var(--d-track);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
 </style>
 </head>
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 0: HEAD & LIGHT STYLES END =================== -->
 <!-- ============================================================================== -->
 
-<body class="h-full flex select-none overflow-x-hidden text-slate-800">
+<body class="dark-shell h-full flex select-none overflow-x-hidden text-slate-800">
 
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 1: AUTHENTICATION MODAL START =============== -->
