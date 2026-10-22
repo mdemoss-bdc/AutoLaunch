@@ -25,3 +25,37 @@ On-demand refresh — DECIDED 2026-10-22 (Matthew): Option A, webhook-first.
 - Stale inventory: cars that vanish from a dealer feed are never marked
   inactive/sold today. Needs a rule (e.g. not seen in 2 consecutive full
   syncs -> is_active=false) designed around real feed behaviour.
+
+## Completion — stale inventory (2026-10-22, overnight)
+
+Implemented in scraper.py: mark_stale_inventory() + tracking in run_scraper().
+
+Rule shipped (conservative, existing columns only — no migration required):
+- During a user's crawl the scraper now collects every VIN seen across all
+  of that user's feeds, and tracks whether the crawl stayed clean.
+- After the feeds finish, IF the crawl saw at least one car AND had zero
+  navigation errors, zero page-1 404s and zero extraction errors, then any
+  of that user's rows with is_active=true whose VIN was not seen get
+  is_active=false. Their status is deliberately NOT changed (a car leaving
+  the feed is not proof it sold).
+- Safety brake: if the stale pass would deactivate more than 50% of a
+  dealer's active inventory (and they have 20+ active units), it refuses
+  and logs instead — that pattern means the feed changed, not the lot.
+- If a "stale" VIN reappears in a later crawl, the existing upsert
+  reactivates it automatically (is_active=true, status="Available").
+- The whole pass is wrapped so a database error (including the theoretical
+  case that is_active does not exist) logs a warning and never fails the
+  scrape. The select is paginated and updates are chunked at 200 VINs.
+- Bonus hardening in the same pass: extraction errors on a page are now
+  caught per-feed instead of crashing the entire multi-user run.
+
+Choice note: the gentler "2 consecutive missed syncs" rule from the
+original note needs per-row memory of misses, which the current schema
+has no column for. A DRAFT migration for that upgrade lives at
+supabase/migrations_draft/stale_tracking_DRAFT.sql (adds last_seen_at +
+stale_miss_count, additive only). It is NOT applied and the scraper does
+not depend on it. Matthew: apply it only if you want the 2-miss rule.
+
+Verified: python3 -m py_compile passes. NOT yet run against the live
+dealer feeds (no scrape was triggered overnight) — first scheduled or
+manual run will exercise it; watch for the "Stale pass" log lines.

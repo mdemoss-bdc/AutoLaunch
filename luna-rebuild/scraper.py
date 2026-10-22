@@ -446,12 +446,76 @@ def push_batch_to_supabase(records: List[dict]) -> int:
     unique_by_vin = {r["vin"]: r for r in records if r.get("vin")}
     try:
         res = db.table("scraped_inventory").upsert(
-            list(unique_by_vin.values()), 
+            list(unique_by_vin.values()),
             on_conflict="vin, user_id"
         ).execute()
         return len(res.data) if res.data else 0
     except Exception as e:
         print(f"[!] Batch upsert error: {e}")
+        return 0
+
+# Safety brake for the stale pass: if a single run would deactivate more than
+# this fraction of a dealer's active inventory, something is probably wrong
+# with the feed itself, so we skip stale marking and log instead.
+STALE_MAX_FRACTION = 0.5
+
+def mark_stale_inventory(uid: str, seen_vins: set) -> int:
+    """Flag inventory that a fully successful crawl did not see.
+
+    Uses only fields the scraper already writes (is_active, status):
+    stale rows get is_active=False and their status is left untouched
+    (a car that left the feed is not necessarily "Sold"). If the same VIN
+    reappears in a later crawl, the normal upsert reactivates it
+    (is_active=True, status="Available").
+
+    Returns the number of rows flagged. Any database error (for example if
+    is_active somehow does not exist in this project's schema) is logged
+    and swallowed so a stale-pass failure can never break the scrape.
+    """
+    if not uid or not seen_vins:
+        return 0
+    try:
+        active_vins = []
+        page_size = 1000
+        offset = 0
+        while True:
+            res = (
+                db.table("scraped_inventory")
+                .select("vin")
+                .eq("user_id", uid)
+                .eq("is_active", True)
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            rows = res.data or []
+            active_vins.extend(r["vin"] for r in rows if r.get("vin"))
+            if len(rows) < page_size:
+                break
+            offset += page_size
+
+        stale = [v for v in active_vins if v not in seen_vins]
+        if not stale:
+            return 0
+
+        if len(active_vins) >= 20 and len(stale) > STALE_MAX_FRACTION * len(active_vins):
+            print(
+                f"[!] Stale pass skipped for user {uid[:8]}: {len(stale)} of "
+                f"{len(active_vins)} active units unseen (> {int(STALE_MAX_FRACTION * 100)}%). "
+                "Feed may have changed; refusing to mass-deactivate."
+            )
+            return 0
+
+        flagged = 0
+        for i in range(0, len(stale), 200):
+            chunk = stale[i:i + 200]
+            db.table("scraped_inventory").update(
+                {"is_active": False}
+            ).eq("user_id", uid).in_("vin", chunk).execute()
+            flagged += len(chunk)
+        print(f"[✓] Stale pass for user {uid[:8]}: flagged {flagged} unseen unit(s) inactive.")
+        return flagged
+    except Exception as e:
+        print(f"[!] Stale pass warning (non-fatal): {e}")
         return 0
 # ==============================================================================
 # ====================== SCRAPER ENTRYPOINT START ==============================
@@ -594,6 +658,10 @@ async def run_scraper():
             print(f"[*] Store: {store_name}")
             print("=======================================================")
             user_units_synced = 0
+            # Stale tracking for this user: every VIN seen across all feeds,
+            # and whether the crawl stayed clean enough to trust a stale pass.
+            user_seen_vins = set()
+            user_had_error = False
 
             for feed in feeds_to_crawl:
 
@@ -628,6 +696,11 @@ async def run_scraper():
                                 f"[!] 404 Page Not Found: {url}"
                             )
 
+                            if pt == 1:
+                                # Feed URL itself is broken: do not trust
+                                # this run for stale marking.
+                                user_had_error = True
+
                             break
 
                     except Exception as e:
@@ -636,13 +709,27 @@ async def run_scraper():
                             f"[!] Navigation error: {e}"
                         )
 
+                        user_had_error = True
+
                     await asyncio.sleep(2)
 
-                    cars = await extract_cards_from_page(
-                        page,
-                        default_condition=condition,
-                        active_uid=active_uid
-                    )
+                    try:
+
+                        cars = await extract_cards_from_page(
+                            page,
+                            default_condition=condition,
+                            active_uid=active_uid
+                        )
+
+                    except Exception as e:
+
+                        print(
+                            f"[!] Extraction error on {url}: {e}"
+                        )
+
+                        user_had_error = True
+
+                        break
 
                     if not cars:
 
@@ -668,6 +755,8 @@ async def run_scraper():
 
                     seen_vins.update(vins)
 
+                    user_seen_vins.update(vins)
+
                     saved = push_batch_to_supabase(cars)
 
                     user_units_synced += saved
@@ -679,6 +768,20 @@ async def run_scraper():
                     await asyncio.sleep(1)
 
             total_synced_all += user_units_synced
+
+            # Stale pass: only after a fully clean crawl that actually saw
+            # cars. Any navigation/extraction error, or an empty result,
+            # means "we don't know" — and "don't know" never deactivates
+            # a dealer's inventory.
+            if user_seen_vins and not user_had_error:
+
+                mark_stale_inventory(active_uid, user_seen_vins)
+
+            elif user_seen_vins and user_had_error:
+
+                print(
+                    f"[!] Stale pass skipped for {store_name}: crawl had errors."
+                )
 
             print(
                 f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced."
