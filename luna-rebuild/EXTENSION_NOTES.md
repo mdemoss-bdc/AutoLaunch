@@ -23,7 +23,7 @@ The repo-root extension/ is untouched.
 
 ## What changed
 
-### manifest.json (v2.1.2)
+### manifest.json (v2.1.3)
 - Added "alarms" permission.
 - Added content script bridge.js on https://mdemoss-bdc.github.io/AutoLaunch/*
 - Added externally_connectable for https://mdemoss-bdc.github.io/*
@@ -42,6 +42,8 @@ The repo-root extension/ is untouched.
   during a posting run, never while idle.
 - Version 2.1.2 (filler v3.2): the field-location fix below. No
   permission changes — the "debugger" note above still applies.
+- Version 2.1.3 (filler v3.3): the step-2 colors + clean-title fix
+  below (COLOR NORMALIZATION + STEP-2 VERIFY). No permission changes.
 
 ### bridge.js (NEW)
 - Runs only on the AutoLaunch origin. Listens for the app's
@@ -287,6 +289,58 @@ The repo-root extension/ is untouched.
   preserves `note` and `formMap` and its cap rises to 6000 chars,
   shedding formMap entries (halve, then drop) before outerHTML /
   readBack, so the field records always survive.
+- COLOR NORMALIZATION + STEP-2 VERIFY (filler v3.3 / v2.1.3 — from
+  the FIRST SUCCESSFUL live run): the Tucson posted, but Matthew had
+  to pick the colors by hand ("i had to pick colors") and the
+  clean-title box stayed unchecked. The old step-2 code explains all
+  three misses: the color fillers got the RAW dealer string ("Mojave
+  Sand") as their only candidate and matched it literally against
+  Facebook's fixed option list; the listbox path used a bare .click()
+  and a fixed wait; the combobox fallback only locates <input>s (the
+  color control is a div); and the result was discarded unread — no
+  read-back, no retry, no record. Colors now have a dedicated path:
+  (1) the dealer string is ranked against the options ACTUALLY
+  offered at runtime by a synonym table (sand/tan/khaki/mojave/
+  desert -> Beige then Tan; charcoal/graphite/granite -> Gray then
+  Silver; silver family -> Silver then Gray; crimson/burgundy/ruby
+  -> Red; hue words beat finish words, so "Pearl White" -> White;
+  the metallic/pearl -> Gray/Silver fallback fires only when no hue
+  was named at all — a named-but-unoffered hue ranks nothing rather
+  than a wrong color); (2) the dropdown opens with the realistic
+  click (trusted CDP click as fallback — and cdpClickEl now attaches
+  the debugger session itself, since the worker refuses clicks on
+  unattached tabs, a gap the harness caught), options are collected
+  document-wide (they render in a portal outside the field's
+  container), and the chosen option is scrolled into view and
+  clicked; (3) the pick is READ BACK from the trigger, and a miss
+  retries once with the next-best candidate. Clean title: the
+  locator now also accepts the labelled clickable row (this
+  variant's control is a custom div, not an input), clicks with the
+  same machinery, and verifies aria-checked/checked afterwards —
+  with a hard rule that an unreadable state earns exactly ONE click,
+  never a blind second toggle. Step-2 fields remain best-effort and
+  can never fail a job — but every outcome is now recorded as a
+  non-fatal STEP NOTE on the diagnostic channel (field ExteriorColor
+  / InteriorColor / CleanTitle, a note code — color_set,
+  color_no_option_match, color_readback_mismatch,
+  clean_title_checked, ... — the requested/chosen values in
+  `detail`, and the read-back). The worker's compactDiagError
+  preserves `detail` (shed with readBack under cap pressure) and the
+  FIELD_DIAG handler stores note + detail in the failure log, so a
+  step-2 miss is visible in the database / log instead of silent.
+  Verification (node, DOM-stub harness, 50 checks; the v3.2 harness
+  also still passes 40/40): the pure ranking (Mojave Sand -> Beige,
+  Granite Crystal Metallic -> Gray, Pearl White -> White, Titanium
+  Silver -> Silver — no "tan"-in-"titanium" trap, Desert Tan ->
+  Beige over verbatim Tan, Passion Purple Pearl -> nothing when
+  purple isn't offered, no wrong Gray); a two-step FB-variant flow
+  with portal-rendered color options — Mojave Sand -> Beige chosen
+  and read back, interior Beige chosen, clean-title div checked,
+  all three notes riding the job payload; the unmatchable color
+  degrading to a note with the fill continuing; synthetic-proof
+  controls driven entirely by the CDP fallback (notes record the
+  CDP path); and the native-<select> + real-checkbox variant.
+  It has NOT yet had a live Facebook run.
 - POSTED only on detected success: navigation to a marketplace item /
   selling URL, or on-page text like "your listing is now live". Timeout
   or anything else = FAILED with the reason. There is no timer that

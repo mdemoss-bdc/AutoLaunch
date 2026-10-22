@@ -121,6 +121,32 @@
 //     warning, not a failure; past Facebook's 20-photo ceiling the
 //     filler removes extras via the tiles' remove buttons, or fails
 //     honestly with photo_overflow.
+// 13. STEP-2 COLORS + CLEAN TITLE (v2.1.3 / filler v3.3, sixth live
+//     test — the FIRST SUCCESSFUL POST): the Tucson went live, but
+//     Matthew had to pick the colors by hand and the clean-title box
+//     stayed unchecked. Root causes, all in the old step-2 code: the
+//     color fillers received the RAW dealer string ("Mojave Sand") as
+//     the only candidate and matched it literally against Facebook's
+//     fixed option list — a name that isn't verbatim in the list can
+//     never match; the listbox path clicked with a bare .click() and
+//     a fixed wait; the combobox fallback only locates <input>s; and
+//     the result was discarded with no read-back, so the misses were
+//     silent by construction. Colors now go through a dedicated path:
+//     the string is normalized against the options ACTUALLY offered
+//     at runtime (a synonym table ranks candidates — sand/tan/khaki/
+//     mojave/desert → Beige/Tan, graphite/granite/charcoal → Gray,
+//     pearl-with-a-hue → the hue), the dropdown is opened with the
+//     realistic-click machinery (CDP click fallback), options are
+//     collected document-wide (they render in a portal), the pick is
+//     READ BACK from the trigger, and a miss retries once with the
+//     next-best candidate. Clean title: the locator now also accepts
+//     the labelled clickable row (this variant's control is a custom
+//     div), clicks with the same machinery, and verifies the checked
+//     state. Step-2 fields stay best-effort — they can never fail a
+//     job — but every outcome is now recorded as a non-fatal step
+//     note on the diagnostic channel (field name, note code, the
+//     requested/chosen values in `detail`, the read-back), so a
+//     silent miss is impossible from here on.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -420,6 +446,91 @@
   }
   // [PURE-LOCATE-END]
 
+  // [PURE-COLOR-BEGIN] — extracted and unit-exercised by the test
+  // harness alongside the verify helpers; keep these free of
+  // DOM/chrome references (strings in, plain values out). See header
+  // note 13: dealer color names ("Mojave Sand", "Granite Crystal
+  // Metallic") almost never appear verbatim in Facebook's fixed color
+  // list, so the ranking runs against the options ACTUALLY offered at
+  // runtime — this block only decides the ORDER to try them in.
+  // Each rule: dealer tokens -> Facebook standard names in preference
+  // order. Tokens match on word boundaries, or as a word PREFIX for
+  // tokens of 4+ chars — so "sand" hits "sandstone" but "tan" never
+  // hits "titanium". Hue/family rules come first; the finish-only
+  // rule (metallic/pearl) is LAST and applies only when NO family
+  // rule matched at all — so "Pearl White" ranks White, not Gray,
+  // and "Passion Purple Pearl" with no purple on offer ranks nothing
+  // (a known hue, honestly unmatched) instead of a wrong Gray.
+  const COLOR_RULES = [
+    { tokens: ["mojave", "sandstone", "sand", "desert", "khaki", "tan", "beige", "cashmere", "almond", "dune", "sahara", "camel"], prefer: ["Beige", "Tan"] },
+    { tokens: ["charcoal", "graphite", "granite", "carbon", "slate", "gunmetal", "anthracite", "magnetic", "ash"], prefer: ["Gray", "Silver"] },
+    { tokens: ["silver", "platinum", "chrome", "steel", "pewter", "tungsten"], prefer: ["Silver", "Gray"] },
+    { tokens: ["gray", "grey"], prefer: ["Gray", "Silver"] },
+    { tokens: ["white", "ivory", "cream", "arctic", "alpine", "glacier", "snow", "frost"], prefer: ["White", "Beige"] },
+    { tokens: ["black", "onyx", "ebony", "jet", "obsidian"], prefer: ["Black"] },
+    { tokens: ["crimson", "burgundy", "maroon", "ruby", "wine", "cherry", "garnet", "claret", "red"], prefer: ["Red"] },
+    { tokens: ["navy", "sapphire", "cobalt", "azure", "aqua", "sky", "royal", "blue"], prefer: ["Blue", "Teal"] },
+    { tokens: ["teal"], prefer: ["Teal", "Blue", "Green"] },
+    { tokens: ["emerald", "forest", "olive", "sage", "mint", "green"], prefer: ["Green", "Teal"] },
+    { tokens: ["chocolate", "espresso", "mocha", "coffee", "walnut", "cocoa", "bronze", "copper", "brown"], prefer: ["Brown", "Beige"] },
+    { tokens: ["champagne", "gold"], prefer: ["Gold", "Beige", "Tan"] },
+    { tokens: ["tangerine", "sunset", "orange"], prefer: ["Orange", "Red"] },
+    { tokens: ["violet", "plum", "lavender", "eggplant", "purple"], prefer: ["Purple", "Pink"] },
+    { tokens: ["magenta", "fuchsia", "rose", "pink"], prefer: ["Pink", "Purple"] },
+    { tokens: ["lemon", "yellow"], prefer: ["Yellow", "Gold"] },
+    { tokens: ["metallic", "pearl", "pearlescent", "mica", "tricoat", "clearcoat"], prefer: ["Gray", "Silver"], finish: true }
+  ];
+  function colorTokenHit(rawNorm, token) {
+    const tok = normText(token);
+    if (!tok || !rawNorm) return false;
+    if (tok.includes(" ")) return rawNorm.includes(tok);
+    return rawNorm.split(/[^a-z0-9]+/).some(w =>
+      w === tok || (tok.length >= 4 && w.startsWith(tok)));
+  }
+  // Rank the options Facebook is ACTUALLY offering for a dealer color
+  // string, best first. Returns option texts verbatim, as offered.
+  // Order: (1) an option exactly equal to the raw string; (2) the
+  // synonym rules in table order, each preferred standard name matched
+  // against the offered options (exact, then containment); (3) an
+  // offered option whose name appears as a word inside the raw string
+  // (a hue the table missed). Empty array = nothing offered is a
+  // defensible match — the caller records that and moves on.
+  function rankColorOptions(rawColor, optionTexts) {
+    const raw = normText(rawColor);
+    if (!raw || !Array.isArray(optionTexts)) return [];
+    const offered = [];
+    for (const t of optionTexts) {
+      const text = String(t == null ? "" : t);
+      const norm = normText(text);
+      if (norm && !offered.some(o => o.norm === norm)) offered.push({ text, norm });
+    }
+    const ranked = [];
+    const push = text => { if (text && !ranked.includes(text)) ranked.push(text); };
+    const exact = offered.find(o => o.norm === raw);
+    if (exact) push(exact.text);
+    let familyMatched = false;
+    for (const rule of COLOR_RULES) {
+      if (!rule.tokens.some(tok => colorTokenHit(raw, tok))) continue;
+      if (rule.finish) {
+        if (familyMatched) continue; // a hue was named; finish can't speak for it
+      } else {
+        familyMatched = true;
+      }
+      for (const pref of rule.prefer) {
+        const pn = normText(pref);
+        const hit = offered.find(o => o.norm === pn) ||
+          offered.find(o => o.norm.includes(pn) || pn.includes(o.norm));
+        if (hit) push(hit.text);
+      }
+    }
+    const rawWords = raw.split(/[^a-z0-9]+/);
+    for (const o of offered) {
+      if (rawWords.includes(o.norm)) push(o.text);
+    }
+    return ranked;
+  }
+  // [PURE-COLOR-END]
+
   // ---- React-safe value setting -----------------------------------------
   function nativeSetValue(el, value) {
     const proto = el instanceof HTMLTextAreaElement
@@ -661,6 +772,14 @@
   }
 
   async function cdpClickEl(el) {
+    // The worker refuses click commands on a tab with no debugger
+    // session (cdp_not_attached) — the ladder attaches inside rung 3,
+    // but direct callers (step-2 color/clean-title fallbacks, v2.1.3)
+    // must attach first. cdpEnsure is a no-op when already attached,
+    // and the session still ends at the usual detach points.
+    if (!(await cdpEnsure("CDP"))) {
+      return { ok: false, error: attemptsFor("CDP").cdpError || "cdp_attach_failed" };
+    }
     try { el.scrollIntoView({ block: "center" }); } catch (e) {}
     await sleep(150);
     const r = el.getBoundingClientRect();
@@ -747,6 +866,34 @@
     // queue row's error_message in the database — the channel that
     // cannot be lost; (3) the storage-log message, kept as before.
     console.log("[AutoLaunch] field_diag " + JSON.stringify(entry));
+    jobDiags.push(entry);
+    try {
+      chrome.runtime.sendMessage(
+        { type: "AUTOLAUNCH_FIELD_DIAG", queueId, diag: entry },
+        () => { void chrome.runtime.lastError; });
+    } catch (e) { /* the console + job-payload records above still stand */ }
+  }
+
+  // Non-fatal step notes (v2.1.3): step-2 fields (colors, clean
+  // title) are best-effort and never fail a job — but their outcomes
+  // are no longer silent. Each one rides the same three channels as a
+  // field diagnostic: a console line, the jobDiags array (compacted
+  // by the worker into the queue row's error_message if the job
+  // fails for any reason), and the FIELD_DIAG storage stream. The
+  // specifics (requested value, option chosen, click path) ride in
+  // `detail`; `note` is the machine-readable outcome code.
+  function recordStepNote(fieldName, note, detail, readBack, el) {
+    const entry = {
+      field: fieldName,
+      element: describeElement(el || null),
+      rungsAttempted: [],
+      readBack: String(readBack == null ? "" : readBack).slice(0, 200),
+      expected: null,
+      cdpError: null,
+      note: note || null,
+      detail: detail || null
+    };
+    console.log("[AutoLaunch] step_note " + JSON.stringify(entry));
     jobDiags.push(entry);
     try {
       chrome.runtime.sendMessage(
@@ -876,6 +1023,258 @@
       }
     }
     return false;
+  }
+
+  // ---- step-2 colors + clean title (v2.1.3, header note 13) --------------
+  // The color options render in a portal listbox OUTSIDE the field's
+  // container, so they are collected document-wide, like everywhere
+  // else in this file.
+  function colorOptionElements() {
+    return Array.from(document.querySelectorAll('[role="option"], [role="menuitem"]'))
+      .filter(isVisibleEl);
+  }
+  async function waitForColorOptions(timeoutMs) {
+    const deadline = Date.now() + (timeoutMs || 2500);
+    let opts = colorOptionElements();
+    while (!opts.length && Date.now() < deadline) {
+      await sleep(400);
+      opts = colorOptionElements();
+    }
+    return opts;
+  }
+  function colorReadBackOk(readBack, chosenText) {
+    const rb = normText(readBack), ch = normText(chosenText);
+    if (!rb || !ch) return false;
+    return rb === ch || rb.includes(ch) || ch.includes(rb);
+  }
+
+  // Fill one of Facebook's fixed-list color dropdowns. The dealer
+  // string is normalized against the options ACTUALLY offered
+  // (rankColorOptions); the pick is READ BACK from the trigger and,
+  // on a miss, retried once with the next-best candidate. Clicks use
+  // the realistic sequence with the trusted CDP click as fallback.
+  // Every outcome lands in a step note; returns true only when the
+  // read-back shows the intended color. Never throws, never fatal.
+  async function fillColorDropdown(fieldName, keywords, rawColor) {
+    const requested = String(rawColor || "");
+    let trigger = null;
+    try {
+      trigger = findAnyField(keywords);
+      if (!trigger) {
+        recordStepNote(fieldName, "color_field_not_present",
+          "requested '" + requested + "'", "");
+        return false;
+      }
+      // Native <select> variant: rank against its real options and
+      // set it directly (the same native-setter path as rung 1).
+      if ((trigger.tagName || "").toUpperCase() === "SELECT") {
+        const optTexts = Array.from(trigger.options || [])
+          .map(o => String(o.text || o.value || ""));
+        const rankedSel = rankColorOptions(requested, optTexts);
+        if (!rankedSel.length) {
+          recordStepNote(fieldName, "color_no_option_match",
+            "requested '" + requested + "'; options: " + optTexts.join(" / "),
+            extractValue(trigger), trigger);
+          return false;
+        }
+        const opt = Array.from(trigger.options || [])
+          .find(o => normText(o.text || o.value) === normText(rankedSel[0]));
+        if (opt) {
+          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+          setter.call(trigger, opt.value);
+          trigger.dispatchEvent(new Event("change", { bubbles: true }));
+          trigger.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        const rbSel = extractValue(trigger);
+        const goodSel = colorReadBackOk(rbSel, rankedSel[0]);
+        recordStepNote(fieldName, goodSel ? "color_set" : "color_readback_mismatch",
+          "requested '" + requested + "' -> option '" + rankedSel[0] + "'",
+          rbSel, trigger);
+        return goodSel;
+      }
+      // Already showing a defensible color (a re-run, or an earlier
+      // step pass set it)? Don't churn the dropdown.
+      const before = extractValue(trigger);
+      if (before && rankColorOptions(requested, [before]).length) {
+        recordStepNote(fieldName, "color_already_set",
+          "requested '" + requested + "'", before, trigger);
+        return true;
+      }
+      // Open it: realistic click first, trusted CDP click as fallback.
+      let options = [];
+      realisticClick(trigger);
+      options = await waitForColorOptions(2000);
+      if (!options.length) {
+        await cdpClickEl(trigger);
+        options = await waitForColorOptions(2000);
+      }
+      if (!options.length) {
+        recordStepNote(fieldName, "color_options_never_opened",
+          "requested '" + requested + "'", extractValue(trigger), trigger);
+        return false;
+      }
+      const ranked = rankColorOptions(requested,
+        options.map(o => String(o.textContent || "")));
+      if (!ranked.length) {
+        recordStepNote(fieldName, "color_no_option_match",
+          "requested '" + requested + "'; options: " +
+            options.map(o => String(o.textContent || "").trim()).slice(0, 16).join(" / "),
+          extractValue(trigger), trigger);
+        try { dispatchKeyboard(trigger, "keydown", { key: "Escape", code: "Escape" }); } catch (e) {}
+        return false;
+      }
+      // Best candidate first; a failed read-back earns ONE retry with
+      // the next-best candidate. Per attempt: realistic click, then a
+      // trusted CDP click if the option is still on screen and the
+      // value still hasn't taken.
+      let lastRead = "";
+      const attempts = Math.min(2, ranked.length);
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        const wanted = ranked[attempt];
+        let opt = colorOptionElements()
+          .find(o => normText(o.textContent) === normText(wanted));
+        if (!opt) {
+          // The list closed after the previous attempt — reopen it.
+          const t2 = findAnyField(keywords);
+          if (t2) trigger = t2;
+          realisticClick(trigger);
+          await waitForColorOptions(2000);
+          opt = colorOptionElements()
+            .find(o => normText(o.textContent) === normText(wanted));
+          if (!opt) continue;
+        }
+        try { opt.scrollIntoView({ block: "center" }); } catch (e) {}
+        await sleep(150);
+        realisticClick(opt);
+        await sleep(600);
+        const t3 = findAnyField(keywords);
+        if (t3) trigger = t3;
+        lastRead = extractValue(trigger);
+        if (colorReadBackOk(lastRead, wanted)) {
+          recordStepNote(fieldName, "color_set",
+            "requested '" + requested + "' -> option '" + wanted + "'",
+            lastRead, trigger);
+          return true;
+        }
+        if (isVisibleEl(opt)) {
+          await cdpClickEl(opt);
+          await sleep(600);
+          const t4 = findAnyField(keywords);
+          if (t4) trigger = t4;
+          lastRead = extractValue(trigger);
+          if (colorReadBackOk(lastRead, wanted)) {
+            recordStepNote(fieldName, "color_set",
+              "requested '" + requested + "' -> option '" + wanted + "' (cdp click)",
+              lastRead, trigger);
+            return true;
+          }
+        }
+      }
+      recordStepNote(fieldName, "color_readback_mismatch",
+        "requested '" + requested + "'; tried: " + ranked.slice(0, attempts).join(" / "),
+        lastRead, trigger);
+      return false;
+    } catch (e) {
+      try {
+        recordStepNote(fieldName, "color_error",
+          "requested '" + requested + "': " + (e && e.message ? e.message : "unknown"),
+          "", trigger);
+      } catch (e2) { /* a note about a note — nothing left to do */ }
+      return false;
+    }
+  }
+
+  // Clean title. In Facebook's current variant the control is a
+  // custom clickable div — the old locator only knew real inputs and
+  // [role="checkbox"], and its bare .click() was never verified, so
+  // the box silently stayed unchecked (first successful live run).
+  // Locate by checkbox semantics first, then by the labelled row;
+  // click with the real machinery (realistic, then CDP); verify the
+  // checked state afterwards and record the outcome.
+  function findCleanTitleControl() {
+    const boxes = Array.from(document.querySelectorAll(
+      'input[type="checkbox"], [role="checkbox"]'));
+    const box = boxes.find(b =>
+      nearbyText(b).includes("clean title") || fieldLabel(b).includes("clean"));
+    if (box) return { stateEl: box, clickEl: box };
+    const labelled = Array.from(document.querySelectorAll("div, label, span"))
+      .filter(isVisibleEl)
+      .find(elm => {
+        if (String(elm.textContent || "").length > 300) return false;
+        return normText(containerLeadingText(elm)).includes("clean title") ||
+          labelTextMatches(containerLabel(elm), ["clean title"]);
+      });
+    if (labelled) {
+      let inner = null;
+      try {
+        inner = labelled.querySelector('input[type="checkbox"], [role="checkbox"]');
+      } catch (e) { inner = null; }
+      return { stateEl: inner || labelled, clickEl: labelled };
+    }
+    return null;
+  }
+  function cleanTitleState(el) {
+    if (!el) return null;
+    if ((el.tagName || "").toUpperCase() === "INPUT") return el.checked === true;
+    const aria = typeof el.getAttribute === "function" ? el.getAttribute("aria-checked") : null;
+    if (aria === "true") return true;
+    if (aria === "false") return false;
+    if (el.checked === true) return true;
+    return null;
+  }
+  async function fillCleanTitle() {
+    try {
+      const found = findCleanTitleControl();
+      if (!found) {
+        // Nothing to record when this step doesn't even mention a
+        // clean title (it lives on step 2; step 1 stays silent) —
+        // but a page that TALKS about a clean title without giving
+        // us a clickable control is worth a note.
+        const pageMentions = normText(
+          (document.body && document.body.innerText) || "").includes("clean title");
+        if (pageMentions) {
+          recordStepNote("CleanTitle", "clean_title_not_found",
+            "page mentions clean title; no clickable control resolved", "");
+        }
+        return false;
+      }
+      const state0 = cleanTitleState(found.stateEl);
+      if (state0 === true) {
+        recordStepNote("CleanTitle", "clean_title_already_checked", "", "checked", found.clickEl);
+        return true;
+      }
+      realisticClick(found.clickEl);
+      await sleep(500);
+      let state = cleanTitleState(found.stateEl);
+      if (state === true) {
+        recordStepNote("CleanTitle", "clean_title_checked", "via dom click", "checked", found.clickEl);
+        return true;
+      }
+      if (state === null && state0 === null) {
+        // The state was never readable — one click is all we dare:
+        // a second could toggle an already-checked box back OFF.
+        recordStepNote("CleanTitle", "clean_title_state_unreadable",
+          "clicked once; checked state could not be read back", "", found.clickEl);
+        return false;
+      }
+      // Readably still unchecked — the trusted click decides.
+      await cdpClickEl(found.clickEl);
+      await sleep(500);
+      state = cleanTitleState(found.stateEl);
+      if (state === true) {
+        recordStepNote("CleanTitle", "clean_title_checked", "via cdp click", "checked", found.clickEl);
+        return true;
+      }
+      recordStepNote("CleanTitle", "clean_title_still_unchecked",
+        "dom + cdp clicks landed; state still reads unchecked", "", found.clickEl);
+      return false;
+    } catch (e) {
+      try {
+        recordStepNote("CleanTitle", "clean_title_error",
+          (e && e.message) ? e.message : "unknown", "");
+      } catch (e2) { /* nothing left to do */ }
+      return false;
+    }
   }
 
   // Year/Make/Model are cascading on Facebook: Make options only enable
@@ -1235,15 +1634,17 @@
       await fillSelectOrListbox(["body style", "body type"], bodyCands);
       await humanPause();
     }
-    // "Standard" in the data means "we don't know" — never type it.
+    // Colors (v2.1.3): dealer names are normalized against the
+    // options Facebook actually offers, the pick is read back, and
+    // the outcome is recorded as a step note. Best-effort still —
+    // a color miss never fails the job. "Standard" in the data
+    // means "we don't know" — never try to post it as a color.
     if (car.color && normText(car.color) !== "standard" && fieldPresent(["exterior color", "exterior"])) {
-      await fillSelectOrListbox(["exterior color", "exterior"], [car.color]) ||
-        await fillCombobox(["exterior color", "exterior"], car.color);
+      await fillColorDropdown("ExteriorColor", ["exterior color", "exterior"], car.color);
       await humanPause();
     }
-    if (car.interior_color && fieldPresent(["interior color", "interior"])) {
-      await fillSelectOrListbox(["interior color", "interior"], [car.interior_color]) ||
-        await fillCombobox(["interior color", "interior"], car.interior_color);
+    if (car.interior_color && normText(car.interior_color) !== "standard" && fieldPresent(["interior color", "interior"])) {
+      await fillColorDropdown("InteriorColor", ["interior color", "interior"], car.interior_color);
       await humanPause();
     }
 
@@ -1273,14 +1674,10 @@
 
     // Clean title: only when the user's preference or the payload says
     // the title is clean; when in doubt, leave it unchecked. Optional —
-    // never part of the required verification set.
+    // never part of the required verification set. The click is now
+    // verified and the outcome recorded (v2.1.3).
     if (cleanTitleWanted(job, car)) {
-      const boxes = Array.from(document.querySelectorAll('input[type="checkbox"], [role="checkbox"]'));
-      const box = boxes.find(b => nearbyText(b).includes("clean title") || fieldLabel(b).includes("clean"));
-      if (box) {
-        const checked = box.checked === true || box.getAttribute("aria-checked") === "true";
-        if (!checked) { box.click(); await sleep(400); }
-      }
+      await fillCleanTitle();
     }
 
     // Description: present on step 1 AND again (empty) on step 2 — fill

@@ -83,6 +83,16 @@
 //     visible controls with their computed container labels), and
 //     the cap rises to 6000 chars — formMap entries are shed first,
 //     so the field records always survive.
+// 12. STEP NOTES RIDE ALONG (v2.1.3, filler v3.3): the first
+//     successful post still needed Matthew's hands for the step-2
+//     color dropdowns and the clean-title box — best-effort fields
+//     whose misses were silent. The content script now records a
+//     non-fatal "step note" for each step-2 outcome (color requested
+//     -> option chosen -> read-back; clean-title click path) on the
+//     same diagnostic channels. Here, compactDiagError also
+//     preserves each record's `detail` string (shed with readBack
+//     under cap pressure), and the FIELD_DIAG handler stores `note`
+//     + `detail` in autolaunch_failure_log alongside the forensics.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -476,14 +486,15 @@ async function logFailureNow(queueId, reason, extra) {
 // keep free of chrome/fetch references.
 // Compact the content script's per-field forensic records into the
 // JSON string stored in the queue row's error_message (diag-to-DB,
-// v3.1; form map v3.2): per field {field, tag, type, role, ariaLabel,
-// outerHTML (≤160 chars), rungsAttempted, readBack, cdpError, note},
-// plus the form_map entry whose formMap lists the failing step's
-// visible controls {tag, type, role, ariaLabel, containerLabel
-// (≤120 chars)}. The whole string is capped at 6000 chars — shed
-// formMap entries first (halve, then drop), then outerHTML, then
-// readBack, then hard-truncate, so the field names + rungs +
-// cdpError + notes survive.
+// v3.1; form map v3.2; step notes v2.1.3): per field {field, tag,
+// type, role, ariaLabel, outerHTML (≤160 chars), rungsAttempted,
+// readBack, cdpError, note, detail (≤200 chars)}, plus the form_map
+// entry whose formMap lists the failing step's visible controls
+// {tag, type, role, ariaLabel, containerLabel (≤120 chars)}. The
+// whole string is capped at 6000 chars — shed formMap entries first
+// (halve, then drop), then outerHTML, then readBack + detail, then
+// hard-truncate, so the field names + rungs + cdpError + notes
+// survive.
 function compactDiagError(diags) {
   if (!Array.isArray(diags) || !diags.length) return null;
   const fields = diags.map(d => {
@@ -499,6 +510,7 @@ function compactDiagError(diags) {
       readBack: (d && d.readBack != null) ? String(d.readBack).slice(0, 120) : null,
       cdpError: (d && d.cdpError) || null,
       note: (d && d.note) || null,
+      detail: (d && d.detail != null) ? String(d.detail).slice(0, 200) : null,
       formMap: (d && Array.isArray(d.formMap))
         ? d.formMap.slice(0, 12).map(m => ({
             tag: (m && m.tag) || null,
@@ -525,7 +537,7 @@ function compactDiagError(diags) {
     out = JSON.stringify({ field_diag: fields });
   }
   if (out.length > 6000) {
-    fields.forEach(f => { f.readBack = null; });
+    fields.forEach(f => { f.readBack = null; f.detail = null; });
     out = JSON.stringify({ field_diag: fields });
   }
   if (out.length > 6000) out = out.slice(0, 6000);
@@ -725,7 +737,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       rungsAttempted: Array.isArray(diag.rungsAttempted) ? diag.rungsAttempted : [],
       readBack: diag.readBack != null ? String(diag.readBack) : null,
       expected: diag.expected != null ? String(diag.expected) : null,
-      cdpError: diag.cdpError || null
+      cdpError: diag.cdpError || null,
+      note: diag.note || null,
+      detail: diag.detail != null ? String(diag.detail) : null
     })
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
