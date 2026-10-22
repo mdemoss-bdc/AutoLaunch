@@ -73,6 +73,16 @@
 //     CDP attach refused with "Another debugger is already attached"
 //     is retried ONCE after 3s before the reason is recorded — a
 //     transient DevTools attach shouldn't cost the rung.
+// 11. FORM MAP RIDES ALONG (v3.2, fifth live test): run 5's
+//     error_message stayed NULL under a working diag-to-DB — the
+//     content script's jobDiags was empty because the four fields
+//     were never LOCATED, so the ladder (and its diagnostics) never
+//     ran for them. Location is fixed content-side (container label
+//     text); here, compactDiagError now also preserves each record's
+//     `note` and the one-per-job `formMap` entry (the failing step's
+//     visible controls with their computed container labels), and
+//     the cap rises to 6000 chars — formMap entries are shed first,
+//     so the field records always survive.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -466,10 +476,14 @@ async function logFailureNow(queueId, reason, extra) {
 // keep free of chrome/fetch references.
 // Compact the content script's per-field forensic records into the
 // JSON string stored in the queue row's error_message (diag-to-DB,
-// v3.1): per field {field, tag, type, role, ariaLabel, outerHTML
-// (≤160 chars), rungsAttempted, readBack, cdpError}, the whole string
-// capped at 3500 chars — shed outerHTML first, then readBack, then
-// hard-truncate, so the field names + rungs + cdpError survive.
+// v3.1; form map v3.2): per field {field, tag, type, role, ariaLabel,
+// outerHTML (≤160 chars), rungsAttempted, readBack, cdpError, note},
+// plus the form_map entry whose formMap lists the failing step's
+// visible controls {tag, type, role, ariaLabel, containerLabel
+// (≤120 chars)}. The whole string is capped at 6000 chars — shed
+// formMap entries first (halve, then drop), then outerHTML, then
+// readBack, then hard-truncate, so the field names + rungs +
+// cdpError + notes survive.
 function compactDiagError(diags) {
   if (!Array.isArray(diags) || !diags.length) return null;
   const fields = diags.map(d => {
@@ -483,19 +497,38 @@ function compactDiagError(diags) {
       outerHTML: el.outerHTML ? String(el.outerHTML).slice(0, 160) : null,
       rungsAttempted: (d && Array.isArray(d.rungsAttempted)) ? d.rungsAttempted.slice() : [],
       readBack: (d && d.readBack != null) ? String(d.readBack).slice(0, 120) : null,
-      cdpError: (d && d.cdpError) || null
+      cdpError: (d && d.cdpError) || null,
+      note: (d && d.note) || null,
+      formMap: (d && Array.isArray(d.formMap))
+        ? d.formMap.slice(0, 12).map(m => ({
+            tag: (m && m.tag) || null,
+            type: (m && m.type) || null,
+            role: (m && m.role) || null,
+            ariaLabel: (m && m.ariaLabel) || null,
+            containerLabel: (m && m.containerLabel != null)
+              ? String(m.containerLabel).slice(0, 120) : null
+          }))
+        : null
     };
   });
   let out = JSON.stringify({ field_diag: fields });
-  if (out.length > 3500) {
+  if (out.length > 6000) {
+    fields.forEach(f => { if (Array.isArray(f.formMap)) f.formMap = f.formMap.slice(0, 6); });
+    out = JSON.stringify({ field_diag: fields });
+  }
+  if (out.length > 6000) {
+    fields.forEach(f => { f.formMap = null; });
+    out = JSON.stringify({ field_diag: fields });
+  }
+  if (out.length > 6000) {
     fields.forEach(f => { f.outerHTML = null; });
     out = JSON.stringify({ field_diag: fields });
   }
-  if (out.length > 3500) {
+  if (out.length > 6000) {
     fields.forEach(f => { f.readBack = null; });
     out = JSON.stringify({ field_diag: fields });
   }
-  if (out.length > 3500) out = out.slice(0, 3500);
+  if (out.length > 6000) out = out.slice(0, 6000);
   return out;
 }
 // [PURE-DIAG-END]

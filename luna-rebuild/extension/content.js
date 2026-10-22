@@ -81,8 +81,35 @@
 //     into the queue row's error_message column — evidence readable
 //     straight from the database, no console archaeology. Each record
 //     is also printed as ONE JSON line to this page's console:
-//     "[AutoLaunch] field_diag {...}". And the photo step had a
-//     multiplication bug: Facebook MERGES every input.files assignment
+//     "[AutoLaunch] field_diag {...}".
+// 12. FIELD LOCATION + NEVER-EMPTY DIAGNOSTICS (v3.2, fifth live test):
+//     run 5 was the giveaway — error_message stayed NULL under a
+//     working diag-to-DB, meaning jobDiags was EMPTY: the ladder and
+//     its forensics never ran at all. Root cause: fieldLabel() only
+//     read an element's OWN aria-label / placeholder / label[for], and
+//     Facebook's current variant carries the labels ("Year", "Make",
+//     "Model", "Price") as sibling text inside a container div — the
+//     controls themselves are bare. findAnyField therefore returned
+//     null for exactly those four fields: fieldPresent was false, the
+//     fillers skipped them, requiredSpecForStep excluded them, and
+//     the aggregation failed them honestly with nothing to report.
+//     (The fields that always worked — Location, Description,
+//     Transmission — are the ones locatable by own attributes or a
+//     fallback.) Location now also scores CONTAINER label text: an
+//     ancestor's leading text segment or label-ish child, matched
+//     exactly or as a prefix, among VISIBLE candidates — tried only
+//     AFTER the own-label match, so nothing that located before moves.
+//     Clickable divs ([role="button"], [aria-haspopup]) join the
+//     candidate set for the select-like fields (the Year control in
+//     this variant is a chevron div). And the diagnostics can no
+//     longer be empty: a required field that fails WITHOUT ever being
+//     located gets a synthesized record (note "field_not_located")
+//     plus ONE "form_map" record — the first ~12 visible controls on
+//     the failing step with their computed container labels — so any
+//     future Facebook label change is visible in the DB on the first
+//     failed run, not the fifth.
+//     And the photo step (also v3.1) had a multiplication bug:
+//     Facebook MERGES every input.files assignment
 //     into its uploader's internal list, and the old code assigned a
 //     GROWING DataTransfer once per photo — 1+2+…+12 ≈ 70 photos —
 //     compounded by dedupe treating the same image at width=500
@@ -301,6 +328,98 @@
   }
   // [PURE-LADDER-END]
 
+  // [PURE-LOCATE-BEGIN] — extracted and unit-exercised by the test
+  // harness alongside the verify helpers; keep these free of
+  // chrome/fetch references (element-likes in, plain values out —
+  // parentElement / childNodes / nodeType / tagName / getAttribute /
+  // textContent are the only surface used). See header note 12: on
+  // Facebook's current variant the label of Year/Make/Model/Price is
+  // SIBLING TEXT inside a container div, not an attribute of the
+  // control, so location must be able to read the container.
+  // Does a subtree contain a form control? (Manual walk, node-capped,
+  // so a label-ish child can be recognised by having none.)
+  function subtreeHasFormControl(root, cap) {
+    let seen = 0;
+    const stack = [root];
+    while (stack.length) {
+      const n = stack.pop();
+      if (!n || seen++ > (cap || 250)) continue;
+      const tag = String(n.tagName || "").toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (typeof n.getAttribute === "function") {
+        const role = n.getAttribute("role");
+        if (role === "combobox" || role === "textbox" || role === "listbox") return true;
+      }
+      const kids = n.childNodes || [];
+      for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
+    }
+    return false;
+  }
+  // The label-ish child of a container: its first element child whose
+  // subtree holds NO form control and whose text is short (1..40
+  // chars) — Facebook renders field labels as exactly such an
+  // element. A control-bearing first element child is decisive: the
+  // label is not here (""), never a deeper sibling's text.
+  function labelishChildText(container) {
+    const kids = (container && container.childNodes) || [];
+    for (let i = 0; i < kids.length; i++) {
+      const n = kids[i];
+      if (!n || n.nodeType !== 1) continue;
+      if (subtreeHasFormControl(n)) return "";
+      const t = String(n.textContent || "").trim();
+      return t.length >= 1 && t.length <= 40 ? t : "";
+    }
+    return "";
+  }
+  // A container's leading text: its first non-empty text node, else
+  // its label-ish child. Deliberately NOT the container's whole
+  // textContent — that would make every ancestor "labelled" with
+  // whatever field happens to be listed first inside it.
+  function containerLeadingText(container) {
+    if (!container) return "";
+    const kids = container.childNodes || [];
+    for (let i = 0; i < kids.length; i++) {
+      const n = kids[i];
+      if (!n) continue;
+      if (n.nodeType === 3) {
+        const t = String(n.nodeValue || "").trim();
+        if (t) return t.slice(0, 60);
+        continue;
+      }
+      if (n.nodeType === 1) break; // element children: helper below
+    }
+    return labelishChildText(container);
+  }
+  // The label a container gives its field: climb up to 5 ancestors
+  // and take the first non-empty leading text. The field's own
+  // wrapper is met first, so a shared form-group higher up only
+  // labels a field when no closer container does.
+  function containerLabel(el) {
+    let node = el;
+    for (let depth = 0; depth < 5 && node; depth++) {
+      node = node.parentElement;
+      if (!node) break;
+      const t = containerLeadingText(node);
+      if (t) return t;
+    }
+    return "";
+  }
+  // A container text labels a field when it EQUALS a keyword or
+  // STARTS with it at a word boundary ("Price" ✓, "Price in USD" ✓,
+  // "Priceless" ✗). Case-insensitive via normText.
+  function labelTextMatches(text, keywords) {
+    const lt = normText(text);
+    if (!lt) return false;
+    return (keywords || []).some(k => {
+      const nk = normText(k);
+      if (!nk) return false;
+      if (lt === nk) return true;
+      return lt.startsWith(nk) &&
+        " :·•-/".includes(lt.charAt(nk.length));
+    });
+  }
+  // [PURE-LOCATE-END]
+
   // ---- React-safe value setting -----------------------------------------
   function nativeSetValue(el, value) {
     const proto = el instanceof HTMLTextAreaElement
@@ -336,14 +455,40 @@
     return text.toLowerCase();
   }
 
-  function findField(keywords, selector) {
-    const els = Array.from(document.querySelectorAll(selector || 'input, textarea'));
-    return els.find(el => keywords.some(k => fieldLabel(el).includes(k))) || null;
+  // Candidate controls for field location (v3.2). The select-like
+  // fields add clickable divs — [role="button"] / [aria-haspopup] —
+  // because the Year control in Facebook's current variant is a
+  // chevron div, not an input or a native select.
+  const FIELD_SELECTOR =
+    'input, textarea, select, [role="combobox"], [aria-haspopup="listbox"], ' +
+    '[role="button"], [aria-haspopup]';
+
+  function isVisibleEl(el) {
+    if (!el) return false;
+    if (el.offsetParent !== null) return true;
+    if (typeof el.getClientRects === "function" && el.getClientRects().length) return true;
+    return false;
   }
 
-  function findAnyField(keywords) {
-    return findField(keywords,
-      'input, textarea, select, [role="combobox"], [aria-haspopup="listbox"]');
+  // Locate a field in three tries, in an order that cannot move a
+  // field that already located (header note 12):
+  //   (a) the element's OWN label — aria-label / placeholder /
+  //       label[for] — the v2 behaviour, unchanged winners;
+  //   (b) CONTAINER label text among VISIBLE candidates — the v3.2
+  //       fix for labels that live as sibling text in a wrapper div;
+  //   (c) the wider nearby-text context, as a last resort.
+  function findAnyField(keywords, selector) {
+    const all = Array.from(document.querySelectorAll(selector || FIELD_SELECTOR));
+    const own = all.find(el => keywords.some(k => fieldLabel(el).includes(k)));
+    if (own) return own;
+    const byContainer = all.filter(isVisibleEl)
+      .find(el => labelTextMatches(containerLabel(el), keywords));
+    if (byContainer) return byContainer;
+    return all.find(el => keywords.some(k => nearbyText(el).includes(k))) || null;
+  }
+
+  function findField(keywords, selector) {
+    return findAnyField(keywords, selector || 'input, textarea, select');
   }
 
   function fieldPresent(keywords) {
@@ -360,6 +505,7 @@
   const fieldAttempts = {};   // name -> { rungs: [...], cdpError: null }
   const diagRecorded = new Set();
   const jobDiags = [];        // forensic records, sent with JOB_FAILED (v3.1)
+  let formMapRecorded = false; // the form_map record is one per job (v3.2)
   let cdpAttached = false;
 
   function attemptsFor(name) {
@@ -571,23 +717,80 @@
   }
 
   // ---- ladder driver + diagnostics ---------------------------------------
-  function recordFieldDiagnostic(field, readBack) {
+  function recordFieldDiagnostic(field, readBack, note) {
     if (diagRecorded.has(field.name)) return;
     diagRecorded.add(field.name);
     const att = attemptsFor(field.name);
+    // The element snapshot: via the field's keywords when it has
+    // them; the Description spec carries none — it locates through
+    // findDescriptionField instead. A field that was never located
+    // snapshots null (describeElement(null) → all-null descriptor),
+    // which is exactly the evidence its "field_not_located" note
+    // (v3.2) needs next to it.
+    let el = null;
+    try {
+      el = field.keywords ? findAnyField(field.keywords)
+        : (field.name === "Description" ? findDescriptionField() : null);
+    } catch (e) { el = null; }
     const entry = {
       field: field.name,
-      element: describeElement(findAnyField(field.keywords)),
+      element: describeElement(el),
       rungsAttempted: att.rungs.slice(),
       readBack: String(readBack == null ? "" : readBack).slice(0, 200),
-      expected: String(field.expected),
-      cdpError: att.cdpError || null
+      expected: field.expected == null ? null : String(field.expected),
+      cdpError: att.cdpError || null,
+      note: note || null
     };
     // Three records of the same evidence (v3.1): (1) ONE JSON line on
     // this page's console, greppable as "field_diag"; (2) the job-level
     // array that rides the AUTOLAUNCH_JOB_FAILED message into the
     // queue row's error_message in the database — the channel that
     // cannot be lost; (3) the storage-log message, kept as before.
+    console.log("[AutoLaunch] field_diag " + JSON.stringify(entry));
+    jobDiags.push(entry);
+    try {
+      chrome.runtime.sendMessage(
+        { type: "AUTOLAUNCH_FIELD_DIAG", queueId, diag: entry },
+        () => { void chrome.runtime.lastError; });
+    } catch (e) { /* the console + job-payload records above still stand */ }
+  }
+
+  // ---- form map (v3.2): the never-empty-diagnostics companion -------
+  // When a required field fails without ever being located, a bare
+  // "not found" teaches nothing. The form map snapshots the first ~12
+  // VISIBLE controls on the failing step — tag / type / role /
+  // aria-label plus the container label location computed for each —
+  // so the NEXT Facebook label change is legible from the database
+  // row of the first failed run. It rides the same three channels as
+  // a field diagnostic (console line, JOB_FAILED payload, storage).
+  const FORM_MAP_SELECTOR =
+    'input, textarea, select, [role="combobox"], [role="button"], ' +
+    '[aria-haspopup], [contenteditable="true"]';
+  function formMapEntries(limit) {
+    return Array.from(document.querySelectorAll(FORM_MAP_SELECTOR))
+      .filter(isVisibleEl)
+      .slice(0, limit || 12)
+      .map(el => {
+        const d = describeElement(el);
+        return {
+          tag: d.tag, type: d.type, role: d.role, ariaLabel: d.ariaLabel,
+          containerLabel: String(containerLabel(el) || "").slice(0, 120)
+        };
+      });
+  }
+  function recordFormMap() {
+    if (formMapRecorded) return;
+    formMapRecorded = true;
+    const entry = {
+      field: "__form_map__",
+      element: null,
+      rungsAttempted: [],
+      readBack: "",
+      expected: null,
+      cdpError: null,
+      note: "form_map",
+      formMap: formMapEntries(12)
+    };
     console.log("[AutoLaunch] field_diag " + JSON.stringify(entry));
     jobDiags.push(entry);
     try {
@@ -640,9 +843,11 @@
   }
 
   async function fillSelectOrListbox(keywords, candidates) {
-    // Native <select> first
+    // Native <select> first — located by its own label, or (v3.2) by
+    // container text when the select itself is bare.
     const sels = Array.from(document.querySelectorAll("select"));
-    const sel = sels.find(s => keywords.some(k => fieldLabel(s).includes(k)));
+    const sel = sels.find(s => keywords.some(k => fieldLabel(s).includes(k))) ||
+      sels.find(s => labelTextMatches(containerLabel(s), keywords));
     if (sel) {
       for (const cand of candidates) {
         if (!cand) continue;
@@ -1165,6 +1370,28 @@
     return spec;
   }
 
+  // For the never-empty diagnostics (v3.2): the location keywords and
+  // the payload value per required-field name, so a field that failed
+  // WITHOUT ever entering a spec can still get a synthesized record.
+  const REQUIRED_FIELD_KEYWORDS = {
+    Year: ["year"], Make: ["make"], Model: ["model"], Price: ["price"]
+  };
+  function expectedForFieldName(name) {
+    switch (name) {
+      case "Year": return car.year;
+      case "Make": return car.make;
+      case "Model": return car.model;
+      case "Price": return car.price;
+      case "Description": return descriptionExpectedSnippet();
+      default: return null;
+    }
+  }
+  function locateRequiredField(name) {
+    if (name === "Description") return findDescriptionField();
+    const kw = REQUIRED_FIELD_KEYWORDS[name];
+    return kw ? findAnyField(kw) : null;
+  }
+
   // ---- main flow ----------------------------------------------------------
   try {
     say("Preparing your listing…");
@@ -1253,6 +1480,35 @@
           (name === "Model" && car.model) || (name === "Price" && car.price) ||
           name === "Description";
         if (hadExpected) missing.add(name);
+      }
+    }
+    // Never-empty diagnostics (v3.2): EVERY failed required field
+    // leaves a forensic record. Fields the ladder exhausted already
+    // have one (diagRecorded). The rest split in two: located but
+    // never laddered (e.g. Description) — snapshot the real element;
+    // and NEVER LOCATED — no spec ever included them because
+    // fieldPresent was false all along (the run-5 failure mode) —
+    // synthesize a "field_not_located" record, and map the form ONCE
+    // so the shapes Facebook actually served are on the record too.
+    for (const name of missing) {
+      if (name === "Photos" || diagRecorded.has(name)) continue;
+      const specEntry = finalSpec.find(f => f.name === name);
+      const kw = REQUIRED_FIELD_KEYWORDS[name];
+      if (specEntry) {
+        let rb = "";
+        try { rb = specEntry.read(); } catch (e) { rb = ""; }
+        recordFieldDiagnostic(
+          specEntry.keywords ? specEntry
+            : Object.assign({}, specEntry, { keywords: kw }),
+          rb);
+      } else if (!locateRequiredField(name)) {
+        recordFieldDiagnostic(
+          { name, expected: expectedForFieldName(name), keywords: kw },
+          "", "field_not_located");
+        recordFormMap();
+      } else {
+        recordFieldDiagnostic(
+          { name, expected: expectedForFieldName(name), keywords: kw }, "");
       }
     }
     if (!photoOk) missing.add("Photos");

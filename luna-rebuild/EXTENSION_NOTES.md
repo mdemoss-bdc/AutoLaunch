@@ -23,7 +23,7 @@ The repo-root extension/ is untouched.
 
 ## What changed
 
-### manifest.json (v2.1.1)
+### manifest.json (v2.1.2)
 - Added "alarms" permission.
 - Added content script bridge.js on https://mdemoss-bdc.github.io/AutoLaunch/*
 - Added externally_connectable for https://mdemoss-bdc.github.io/*
@@ -40,6 +40,8 @@ The repo-root extension/ is untouched.
   tab — it disappears when the worker detaches, which happens when the
   fill sequence ends or the job finishes/fails. It only ever appears
   during a posting run, never while idle.
+- Version 2.1.2 (filler v3.2): the field-location fix below. No
+  permission changes — the "debugger" note above still applies.
 
 ### bridge.js (NEW)
 - Runs only on the AutoLaunch origin. Listens for the app's
@@ -248,6 +250,43 @@ The repo-root extension/ is untouched.
   write it into the queue row's error_message (see DIAG-TO-DB under
   background.js). Run 4 proved the storage-only path could silently
   lose them; the database copy cannot.
+- FIELD LOCATION (filler v3.2 — the run-5 root cause): fieldLabel()
+  only ever read an element's OWN attributes (aria-label, placeholder,
+  label[for]). Facebook's current variant carries the Year / Make /
+  Model / Price labels as SIBLING TEXT inside a container div — the
+  controls themselves are bare — so findAnyField returned null for
+  exactly those four fields across all five live runs: fieldPresent
+  was false, the fillers skipped them, the required-spec excluded
+  them, the ladder and its diagnostics never ran, and the aggregation
+  failed them honestly with an EMPTY jobDiags (which is why run 5's
+  error_message stayed NULL under a working diag-to-DB — there was
+  nothing to carry). Location now tries, IN ORDER: (a) the element's
+  own label — the v2 behaviour, so fields that located before resolve
+  to the same elements; (b) CONTAINER label text among VISIBLE
+  candidates — an ancestor's (≤5 levels) leading text segment or
+  label-ish child (first element child with no form control in its
+  subtree and 1–40 chars of text), matched exactly or as a
+  word-boundary prefix; (c) the wider nearby-text context, last
+  resort. Clickable divs ([role="button"], [aria-haspopup]) are
+  candidates too — this variant's Year control is a chevron div, and
+  the existing open → click-option machinery (rung 1 select/listbox,
+  rungs 2/3) operates on whatever element location returns. The pure
+  helpers (subtreeHasFormControl / labelishChildText /
+  containerLeadingText / containerLabel / labelTextMatches) live in a
+  [PURE-LOCATE] block and are unit-exercised like the others.
+- NEVER-EMPTY DIAGNOSTICS (filler v3.2): at the final aggregation,
+  EVERY failed required field now leaves a record. Ladder-exhausted
+  fields keep theirs; a located-but-never-laddered field (e.g.
+  Description) gets one with its real element; a field that was
+  NEVER LOCATED gets a synthesized record — element null,
+  rungsAttempted [], note "field_not_located" — plus ONE "__form_map__"
+  record per job: the first 12 visible controls on the failing step
+  with tag/type/role/aria-label and the container label computed for
+  each, so the next Facebook label change is legible from the
+  database row of the FIRST failed run. The worker's compactDiagError
+  preserves `note` and `formMap` and its cap rises to 6000 chars,
+  shedding formMap entries (halve, then drop) before outerHTML /
+  readBack, so the field records always survive.
 - POSTED only on detected success: navigation to a marketplace item /
   selling URL, or on-page text like "your listing is now live". Timeout
   or anything else = FAILED with the reason. There is no timer that
@@ -373,6 +412,44 @@ The repo-root extension/ is untouched.
   results — including the full per-field diagnostics on any failure —
   land in the database (auto_posting_queue.error_message), where Luna
   reads them directly.
+- 2026-10-22, fifth run (v3.1 build, 2.1.1): photos PERFECT this time —
+  exactly 12, single-shot (the v3.1 photo fix confirmed live). Still
+  fields_unfilled:Year,Make,Model,Price — and the decisive clue:
+  error_message stayed NULL under a WORKING diag-to-DB, meaning
+  jobDiags was empty, meaning the ladder and its diagnostics never
+  ran at all. Reading the shipped code found it: fieldLabel() only
+  checks an element's own aria-label / placeholder / label[for], and
+  this form variant carries those four labels as sibling text inside
+  a container div. findAnyField returned null → fieldPresent false →
+  fillers skipped them, the spec excluded them, the aggregation
+  failed them. (Location / Description / Transmission always worked —
+  the fields locatable by own attributes or a fallback.) The v3.2
+  build (2.1.2) is the fix: container-text location (see FIELD
+  LOCATION above), clickable-div candidates for the dropdown fields,
+  and never-empty diagnostics (a never-located field synthesizes a
+  "field_not_located" record + a one-per-job form_map of the step's
+  visible controls with their computed container labels; the worker's
+  compaction cap rises to 6000 and preserves both). It has NOT yet
+  had a live Facebook run. Verification (node, DOM-stub harness, 40
+  checks): the pure location helpers (span label, leading text node,
+  nested label element, control-bearing-child decisiveness, 5-level
+  climb cap, own-wrapper-beats-group, word-boundary matching); a
+  full-flow run against a stub of THIS variant (container divs with
+  sibling label text, bare inputs, a div-dropdown Year whose options
+  appear on click) — all four fields LOCATED and filled via rung 1,
+  verified, zero diagnostics (the terminal failure was only the
+  photoless car's honest Photos stop); a variant with Model truly
+  absent — fields_unfilled:Model,Photos plus the field_not_located
+  record (null element) and a form_map carrying the computed labels
+  (Location/Year/Make/Price/Description); and the old own-attribute
+  variant as a regression check (same elements, clean fills).
+  Re-test: overwrite the extension folder with the fresh copy at the
+  SAME path (card must read version 2.1.2), Reload, hard-refresh the
+  app tab, re-queue the Tucson — and do NOT open DevTools/F12 on the
+  Facebook tab while it runs (an attached DevTools blocks the
+  trusted-input rung). If a field still fails, its record — or its
+  field_not_located record + the form_map — will be sitting in the
+  queue row's error_message for Luna to read directly.
 
 ## Honest limits (untested overnight)
 
