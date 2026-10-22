@@ -1597,7 +1597,7 @@ body {
       <div class="space-y-4 text-xs">
         <div>
           <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">AI background</label>
-          <p class="text-[11px] text-slate-500 mb-2">Pick a background on the right — the vehicle is cut out and placed on it automatically.</p>
+          <p class="text-[11px] text-slate-500 mb-2">Pick a background on the right — your choice is saved and used as the posting background. The preview shows the background itself for now; the live cut-out (vehicle placed on it) arrives with the background engine.</p>
           <select id="selectAiBgMode" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
             <option value="first_only">First photo only</option>
             <option value="all_photos">All photos</option>
@@ -1644,24 +1644,24 @@ body {
         <div id="previewPhotoWrap" class="h-48 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
           <img id="previewPhotoEditImg" src="assets/backgrounds/bg-bright.jpg" class="w-full h-full object-cover" draggable="false">
           <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/60 to-transparent p-2 text-center">
-            <span class="text-[10px] text-white font-medium">Showroom Style Preview</span>
+            <span class="text-[10px] text-white font-medium">Background Preview</span>
           </div>
         </div>
 
         <div id="photoBgPanel" class="space-y-2 pt-1">
           <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">Showroom Backgrounds</span>
           <div class="grid grid-cols-3 gap-2">
-            <button onclick="setPreviewBg('assets/backgrounds/bg-bright.jpg')" class="p-1 rounded-xl border border-blue-600 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+            <button data-bg-btn onclick="setPreviewBg('assets/backgrounds/bg-bright.jpg', this)" class="p-1 rounded-xl border border-blue-600 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
               <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-bright.jpg" class="w-full h-full object-cover"></div>
-              <span class="text-[10px] text-slate-900 font-semibold block mt-1 text-center">Bright</span>
+              <span data-bg-label class="text-[10px] text-slate-900 font-semibold block mt-1 text-center">Bright</span>
             </button>
-            <button onclick="setPreviewBg('assets/backgrounds/bg-dark.jpg')" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+            <button data-bg-btn onclick="setPreviewBg('assets/backgrounds/bg-dark.jpg', this)" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
               <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-dark.jpg" class="w-full h-full object-cover"></div>
-              <span class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Dark</span>
+              <span data-bg-label class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Dark</span>
             </button>
-            <button onclick="setPreviewBg('assets/backgrounds/bg-lot.jpg')" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
+            <button data-bg-btn onclick="setPreviewBg('assets/backgrounds/bg-lot.jpg', this)" class="p-1 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-400 transition cursor-pointer text-left shadow-sm">
               <div class="h-10 rounded-lg overflow-hidden bg-slate-200"><img src="assets/backgrounds/bg-lot.jpg" class="w-full h-full object-cover"></div>
-              <span class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Clean lot</span>
+              <span data-bg-label class="text-[10px] text-slate-600 font-semibold block mt-1 text-center">Clean lot</span>
             </button>
           </div>
         </div>
@@ -2231,6 +2231,12 @@ updateLastSyncDisplay();
       if (data.ai_background_mode) {
         const aiSel = document.getElementById("selectAiBgMode");
         if (aiSel) aiSel.value = data.ai_background_mode;
+      }
+
+      if (data.ai_background_choice) {
+        applyPhotoBgSelection(data.ai_background_choice);
+        const pimg = document.getElementById("previewPhotoEditImg");
+        if (pimg) pimg.src = data.ai_background_choice;
       }
 
       if (data.daily_post_limit !== undefined && data.daily_post_limit !== null) {
@@ -4444,9 +4450,25 @@ function toggleSelectAllCars(master) {
   document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
 }
 
-function setPreviewBg(url) {
+let selectedPhotoBg = "assets/backgrounds/bg-bright.jpg";
+function setPreviewBg(url, btn) {
+  selectedPhotoBg = url;
   const img = document.getElementById("previewPhotoEditImg");
   if (img) img.src = url;
+  applyPhotoBgSelection(url);
+}
+function applyPhotoBgSelection(url) {
+  selectedPhotoBg = url;
+  document.querySelectorAll("[data-bg-btn]").forEach(b => {
+    const label = b.querySelector("[data-bg-label]");
+    const active = b.getAttribute("onclick") && b.getAttribute("onclick").includes(url);
+    b.classList.toggle("border-blue-600", active);
+    b.classList.toggle("border-slate-200", !active);
+    if (label) {
+      label.classList.toggle("text-slate-900", active);
+      label.classList.toggle("text-slate-600", !active);
+    }
+  });
 }
 
 // Button Audit: the photo-edits modal had three dead controls — "Try another
@@ -4683,6 +4705,16 @@ async function saveAutoPhotoEdits() {
       }, { onConflict: "user_id" });
       if (extraError) console.warn("Crop position/frequency not persisted yet:", extraError.message);
     } catch (e) { /* non-fatal: values still apply for this session */ }
+
+    // Persist WHICH background is selected (best-effort; column added 2026-10-22).
+    try {
+      const { error: bgError } = await supabaseClient.from("user_settings").upsert({
+        user_id: currentUser.id,
+        ai_background_choice: selectedPhotoBg,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+      if (bgError) console.warn("Background choice not persisted yet:", bgError.message);
+    } catch (e) { /* non-fatal: selection still applies for this session */ }
 
     const statusLbl = document.getElementById("photoEditStatusLabel");
     if (statusLbl) statusLbl.innerText = autoCrop ? "On - smart crop" : "Off";
