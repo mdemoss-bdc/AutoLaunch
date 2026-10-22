@@ -1,0 +1,45 @@
+name: AutoLaunch Scraper TEST (rebuild, capped)
+
+# Manual-only test runner for the luna-rebuild scraper.
+# Added 2026-10-22 with Matthew's approval for a capped inventory test:
+# it runs luna-rebuild/scraper.py (NOT the production root scraper.py),
+# has no schedule, and defaults to a 15-vehicle cap per user.
+# Safe to delete after testing; the production "AutoLaunch Scraper Runner"
+# workflow is untouched by this file.
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Optional: User UUID to crawl for just that user. Leave blank to crawl all configured users.'
+        required: false
+        default: ''
+      scrape_limit:
+        description: 'Max vehicles to sync per user for this test run.'
+        required: true
+        default: '15'
+
+jobs:
+  scrape-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright supabase
+          playwright install --with-deps chromium
+
+      - name: Run REBUILD Scraper (capped test)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          SCRAPE_LIMIT: ${{ github.event.inputs.scrape_limit }}
+        run: python luna-rebuild/scraper.py
