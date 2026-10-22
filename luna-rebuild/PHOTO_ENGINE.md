@@ -1,0 +1,99 @@
+# AI Background Cut-Out Engine (v1)
+
+Powers the live preview in **Settings → Automatic photo edits**: the preview
+vehicle is cut out of its dealer photo and composited onto the selected
+showroom background (Bright / Dark / Clean lot), entirely in the browser.
+
+Built 2026-10-22. Status: **v1 — preview only.** Posting with edited photos is
+deliberately NOT wired yet (see "Remaining wiring" below).
+
+## How it works
+
+1. **Trigger points** — `refreshCutoutPreview()` runs when:
+   - the Automatic Photo Edits modal opens (`openAutoPhotoEditsModal`),
+   - the vehicle cycles ("Try another vehicle" → `cyclePreviewVehicle`),
+   - the background changes (`setPreviewBg`),
+   - the AI background mode select changes (switching to *Disabled* shows the
+     original photo instead).
+2. **Lazy engine load** — the first time a cut-out is needed, the engine
+   module is fetched with a dynamic `import()`. Nothing downloads at app
+   startup. The library then downloads its AI model + ONNX WASM binaries
+   once (tens of MB) and the browser caches them for later visits. The
+   preview overlay shows progress ("Downloading AI model — n%", then
+   "Removing background — n%") and tells the user the first download is
+   one-time.
+3. **Removal** — `@imgly/background-removal` (`removeBackground`, ISNet
+   "medium" model) runs on-device via onnxruntime-web. No API keys, no
+   server, no photo uploads — this matches AutoLaunch's local-first
+   principle: the user's machine does the work.
+4. **Cut-out cache** — results are kept in a `Map` keyed by photo URL
+   (transparent PNG blob + dimensions + alpha bounding box). Switching
+   backgrounds re-composites from the cached cut-out instantly; the removal
+   runs exactly once per vehicle photo per session.
+5. **Composite renderer** — a 1600×1200 (4:3) canvas: background drawn
+   cover-fit, a soft elliptical ground shadow (radial gradient, no
+   `ctx.filter` dependency), and the cut-out drawn from its alpha-trimmed
+   bounding box, scaled to ≤94% of canvas width and bottom-aligned on the
+   ground line (90% height) so the wheels sit on the "floor". Exported as
+   JPEG (quality 0.9) into the preview image; caption reads
+   "Live cut-out preview".
+6. **Download preview** button under the preview saves the current composite
+   JPEG, named after the vehicle. Enabled only when a composite exists.
+
+Only the single preview vehicle's **first photo** is ever processed (per the
+modal's default "First photo only" mode). Inventory is never batch-processed.
+
+## CDN dependency (pinned)
+
+| Piece | URL |
+|---|---|
+| Engine library | `https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/dist/index.mjs` |
+| Peer runtime (import map) | `https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.bundle.min.mjs` |
+| Peer runtime, WebGPU (import map) | `https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.webgpu.bundle.min.mjs` |
+| Model + WASM assets | library default `publicPath`: `https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/` (fetches `resources.json`, verified live with `Access-Control-Allow-Origin: *`) |
+
+**Why the raw `dist/index.mjs` and not jsDelivr's `+esm` build:** the `+esm`
+bundle rewrites the library's `onnxruntime-web` peer import to an
+origin-relative path (`/npm/onnxruntime-web@1.21.0/+esm`), which resolves
+against the *page's* origin and 404s anywhere except jsDelivr itself (esm.sh
+has the same shape). The raw dist keeps the bare specifier
+`import("onnxruntime-web")`, which the `<script type="importmap">` in
+`index.html`'s `<head>` pins to the exact peer version (1.21.0). The library
+itself points onnxruntime's WASM loader at the model CDN manifest, so no
+further asset wiring is needed.
+
+Requirements/risks: import maps need a modern browser (Chrome 89+, Safari
+16.4+, Firefox 108+). On anything older the engine load fails and the
+fallback below applies. Runtime behavior was verified statically (URLs,
+headers, manifest contents, bundle source); it has not yet been run in a
+live browser session.
+
+## CORS limitation & fallback behavior
+
+Vehicle photos live on dealer CDNs. The engine first tries `fetch -> Blob`
+with CORS; dealer hosts usually send `Access-Control-Allow-Origin` headers
+(the ones AutoLaunch scrapes do), so this normally works. If the fetch is
+blocked, the photo URL is handed to the library directly as a second chance.
+
+If anything fails — photo CORS, module load, model download, or the removal
+itself — the preview **never breaks**: it falls back to the vehicle's
+original photo with the honest note
+*"Couldn't process this photo — showing the original"*, the caption reads
+"Original Photo", the Download button stays disabled, and the full error is
+logged to the console with a `[PhotoEngine]` prefix. A sequence guard makes
+sure a slow job for a previous vehicle/background can never overwrite a
+newer preview.
+
+## Remaining wiring (v2 — explicitly out of scope for v1)
+
+- **Persist composites:** upload the composite JPEG (and/or the cut-out PNG)
+  to Supabase Storage at queue time and store the URL on the queue/inventory
+  row, so an edit survives reloads and is shared across the user's devices.
+- **Posting:** the Chrome extension's posting flow should prefer the
+  composite photo (falling back to the original) when filling a Facebook
+  Marketplace listing; same for the Instagram/TikTok syndication paths.
+- **"All photos" mode:** v1 honors "First photo only" / "Disabled". Batch-
+  processing every photo of a vehicle belongs with the queue-time wiring
+  above, not in the settings modal.
+- **Crop interplay:** the Adjust-crop focal point currently applies to
+  original-photo previews; compositing with crops is a v2 decision.

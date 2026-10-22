@@ -19,6 +19,19 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <!-- Supabase JS Client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- AI background cut-out engine (see PHOTO_ENGINE.md): @imgly/background-removal
+     dynamically imports its "onnxruntime-web" peer by bare specifier, so this
+     import map pins it to the exact peer version (1.21.0) on jsDelivr. The
+     engine module itself is lazy-loaded at runtime — nothing downloads until
+     the Automatic Photo Edits modal is opened. -->
+<script type="importmap">
+{
+  "imports": {
+    "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.bundle.min.mjs",
+    "onnxruntime-web/webgpu": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.webgpu.bundle.min.mjs"
+  }
+}
+</script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
@@ -1597,8 +1610,8 @@ body {
       <div class="space-y-4 text-xs">
         <div>
           <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">AI background</label>
-          <p class="text-[11px] text-slate-500 mb-2">Pick a background on the right — your choice is saved and used as the posting background. The preview shows the background itself for now; the live cut-out (vehicle placed on it) arrives with the background engine.</p>
-          <select id="selectAiBgMode" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
+          <p class="text-[11px] text-slate-500 mb-2">Pick a background on the right — your choice is saved and used as the posting background. The preview cuts the vehicle out and places it on the background right here on your device (first preview downloads the AI model once).</p>
+          <select id="selectAiBgMode" onchange="refreshCutoutPreview()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer">
             <option value="first_only">First photo only</option>
             <option value="all_photos">All photos</option>
             <option value="disabled">Disabled</option>
@@ -1644,8 +1657,22 @@ body {
         <div id="previewPhotoWrap" class="h-48 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
           <img id="previewPhotoEditImg" src="assets/backgrounds/bg-bright.jpg" class="w-full h-full object-cover" draggable="false">
           <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/60 to-transparent p-2 text-center">
-            <span class="text-[10px] text-white font-medium">Background Preview</span>
+            <span id="previewCaptionText" class="text-[10px] text-white font-medium">Background Preview</span>
           </div>
+          <div id="previewEngineOverlay" class="absolute inset-0 z-10 hidden items-center justify-center bg-slate-900/55">
+            <div class="text-center text-white px-4">
+              <i class="fa-solid fa-circle-notch fa-spin text-xl"></i>
+              <p id="previewEngineStatus" class="text-[11px] mt-2 font-semibold">Loading the AI engine…</p>
+              <p class="text-[10px] mt-1 text-slate-300">First time downloads the AI model once — after that it runs entirely on this device.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-start justify-between gap-3">
+          <span id="previewStatusText" class="text-[10px] text-slate-500 leading-snug"></span>
+          <button id="btnDownloadPreview" onclick="downloadCompositePreview()" disabled class="shrink-0 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-semibold opacity-40 cursor-not-allowed">
+            <i class="fa-solid fa-download mr-1"></i>Download preview
+          </button>
         </div>
 
         <div id="photoBgPanel" class="space-y-2 pt-1">
@@ -4244,7 +4271,13 @@ function switchSettingsTab(tab) {
 function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
 function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
-function openAutoPhotoEditsModal() { document.getElementById("autoPhotoEditsModal").classList.remove("hidden"); }
+function openAutoPhotoEditsModal() {
+  document.getElementById("autoPhotoEditsModal").classList.remove("hidden");
+  // Cut-out engine: (re)build the live composite preview for the current
+  // vehicle + selected background. Lazy — the engine module and AI model
+  // only download the first time this runs.
+  refreshCutoutPreview();
+}
 function openPostingSafetyModal() { document.getElementById("postingSafetyModal").classList.remove("hidden"); }
 function openPostingPreferencesModal() { document.getElementById("postingPreferencesModal").classList.remove("hidden"); }
 function clearFilters() {
@@ -4453,9 +4486,10 @@ function toggleSelectAllCars(master) {
 let selectedPhotoBg = "assets/backgrounds/bg-bright.jpg";
 function setPreviewBg(url, btn) {
   selectedPhotoBg = url;
-  const img = document.getElementById("previewPhotoEditImg");
-  if (img) img.src = url;
   applyPhotoBgSelection(url);
+  // Cut-out engine: recomposite onto the new background. If this vehicle's
+  // cut-out is already cached this is instant (no re-run of the AI removal).
+  refreshCutoutPreview();
 }
 function applyPhotoBgSelection(url) {
   selectedPhotoBg = url;
@@ -4471,6 +4505,318 @@ function applyPhotoBgSelection(url) {
   });
 }
 
+// ==============================================================================
+// ==================== AI BACKGROUND CUT-OUT ENGINE (v1) =====================
+// Client-side vehicle background removal + composite preview for the photo-
+// edits modal, powered by @imgly/background-removal (ISNet model running on
+// onnxruntime-web). Everything happens on the user's device: no API keys, no
+// server, no uploads — matching the app's local-first principle.
+//
+// Loading strategy (see PHOTO_ENGINE.md for the full story):
+//  - The library's raw dist/index.mjs is dynamic-import()ed lazily, only when
+//    the photo-edits modal first needs a cut-out. Never at app startup.
+//  - We deliberately do NOT use jsDelivr's "+esm" build of the library: it
+//    rewrites the onnxruntime-web peer import to an origin-relative
+//    "/npm/onnxruntime-web@..." path that 404s on any origin but jsDelivr's.
+//    The raw dist imports the bare specifier "onnxruntime-web", which the
+//    import map in <head> pins to the exact peer version (1.21.0).
+//  - The AI model + ONNX WASM binaries download once from the library's
+//    default publicPath (staticimgly.com/@imgly/background-removal-data/
+//    1.7.0/dist/resources.json — verified reachable, CORS open) and are
+//    cached by the browser afterwards.
+//
+// Scope guard: only the single preview vehicle's FIRST photo is ever
+// processed. Background switches recomposite from the cached cut-out and
+// never re-run the removal.
+// ==============================================================================
+const BG_ENGINE_MODULE_URL = "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/dist/index.mjs";
+let bgEngineModule = null;
+let bgEngineLoadPromise = null;
+let bgEngineModelReady = false;   // true after the first successful removal
+const cutoutCache = new Map();    // photoUrl -> { blobUrl, img, width, height, bbox }
+const cutoutInFlight = new Map(); // photoUrl -> Promise<cache entry>
+let currentCompositeDataUrl = null; // JPEG data URL of the on-screen composite
+let bgEngineSeq = 0;              // race guard: only the newest request may paint
+
+async function loadBgEngine() {
+  if (bgEngineModule) return bgEngineModule;
+  if (!bgEngineLoadPromise) {
+    bgEngineLoadPromise = import(BG_ENGINE_MODULE_URL)
+      .then(mod => { bgEngineModule = mod; return mod; })
+      .catch(err => { bgEngineLoadPromise = null; throw err; });
+  }
+  return bgEngineLoadPromise;
+}
+
+function loadEngineImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Image failed to load: " + String(src).slice(0, 120)));
+    img.src = src;
+  });
+}
+
+function setPreviewCaption(text) {
+  const el = document.getElementById("previewCaptionText");
+  if (el) el.innerText = text;
+}
+
+function setPreviewNote(text, isError) {
+  const el = document.getElementById("previewStatusText");
+  if (!el) return;
+  el.innerText = text || "";
+  el.className = "text-[10px] leading-snug " + (isError ? "text-red-500 font-semibold" : "text-slate-500");
+}
+
+function showPreviewEngineOverlay(statusText) {
+  const ov = document.getElementById("previewEngineOverlay");
+  if (ov) { ov.classList.remove("hidden"); ov.classList.add("flex"); }
+  const st = document.getElementById("previewEngineStatus");
+  if (st && statusText) st.innerText = statusText;
+}
+
+function hidePreviewEngineOverlay() {
+  const ov = document.getElementById("previewEngineOverlay");
+  if (ov) { ov.classList.add("hidden"); ov.classList.remove("flex"); }
+}
+
+function setDownloadPreviewEnabled(enabled) {
+  const btn = document.getElementById("btnDownloadPreview");
+  if (!btn) return;
+  btn.disabled = !enabled;
+  btn.classList.toggle("opacity-40", !enabled);
+  btn.classList.toggle("cursor-not-allowed", !enabled);
+  btn.classList.toggle("cursor-pointer", enabled);
+}
+
+// Find the bounding box of non-transparent pixels in a cut-out PNG so the
+// vehicle can be placed by its actual silhouette (wheels on the ground line)
+// instead of by the edges of the original photo frame.
+function computeAlphaBBox(img) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const full = { x: 0, y: 0, w: w, h: h };
+  try {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const cx = c.getContext("2d", { willReadFrequently: true });
+    cx.drawImage(img, 0, 0);
+    const data = cx.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    const step = 2; // sample every 2nd pixel — plenty for a bounding box
+    for (let y = 0; y < h; y += step) {
+      for (let x = 0; x < w; x += step) {
+        if (data[(y * w + x) * 4 + 3] > 12) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return full;
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  } catch (e) {
+    console.warn("[PhotoEngine] Alpha bbox failed, using full frame:", e);
+    return full;
+  }
+}
+
+// Run background removal for one photo URL (or reuse the cached / in-flight
+// result). Returns the cutout cache entry.
+async function getOrCreateCutout(photoUrl, onProgress) {
+  const cached = cutoutCache.get(photoUrl);
+  if (cached) return cached;
+  if (cutoutInFlight.has(photoUrl)) return cutoutInFlight.get(photoUrl);
+  const job = (async () => {
+    const mod = await loadBgEngine();
+    if (typeof mod.removeBackground !== "function") {
+      throw new Error("Background engine module loaded without removeBackground()");
+    }
+    // Dealer CDNs usually send CORS headers, so fetch -> Blob first and hand
+    // the library raw bytes. If the fetch itself is blocked, fall back to
+    // handing the library the URL and letting it fetch its own way.
+    let source = photoUrl;
+    try {
+      const resp = await fetch(photoUrl, { mode: "cors" });
+      if (!resp.ok) throw new Error("photo fetch HTTP " + resp.status);
+      source = await resp.blob();
+    } catch (fetchErr) {
+      console.warn("[PhotoEngine] fetch->blob failed for photo; passing URL to engine instead:", fetchErr);
+      source = photoUrl;
+    }
+    const cutoutBlob = await mod.removeBackground(source, {
+      model: "medium",
+      output: { format: "image/png", quality: 1 },
+      progress: (key, current, total) => { if (onProgress) onProgress(key, current, total); }
+    });
+    const blobUrl = URL.createObjectURL(cutoutBlob);
+    const img = await loadEngineImage(blobUrl);
+    const entry = {
+      blobUrl: blobUrl,
+      img: img,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      bbox: computeAlphaBBox(img)
+    };
+    cutoutCache.set(photoUrl, entry);
+    bgEngineModelReady = true;
+    return entry;
+  })();
+  cutoutInFlight.set(photoUrl, job);
+  try { return await job; }
+  finally { cutoutInFlight.delete(photoUrl); }
+}
+
+// Draw background (cover-fit) + soft ground shadow + the cut-out vehicle,
+// bottom-aligned on the ground line, and export as a JPEG data URL.
+async function renderComposite(cutout, bgUrl) {
+  const W = 1600, H = 1200; // 4:3 — matches the modal preview's aspect family
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const bgImg = await loadEngineImage(bgUrl);
+  const bs = Math.max(W / bgImg.naturalWidth, H / bgImg.naturalHeight);
+  const bw = bgImg.naturalWidth * bs, bh = bgImg.naturalHeight * bs;
+  ctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh);
+
+  const bb = cutout.bbox || { x: 0, y: 0, w: cutout.width, h: cutout.height };
+  const groundY = H * 0.90;
+  const vs = Math.min((W * 0.94) / bb.w, (H * 0.84) / bb.h);
+  const vw = bb.w * vs, vh = bb.h * vs;
+  const vx = (W - vw) / 2, vy = groundY - vh;
+
+  // Soft elliptical ground shadow under the vehicle (radial gradient scaled
+  // vertically — no ctx.filter, so it renders the same in every browser).
+  ctx.save();
+  ctx.translate(W / 2, groundY + vh * 0.02);
+  ctx.scale(1, 0.16);
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, vw * 0.52);
+  grad.addColorStop(0, "rgba(0,0,0,0.40)");
+  grad.addColorStop(0.65, "rgba(0,0,0,0.20)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, vw * 0.52, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.drawImage(cutout.img, bb.x, bb.y, bb.w, bb.h, vx, vy, vw, vh);
+  return canvas.toDataURL("image/jpeg", 0.9);
+}
+
+function paintComposite(img, dataUrl) {
+  currentCompositeDataUrl = dataUrl;
+  // "contain" (not cover) so the full 4:3 composite — vehicle AND its ground
+  // shadow — stays visible in the wide, short preview frame.
+  img.style.objectFit = "contain";
+  img.style.objectPosition = "50% 50%";
+  img.src = dataUrl;
+  setPreviewCaption("Live cut-out preview");
+  setPreviewNote("Cut out and composited on this device. Preview only for now — posting with edited photos arrives with the next wiring step.", false);
+  setDownloadPreviewEnabled(true);
+}
+
+function paintOriginalFallback(img, photoUrl, note) {
+  currentCompositeDataUrl = null;
+  img.style.objectFit = "cover";
+  img.src = photoUrl;
+  setPreviewCaption("Original Photo");
+  setPreviewNote(note || "Couldn't process this photo — showing the original.", true);
+  setDownloadPreviewEnabled(false);
+}
+
+// The conductor: called when the modal opens, when the vehicle cycles, when
+// the background changes, and when the AI mode select changes. Cached
+// cut-outs recomposite instantly; uncached ones run the removal exactly once.
+async function refreshCutoutPreview() {
+  const img = document.getElementById("previewPhotoEditImg");
+  if (!img) return;
+  const seq = ++bgEngineSeq;
+  const isCurrent = () => seq === bgEngineSeq;
+
+  const car = getCurrentPreviewCar();
+  if (car) updatePreviewVehicleLabel(car);
+
+  if (!car) {
+    // No inventory yet — keep the previous behaviour (background only).
+    img.style.objectFit = "cover";
+    img.src = selectedPhotoBg;
+    currentCompositeDataUrl = null;
+    setDownloadPreviewEnabled(false);
+    setPreviewCaption("Background Preview");
+    setPreviewNote("Load your inventory to preview a vehicle cut-out here.", false);
+    hidePreviewEngineOverlay();
+    return;
+  }
+
+  const modeSel = document.getElementById("selectAiBgMode");
+  if (modeSel && modeSel.value === "disabled") {
+    hidePreviewEngineOverlay();
+    paintOriginalFallback(img, normalizePhotoUrl(car.image_url), "");
+    setPreviewNote("AI background is set to Disabled — showing the original photo.", false);
+    return;
+  }
+
+  const photoUrl = normalizePhotoUrl(car.image_url);
+
+  // Fast path: cut-out already cached → recomposite only.
+  const cached = cutoutCache.get(photoUrl);
+  if (cached) {
+    try {
+      const dataUrl = await renderComposite(cached, selectedPhotoBg);
+      if (!isCurrent()) return;
+      hidePreviewEngineOverlay();
+      paintComposite(img, dataUrl);
+    } catch (err) {
+      if (!isCurrent()) return;
+      console.error("[PhotoEngine] Composite failed:", err);
+      paintOriginalFallback(img, photoUrl);
+    }
+    return;
+  }
+
+  // Slow path: run the removal for this photo (once — then it's cached).
+  showPreviewEngineOverlay(bgEngineModelReady
+    ? "Removing background…"
+    : "Loading the AI engine — first time downloads the model once…");
+  setPreviewNote("", false);
+  try {
+    const entry = await getOrCreateCutout(photoUrl, (key, current, total) => {
+      if (!isCurrent()) return;
+      const st = document.getElementById("previewEngineStatus");
+      if (!st) return;
+      const pct = total ? Math.round((current / total) * 100) : null;
+      if (String(key).indexOf("fetch") === 0) {
+        st.innerText = "Downloading AI model" + (pct !== null ? " — " + pct + "%" : "…");
+      } else {
+        st.innerText = "Removing background" + (pct !== null ? " — " + pct + "%" : "…");
+      }
+    });
+    if (!isCurrent()) return;
+    const dataUrl = await renderComposite(entry, selectedPhotoBg);
+    if (!isCurrent()) return;
+    hidePreviewEngineOverlay();
+    paintComposite(img, dataUrl);
+  } catch (err) {
+    if (!isCurrent()) return;
+    hidePreviewEngineOverlay();
+    console.error("[PhotoEngine] Background removal failed for " + photoUrl + ":", err);
+    paintOriginalFallback(img, photoUrl);
+  }
+}
+
+function downloadCompositePreview() {
+  if (!currentCompositeDataUrl) return;
+  const nameEl = document.getElementById("previewVehicleName");
+  const label = ((nameEl && nameEl.innerText) || "vehicle").trim()
+    .replace(/[^\w\- ]+/g, "").replace(/\s+/g, "-");
+  const a = document.createElement("a");
+  a.href = currentCompositeDataUrl;
+  a.download = (label || "vehicle") + "-autolaunch-preview.jpg";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 // Button Audit: the photo-edits modal had three dead controls — "Try another
 // vehicle", and the Background / Adjust crop tabs. All three are wired now.
 function normalizePhotoUrl(url) {
@@ -4480,20 +4826,35 @@ function normalizePhotoUrl(url) {
   return u;
 }
 
-function cyclePreviewVehicle() {
-  const cars = (window.currentFilteredInventory && window.currentFilteredInventory.length)
+function getPreviewCars() {
+  return (window.currentFilteredInventory && window.currentFilteredInventory.length)
     ? window.currentFilteredInventory
     : rawInventory;
+}
+
+function updatePreviewVehicleLabel(car) {
+  const nameEl = document.getElementById("previewVehicleName");
+  if (nameEl && car) nameEl.innerText = (`${car.year || ''} ${car.make || ''} ${car.model || ''}`).trim() || "Vehicle";
+}
+
+function getCurrentPreviewCar() {
+  const cars = getPreviewCars();
+  if (!cars || !cars.length) return null;
+  if (previewVehicleIndex < 0 || previewVehicleIndex >= cars.length) previewVehicleIndex = 0;
+  return cars[previewVehicleIndex];
+}
+
+function cyclePreviewVehicle() {
+  const cars = getPreviewCars();
   if (!cars || !cars.length) {
     alert("No vehicles loaded yet — refresh your inventory first, then try again.");
     return;
   }
   previewVehicleIndex = (previewVehicleIndex + 1) % cars.length;
-  const car = cars[previewVehicleIndex];
-  const img = document.getElementById("previewPhotoEditImg");
-  if (img) img.src = normalizePhotoUrl(car.image_url);
-  const nameEl = document.getElementById("previewVehicleName");
-  if (nameEl) nameEl.innerText = (`${car.year || ''} ${car.make || ''} ${car.model || ''}`).trim() || "Vehicle";
+  updatePreviewVehicleLabel(cars[previewVehicleIndex]);
+  // Cut-out engine: build the composite for the newly selected vehicle
+  // (cached cut-outs recomposite instantly; new vehicles run removal once).
+  refreshCutoutPreview();
 }
 
 function switchPhotoEditTab(tab) {
