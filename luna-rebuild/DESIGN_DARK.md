@@ -60,6 +60,74 @@ emerald `#34D399`, amber `#FBBF24`, rose `#FB7185`, indigo `#A5B4FF`, sky `#38BD
   stronger brand wash (`rgba(59,130,246,.10)` fading down).
 - Focus rings: `--tw-ring-color: rgba(46,124,246,.55)` inside the dark shell.
 
+## Color themes (Settings → Appearance)
+
+Users can recolor the shell: 8 curated presets plus a fully custom
+base + accent pair, saved per user on `user_settings` (`theme_preset` =
+preset id or `"custom"`, `theme_custom` = `{base, accent}`). Matthew's ask:
+"whatever color combination their little heart desires."
+
+**How it works**
+
+- The shell CSS consumes ~27 tokens. Every accent-tinted rule derives from
+  four RGB-triplet tokens (`--accent-rgb`, `--accent-strong-rgb`,
+  `--glow-rgb`, `--btn-rgb`) via `rgba(var(--accent-rgb), α)` — no
+  hard-coded blue literals remain in accent-derived rules (semantic
+  status hues — emerald/amber/rose/indigo/sky/purple — intentionally stay
+  fixed so meaning never changes with the colorway).
+- A theme is `{ base, accent, mode }`. `deriveThemeTokens()` expands the
+  two colors into the full token set in HSL space: surfaces are the base
+  hue at stepped lightnesses (dark: card = base L + .06, field + .055,
+  deep + .052, sidebar + .018, page-top + .028; light mirrors downward),
+  the text scale is the base hue at fixed lightness rungs (dark: heading
+  .93 → fainter .40; light: heading .10 → fainter .74), link/electric/
+  strong/button fills come from the accent hue.
+- `applyTheme()` writes the tokens inline on `<body>`, overriding the
+  stylesheet defaults; it also sets the `<html>` backdrop directly (html
+  can't inherit body's custom properties). No saved theme → nothing is
+  written and the stylesheet defaults render — that IS Midnight Blue.
+- **Readability is enforced, not hoped for:** after derivation, heading,
+  body, and link colors are stepped in lightness until they clear WCAG
+  4.5:1 against the worst surface they sit on (card and page canvas);
+  if the heading pins at its extreme, the surface steps away instead.
+  The primary-button fill is stepped to ≥3:1 under its white label.
+  Custom mode is chosen by base luminance: ≤0.20 relative luminance →
+  dark mode (light text scale); above that → light mode (dark text).
+- UI: Settings → **Appearance** tab. Preset swatches apply instantly on
+  click; the two custom color inputs live-preview on `input`, and
+  **Use custom colors** commits the pair as the active selection.
+  Everything persists through the modal's normal Save Settings
+  (`saveAllSettings` upserts `theme_preset`/`theme_custom`), and
+  `loadUserStoreSettings` restores + applies on sign-in. Opening Settings
+  re-syncs the picker to the committed selection.
+
+**Presets**
+
+| ID | Name | Base | Accent | Mode |
+|---|---|---|---|---|
+| `midnight` | Midnight Blue | `#070D1A` | `#3B82F6` | dark |
+| `carbon` | Carbon Black / Blue | `#08090C` | `#3B82F6` | dark |
+| `blackred` | Black / Red | `#0A0809` | `#EF4444` | dark |
+| `deepsea` | Deep Sea | `#06222B` | `#22C55E` | dark |
+| `emerald` | Emerald Night | `#071A10` | `#10B981` | dark |
+| `violet` | Royal Violet | `#120A26` | `#8B5CF6` | dark |
+| `arctic` | Arctic | `#EFF4FA` | `#2563EB` | light |
+| `paperred` | Paper Red | `#FAF5F2` | `#DC2626` | light |
+
+Midnight Blue additionally carries a literal token map (`MIDNIGHT_TOKENS`
+in the theme engine) equal to the original template values — verified
+token-for-token against the stylesheet defaults — so the default render
+is unchanged. The other presets run through the standard derivation.
+
+Verified by unit test (Node, engine extracted from the page): all 8
+presets + 8 hostile custom pairs (white+yellow, black+black, mid-gray,
+pure red, lime+magenta, white+white…) produce valid colors with
+heading/body/link ≥ 4.5:1 against card and page.
+
+Scope note: themes recolor the shell + Inventory (the surfaces the dark
+template covers). Modals stay light and Get Started / Wishlist stay
+pinned until the rollout pass; they will consume the same tokens then.
+
 ## Rollout notes (for the next pass)
 
 - `#getStartedPage` and `#wishlistPage` are temporarily pinned to the old light

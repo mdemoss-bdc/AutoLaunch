@@ -154,6 +154,14 @@ body {
    Tokens are documented in DESIGN_DARK.md — reuse them, don't reinvent.
    ========================================================================== */
 body.dark-shell {
+  /* Accent as RGB triplets so every accent-tinted rule below derives from
+     ONE value. The theme engine (Settings → Appearance) overrides these
+     inline on <body>; these defaults are the Midnight Blue preset and must
+     stay identical to the original template values. */
+  --accent-rgb: 59, 130, 246;
+  --accent-strong-rgb: 96, 165, 250;
+  --glow-rgb: 46, 124, 246;
+  --btn-rgb: 37, 99, 235;
   --d-page: #070D1A;
   --d-page-top: #0B1424;
   --d-sidebar: #0A1220;
@@ -161,8 +169,8 @@ body.dark-shell {
   --d-card: #101B30;
   --d-field: #0E1930;
   --d-track: #22345A;
-  --d-edge: rgba(59, 130, 246, 0.16);
-  --d-edge-strong: rgba(96, 165, 250, 0.45);
+  --d-edge: rgba(var(--accent-rgb), 0.16);
+  --d-edge-strong: rgba(var(--accent-strong-rgb), 0.45);
   --d-field-edge: #2A3D5F;
   --d-line: rgba(255, 255, 255, 0.055);
   --d-h: #E9EFF8;
@@ -170,8 +178,13 @@ body.dark-shell {
   --d-soft: #9FB0C7;
   --d-micro: #8698B5;
   --d-faint: #7A90AC;
+  --d-fainter: #54687F;
+  --d-placeholder: #7186A3;
   --d-link: #58A6FF;
+  --d-link-bright: #93C5FD;
   --d-electric: #2E7CF6;
+  --d-electric-deep: #1D4ED8;
+  --d-veil: rgba(13, 24, 44, 0.92);
   background: var(--d-page);
 }
 html:has(> body.dark-shell) { background: #070D1A; }
@@ -179,7 +192,7 @@ html:has(> body.dark-shell) { background: #070D1A; }
 /* Inventory canvas: navy gradient with a soft electric glow near the top */
 body.dark-shell main {
   background:
-    radial-gradient(1100px 480px at 72% -8%, rgba(46, 124, 246, 0.13), rgba(46, 124, 246, 0) 60%),
+    radial-gradient(1100px 480px at 72% -8%, rgba(var(--glow-rgb), 0.13), rgba(var(--glow-rgb), 0) 60%),
     linear-gradient(180deg, var(--d-page-top) 0%, var(--d-page) 55%);
 }
 /* Views not yet rolled out keep the exact light canvas they have today */
@@ -189,23 +202,23 @@ body.dark-shell #wishlistPage { background: #f0f4f8; }
 /* ---- Sidebar ------------------------------------------------------------ */
 body.dark-shell aside {
   background: var(--d-sidebar);
-  border-right-color: rgba(59, 130, 246, 0.14);
+  border-right-color: rgba(var(--accent-rgb), 0.14);
   box-shadow: 0 0 32px rgba(0, 0, 0, 0.35);
 }
 body.dark-shell .nav-selected {
-  background: linear-gradient(135deg, #2E7CF6, #1D4ED8) !important;
-  box-shadow: 0 6px 18px rgba(46, 124, 246, 0.45) !important;
+  background: linear-gradient(135deg, var(--d-electric), var(--d-electric-deep)) !important;
+  box-shadow: 0 6px 18px rgba(var(--glow-rgb), 0.45) !important;
 }
 
 /* ---- Surfaces ------------------------------------------------------------ */
 /* Order matters: .glass-card comes after .bg-white so cards win the tie. */
 body.dark-shell :is(aside, main) .bg-white { background-color: var(--d-field); }
-body.dark-shell :is(aside, main) .bg-white\/95 { background-color: rgba(13, 24, 44, 0.92); }
+body.dark-shell :is(aside, main) .bg-white\/95 { background-color: var(--d-veil); }
 body.dark-shell :is(aside, main) .bg-slate-50 { background-color: var(--d-deep); }
 body.dark-shell :is(aside, main) .bg-slate-50\/80 { background-color: var(--d-deep); }
 body.dark-shell :is(aside, main) .bg-slate-100 { background-color: rgba(148, 163, 184, 0.12); }
 body.dark-shell :is(aside, main) .bg-slate-200 { background-color: var(--d-track); }
-body.dark-shell :is(aside, main) .bg-blue-50 { background-color: rgba(59, 130, 246, 0.14); }
+body.dark-shell :is(aside, main) .bg-blue-50 { background-color: rgba(var(--accent-rgb), 0.14); }
 body.dark-shell :is(aside, main) .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.16); }
 body.dark-shell :is(aside, main) .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.13); }
 body.dark-shell :is(aside, main) .bg-amber-50 { background-color: rgba(245, 158, 11, 0.13); }
@@ -216,13 +229,13 @@ body.dark-shell :is(aside, main) .glass-card {
   box-shadow: 0 10px 24px rgba(2, 6, 17, 0.45);
 }
 body.dark-shell :is(aside, main) .glass-card:hover {
-  border-color: rgba(96, 165, 250, 0.35);
+  border-color: rgba(var(--accent-strong-rgb), 0.35);
   box-shadow: 0 14px 30px rgba(2, 6, 17, 0.55);
 }
 
 /* Ribbon cards: deepen the brand wash for dark; hairline stays blue→sky */
 body.dark-shell main .ribbon-card {
-  background-image: linear-gradient(180deg, rgba(59, 130, 246, 0.10), rgba(59, 130, 246, 0) 55%);
+  background-image: linear-gradient(180deg, rgba(var(--accent-rgb), 0.10), rgba(var(--accent-rgb), 0) 55%);
 }
 body.dark-shell main #ribbonSafetyBar { box-shadow: 0 0 8px rgba(245, 158, 11, 0.55); }
 
@@ -234,7 +247,7 @@ body.dark-shell :is(aside, main) .text-slate-700 { color: var(--d-body); }
 body.dark-shell :is(aside, main) .text-slate-600 { color: var(--d-soft); }
 body.dark-shell :is(aside, main) .text-slate-500 { color: var(--d-micro); }
 body.dark-shell :is(aside, main) .text-slate-400 { color: var(--d-faint); }
-body.dark-shell :is(aside, main) .text-slate-300 { color: #54687F; }
+body.dark-shell :is(aside, main) .text-slate-300 { color: var(--d-fainter); }
 body.dark-shell :is(aside, main) .text-blue-600 { color: var(--d-link); }
 body.dark-shell :is(aside, main) .text-indigo-700 { color: #A5B4FF; }
 body.dark-shell :is(aside, main) .text-sky-600 { color: #38BDF8; }
@@ -247,7 +260,7 @@ body.dark-shell :is(aside, main) .text-rose-700 { color: #FB7185; }
 body.dark-shell :is(aside, main) .border-slate-200 { border-color: var(--d-edge); }
 body.dark-shell :is(aside, main) .border-slate-300 { border-color: var(--d-field-edge); }
 body.dark-shell :is(aside, main) .border-slate-100 { border-color: var(--d-line); }
-body.dark-shell :is(aside, main) .border-blue-200 { border-color: rgba(59, 130, 246, 0.35); }
+body.dark-shell :is(aside, main) .border-blue-200 { border-color: rgba(var(--accent-rgb), 0.35); }
 body.dark-shell :is(aside, main) .border-indigo-200 { border-color: rgba(99, 102, 241, 0.38); }
 body.dark-shell :is(aside, main) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.35); }
 body.dark-shell :is(aside, main) .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
@@ -255,32 +268,32 @@ body.dark-shell :is(aside, main) .border-rose-200 { border-color: rgba(244, 63, 
 body.dark-shell main .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--d-line); }
 
 /* ---- Hover / focus states -------------------------------------------------- */
-body.dark-shell :is(aside, main) .hover\:bg-slate-50:hover { background-color: rgba(59, 130, 246, 0.07); }
-body.dark-shell :is(aside, main) .hover\:bg-slate-100:hover { background-color: rgba(59, 130, 246, 0.09); }
+body.dark-shell :is(aside, main) .hover\:bg-slate-50:hover { background-color: rgba(var(--accent-rgb), 0.07); }
+body.dark-shell :is(aside, main) .hover\:bg-slate-100:hover { background-color: rgba(var(--accent-rgb), 0.09); }
 body.dark-shell :is(aside, main) .hover\:bg-rose-100:hover { background-color: rgba(244, 63, 94, 0.20); }
 body.dark-shell :is(aside, main) .hover\:text-slate-900:hover,
 body.dark-shell :is(aside, main) .hover\:text-slate-700:hover { color: var(--d-h); }
-body.dark-shell :is(aside, main) .hover\:text-blue-800:hover { color: #93C5FD; }
+body.dark-shell :is(aside, main) .hover\:text-blue-800:hover { color: var(--d-link-bright); }
 body.dark-shell :is(aside, main) .hover\:text-rose-600:hover { color: #FB7185; }
 body.dark-shell main .hover\:border-blue-300:hover { border-color: var(--d-edge-strong); }
-body.dark-shell main :is(input, select):focus { --tw-ring-color: rgba(46, 124, 246, 0.55); }
-body.dark-shell main input::placeholder { color: #7186A3; }
+body.dark-shell main :is(input, select):focus { --tw-ring-color: rgba(var(--glow-rgb), 0.55); }
+body.dark-shell main input::placeholder { color: var(--d-placeholder); }
 
 /* ---- Buttons, pills, toggles ------------------------------------------------ */
 body.dark-shell main .btn-gradient {
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45), inset 0 0 0 1px rgba(96, 165, 250, 0.25);
+  box-shadow: 0 6px 20px rgba(var(--btn-rgb), 0.45), inset 0 0 0 1px rgba(var(--accent-strong-rgb), 0.25);
 }
 /* Whichever pill is active (JS swaps in .bg-blue-600) gets the electric fill */
 body.dark-shell main #pillActive.bg-blue-600,
 body.dark-shell main #pillUnposted.bg-blue-600,
 body.dark-shell main #pillPosted.bg-blue-600,
 body.dark-shell main #pillAll.bg-blue-600 {
-  background-image: linear-gradient(135deg, #2E7CF6, #1D4ED8);
-  box-shadow: 0 4px 16px rgba(46, 124, 246, 0.45);
+  background-image: linear-gradient(135deg, var(--d-electric), var(--d-electric-deep));
+  box-shadow: 0 4px 16px rgba(var(--glow-rgb), 0.45);
   border-color: transparent;
 }
 /* Table rows: deep hover wash instead of the light theme's #f8fafc */
-body.dark-shell main .table-row-vibrant:hover { background-color: rgba(59, 130, 246, 0.06) !important; }
+body.dark-shell main .table-row-vibrant:hover { background-color: rgba(var(--accent-rgb), 0.06) !important; }
 
 /* ---- Scrollbars (inventory + sidebar scrollers) ------------------------------ */
 body.dark-shell :is(aside, main) * { scrollbar-width: thin; scrollbar-color: var(--d-track) transparent; }
@@ -1290,6 +1303,10 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
             AI Settings
           </button>
 
+          <button data-settings-tab="appearance" onclick="switchSettingsTab('appearance')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
+            Appearance
+          </button>
+
         </div>
 
       </div>
@@ -1592,6 +1609,77 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
         </div>
 
       </div><!-- /settingsPanelAi -->
+
+      <div id="settingsPanelAppearance" class="space-y-6 hidden">
+
+        <!-- APPEARANCE / COLOR THEME CARD -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <h3 class="font-bold text-lg mb-2">
+            Color Theme
+          </h3>
+
+          <p class="text-xs text-slate-400 mb-5">
+            Pick a colorway for the app shell — or dial in your own. Changes preview instantly; press <span class="font-semibold text-slate-500">Save Settings</span> to keep them. The app works out all the in-between shades and keeps text readable on whatever you choose.
+          </p>
+
+          <label class="block text-xs font-bold text-slate-500 uppercase mb-3">
+            Presets
+          </label>
+
+          <div id="themePresetGrid" class="grid grid-cols-4 gap-3 mb-6"></div>
+
+          <label class="block text-xs font-bold text-slate-500 uppercase mb-3">
+            Custom Colors
+          </label>
+
+          <div id="themeCustomCard" class="rounded-2xl border border-slate-200 p-4">
+
+            <div class="flex flex-wrap items-end gap-5">
+
+              <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2" for="themeCustomBase">
+                  Base color
+                </label>
+                <input
+                  type="color"
+                  id="themeCustomBase"
+                  value="#0B1424"
+                  oninput="onThemeCustomInput()"
+                  class="w-16 h-11 rounded-lg border border-slate-300 cursor-pointer bg-white p-1">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2" for="themeCustomAccent">
+                  Accent color
+                </label>
+                <input
+                  type="color"
+                  id="themeCustomAccent"
+                  value="#3B82F6"
+                  oninput="onThemeCustomInput()"
+                  class="w-16 h-11 rounded-lg border border-slate-300 cursor-pointer bg-white p-1">
+              </div>
+
+              <button
+                type="button"
+                onclick="applyCustomTheme()"
+                class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
+                Use custom colors
+              </button>
+
+            </div>
+
+            <p class="text-xs text-slate-400 mt-3">
+              Moving a color previews it live. <span class="font-semibold text-slate-500">Use custom colors</span> makes the pair your theme, then Save Settings to keep it.
+            </p>
+
+          </div>
+
+        </div>
+
+      </div><!-- /settingsPanelAppearance -->
 
         <!-- SAVE -->
 
@@ -2534,6 +2622,21 @@ updateLastSyncDisplay();
       locationGroups = Array.isArray(data.location_groups) ? data.location_groups : [];
       renderLocationGroupsSettings();
 
+      // Color theme: restore the saved selection and apply it. Absent
+      // columns / no saved theme leave the Midnight Blue default exactly
+      // as the stylesheet defines it.
+      if (data.theme_custom && data.theme_custom.base && data.theme_custom.accent) {
+        themeState.custom = { base: data.theme_custom.base, accent: data.theme_custom.accent };
+      }
+      if (data.theme_preset === "custom" && themeState.custom) {
+        themeState.preset = "custom";
+        applyCommittedTheme();
+      } else if (data.theme_preset && THEMES.some(t => t.id === data.theme_preset)) {
+        themeState.preset = data.theme_preset;
+        applyCommittedTheme();
+      }
+      renderThemePicker();
+
       // Branding frame restore. (The retired background feature also saved
       // mode/choice/custom-background values to this table — they are
       // simply no longer read.)
@@ -2680,6 +2783,8 @@ const certifiedUrl =
   used_url: usedUrl,
   new_url: newUrl,
   certified_url: certifiedUrl,
+  theme_preset: themeState.preset,
+  theme_custom: themeState.custom,
   updated_at: new Date().toISOString()
 }, { onConflict: "user_id" });
     if (error) throw error;
@@ -4583,7 +4688,7 @@ async function saveWishlistForm() {
   }
 }
 
-function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); renderLocationGroupsSettings(); }
+function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); renderLocationGroupsSettings(); renderThemePicker(); }
 function renderUserId() { const el = document.getElementById("settingsUserId"); if (el) el.textContent = (currentUser && currentUser.id) ? currentUser.id : "—"; }
 async function copyUserId() {
   const id = (currentUser && currentUser.id) ? currentUser.id : "";
@@ -4599,7 +4704,7 @@ async function copyUserId() {
 }
 // Luna: Settings left-menu tabs (Dealership / Facebook / Automation / AI Settings)
 function switchSettingsTab(tab) {
-  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", automation: "settingsPanelAutomation", ai: "settingsPanelAi" };
+  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", automation: "settingsPanelAutomation", ai: "settingsPanelAi", appearance: "settingsPanelAppearance" };
   Object.entries(panels).forEach(([key, id]) => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("hidden", key !== tab);
@@ -4609,6 +4714,316 @@ function switchSettingsTab(tab) {
     btn.className = "w-full text-left px-4 py-3 rounded-xl cursor-pointer " + (active ? "bg-blue-600 text-white font-bold" : "bg-slate-100 text-slate-600 font-semibold");
   });
 }
+// ==============================================================================
+// ====================== COLOR THEME ENGINE START ==============================
+// ==============================================================================
+// User-selectable colorways for the dark command-center shell. A theme is
+// just { base, accent, mode }: deriveThemeTokens() expands those two colors
+// into the full --d-* token set the shell CSS consumes, and applyTheme()
+// writes the tokens inline on <body>, overriding the stylesheet defaults
+// (which are the Midnight Blue values, so no saved theme = today's look).
+// Presets may carry literal token overrides; Midnight Blue carries the full
+// original template values so the default render is byte-for-byte the same.
+// Persisted on user_settings as theme_preset (id, or "custom") and
+// theme_custom ({base, accent}); see loadUserStoreSettings / saveAllSettings.
+// THEME ENGINE START
+function hexToRgb(hex) {
+  const m = String(hex || "").trim().match(/^#?([0-9a-f]{6})$/i) || String(hex || "").trim().match(/^#?([0-9a-f]{3})$/i);
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h.split("").map(c => c + c).join("");
+  return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+}
+function rgbToHex(r, g, b) {
+  const c = v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+  return ("#" + c(r) + c(g) + c(b)).toUpperCase();
+}
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return { h: h * 60, s, l };
+}
+function hslToRgb(h, s, l) {
+  h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(1, s)); l = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; } else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+  return { r: Math.round((r + m) * 255), g: Math.round((g + m) * 255), b: Math.round((b + m) * 255) };
+}
+function hslHex(h, s, l) { const c = hslToRgb(h, s, l); return rgbToHex(c.r, c.g, c.b); }
+function rgbString(rgb) { return rgb.r + ", " + rgb.g + ", " + rgb.b; }
+function rgbaString(rgb, a) { return "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + a + ")"; }
+function relLuminance(rgb) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(rgb.r) + 0.7152 * f(rgb.g) + 0.0722 * f(rgb.b);
+}
+function contrastRatio(rgbA, rgbB) {
+  const la = relLuminance(rgbA), lb = relLuminance(rgbB);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+// Mode for a custom base: light text on genuinely dark bases, dark text on
+// everything else (mid-luminance bases read better with dark text, and the
+// contrast stepper below guarantees the heading clears 4.5 either way).
+function themeModeForBase(baseHex) {
+  const rgb = hexToRgb(baseHex);
+  if (!rgb) return "dark";
+  return relLuminance(rgb) <= 0.20 ? "dark" : "light";
+}
+// Step one token color's lightness until it clears `target` contrast against
+// a fixed surface color; returns the (possibly unchanged) hex.
+function stepLightnessForContrast(hsl, surfaceRgb, target, dir) {
+  let { h, s, l } = hsl;
+  for (let i = 0; i < 60; i++) {
+    if (contrastRatio(hslToRgb(h, s, l), surfaceRgb) >= target) break;
+    l += dir * 0.01;
+    if (l < 0 || l > 1) { l = Math.max(0, Math.min(1, l)); break; }
+  }
+  return hslHex(h, s, l);
+}
+function deriveThemeTokens(spec) {
+  const base = hexToRgb(spec.base) || { r: 7, g: 13, b: 26 };
+  const accent = hexToRgb(spec.accent) || { r: 59, g: 130, b: 246 };
+  const mode = spec.mode || themeModeForBase(spec.base);
+  const bh = rgbToHsl(base.r, base.g, base.b);
+  const ah = rgbToHsl(accent.r, accent.g, accent.b);
+  const dark = mode === "dark";
+  const t = {};
+  if (dark) {
+    t["--d-page"] = rgbToHex(base.r, base.g, base.b);
+    t["--d-page-top"] = hslHex(bh.h, bh.s, bh.l + 0.028);
+    t["--d-sidebar"] = hslHex(bh.h, bh.s, bh.l + 0.018);
+    t["--d-deep"] = hslHex(bh.h, Math.min(bh.s + 0.06, 1), bh.l + 0.052);
+    t["--d-field"] = hslHex(bh.h, bh.s, bh.l + 0.055);
+    t["--d-card"] = hslHex(bh.h, bh.s, bh.l + 0.060);
+    t["--d-track"] = hslHex(ah.h, ah.s * 0.55, 0.26);
+    t["--d-field-edge"] = hslHex(bh.h, bh.s * 0.85, bh.l + 0.205);
+    t["--d-line"] = "rgba(255, 255, 255, 0.055)";
+    t["--d-veil"] = rgbaString(hslToRgb(bh.h, bh.s, bh.l + 0.045), 0.92);
+    t["--d-h"] = hslHex(bh.h, 0.32, 0.93);
+    t["--d-body"] = hslHex(bh.h, 0.30, 0.83);
+    t["--d-soft"] = hslHex(bh.h, 0.24, 0.69);
+    t["--d-micro"] = hslHex(bh.h, 0.20, 0.61);
+    t["--d-faint"] = hslHex(bh.h, 0.19, 0.56);
+    t["--d-fainter"] = hslHex(bh.h, 0.22, 0.40);
+    t["--d-placeholder"] = hslHex(bh.h, 0.20, 0.53);
+    t["--d-link"] = hslHex(ah.h, Math.min(ah.s + 0.05, 1), 0.67);
+    t["--d-link-bright"] = hslHex(ah.h, Math.min(ah.s + 0.05, 1), 0.78);
+    t["--d-electric"] = hslHex(ah.h, ah.s, 0.57);
+    t["--d-electric-deep"] = hslHex(ah.h + 4, ah.s * 0.85, Math.max(ah.l - 0.12, 0.30));
+    t["--accent-strong-rgb"] = rgbString(hslToRgb(ah.h, ah.s, 0.68));
+  } else {
+    t["--d-page"] = rgbToHex(base.r, base.g, base.b);
+    t["--d-page-top"] = hslHex(bh.h, bh.s, Math.min(bh.l + 0.015, 0.995));
+    t["--d-sidebar"] = hslHex(bh.h, bh.s, Math.max(bh.l - 0.025, 0));
+    t["--d-deep"] = hslHex(bh.h, bh.s, Math.max(bh.l - 0.05, 0));
+    t["--d-field"] = hslHex(bh.h, bh.s * 0.5, 0.995);
+    t["--d-card"] = hslHex(bh.h, bh.s * 0.65, Math.min(bh.l + 0.012, 0.99));
+    t["--d-track"] = hslHex(ah.h, ah.s * 0.45, 0.84);
+    t["--d-field-edge"] = hslHex(bh.h, bh.s * 0.8, Math.max(bh.l - 0.20, 0));
+    t["--d-line"] = "rgba(15, 23, 42, 0.09)";
+    t["--d-veil"] = "rgba(255, 255, 255, 0.94)";
+    t["--d-h"] = hslHex(bh.h, 0.32, 0.10);
+    t["--d-body"] = hslHex(bh.h, 0.26, 0.24);
+    t["--d-soft"] = hslHex(bh.h, 0.20, 0.40);
+    t["--d-micro"] = hslHex(bh.h, 0.18, 0.50);
+    t["--d-faint"] = hslHex(bh.h, 0.16, 0.60);
+    t["--d-fainter"] = hslHex(bh.h, 0.14, 0.74);
+    t["--d-placeholder"] = hslHex(bh.h, 0.16, 0.55);
+    t["--d-link"] = hslHex(ah.h, ah.s, 0.40);
+    t["--d-link-bright"] = hslHex(ah.h, ah.s, 0.55);
+    t["--d-electric"] = hslHex(ah.h, ah.s, 0.47);
+    t["--d-electric-deep"] = hslHex(ah.h, ah.s * 0.9, 0.38);
+    t["--accent-strong-rgb"] = rgbString(hslToRgb(ah.h, ah.s, 0.42));
+  }
+  t["--accent-rgb"] = rgbString(accent);
+  t["--d-edge"] = rgbaString(accent, dark ? 0.16 : 0.25);
+  t["--d-edge-strong"] = rgbaString(hslToRgb(ah.h, ah.s, dark ? 0.68 : 0.42), 0.45);
+  const electricRgb = hexToRgb(t["--d-electric"]);
+  t["--glow-rgb"] = rgbString(electricRgb);
+  t["--btn-rgb"] = rgbString(hslToRgb(ah.h, ah.s * 0.92, dark ? 0.53 : 0.45));
+  // Readability guarantees: heading, body and link text must clear WCAG
+  // contrast against every surface they sit on (card AND the page canvas)
+  // whatever colors were picked; the primary-button fill must stay
+  // readable under its white label.
+  const dir = dark ? 1 : -1;
+  const surfaceRgbs = () => ["--d-card", "--d-page", "--d-page-top"].map(k => hexToRgb(t[k]));
+  const worstContrast = rgb => Math.min.apply(null, surfaceRgbs().map(s => contrastRatio(rgb, s)));
+  let hRgb = hexToRgb(t["--d-h"]);
+  const hHsl = rgbToHsl(hRgb.r, hRgb.g, hRgb.b);
+  for (let i = 0; i < 60 && worstContrast(hRgb) < 4.6; i++) {
+    hHsl.l = Math.max(0, Math.min(1, hHsl.l + dir * 0.01));
+    hRgb = hslToRgb(hHsl.h, hHsl.s, hHsl.l);
+  }
+  t["--d-h"] = rgbToHex(hRgb.r, hRgb.g, hRgb.b);
+  if (worstContrast(hRgb) < 4.55) {
+    // Heading is pinned at its extreme — move the card away instead,
+    // then (last resort) nudge the canvas gradient stops as well.
+    const cardRgb = hexToRgb(t["--d-card"]);
+    const cHsl = rgbToHsl(cardRgb.r, cardRgb.g, cardRgb.b);
+    t["--d-card"] = stepLightnessForContrast(cHsl, hRgb, 4.75, -dir);
+  }
+  if (worstContrast(hRgb) < 4.55) {
+    ["--d-page", "--d-page-top"].forEach(k => {
+      const c = hexToRgb(t[k]);
+      t[k] = stepLightnessForContrast(rgbToHsl(c.r, c.g, c.b), hRgb, 4.6, -dir);
+    });
+  }
+  const cardRgb2 = hexToRgb(t["--d-card"]);
+  const pageRgb2 = hexToRgb(t["--d-page"]);
+  const bRgb = hexToRgb(t["--d-body"]);
+  let bodyHex = stepLightnessForContrast(rgbToHsl(bRgb.r, bRgb.g, bRgb.b), cardRgb2, 4.5, dir);
+  const bRgb2 = hexToRgb(bodyHex);
+  bodyHex = stepLightnessForContrast(rgbToHsl(bRgb2.r, bRgb2.g, bRgb2.b), pageRgb2, 4.5, dir);
+  t["--d-body"] = bodyHex;
+  const lRgb = hexToRgb(t["--d-link"]);
+  let linkHex = stepLightnessForContrast(rgbToHsl(lRgb.r, lRgb.g, lRgb.b), cardRgb2, 4.5, dir);
+  const lRgb2 = hexToRgb(linkHex);
+  linkHex = stepLightnessForContrast(rgbToHsl(lRgb2.r, lRgb2.g, lRgb2.b), pageRgb2, 4.5, dir);
+  t["--d-link"] = linkHex;
+  const elHsl = rgbToHsl(electricRgb.r, electricRgb.g, electricRgb.b);
+  t["--d-electric"] = stepLightnessForContrast(elHsl, { r: 255, g: 255, b: 255 }, 3.0, -1);
+  t["--glow-rgb"] = rgbString(hexToRgb(t["--d-electric"]));
+  return t;
+}
+// The original template values, verbatim — Midnight Blue's literal token
+// map, so applying the default preset reproduces today's render exactly.
+const MIDNIGHT_TOKENS = {
+  "--accent-rgb": "59, 130, 246",
+  "--accent-strong-rgb": "96, 165, 250",
+  "--glow-rgb": "46, 124, 246",
+  "--btn-rgb": "37, 99, 235",
+  "--d-page": "#070D1A",
+  "--d-page-top": "#0B1424",
+  "--d-sidebar": "#0A1220",
+  "--d-deep": "#0C1730",
+  "--d-card": "#101B30",
+  "--d-field": "#0E1930",
+  "--d-track": "#22345A",
+  "--d-edge": "rgba(59, 130, 246, 0.16)",
+  "--d-edge-strong": "rgba(96, 165, 250, 0.45)",
+  "--d-field-edge": "#2A3D5F",
+  "--d-line": "rgba(255, 255, 255, 0.055)",
+  "--d-h": "#E9EFF8",
+  "--d-body": "#CBD5E1",
+  "--d-soft": "#9FB0C7",
+  "--d-micro": "#8698B5",
+  "--d-faint": "#7A90AC",
+  "--d-fainter": "#54687F",
+  "--d-placeholder": "#7186A3",
+  "--d-link": "#58A6FF",
+  "--d-link-bright": "#93C5FD",
+  "--d-electric": "#2E7CF6",
+  "--d-electric-deep": "#1D4ED8",
+  "--d-veil": "rgba(13, 24, 44, 0.92)"
+};
+const THEMES = [
+  { id: "midnight", name: "Midnight Blue", base: "#070D1A", accent: "#3B82F6", mode: "dark", tokens: MIDNIGHT_TOKENS },
+  { id: "carbon", name: "Carbon Black / Blue", base: "#08090C", accent: "#3B82F6", mode: "dark" },
+  { id: "blackred", name: "Black / Red", base: "#0A0809", accent: "#EF4444", mode: "dark" },
+  { id: "deepsea", name: "Deep Sea", base: "#06222B", accent: "#22C55E", mode: "dark" },
+  { id: "emerald", name: "Emerald Night", base: "#071A10", accent: "#10B981", mode: "dark" },
+  { id: "violet", name: "Royal Violet", base: "#120A26", accent: "#8B5CF6", mode: "dark" },
+  { id: "arctic", name: "Arctic", base: "#EFF4FA", accent: "#2563EB", mode: "light" },
+  { id: "paperred", name: "Paper Red", base: "#FAF5F2", accent: "#DC2626", mode: "light" }
+];
+// Committed selection (what Save persists and load restores). Preview-only
+// changes apply visually without touching this until the user commits by
+// picking a preset or pressing "Use custom colors".
+let themeState = { preset: "midnight", custom: null };
+function themeTokensForSelection() {
+  if (themeState.preset === "custom" && themeState.custom) {
+    return deriveThemeTokens({ base: themeState.custom.base, accent: themeState.custom.accent });
+  }
+  const preset = THEMES.find(t => t.id === themeState.preset) || THEMES[0];
+  const derived = deriveThemeTokens(preset);
+  return preset.tokens ? Object.assign(derived, preset.tokens) : derived;
+}
+function applyTheme(tokens) {
+  if (!tokens || !document.body) return;
+  Object.entries(tokens).forEach(([key, value]) => {
+    document.body.style.setProperty(key, value);
+  });
+  // The html backdrop color can't inherit body's custom properties, so
+  // set it directly (stylesheet default is Midnight's page color).
+  if (tokens["--d-page"]) document.documentElement.style.background = tokens["--d-page"];
+}
+function applyCommittedTheme() { applyTheme(themeTokensForSelection()); }
+function selectThemePreset(id) {
+  if (!THEMES.some(t => t.id === id)) return;
+  themeState.preset = id;
+  applyCommittedTheme();
+  renderThemePicker();
+}
+// Live preview while the color inputs move; committed only via the
+// "Use custom colors" button (applyCustomTheme).
+function onThemeCustomInput() {
+  const baseEl = document.getElementById("themeCustomBase");
+  const accentEl = document.getElementById("themeCustomAccent");
+  if (!baseEl || !accentEl) return;
+  applyTheme(deriveThemeTokens({ base: baseEl.value, accent: accentEl.value }));
+}
+function applyCustomTheme() {
+  const baseEl = document.getElementById("themeCustomBase");
+  const accentEl = document.getElementById("themeCustomAccent");
+  if (!baseEl || !accentEl) return;
+  themeState.custom = { base: baseEl.value, accent: accentEl.value };
+  themeState.preset = "custom";
+  applyCommittedTheme();
+  renderThemePicker();
+}
+// (Re)builds the Appearance tab UI from themeState: swatch grid with the
+// selected ring, custom inputs seeded from the saved pair (or, failing
+// that, the active preset's colors).
+function renderThemePicker() {
+  const grid = document.getElementById("themePresetGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  THEMES.forEach(preset => {
+    const selected = themeState.preset === preset.id;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "flex flex-col items-center gap-2 cursor-pointer group";
+    btn.setAttribute("aria-pressed", selected ? "true" : "false");
+    const swatch = document.createElement("span");
+    swatch.className = "block w-full h-12 rounded-xl border border-slate-200";
+    swatch.style.background = "linear-gradient(135deg, " + preset.base + " 0 55%, " + preset.accent + " 55% 100%)";
+    if (selected) swatch.style.boxShadow = "0 0 0 2px #ffffff, 0 0 0 4px " + preset.accent;
+    const label = document.createElement("span");
+    label.className = "text-[11px] leading-tight text-center " + (selected ? "font-bold text-slate-900" : "font-semibold text-slate-500");
+    label.textContent = preset.name;
+    btn.appendChild(swatch);
+    btn.appendChild(label);
+    btn.addEventListener("click", () => selectThemePreset(preset.id));
+    grid.appendChild(btn);
+  });
+  const baseEl = document.getElementById("themeCustomBase");
+  const accentEl = document.getElementById("themeCustomAccent");
+  const seed = themeState.custom || (() => {
+    const p = THEMES.find(t => t.id === themeState.preset) || THEMES[0];
+    return { base: p.base, accent: p.accent };
+  })();
+  if (baseEl) baseEl.value = seed.base;
+  if (accentEl) accentEl.value = seed.accent;
+  const card = document.getElementById("themeCustomCard");
+  if (card) {
+    const customActive = themeState.preset === "custom";
+    card.style.boxShadow = customActive ? "0 0 0 2px #ffffff, 0 0 0 4px " + (seed.accent || "#2563EB") : "";
+    card.style.borderColor = customActive ? (seed.accent || "") : "";
+  }
+}
+// THEME ENGINE END
+// ==============================================================================
+// ====================== COLOR THEME ENGINE END ================================
+// ==============================================================================
 function openQueueModal() { document.getElementById("queueModal").classList.remove("hidden"); }
 function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
