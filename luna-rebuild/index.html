@@ -1022,6 +1022,7 @@ body {
               <input
                 type="checkbox"
                 id="chkSettingsAutoPost"
+                onchange="toggleSettingsAutoPost(this)"
                 class="sr-only peer">
 
               <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
@@ -1666,6 +1667,7 @@ let activeMakeFilter = "";
 let activeModelFilter = "";
 let activeConditionFilter = "";
 let postingQueue = [];
+let userDailyPostLimit = 10;
 let activeDropdownVin = null;
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
 
@@ -1821,28 +1823,32 @@ updateLastSyncDisplay();
         if (statusLbl) statusLbl.innerText = data.auto_crop_enabled ? "On - smart crop" : "Off";
         const chkCrop = document.getElementById("chkAutoCrop");
         if (chkCrop) chkCrop.checked = data.auto_crop_enabled;
+        const ribbonCrop = document.getElementById("chkRibbonPhotoCrop");
+        if (ribbonCrop) ribbonCrop.checked = !!data.auto_crop_enabled;
       }
+
+      // Phase 4: ribbon switches reflect the saved settings on load
+      if (data.auto_post_enabled !== undefined && data.auto_post_enabled !== null) {
+        const ribbonArrivals = document.getElementById("chkRibbonArrivals");
+        if (ribbonArrivals) ribbonArrivals.checked = !!data.auto_post_enabled;
+        const settingsAutoPost = document.getElementById("chkSettingsAutoPost");
+        if (settingsAutoPost) settingsAutoPost.checked = !!data.auto_post_enabled;
+      }
+      if (data.enable_auto_repost !== undefined && data.enable_auto_repost !== null) {
+        const ribbonRepost = document.getElementById("chkRibbonRepost");
+        if (ribbonRepost) ribbonRepost.checked = !!data.enable_auto_repost;
+      }
+      syncRibbonMasterCheckbox();
 
       if (data.ai_background_mode) {
         const aiSel = document.getElementById("selectAiBgMode");
         if (aiSel) aiSel.value = data.ai_background_mode;
       }
 
-      if (data.daily_post_limit !== undefined) {
-        const limitVal = data.daily_post_limit;
-        const limitLabel = document.getElementById("ribbonSafetyLimitLabel");
-        const safetyText = document.getElementById("safetyCounterText");
-        const safetyBar = document.getElementById("safetyCounterBar");
-
-        let limitDisplay = limitVal === 999 ? "Unlimited" : limitVal;
-        if (limitLabel) limitLabel.innerText = `1 of ${limitDisplay} today`;
-        if (safetyText) safetyText.innerText = `1/${limitDisplay}`;
-        if (safetyBar && limitVal !== 999) {
-          const pct = Math.min(100, Math.max(10, (1 / limitVal) * 100));
-          safetyBar.style.width = `${pct}%`;
-        } else if (safetyBar) {
-          safetyBar.style.width = `5%`;
-        }
+      if (data.daily_post_limit !== undefined && data.daily_post_limit !== null) {
+        userDailyPostLimit = data.daily_post_limit;
+        // Real count, not the old hardcoded "1 of X"
+        refreshSafetyCounter();
       }
 
       if (data.posting_speed) {
@@ -2797,6 +2803,8 @@ if (!rows.length) {
     return;
 }
 
+        if (!(await checkDailyLimit(rows.length))) return;
+
         const { error } = await supabaseClient
             .from("auto_posting_queue")
             .insert(rows);
@@ -2807,7 +2815,9 @@ if (!rows.length) {
 
         applyFilters();
 
-        alert(`${selectedVehicles.length} vehicle(s) queued.`);
+        refreshSafetyCounter();
+
+        alert(`${rows.length} vehicle(s) queued.`);
 
     } catch (err) {
 
@@ -2856,15 +2866,19 @@ async function removeQueueItem(id) {
 async function enqueueMarketplaceCar(vin) {
   if (!currentUser) return;
   try {
-    await supabaseClient.from("auto_posting_queue").insert({
+    if (!(await checkDailyLimit(1))) return;
+
+    const { error } = await supabaseClient.from("auto_posting_queue").insert({
       user_id: currentUser.id,
       vin: vin,
       target_channel: 'marketplace',
       status: 'pending'
     });
+    if (error) throw error;
 
     await loadPostingQueue();
     applyFilters();
+    refreshSafetyCounter();
     alert("✓ Vehicle scheduled in Post Queue!");
   } catch (err) {
     alert("Could not queue vehicle: " + err.message);
@@ -3083,7 +3097,41 @@ function populateOnboardingFields() {
         certField.value = currentStore.cpoUrl || "";
 
 }
-  function testInventory() {
+  // Phase 4: REAL inventory URL check (replaces the old fake 1.5s
+  // always-success timeout). From a browser we can honestly verify:
+  //   1. the text is a valid URL with a reachable host (fetch, no-cors),
+  //   2. nothing more — dealer sites block cross-origin reads (CORS), so
+  //      the response body, car count, photos and VINs CANNOT be inspected
+  //      from here. That deeper check happens when the scraper runs.
+  // Results say exactly which of those happened. No fake checkmarks.
+  async function probeInventoryUrl(rawUrl) {
+    let parsed;
+    try {
+      parsed = new URL(rawUrl);
+      if (!/^https?:$/.test(parsed.protocol)) throw new Error("protocol");
+    } catch (e) {
+      return { ok: false, reason: "Not a valid web address — check for typos and include https://" };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 9000);
+    try {
+      // mode:"no-cors" resolves with an opaque response for ANY HTTP reply
+      // (even a 404), and rejects only when the host cannot be reached at
+      // all (DNS, connection refused, mixed-content block, timeout).
+      await fetch(parsed.href, { mode: "no-cors", signal: controller.signal, credentials: "omit" });
+      return { ok: true, reason: "Address answers from a browser" };
+    } catch (e) {
+      const why = e.name === "AbortError"
+        ? "Timed out after 9 seconds — the site did not answer"
+        : "Could not reach this address from a browser (offline host, wrong domain, or the page blocks the check)";
+      return { ok: false, reason: why };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function testInventory() {
 
     const dealerName =
         document.getElementById(
@@ -3099,6 +3147,9 @@ function populateOnboardingFields() {
         document.getElementById(
             "onboardingNewUrl"
         ).value.trim();
+
+    const certifiedField = document.getElementById("onboardingCertifiedUrl");
+    const certifiedUrl = certifiedField ? certifiedField.value.trim() : "";
 
     if (!dealerName) {
         alert("Please enter a dealership name.");
@@ -3125,13 +3176,41 @@ function populateOnboardingFields() {
     btn.innerHTML =
         "Testing Inventory...";
 
-setTimeout(() => {
+    const targets = [
+        { label: "Used Inventory", url: usedUrl },
+        { label: "New Inventory", url: newUrl }
+    ];
+    if (certifiedUrl) targets.push({ label: "Certified Inventory", url: certifiedUrl });
 
-    document
-        .getElementById(
-            "inventoryTestResults"
-        )
-        .classList.remove("hidden");
+    const results = [];
+    for (const t of targets) {
+        const r = await probeInventoryUrl(t.url);
+        results.push({ label: t.label, url: t.url, ok: r.ok, reason: r.reason });
+    }
+
+    const resultsEl = document.getElementById("inventoryTestResults");
+    const allOk = results.every(r => r.ok);
+    const lines = results.map(r =>
+        `<div>${r.ok ? "✅" : "❌"} <strong>${r.label}:</strong> ${r.ok ? "Reachable" : "Not reachable"} — ${r.reason}<br><span class="text-xs text-slate-500">${r.url}</span></div>`
+    ).join("");
+    resultsEl.innerHTML = `
+        <h3 class="text-lg font-bold text-slate-900 mb-4">
+            ${allOk ? "✅" : "⚠️"} Inventory Test Results
+        </h3>
+        <div class="space-y-2 text-sm">${lines}</div>
+        <p class="text-xs text-slate-500 mt-4">
+            This check confirms each address answers from a browser. Dealer sites block
+            other websites from reading their pages (CORS), so cars, photos and VINs can't
+            be verified here — the scraper confirms those on its first run.
+        </p>
+        <div class="mt-6">
+            <button
+                onclick="continueSetup()"
+                class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
+                Continue
+            </button>
+        </div>`;
+    resultsEl.classList.remove("hidden");
 
     const testStep =
         document.getElementById(
@@ -3145,7 +3224,7 @@ setTimeout(() => {
         );
 
         testStep.classList.add(
-            "text-blue-600",
+            allOk ? "text-blue-600" : "text-amber-600",
             "font-semibold"
         );
 
@@ -3156,9 +3235,7 @@ setTimeout(() => {
     btn.innerHTML =
         "Test Inventory";
 
-}, 1500);
-
-}   //
+}
 
 function showGetStartedPage() {
     populateOnboardingFields();
@@ -3202,8 +3279,159 @@ function clearFilters() {
     closeModal('filtersModal');
 }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-function toggleRibbonSetting(k) {
-    console.log("clicked:", k);
+// ==============================================================================
+// ====================== PHASE 4: SETTINGS THAT WORK ===========================
+// ==============================================================================
+
+// Ribbon switch -> the user_settings column(s) it controls. These are the
+// same columns the settings modals already save to, so the ribbon and the
+// modals can never disagree:
+//   auto_main     = master switch, drives all three columns at once
+//   auto_arrivals = auto_post_enabled      (same as Auto-Post modal)
+//   auto_repost   = enable_auto_repost     (same as Repost modal)
+//   auto_crop     = auto_crop_enabled      (same as Photo Edits modal)
+const RIBBON_SETTING_FIELDS = {
+  auto_main: ["auto_post_enabled", "enable_auto_repost", "auto_crop_enabled"],
+  auto_arrivals: ["auto_post_enabled"],
+  auto_repost: ["enable_auto_repost"],
+  auto_crop: ["auto_crop_enabled"]
+};
+const RIBBON_SETTING_CHECKBOX = {
+  auto_main: "chkRibbonAutoMain",
+  auto_arrivals: "chkRibbonArrivals",
+  auto_repost: "chkRibbonRepost",
+  auto_crop: "chkRibbonPhotoCrop"
+};
+
+async function toggleRibbonSetting(k) {
+  const fields = RIBBON_SETTING_FIELDS[k];
+  const chk = document.getElementById(RIBBON_SETTING_CHECKBOX[k]);
+  if (!fields || !chk) return;
+  if (!currentUser) { chk.checked = !chk.checked; return; }
+
+  const value = chk.checked;
+  const payload = { user_id: currentUser.id, updated_at: new Date().toISOString() };
+  fields.forEach(f => { payload[f] = value; });
+
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert(payload, { onConflict: "user_id" });
+    if (error) throw error;
+  } catch (err) {
+    chk.checked = !value; // revert: the save did not happen, do not pretend
+    alert("Could not save that setting: " + (err.message || "Unknown error"));
+    return;
+  }
+
+  // Keep every other control that reflects the same columns in sync.
+  if (k === "auto_main") {
+    ["chkRibbonArrivals", "chkRibbonRepost", "chkRibbonPhotoCrop"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.checked = value;
+    });
+  }
+  if (fields.includes("auto_post_enabled")) {
+    const settingsChk = document.getElementById("chkSettingsAutoPost");
+    if (settingsChk) settingsChk.checked = value;
+    const arrivalsChk = document.getElementById("chkRibbonArrivals");
+    if (arrivalsChk && k === "auto_main") arrivalsChk.checked = value;
+  }
+  if (fields.includes("auto_crop_enabled")) {
+    const statusLbl = document.getElementById("photoEditStatusLabel");
+    if (statusLbl) statusLbl.innerText = value ? "On - smart crop" : "Off";
+    const modalChk = document.getElementById("chkAutoCrop");
+    if (modalChk) modalChk.checked = value;
+  }
+  syncRibbonMasterCheckbox();
+}
+
+// The Settings modal's Auto Posting switch controls the same column as the
+// ribbon's "Auto-post new arrivals" switch. Route it through the same save.
+function toggleSettingsAutoPost(el) {
+  const ribbon = document.getElementById("chkRibbonArrivals");
+  if (ribbon) ribbon.checked = el.checked;
+  toggleRibbonSetting("auto_arrivals");
+}
+
+function syncRibbonMasterCheckbox() {
+  const master = document.getElementById("chkRibbonAutoMain");
+  if (!master) return;
+  const parts = ["chkRibbonArrivals", "chkRibbonRepost", "chkRibbonPhotoCrop"]
+    .map(id => document.getElementById(id));
+  if (parts.every(el => el)) {
+    master.checked = parts.every(el => el.checked);
+  }
+}
+
+// ---- Daily posting safety limit -------------------------------------------
+// Usage today = queue rows created today that are not failed, plus cars
+// whose marketplace_posted_at is today and were not already counted above.
+async function getDailyPostUsage() {
+  if (!currentUser) return 0;
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const startISO = start.toISOString();
+  const countedVins = new Set();
+  let used = 0;
+  try {
+    const { data: qRows, error: qErr } = await supabaseClient
+      .from("auto_posting_queue")
+      .select("vin, status, created_at")
+      .eq("user_id", currentUser.id)
+      .gte("created_at", startISO);
+    if (qErr) throw qErr;
+    (qRows || []).forEach(r => {
+      if (r.status !== "failed") { used++; if (r.vin) countedVins.add(r.vin); }
+    });
+    const { data: posted, error: pErr } = await supabaseClient
+      .from("scraped_inventory")
+      .select("vin, marketplace_posted_at")
+      .eq("user_id", currentUser.id)
+      .gte("marketplace_posted_at", startISO);
+    if (pErr) throw pErr;
+    (posted || []).forEach(r => { if (r.vin && !countedVins.has(r.vin)) used++; });
+  } catch (err) {
+    console.error("Daily limit usage check failed:", err);
+  }
+  return used;
+}
+
+// Returns true when `adding` more queue rows stays within today's limit.
+async function checkDailyLimit(adding) {
+  const limit = userDailyPostLimit;
+  if (!limit || limit >= 999) return true; // 999 = Unlimited (existing convention)
+  const used = await getDailyPostUsage();
+  updateSafetyCounterUI(used, limit);
+  if (used + adding > limit) {
+    alert(
+      `Daily posting safety limit reached: ${used} of ${limit} used today.\n\n` +
+      `Raise the limit under Posting Safety, or queue again tomorrow. ` +
+      `Nothing was queued.`
+    );
+    return false;
+  }
+  return true;
+}
+
+function updateSafetyCounterUI(used, limit) {
+  const limitLabel = document.getElementById("ribbonSafetyLimitLabel");
+  const safetyText = document.getElementById("safetyCounterText");
+  const safetyBar = document.getElementById("safetyCounterBar");
+  const displayCap = (!limit || limit >= 999) ? "Unlimited" : limit;
+  if (limitLabel) limitLabel.innerText = `${used} of ${displayCap} today`;
+  if (safetyText) safetyText.innerText = `${used}/${displayCap}`;
+  if (safetyBar) {
+    safetyBar.style.width = (!limit || limit >= 999)
+      ? "5%"
+      : `${Math.min(100, Math.max(2, (used / limit) * 100))}%`;
+  }
+}
+
+async function refreshSafetyCounter() {
+  if (!currentUser) return;
+  const used = await getDailyPostUsage();
+  updateSafetyCounterUI(used, userDailyPostLimit);
 }
 function toggleSelectAllCars(master) {
   document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
@@ -3366,18 +3594,8 @@ async function savePostingSafetyPreferences() {
 
     if (error) throw error;
 
-    const limitLabel = document.getElementById("ribbonSafetyLimitLabel");
-    const safetyText = document.getElementById("safetyCounterText");
-    const safetyBar = document.getElementById("safetyCounterBar");
-    const displayCap = limitValue === 999 ? "Unlimited" : limitValue;
-
-    if (limitLabel) limitLabel.innerText = `1 of ${displayCap} today`;
-    if (safetyText) safetyText.innerText = `1/${displayCap}`;
-    if (safetyBar && limitValue !== 999) {
-      safetyBar.style.width = `${Math.min(100, (1 / limitValue) * 100)}%`;
-    } else if (safetyBar) {
-      safetyBar.style.width = "5%";
-    }
+    userDailyPostLimit = limitValue;
+    refreshSafetyCounter();
 
     closeModal('postingSafetyModal');
     alert("✓ Posting safety rules saved successfully!");
