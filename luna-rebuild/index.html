@@ -1369,9 +1369,9 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
         <thead class="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px] bg-slate-50/80">
           <tr>
             <th class="py-3.5 px-4 w-10"></th>
-            <th class="py-3.5 px-4 cursor-pointer select-none" onclick="toggleHeaderSort('make')" title="Click to sort by make">CAR <span id="sortArrowMake" class="text-blue-600"></span></th>
-            <th class="py-3.5 px-4 cursor-pointer select-none" onclick="toggleHeaderSort('price')" title="Click to sort by price">PRICE & MILES <span id="sortArrowPrice" class="text-blue-600"></span></th>
-            <th class="py-3.5 px-4 cursor-pointer select-none" onclick="toggleHeaderSort('status')" title="Click to sort by status">STATUS <span id="sortArrowStatus" class="text-blue-600"></span></th>
+            <th class="py-3.5 px-4 select-none">CAR <button type="button" class="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-current bg-white/10 text-[10px] font-black text-blue-600 align-middle hover:bg-white/20" onclick="toggleHeaderSort('make')" title="Sort cars A–Z / Z–A" aria-label="Sort cars"><span id="sortArrowMake">↕</span></button></th>
+            <th class="py-3.5 px-4 select-none">PRICE <button type="button" class="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-current bg-white/10 text-[10px] font-black text-blue-600 align-middle hover:bg-white/20" onclick="toggleHeaderSort('price')" title="Sort by price" aria-label="Sort by price"><span id="sortArrowPrice">↕</span></button> <span class="mx-1">&</span> MILES <button type="button" class="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-current bg-white/10 text-[10px] font-black text-blue-600 align-middle hover:bg-white/20" onclick="toggleHeaderSort('miles')" title="Sort by mileage" aria-label="Sort by mileage"><span id="sortArrowMiles">↕</span></button></th>
+            <th class="py-3.5 px-4 select-none">STATUS <button type="button" class="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-current bg-white/10 text-[10px] font-black text-blue-600 align-middle hover:bg-white/20" onclick="toggleHeaderSort('status')" title="Sort by status" aria-label="Sort by status"><span id="sortArrowStatus">↕</span></button></th>
             <th class="py-3.5 px-4 text-right">LAUNCH IT</th>
           </tr>
         </thead>
@@ -3403,23 +3403,28 @@ function populateFilterDropdowns() {
     }
 
 }
-// Sorting (Matthew, 2026-10-23): clickable CAR / PRICE & MILES headers toggle
-// direction and mirror into the sort dropdown; the dropdown keeps every mode.
+// Sorting (Matthew, 2026-10-23): EACH sortable header has its own visible
+// sort button beside the header text. The buttons toggle direction and
+// mirror into the sort dropdown; inactive buttons show ↕, the active one
+// shows ▲/▼.
 function toggleHeaderSort(kind) {
   const sel = document.getElementById("sortSelect");
   if (!sel) return;
   if (kind === "make") sel.value = sel.value === "make_asc" ? "make_desc" : "make_asc";
   else if (kind === "price") sel.value = sel.value === "price_asc" ? "price_desc" : "price_asc";
+  else if (kind === "miles") sel.value = sel.value === "miles_asc" ? "miles_desc" : "miles_asc";
   else if (kind === "status") sel.value = sel.value === "status_asc" ? "status_desc" : "status_asc";
   applyFilters();
 }
 function syncSortArrows(sort) {
   const m = document.getElementById("sortArrowMake");
   const p = document.getElementById("sortArrowPrice");
+  const mi = document.getElementById("sortArrowMiles");
   const s = document.getElementById("sortArrowStatus");
-  if (m) m.textContent = sort === "make_asc" ? "▲" : sort === "make_desc" ? "▼" : "";
-  if (p) p.textContent = sort === "price_asc" ? "▲" : sort === "price_desc" ? "▼" : "";
-  if (s) s.textContent = sort === "status_asc" ? "▲" : sort === "status_desc" ? "▼" : "";
+  if (m) m.textContent = sort === "make_asc" ? "▲" : sort === "make_desc" ? "▼" : "↕";
+  if (p) p.textContent = sort === "price_asc" ? "▲" : sort === "price_desc" ? "▼" : "↕";
+  if (mi) mi.textContent = sort === "miles_asc" ? "▲" : sort === "miles_desc" ? "▼" : "↕";
+  if (s) s.textContent = sort === "status_asc" ? "▲" : sort === "status_desc" ? "▼" : "↕";
 }
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
@@ -3632,6 +3637,27 @@ function hasPrice(car) {
   return !!(car && car.price && Number(car.price) > 0);
 }
 
+// PRICE STATUS (Matthew, 2026-10-23): a missing numeric price is not all
+// the same. The dealer's own published state is shown instead: "Call for
+// Price" when the dealer says so, "No price listed" when they publish no
+// price, and the generic alert only when we have not classified the car.
+function priceStatusText(car) {
+  if (hasPrice(car)) return "$" + Number(car.price).toLocaleString();
+  if (car && car.price_status === "call") return "Call for Price";
+  if (car && car.price_status === "none") return "No price listed";
+  return "Price needed";
+}
+
+function noPriceButton(car, vinAttr) {
+  if (car && car.price_status === "call") {
+    return `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300 text-[11px] font-bold cursor-pointer">Call for Price — tap to add</button>`;
+  }
+  if (car && car.price_status === "none") {
+    return `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">No price listed — tap to add</button>`;
+  }
+  return `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">⚠ Price needed — tap to add</button>`;
+}
+
 let needsPriceOnly = false;
 function toggleNeedsPriceOnly() {
   needsPriceOnly = !needsPriceOnly;
@@ -3726,7 +3752,7 @@ function renderGridRows(cars) {
         <div class="flex items-baseline gap-2.5 pt-2">
           ${hasPrice(car)
             ? `<span class="text-sm font-bold text-blue-600">${priceText}</span>`
-            : `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">⚠ Price needed — tap to add</button>`}
+            : noPriceButton(car, vinAttr)}
           <span class="text-[11px] text-slate-500">${milesText}</span>
         </div>
       </div>
@@ -3817,7 +3843,7 @@ ${car.location_name ? `
       <td class="py-4 px-4 font-sans">
         ${hasPrice(car)
           ? `<span class="text-xs font-bold text-blue-600 block leading-tight">${priceText}</span>`
-          : `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">⚠ Price needed — tap to add</button>`}
+          : noPriceButton(car, vinAttr)}
         <span class="text-[11px] text-slate-500 block">${milesText}</span>
       </td>
 
@@ -4182,13 +4208,16 @@ async function saveVehicleNewPrice() {
   try {
     const { error } = await supabaseClient
       .from("scraped_inventory")
-      .update({ price: newPrice })
+      .update({ price: newPrice, price_status: null })
       .eq("vin", targetPriceVin)
       .eq("user_id", currentUser.id);
     if (error) throw error;
 
     const car = rawInventory.find(c => c.vin === targetPriceVin);
-    if (car) car.price = newPrice;
+    if (car) {
+      car.price = newPrice;
+      car.price_status = null;
+    }
 
     closeModal("changePriceModal");
     applyFilters();
@@ -4255,7 +4284,7 @@ function openVehicleDetailsModal(car) {
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
       <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
         <span class="text-slate-500 block text-[10px] uppercase font-bold">Price</span>
-        <strong class="text-slate-900 text-sm">${car.price ? '$' + car.price.toLocaleString() : 'Call'}</strong>
+        <strong class="text-slate-900 text-sm">${priceStatusText(car)}</strong>
       </div>
       <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
         <span class="text-slate-500 block text-[10px] uppercase font-bold">Mileage</span>
@@ -5569,7 +5598,7 @@ function renderWishlist(fresh) {
         if (!photoUrl || photoUrl.includes('/static/') || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
         photoUrl = escapeHtml(photoUrl);
         const vinAttr = escapeHtml(car.vin || '');
-        const priceText = car.price && car.price > 0 ? "$" + car.price.toLocaleString() : "Call for Price";
+        const priceText = priceStatusText(car);
         const milesText = (car.mileage || 0).toLocaleString() + " mi";
         const isPosted = !!car.marketplace_posted_at;
         const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');

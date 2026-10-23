@@ -635,6 +635,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 model: detectedModel,
                 trim: detectedTrim,
                 price: price,
+                price_status: price ? null : (/call\s+for\s+price/i.test(cardText) ? "call" : "none"),
                 mileage: mileage,
                 location_name: exactLocation,
                 image_url: photoUrl,
@@ -659,6 +660,40 @@ def push_batch_to_supabase(records: List[dict]) -> int:
     if not records:
         return 0
     unique_by_vin = {r["vin"]: r for r in records if r.get("vin")}
+
+    # Preserve a numeric price already stored when this scrape found none.
+    # This protects a price the user typed in manually for a Call for
+    # Price / unpriced vehicle. When a later scrape DOES find a numeric
+    # dealer price, that new value replaces the stored one automatically.
+    try:
+        missing_by_user = {}
+        for r in unique_by_vin.values():
+            if not r.get("price") and r.get("user_id"):
+                missing_by_user.setdefault(r["user_id"], []).append(r["vin"])
+        for uid, vins in missing_by_user.items():
+            existing_prices = {}
+            for i in range(0, len(vins), 200):
+                chunk = vins[i:i + 200]
+                res = (
+                    db.table("scraped_inventory")
+                    .select("vin, price")
+                    .eq("user_id", uid)
+                    .in_("vin", chunk)
+                    .execute()
+                )
+                for row in res.data or []:
+                    if row.get("price"):
+                        existing_prices[row["vin"]] = row["price"]
+            for r in unique_by_vin.values():
+                if (
+                    r.get("user_id") == uid
+                    and not r.get("price")
+                    and r.get("vin") in existing_prices
+                ):
+                    r["price"] = existing_prices[r["vin"]]
+    except Exception as e:
+        print(f"[!] Existing-price preservation warning (non-fatal): {e}")
+
     try:
         res = db.table("scraped_inventory").upsert(
             list(unique_by_vin.values()),
@@ -725,6 +760,7 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     out = {
         "photos": [],
         "price": None,
+        "price_status": None,
         "price_is_final": False,
         "color": None,
         "interior_color": None,
@@ -913,6 +949,38 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
         except Exception:
             pass
 
+    # ---- PRICE STATUS (Matthew, 2026-10-23): distinguish a dealer that
+    # deliberately publishes "Call for Price" from one that publishes no
+    # price at all. Both states auto-clear on a later scrape when a real
+    # numeric price appears.
+    if out["price"] is not None:
+        out["price_status"] = None
+    else:
+        _visible_text = re.sub(
+            r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I
+        )
+        _visible_text = re.sub(r"<[^>]+>", " ", _visible_text)
+        _visible_text = re.sub(r"\s+", " ", _visible_text)
+        # Scope to THIS vehicle: DealerOn VDPs end with a "Vehicles You
+        # Might Like" cross-sell whose cars are often Call for Price —
+        # their state must never leak onto this car (verified live: the
+        # Grand Highlander Platinum publishes no price at all, yet its
+        # page mentions Call for Price 16 times, all in the cross-sell).
+        _cut = len(_visible_text)
+        for _marker in (
+            "vehicles you might like",
+            "you may also like",
+            "similar vehicles",
+            "recommended vehicles",
+        ):
+            _idx = _visible_text.lower().find(_marker)
+            if 0 <= _idx < _cut:
+                _cut = _idx
+        _main_text = _visible_text[:_cut]
+        out["price_status"] = (
+            "call" if re.search(r"\bcall\s+for\s+price\b", _main_text, re.I) else "none"
+        )
+
     # ---- SPEC LIST colors (DealerOn .info__value blocks), exterior first
     for label, key in (("Exterior Color", "color"), ("Interior Color", "interior_color")):
         if out[key]:
@@ -980,6 +1048,13 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
             and car["price"] < 5000
         ):
             car["price"] = None
+        # Keep the dealer-publication state current. A numeric price always
+        # clears it; otherwise the VDP's call/none classification wins over
+        # the SRP card's classification.
+        if car.get("price"):
+            car["price_status"] = None
+        elif d.get("price_status"):
+            car["price_status"] = d["price_status"]
         if d["color"]:
             car["color"] = d["color"]
         if d["interior_color"]:
