@@ -2982,6 +2982,14 @@ currentStore.cpoUrl = certifiedUrl;
   }
 }
 
+// Phase B pill predicates — single source of truth so the pill COUNTS
+// (in fetchLiveInventory) and the pill ROWS (in applyFilters) can never
+// disagree: ACTIVE = !isSold, POSTED = !!marketplace_posted_at (sold or
+// not), UNPOSTED = !marketplace_posted_at && !isSold, ALL = every car.
+function isSold(car) {
+  return !!car && (car.status || "").toLowerCase() === "sold";
+}
+
 async function fetchLiveInventory(isManual) {
   if (!currentUser) return;
   const tbody = document.getElementById("inventoryTableBody");
@@ -3012,12 +3020,15 @@ async function fetchLiveInventory(isManual) {
     rawInventory = allCars.filter(c => c.is_active !== false);
     populateFilterDropdowns();
     renderLocationGroupsSettings();
-    const postedCount = rawInventory.filter(c => c.marketplace_posted_at).length;
-    const unpostedCount = rawInventory.length - postedCount;
-    
+    // Phase B: counts use the SAME predicates as applyFilters' pill
+    // filter (see isSold above), so count === rendered rows per pill.
+    const postedCount = rawInventory.filter(c => !!c.marketplace_posted_at).length;
+    const activeCount = rawInventory.filter(c => !isSold(c)).length;
+    const unpostedCount = rawInventory.filter(c => !c.marketplace_posted_at && !isSold(c)).length;
+
     document.getElementById("topCarsCountLabel").innerText = `${rawInventory.length} Vehicles`;
     document.getElementById("showingCountBold").innerText = rawInventory.length;
-    document.getElementById("pillActiveCount").innerText = rawInventory.length;
+    document.getElementById("pillActiveCount").innerText = activeCount;
     document.getElementById("pillUnpostedCount").innerText = unpostedCount;
     document.getElementById("pillPostedCount").innerText = postedCount;
     document.getElementById("pillAllCount").innerText = rawInventory.length;
@@ -3254,11 +3265,12 @@ if (filterMileageRange) {
         mileage < 100000
     ) return false;
 }
-const isPosted = !!car.marketplace_posted_at;
-    if (activePillFilter === 'POSTED' && !isPosted) return false;
-    if (activePillFilter === 'UNPOSTED' && isPosted) return false;
-    const isSold = (car.status || "").toLowerCase() === "sold";
-    if (activePillFilter !== 'ALL' && isSold) return false;
+    // Phase B pill predicate — identical definitions to the pill counts
+    // in fetchLiveInventory: ACTIVE = !isSold; POSTED = posted (sold or
+    // not); UNPOSTED = not posted && !isSold; ALL = every car.
+    if (activePillFilter === 'ACTIVE' && isSold(car)) return false;
+    if (activePillFilter === 'POSTED' && !car.marketplace_posted_at) return false;
+    if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
 
     const title = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.trim || ''} ${car.vin || ''} ${car.stock_num || ''}`.toLowerCase();
     return !query || title.includes(query);
@@ -4065,9 +4077,12 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 // extension fails it rather than handing it to the poster. Delete
 // jobs are exempt: they remove a listing, photos are irrelevant.
 const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && !!car && !hasRealPhoto(car);
+// Phase B: a DELETE job (e.g. a sold car's listing removal) must read as
+// a removal at every stage — pending = queued, processing = in flight,
+// completed = removed — never as a generic post "Pending".
 const statusChip = blockedNoPhoto
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No photos — won't post</span>`
-    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
+    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
 
     return `
 
@@ -4250,12 +4265,19 @@ document.addEventListener("visibilitychange", function () {
         return;
     }
 
-    // NO-PHOTO RULE: photo-less cars are skipped, never queued — and the
-    // user is told how many were skipped, in the messages below.
-    const skippedNoPhoto = selectedVehicles.filter(car => !hasRealPhoto(car)).length;
-    const vehiclesToQueue = selectedVehicles.filter(car => hasRealPhoto(car));
+    // NO-PHOTO RULE + SOLD RULE (Phase B): sold cars and photo-less cars
+    // are skipped, never queued — and the user is told how many were
+    // skipped for each reason, in the messages below. A sold car is
+    // counted as sold even if it also has no photos (never double-counted).
+    const skippedSold = selectedVehicles.filter(car => isSold(car)).length;
+    const skippedNoPhoto = selectedVehicles.filter(car => !isSold(car) && !hasRealPhoto(car)).length;
+    const vehiclesToQueue = selectedVehicles.filter(car => !isSold(car) && hasRealPhoto(car));
+    const skipNote = [
+        skippedSold ? `${skippedSold} vehicle(s) were skipped — sold. Sold vehicles are never posted.` : "",
+        skippedNoPhoto ? `${skippedNoPhoto} vehicle(s) were skipped — no photos. Vehicles without real photos are never posted.` : ""
+    ].filter(Boolean).join("\n\n");
     if (!vehiclesToQueue.length) {
-        alert(`Nothing was queued: ${skippedNoPhoto} selected vehicle(s) have no photos.\n\nVehicles without real photos are never posted.`);
+        alert(`Nothing was queued:\n\n${skipNote}`);
         return;
     }
 
@@ -4289,8 +4311,8 @@ vehiclesToQueue.forEach(car => {
 
 if (!rows.length) {
 
-    alert(skippedNoPhoto
-        ? `Nothing new was queued: the rest are already queued, and ${skippedNoPhoto} vehicle(s) were skipped — no photos. Vehicles without real photos are never posted.`
+    alert(skipNote
+        ? `Nothing new was queued: the rest are already queued.\n\n${skipNote}`
         : "Selected vehicles are already queued.");
 
     return;
@@ -4314,7 +4336,7 @@ if (!rows.length) {
         alert((enabledChannels.length > 1
             ? `${marketplaceRows} vehicle(s) queued across ${enabledChannels.length} channels (${rows.length} posts total).`
             : `${rows.length} vehicle(s) queued.`)
-            + (skippedNoPhoto ? `\n\n${skippedNoPhoto} vehicle(s) were skipped — no photos. Vehicles without real photos are never posted.` : ""));
+            + (skipNote ? `\n\n${skipNote}` : ""));
 
     } catch (err) {
 
@@ -4362,8 +4384,13 @@ async function removeQueueItem(id) {
   
 async function enqueueMarketplaceCar(vin) {
   if (!currentUser) return;
-  // NO-PHOTO RULE: never queue a car with no real photos.
+  // NO-PHOTO RULE + SOLD RULE (Phase B): never queue a sold car, or a
+  // car with no real photos.
   const carForQueue = rawInventory.find(c => c.vin === vin);
+  if (carForQueue && isSold(carForQueue)) {
+    alert("That vehicle is sold, so it can't be posted.\n\nSold vehicles are never posted.");
+    return;
+  }
   if (carForQueue && !hasRealPhoto(carForQueue)) {
     alert("That vehicle has no photos, so it can't be posted.\n\nVehicles without real photos are never posted — the car needs real photos on the dealer's site first.");
     return;
