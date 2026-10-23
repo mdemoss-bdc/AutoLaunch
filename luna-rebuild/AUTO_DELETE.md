@@ -119,6 +119,44 @@ runs after a posted car has dropped off the Moses feed — or is
 covered by the fixture simulation in the build report (brake, cap,
 dedupe, toggle cases all simulated green).
 
+## Addendum (2026-10-22, later that night) — the stale-copy lesson
+
+The first live Trigger 1 test **missed**, and the reason is now a
+standing rule. Matthew marked the posted Silverado sold from his
+phone; the database recorded `status = "Sold"` but **no delete row
+was queued**. His phone's inventory had been loaded *before* the
+truck posted, so the app's in-memory copy said "unposted" and
+`markVehicleSold` took the mark-only branch — even though the
+database had `marketplace_posted_at` set the whole time.
+
+**The fresh-read rule:** any decision with real-world side effects
+is made from the car's **current database row**, never from the
+screen's possibly-stale copy. Implemented in
+`freshCarForDecision(vin, localCar)` — re-reads `status`,
+`marketplace_posted_at` and the identity fields by vin + user,
+merges fresh over local:
+
+- `markVehicleSold` — after the confirm, the already-sold check,
+  the is-posted decision, and the fields stamped on the removal
+  job all come from the fresh row.
+- `removeVehicleFromInventory` — same: posted-ness is decided
+  fresh (the local copy now only writes the confirm note's text).
+- `queueListingRemoval` — its dedupe keeps the local
+  `postingQueue` check as a fast path, then **re-checks the table**
+  for a pending/processing delete before inserting. If that check
+  itself fails, it falls through to the insert: a rare duplicate
+  (which the extension goal-achieves harmlessly) beats a lost
+  removal.
+- A failed fresh read never blocks the action: the helper returns
+  the local copy and the flow proceeds with the old behavior.
+
+`removeVehicleFromFacebook` was audited and deliberately left
+alone: it makes no posted-state decision of its own (it never reads
+`marketplace_posted_at`), and its only local-state dependency was
+the dedupe — which the producer's new fresh check now backs up.
+Its confirm → queue → already-queued outcome is correct on either
+copy.
+
 ## What did not change
 
 - The Remove from Facebook button: same confirm, same copy, same

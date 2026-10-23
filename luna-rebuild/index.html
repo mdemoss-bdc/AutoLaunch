@@ -3628,6 +3628,33 @@ function handleDropdownAction(action) {
   }
 }
 
+// FRESH-READ RULE (2026-10-22): a decision with real-world side
+// effects — queueing a listing removal above all — is made from the
+// car's CURRENT database row, never from the in-memory rawInventory
+// copy, which may have been loaded before the car posted (or sold).
+// The first live mark-sold test proved it: the phone's inventory had
+// been loaded before the truck posted, so its copy said "unposted",
+// the database said posted, and the trigger silently took the
+// mark-only branch and queued nothing. Returns the fresh row merged
+// over the local copy (fresh fields win, local fields fill gaps), or
+// the local copy itself when the read fails — a network hiccup must
+// never block the mark/remove itself, it just falls back to the old
+// behavior.
+async function freshCarForDecision(vin, localCar) {
+  try {
+    const { data, error } = await supabaseClient
+      .from("scraped_inventory")
+      .select("status, marketplace_posted_at, year, make, model, price, stock_number")
+      .eq("vin", vin)
+      .eq("user_id", currentUser.id)
+      .limit(1);
+    if (error || !data || !data.length) return localCar;
+    return { ...(localCar || {}), ...data[0], vin };
+  } catch (e) {
+    return localCar;
+  }
+}
+
 // AUTO-DELETE ON EXIT — shared producer for listing-removal jobs.
 // Every trigger that takes a live listing down (the Remove button,
 // Mark as sold, Remove from inventory, and the scraper's stale pass
@@ -3644,6 +3671,25 @@ async function queueListingRemoval(car) {
     i.vin === vin && i.action === 'delete' &&
     (i.status === 'pending' || i.status === 'processing'));
   if (alreadyQueued) return "already";
+
+  // Fresh dedupe (2026-10-22, same stale-copy lesson): the
+  // in-memory postingQueue can lag the database just like
+  // rawInventory can, so check the table itself before inserting.
+  // A duplicate delete row would be safe (the extension
+  // goal-achieves the second one) but noisy. If the check itself
+  // fails, fall through to the insert — the local check above
+  // already ran, and a rare duplicate beats a lost removal.
+  try {
+    const { data, error } = await supabaseClient
+      .from("auto_posting_queue")
+      .select("id")
+      .eq("user_id", currentUser.id)
+      .eq("vin", vin)
+      .eq("action", "delete")
+      .in("status", ["pending", "processing"])
+      .limit(1);
+    if (!error && data && data.length) return "already";
+  } catch (e) { /* fall through to the insert */ }
 
   const { error } = await supabaseClient
     .from("auto_posting_queue")
@@ -3682,8 +3728,7 @@ async function markVehicleSold(vin) {
     return;
   }
 
-  const isPosted = !!car.marketplace_posted_at;
-  const note = !isPosted
+  const note = !car.marketplace_posted_at
     ? ""
     : autoDeleteOnExitEnabled
     ? "\n\nIts Facebook listing will be queued for removal — the helper will take it down."
@@ -3691,6 +3736,18 @@ async function markVehicleSold(vin) {
   if (!confirm(`Mark "${title}" as sold?${note}`)) return;
 
   try {
+    // FRESH-READ RULE: from here on, decide from the car's current
+    // database row, not the screen's possibly-stale copy — the
+    // already-sold check, whether it is posted, and the fields the
+    // removal job is stamped with (see freshCarForDecision). If the
+    // read failed, decisionCar IS the local copy and nothing blocks.
+    const decisionCar = await freshCarForDecision(vin, car);
+    if ((decisionCar.status || "").toLowerCase() === "sold") {
+      alert(`"${title}" is already marked sold.`);
+      return;
+    }
+    const isPosted = !!decisionCar.marketplace_posted_at;
+
     const { error } = await supabaseClient
       .from("scraped_inventory")
       .update({ status: "Sold" })
@@ -3698,10 +3755,11 @@ async function markVehicleSold(vin) {
       .eq("user_id", currentUser.id);
     if (error) throw error;
     car.status = "Sold";
+    car.marketplace_posted_at = decisionCar.marketplace_posted_at;
 
     let removal = null;
     if (isPosted && autoDeleteOnExitEnabled) {
-      removal = await queueListingRemoval(car);
+      removal = await queueListingRemoval(decisionCar);
       await loadPostingQueue();
     }
     applyFilters();
@@ -3917,11 +3975,15 @@ async function removeVehicleFromInventory(vin) {
 
     // Auto-delete on exit (app side): a posted car leaving inventory
     // takes its listing down with it. Same producer + dedupe as the
-    // Remove button and Mark as sold.
+    // Remove button and Mark as sold. FRESH-READ RULE: whether the
+    // car is posted is decided from its current database row, not
+    // the screen's possibly-stale copy — wasPosted above only wrote
+    // the confirm note (see freshCarForDecision).
     let removal = null;
-    if (wasPosted && autoDeleteOnExitEnabled) {
+    const decisionCar = await freshCarForDecision(vin, car);
+    if (decisionCar && decisionCar.marketplace_posted_at && autoDeleteOnExitEnabled) {
       try {
-        removal = await queueListingRemoval(car);
+        removal = await queueListingRemoval(decisionCar);
         await loadPostingQueue();
       } catch (qErr) {
         removal = "failed";
