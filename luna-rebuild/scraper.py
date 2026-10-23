@@ -676,7 +676,7 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             // The extension discloses in the listing description
             // that a defaulted figure means actual miles may be
             // less. Real published mileage always wins.
-            const mileMatch = cardText.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})\\s*(?:miles|mi\\b)/i);
+            const mileMatch = cardText.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\s*(?:miles|mi\\b)/i);
             const mileage = mileMatch ? parseInt(mileMatch[1].replace(/,/g, '')) : (defaultCond === "New" ? 1000 : null);
 
             // 8. COLOR
@@ -835,6 +835,7 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
         "color": None,
         "interior_color": None,
         "body_type": None,
+        "mileage": None,
     }
     if not html or not vin:
         return out
@@ -925,6 +926,28 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
                 out["color"] = str(item["color"]).strip()
             if item.get("bodyType") and not out["body_type"]:
                 out["body_type"] = str(item["bodyType"]).strip()
+            odo = item.get("mileageFromOdometer")
+            if odo is not None and out["mileage"] is None:
+                if isinstance(odo, dict):
+                    odo = odo.get("value")
+                mv = _money_int(odo)
+                if mv is not None:
+                    out["mileage"] = mv
+
+    # ---- MILEAGE fallback: the VDP spec block prints the figure
+    # even when the SRP card regex missed it and the JSON-LD carries
+    # no odometer (2026-10-23: a 2027 Sentra whose site publishes
+    # 442 stored NULL — the SRP pattern required a comma group or
+    # 4+ digits, so a bare "442 miles" never matched; the spec
+    # block's "MILEAGE 442" has no "miles" suffix at all). First
+    # label occurrence wins: the subject car's spec block precedes
+    # the "Vehicles You Might Like" cross-sell.
+    if out["mileage"] is None:
+        mm = re.search(
+            r"(?:MILEAGE|ODOMETER)[^0-9]{0,120}([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})",
+            html, re.I)
+        if mm:
+            out["mileage"] = int(mm.group(1).replace(",", ""))
 
     if not photos and jsonld_images:
         for u in jsonld_images:
@@ -1118,10 +1141,21 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
             and car["price"] < 5000
         ):
             car["price"] = None
-        # Keep the dealer-publication state current. A numeric price always
-        # clears it; otherwise the VDP's call/none classification wins over
-        # the SRP card's classification.
-        if car.get("price"):
+        # Keep the dealer-publication state current — with one
+        # precedence correction (2026-10-23): a VDP that publishes
+        # NO price (call/none) is authoritative over an SRP figure.
+        # SRP cards carry teaser/payment numbers that are not the
+        # advertised price (a Call-for-Price 2026 Sienna stored
+        # $7,998 off its card and posted to Facebook at that
+        # figure). When the car's own page says no price is
+        # published, there is no price — the app will ask the user
+        # to type one (Matthew's no-price rule). Otherwise a numeric
+        # price clears the state, and the VDP classification wins
+        # over the SRP card's.
+        if not d["price"] and d.get("price_status") in ("call", "none"):
+            car["price"] = None
+            car["price_status"] = d["price_status"]
+        elif car.get("price"):
             car["price_status"] = None
         elif d.get("price_status"):
             car["price_status"] = d["price_status"]
@@ -1133,6 +1167,11 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
             not car.get("body_type") or car["body_type"] == "Other"
         ):
             car["body_type"] = d["body_type"]
+        # Mileage gap-fill (2026-10-23): the VDP figure only fills a
+        # gap the SRP pass left empty — a real SRP number is the
+        # dealer's headline figure and always wins.
+        if d.get("mileage") is not None and car.get("mileage") is None:
+            car["mileage"] = d["mileage"]
 
     await asyncio.gather(*(one(c) for c in cars), return_exceptions=True)
     return enriched

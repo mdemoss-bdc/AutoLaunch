@@ -1417,6 +1417,14 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <i class="fa-solid fa-tag w-4 text-slate-400"></i>
     <span>Change price</span>
   </button>
+  <button onclick="handleDropdownAction('change_vin')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-barcode w-4 text-slate-400"></i>
+    <span>Change VIN</span>
+  </button>
+  <button onclick="handleDropdownAction('change_miles')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-gauge w-4 text-slate-400"></i>
+    <span>Change miles</span>
+  </button>
   <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-solid fa-link w-4 text-slate-400"></i>
     <span>Already on Facebook? Add its link</span>
@@ -1529,6 +1537,49 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
       <button onclick="closeModal('changePriceModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
       <button onclick="saveVehicleNewPrice()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Save Price</button>
+    </div>
+  </div>
+</div>
+
+<!-- 2b. Change VIN Dialog Modal (Matthew, 2026-10-23: the edit trio —
+     price / VIN / miles — so a user can fix bad data by hand) -->
+<div id="changeVinModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-barcode text-blue-600"></i> <span>Change VIN</span>
+      </h3>
+      <button onclick="closeModal('changeVinModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <div>
+      <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Correct VIN</label>
+      <input type="text" id="inputNewVehicleVin" maxlength="17" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono font-bold uppercase">
+      <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">Fixes a wrong or mistyped VIN from the dealer's feed. Anything queued for this car follows the new VIN.</p>
+    </div>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+      <button onclick="closeModal('changeVinModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
+      <button onclick="saveVehicleNewVin()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Save VIN</button>
+    </div>
+  </div>
+</div>
+
+<!-- 2c. Change Miles Dialog Modal -->
+<div id="changeMilesModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-gauge text-blue-600"></i> <span>Change Miles</span>
+      </h3>
+      <button onclick="closeModal('changeMilesModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <div>
+      <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Current Miles</label>
+      <input type="number" id="inputNewVehicleMiles" min="0" step="1" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono font-bold">
+      <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">Fix miles the feed got wrong, or update them after a car has been driven. The next post uses the number you set here.</p>
+    </div>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+      <button onclick="closeModal('changeMilesModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
+      <button onclick="saveVehicleNewMiles()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Save Miles</button>
     </div>
   </div>
 </div>
@@ -2631,6 +2682,11 @@ document.addEventListener("click", function (e) {
   } else if (action === "change-price") {
     const car = rawInventory.find(c => c.vin === vin);
     openChangePriceModal(vin, car ? (car.price || 0) : 0);
+  } else if (action === "change-vin") {
+    openChangeVinModal(vin);
+  } else if (action === "change-miles") {
+    const car = rawInventory.find(c => c.vin === vin);
+    openChangeMilesModal(vin, car ? car.mileage : null);
   } else if (action === "remove-fb") {
     removeVehicleFromFacebook(vin);
   } else if (action === "row-dropdown") {
@@ -2671,6 +2727,58 @@ let currentStore = {
 };
 
 let rawInventory = [];
+
+// Inventory bulk selection is keyed by VIN, never by row position.
+// Keeping it outside the DOM means periodic queue/inventory renders,
+// sorting, filtering, and list/grid switches cannot clear a selection
+// before Matthew clicks Post Selected or Remove Selected.
+const selectedCarVins = new Set();
+
+function pruneSelectedCarVins() {
+  const existingVins = new Set(rawInventory.map(car => car && car.vin).filter(Boolean));
+  selectedCarVins.forEach(vin => {
+    if (!existingVins.has(vin)) selectedCarVins.delete(vin);
+  });
+}
+
+function getSelectedInventoryCars() {
+  pruneSelectedCarVins();
+  return rawInventory.filter(car => car && car.vin && selectedCarVins.has(car.vin));
+}
+
+function syncSelectAllCheckbox() {
+  const master = document.getElementById("selectAllCheckbox");
+  if (!master) return;
+  const filtered = Array.isArray(window.currentFilteredInventory)
+    ? window.currentFilteredInventory
+    : [];
+  const selectable = filtered.filter(car => car && car.vin);
+  const selectedCount = selectable.filter(car => selectedCarVins.has(car.vin)).length;
+  master.checked = selectable.length > 0 && selectedCount === selectable.length;
+  master.indeterminate = selectedCount > 0 && selectedCount < selectable.length;
+}
+
+function syncInventorySelectionUI() {
+  document.querySelectorAll(".car-select-chk").forEach(chk => {
+    const vin = chk.dataset ? chk.dataset.vin : null;
+    chk.checked = !!vin && selectedCarVins.has(vin);
+  });
+  syncSelectAllCheckbox();
+}
+
+document.addEventListener("change", function (e) {
+  const el = e.target;
+  if (!el || !el.classList || !el.classList.contains("car-select-chk")) return;
+  const vin = el.dataset ? el.dataset.vin : null;
+  if (!vin) {
+    el.checked = false;
+    syncSelectAllCheckbox();
+    return;
+  }
+  if (el.checked) selectedCarVins.add(vin);
+  else selectedCarVins.delete(vin);
+  syncSelectAllCheckbox();
+});
 
 // ---------- Location groups (merge co-located stores) ----------
 // Raw location_name values from the scraper are never modified; groups are
@@ -3635,9 +3743,11 @@ if (filterMileageRange) {
   });
   syncSortArrows(sort);
   window.currentFilteredInventory = filtered;
+  pruneSelectedCarVins();
 
 document.getElementById("showingCountBold").innerText = filtered.length;
 renderTableRows(filtered);
+syncInventorySelectionUI();
 updateClearFiltersVisibility();
 // NO-PRICE RULE: keep the amber alert chip honest after every render.
 const npChip = document.getElementById("needsPriceChip");
@@ -3650,9 +3760,9 @@ if (npChip) {
   npChip.classList.toggle("bg-amber-700", needsPriceOnly);
 }
 }
-// Button Audit: list/grid view toggle. Only ONE view is rendered at a time
-// so .car-select-chk checkboxes always line up 1:1 (by DOM order) with
-// window.currentFilteredInventory — bulkQueueSelectedVehicles depends on it.
+// Button Audit: list/grid view toggle. Only ONE view is rendered at a
+// time. Bulk selection is stored by VIN in selectedCarVins, so switching
+// views (like sorting or filtering) preserves the checked cars.
 function setViewMode(mode) {
   inventoryViewMode = mode === "grid" ? "grid" : "list";
   const on = "w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs cursor-pointer";
@@ -3770,7 +3880,7 @@ function renderGridRows(cars) {
   const grid = document.getElementById("inventoryGridView");
   const tbody = document.getElementById("inventoryTableBody");
   if (!grid) return;
-  if (tbody) tbody.innerHTML = ""; // keep checkbox indexing 1:1 with the grid
+  if (tbody) tbody.innerHTML = ""; // only the active view owns row markup
 
   if (!cars.length) {
     grid.innerHTML = '<div class="col-span-full py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</div>';
@@ -3841,7 +3951,7 @@ function renderGridRows(cars) {
           <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-full h-44 object-cover">
         </div>
         <label class="absolute top-2 left-2 bg-white/95 rounded-lg px-1.5 py-1 shadow-sm cursor-pointer flex items-center">
-          <input type="checkbox" class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
+          <input type="checkbox" data-vin="${vinAttr}" ${selectedCarVins.has(car.vin) ? "checked" : ""} class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
         </label>
         <div class="absolute top-2 right-2">${statusChip}</div>
       </div>
@@ -3903,7 +4013,7 @@ function renderTableRows(cars) {
 
     html += `<tr class="table-row-vibrant transition border-b border-slate-100 group">
       <td class="py-4 px-4 text-center">
-        <input type="checkbox" class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
+        <input type="checkbox" data-vin="${vinAttr}" ${selectedCarVins.has(car.vin) ? "checked" : ""} class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
       </td>
       
 <td class="py-4 px-4">
@@ -4076,6 +4186,8 @@ function handleDropdownAction(action) {
     case "view_details": openVehicleDetailsModal(car); break;
     case "mark_sold": markVehicleSold(car.vin); break;
     case "change_price": openChangePriceModal(car.vin, car.price || 0); break;
+    case "change_vin": openChangeVinModal(car.vin); break;
+    case "change_miles": openChangeMilesModal(car.vin, car.mileage); break;
     case "add_link": openAddFbLinkModal(car.vin); break;
     case "remove_inventory": removeVehicleFromInventory(car.vin); break;
   }
@@ -4298,12 +4410,7 @@ async function removeVehicleFromFacebook(vin) {
 async function bulkRemoveSelectedFromFacebook() {
   if (!currentUser) return;
 
-  const selectedVehicles = [];
-  document.querySelectorAll(".car-select-chk").forEach((chk, index) => {
-    if (chk.checked && window.currentFilteredInventory?.[index]) {
-      selectedVehicles.push(window.currentFilteredInventory[index]);
-    }
-  });
+  const selectedVehicles = getSelectedInventoryCars();
 
   if (!selectedVehicles.length) {
     alert("Please select at least one vehicle.");
@@ -4333,15 +4440,21 @@ async function bulkRemoveSelectedFromFacebook() {
   let queuedCount = 0;
   let alreadyCount = 0;
   let failedCount = 0;
+  const handledVins = [];
   for (const car of vehiclesToRemove) {
     try {
       const result = await queueListingRemoval(car);
       if (result === "queued") queuedCount++;
       else alreadyCount++;
+      handledVins.push(car.vin);
     } catch (e) {
       failedCount++;
     }
   }
+
+  // Cars whose removals are queued (or were already queued) no longer
+  // need to stay selected. Skipped and failed cars remain selected.
+  handledVins.forEach(vin => selectedCarVins.delete(vin));
 
   await loadPostingQueue();
   applyFilters();
@@ -4391,6 +4504,117 @@ async function saveVehicleNewPrice() {
     alert("✓ Vehicle price updated successfully!");
   } catch (err) {
     alert("Could not update price: " + err.message);
+  }
+}
+
+// Change VIN / Change miles (Matthew, 2026-10-23): the rest of the
+// edit trio beside Change price. Both write straight to
+// scraped_inventory and patch the in-memory row, mirroring
+// saveVehicleNewPrice. A VIN edit renames the row itself, so it
+// survives scrapes. A miles edit fixes the number NOW; a later
+// scrape refreshes miles from the dealer's site (the durable fix
+// for wrong miles is the extraction sweep — see the 0-mile
+// Sentra, whose site publishes 442 while the row stored 0).
+let targetVinVin = null;
+function openChangeVinModal(vin) {
+  targetVinVin = vin;
+  const input = document.getElementById("inputNewVehicleVin");
+  if (input) input.value = vin || "";
+  document.getElementById("changeVinModal").classList.remove("hidden");
+}
+
+async function saveVehicleNewVin() {
+  if (!currentUser || !targetVinVin) return;
+  const newVin = (document.getElementById("inputNewVehicleVin").value || "")
+    .trim().toUpperCase().replace(/\s+/g, "");
+
+  if (!/^[A-Z0-9]{11,17}$/.test(newVin)) {
+    alert("Please enter a valid VIN (11–17 letters/numbers, no spaces).");
+    return;
+  }
+  if (newVin === targetVinVin) {
+    closeModal("changeVinModal");
+    return;
+  }
+
+  try {
+    const { data: clash, error: clashErr } = await supabaseClient
+      .from("scraped_inventory")
+      .select("id")
+      .eq("user_id", currentUser.id)
+      .eq("vin", newVin)
+      .limit(1);
+    if (clashErr) throw clashErr;
+    if (clash && clash.length) {
+      alert("Another car in your inventory already has that VIN — not changed.");
+      return;
+    }
+
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({ vin: newVin })
+      .eq("vin", targetVinVin)
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+
+    // Queued (not yet started) jobs follow the car to its new VIN.
+    await supabaseClient
+      .from("auto_posting_queue")
+      .update({ vin: newVin })
+      .eq("vin", targetVinVin)
+      .eq("user_id", currentUser.id)
+      .eq("status", "pending");
+
+    const car = rawInventory.find(c => c.vin === targetVinVin);
+    if (car) car.vin = newVin;
+    if (selectedCarVins.has(targetVinVin)) {
+      selectedCarVins.delete(targetVinVin);
+      selectedCarVins.add(newVin);
+    }
+    targetVinVin = newVin;
+
+    closeModal("changeVinModal");
+    applyFilters();
+    if (typeof loadPostingQueue === "function") loadPostingQueue();
+    alert("✓ Vehicle VIN updated successfully!");
+  } catch (err) {
+    alert("Could not update VIN: " + err.message);
+  }
+}
+
+let targetMilesVin = null;
+function openChangeMilesModal(vin, currentMiles) {
+  targetMilesVin = vin;
+  const input = document.getElementById("inputNewVehicleMiles");
+  if (input) input.value = currentMiles != null ? currentMiles : "";
+  document.getElementById("changeMilesModal").classList.remove("hidden");
+}
+
+async function saveVehicleNewMiles() {
+  if (!currentUser || !targetMilesVin) return;
+  const newMiles = parseInt(document.getElementById("inputNewVehicleMiles").value, 10);
+
+  if (isNaN(newMiles) || newMiles < 0) {
+    alert("Please enter the car's current miles (0 or more).");
+    return;
+  }
+
+  try {
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({ mileage: newMiles })
+      .eq("vin", targetMilesVin)
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+
+    const car = rawInventory.find(c => c.vin === targetMilesVin);
+    if (car) car.mileage = newMiles;
+
+    closeModal("changeMilesModal");
+    applyFilters();
+    alert("✓ Vehicle miles updated successfully!");
+  } catch (err) {
+    alert("Could not update miles: " + err.message);
   }
 }
 
@@ -4838,20 +5062,7 @@ document.addEventListener("visibilitychange", function () {
 
     if (!currentUser) return;
 
-    const selectedVehicles = [];
-
-    document.querySelectorAll(".car-select-chk").forEach((chk, index) => {
-
-        if (
-            chk.checked &&
-            window.currentFilteredInventory?.[index]
-        ) {
-            selectedVehicles.push(
-                window.currentFilteredInventory[index]
-            );
-        }
-
-    });
+    const selectedVehicles = getSelectedInventoryCars();
 
     if (!selectedVehicles.length) {
         alert("Please select at least one vehicle.");
@@ -4921,6 +5132,10 @@ if (!rows.length) {
             .insert(rows);
 
         if (error) throw error;
+
+        // Only the cars actually queued by this click are deselected;
+        // skipped cars stay selected so they can be fixed and retried.
+        [...new Set(rows.map(row => row.vin))].forEach(vin => selectedCarVins.delete(vin));
 
         await loadPostingQueue();
 
@@ -6821,7 +7036,15 @@ async function refreshSafetyCounter() {
   updateSafetyCounterUI(used, userDailyPostLimit);
 }
 function toggleSelectAllCars(master) {
-  document.querySelectorAll(".car-select-chk").forEach(c => c.checked = master.checked);
+  const filtered = Array.isArray(window.currentFilteredInventory)
+    ? window.currentFilteredInventory
+    : [];
+  filtered.forEach(car => {
+    if (!car || !car.vin) return;
+    if (master.checked) selectedCarVins.add(car.vin);
+    else selectedCarVins.delete(car.vin);
+  });
+  syncInventorySelectionUI();
 }
 
 // Branding frame state (logo + contact strip): restores from user_settings
