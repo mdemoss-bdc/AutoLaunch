@@ -1390,3 +1390,38 @@ the app keeps showing it Posted — which is the truth. The F-250
 and Navigator listings from the 2026-10-23 tests are still live
 under review; they can be Removed again once their reviews clear,
 or deleted by hand.
+
+## 22. Page-identity guard: verdicts only from the Selling page (v2.1.16, 2026-10-23)
+
+The 2.1.15 fresh-load proof was beaten on its first live test
+(both the F-250 and Navigator deletes "completed" again; the
+seller's refreshed Selling page showed both listings still
+Active). The mechanism was visible in Matthew's own report: the
+job tab "keeps going to the Friend Requests screen after it
+deletes", green success banner included. Facebook is a SPA — a
+stray click during the delete can change the page WITHOUT a
+reload, so the content script's entry guard never re-runs, the
+async flow keeps living in the drifted document, the proof's
+reload + scans happen on a page with no listing cards at all,
+and zero matches there read as "gone".
+
+v2.1.16 (content.js + background.js): a delete may only be
+CLAIMED from the Selling page at verdict time.
+- recoverToSellingPage(stage): if the current URL is not
+  /marketplace/you/(selling|dashboard), the flow stops and the
+  tab is navigated back to the Selling page (the reloaded script
+  restarts cleanly); recoveries are counted on the job record
+  and the job fails delete_wrong_page past 3.
+- Checked at attempt start, at finishDeleteWithFreshProof entry
+  (so a drifted tab never arms the proof reload or reports), at
+  proof start, and again at the proof's absent verdict — which
+  additionally requires sellingPageRendered() (cards present or
+  selling-page chrome in the text), else delete_unproven.
+- Worker second witness: AUTOLAUNCH_JOB_DELETED is refused
+  unless sender.tab.url is the selling/dashboard page; a refused
+  report finishes the job FAILED as
+  delete_reported_from_wrong_page instead of clearing the stamp.
+
+Matthew's call (2026-10-23): the son's duplicate-flagged
+"didn't post" listings stay in place during testing on purpose —
+the helper should prove it works in the real, messy list.

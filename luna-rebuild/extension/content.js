@@ -2826,7 +2826,67 @@
   // the review hold. Found otherwise -> ONE genuine second attempt
   // (deleteProofDone makes its success report directly, so the
   // loop always terminates). Absent -> JOB_DELETED, for real.
+  // ---- page-identity guard (v2.1.16) -------------------------------------
+  // The fresh-load proof was still beaten on its first live test
+  // (2026-10-23 ~11:32 EDT, both cars): Facebook is a single-page
+  // app, so a stray click during the delete can move the tab to
+  // another Facebook page (Matthew watched it land on Friend
+  // Requests, green "deleted" banner and all) WITHOUT reloading —
+  // the entry guard at the top of this script never re-runs, the
+  // async flow keeps living in the drifted document, and every
+  // scan there finds zero cards, which the proof read as "gone".
+  // So no delete verdict is valid unless the tab is provably on
+  // the Selling page AT VERDICT TIME: every claim path re-checks,
+  // and a drifted tab is navigated back so the flow restarts on
+  // the right page instead of concluding on the wrong one.
+  const SELLING_URL_RE = /facebook\.com\/marketplace\/you\/(selling|dashboard)/;
+  function onSellingPage() {
+    return SELLING_URL_RE.test(window.location.href);
+  }
+  function sellingPageRendered() {
+    // The selling page's own furniture. A page with no cards and
+    // no selling chrome has not finished loading — a scan there
+    // proves nothing either way.
+    if (countSellingCards() > 0) return true;
+    const t = (document.body && document.body.innerText) || "";
+    return /create new listing/i.test(t) && /your listings|selling/i.test(t);
+  }
+  // True = caller may proceed. False = the tab had drifted and is
+  // being navigated back; the caller must stop NOW (the reloaded
+  // script restarts the flow on the right page). Recoveries are
+  // counted on the job record; past 3 the job fails honestly
+  // instead of looping.
+  async function recoverToSellingPage(stage) {
+    if (onSellingPage()) return true;
+    let n = 0;
+    try {
+      const cur = await chrome.storage.local.get(["current_posting_job"]);
+      const j = cur && cur.current_posting_job;
+      if (j && j.queueId === queueId) {
+        n = (j.deleteNavRecoveries || 0) + 1;
+        j.deleteNavRecoveries = n;
+        await chrome.storage.local.set({ current_posting_job: j });
+      }
+    } catch (e) { /* the counter is best-effort */ }
+    recordStepNote("Delete", "delete_wrong_page",
+      `stage:${stage} url:${window.location.href.slice(0, 80)} recovery:${n}`, String(n));
+    if (n > 3) {
+      await fail(
+        "The helper's tab kept leaving the Selling page, so the removal was NOT confirmed. The listing may still be live — check your Selling page.",
+        "delete_wrong_page");
+      return false;
+    }
+    say("Returning to your Selling page to finish the removal check…");
+    await sleep(400);
+    try { window.location.href = "https://www.facebook.com/marketplace/you/selling"; } catch (e) { /* no-op */ }
+    return false;
+  }
+
   async function finishDeleteWithFreshProof() {
+    // A claim may only leave from the Selling page (v2.1.16): if
+    // the tab drifted during the attempt, go back and let the
+    // flow restart there instead of arming/reporting here.
+    if (!(await recoverToSellingPage("finish"))) return;
     let stored = null;
     try {
       const cur = await chrome.storage.local.get(["current_posting_job"]);
@@ -2867,6 +2927,8 @@
         return;
       }
 
+      if (!(await recoverToSellingPage("proof_start"))) return;
+
       const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() || "vehicle";
       await settleSellingList();
       const strict = findListingCards();
@@ -2877,6 +2939,16 @@
         String(strict.length));
 
       if (!found) {
+        // The verdict gate (v2.1.16): "absent" only counts from a
+        // Selling page that actually rendered. Drifted tab -> go
+        // back and restart; unrendered list -> unproven, not gone.
+        if (!(await recoverToSellingPage("proof_verdict"))) return;
+        if (!sellingPageRendered()) {
+          await fail(
+            "The Selling page didn't finish loading, so the removal could not be confirmed. The listing may still be live — try Remove again.",
+            "delete_unproven");
+          return;
+        }
         await cdpDetach();
         say("Listing deleted on Facebook ✓", "#15803d");
         await report("AUTOLAUNCH_JOB_DELETED", {});
@@ -2926,6 +2998,8 @@
           "facebook_checkpoint");
         return;
       }
+
+      if (!(await recoverToSellingPage("attempt_start"))) return;
 
       const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() || "vehicle";
       if (!car.price) {

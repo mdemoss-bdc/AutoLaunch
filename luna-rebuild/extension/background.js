@@ -1175,9 +1175,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // discipline as the other job-finish messages' storage contract —
     // finishJobDeleted additionally requires the id to match the
     // currently claimed job).
-    const senderUrl = (sender && sender.url) ||
-      (sender && sender.tab && sender.tab.url) || "";
-    if (!senderUrl.startsWith("https://www.facebook.com/")) return;
+    // v2.1.16 second witness: a delete may only be CLAIMED from the
+    // Selling page. Facebook's SPA can drift the job tab elsewhere
+    // (Friend Requests, 2026-10-23) without a reload, and a report
+    // from any other page is a scan of the wrong room — refuse it
+    // and fail the job honestly instead of clearing the stamp.
+    const senderUrl = (sender && sender.tab && sender.tab.url) ||
+      (sender && sender.url) || "";
+    if (!/^https:\/\/www\.facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(senderUrl)) {
+      finishJobFailed(message.queueId,
+        "delete_reported_from_wrong_page:" + senderUrl.slice(0, 80), [])
+        .then(() => sendResponse({ ok: false }))
+        .catch(() => sendResponse({ ok: false }));
+      return true;
+    }
     finishJobDeleted(message.queueId)
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
