@@ -3328,7 +3328,7 @@ function populateFilterDropdowns() {
 
     const makes = [...new Set(
         rawInventory
-            .map(c => c.make)
+            .map(c => displayMakeText(c.make))
             .filter(Boolean)
     )].sort();
 
@@ -3338,14 +3338,7 @@ function populateFilterDropdowns() {
 
     const models = [...new Set(
     modelSource
-        .map(c => {
-
-            if (c.model === "Hr") return "HR-V";
-            if (c.model === "Cr") return "CR-V";
-
-            return c.model;
-
-        })
+        .map(c => displayModelText(c.model))
         .filter(m =>
             m &&
             m.toLowerCase() !== "vin"
@@ -3410,10 +3403,16 @@ function populateFilterDropdowns() {
 function toggleHeaderSort(kind) {
   const sel = document.getElementById("sortSelect");
   if (!sel) return;
-  if (kind === "make") sel.value = sel.value === "make_asc" ? "make_desc" : "make_asc";
-  else if (kind === "price") sel.value = sel.value === "price_asc" ? "price_desc" : "price_asc";
-  else if (kind === "miles") sel.value = sel.value === "miles_asc" ? "miles_desc" : "miles_asc";
-  else if (kind === "status") sel.value = sel.value === "status_asc" ? "status_desc" : "status_asc";
+  // Three-state cycle (Matthew, 2026-10-23): ascending → descending →
+  // OFF (back to "Newest first"). Without the third state, once a header
+  // sort was picked there was no way to unsort from the headers.
+  const cycle = (asc, desc) => {
+    sel.value = sel.value === asc ? desc : sel.value === desc ? "newest_first" : asc;
+  };
+  if (kind === "make") cycle("make_asc", "make_desc");
+  else if (kind === "price") cycle("price_asc", "price_desc");
+  else if (kind === "miles") cycle("miles_asc", "miles_desc");
+  else if (kind === "status") cycle("status_asc", "status_desc");
   applyFilters();
 }
 function syncSortArrows(sort) {
@@ -3458,11 +3457,11 @@ const filterMileageRange =
     ) return false;
     if (
         filterMake &&
-        car.make !== filterMake
+        displayMakeText(car.make) !== filterMake
     ) return false;
     if (
         filterModel &&
-        car.model !== filterModel
+        displayModelText(car.model) !== filterModel
     ) return false;
     if (
         filterCondition &&
@@ -3637,6 +3636,33 @@ function hasPrice(car) {
   return !!(car && car.price && Number(car.price) > 0);
 }
 
+// MODEL/MAKE DISPLAY (2026-10-23): older scrapes stored some models
+// truncated or mis-cased ("Cr", "Rav4", "Rx", make "Gmc"). The scraper
+// parser is fixed and the stored rows are being backfilled from their
+// dealer URLs; these helpers normalize the unambiguous leftovers at
+// display time so titles and filter labels read correctly either way.
+// (Ambiguous fragments — "F", "Super", "Grand" — are NOT guessed here;
+// only the URL knows which truck/trim they were, and the backfill
+// resolves those in the data itself.)
+const MODEL_DISPLAY_FIXES = {
+  cr: "CR-V", hr: "HR-V", rav4: "RAV4", "4runner": "4Runner",
+  rx: "RX", tx: "TX", nx: "NX", gx: "GX", lx: "LX", ux: "UX",
+  es: "ES", is: "IS", ls: "LS", rc: "RC",
+  mdx: "MDX", rdx: "RDX", zdx: "ZDX", adx: "ADX", tlx: "TLX",
+  ct4: "CT4", ct5: "CT5", xt4: "XT4", xt5: "XT5", xt6: "XT6",
+  xc40: "XC40", xc60: "XC60", xc90: "XC90",
+  gv60: "GV60", gv70: "GV70", gv80: "GV80",
+  gr86: "GR86", mkz: "MKZ", bz4x: "bZ4X", ix: "iX", i7: "i7"
+};
+function displayModelText(model) {
+  if (!model) return "";
+  return MODEL_DISPLAY_FIXES[String(model).toLowerCase()] || model;
+}
+function displayMakeText(make) {
+  if (!make) return "";
+  return String(make).toLowerCase() === "gmc" ? "GMC" : make;
+}
+
 // PRICE STATUS (Matthew, 2026-10-23): a missing numeric price is not all
 // the same. The dealer's own published state is shown instead: "Call for
 // Price" when the dealer says so, "No price listed" when they publish no
@@ -3745,7 +3771,7 @@ function renderGridRows(cars) {
       </div>
       <div class="p-4 pb-2 flex-1">
         <div data-action="details" data-vin="${vinAttr}" class="cursor-pointer">
-          <strong class="text-sm font-bold text-slate-950 block leading-tight">${escapeHtml(car.year || '')} ${escapeHtml(car.make || '')} ${escapeHtml(car.model || '')}</strong>
+          <strong class="text-sm font-bold text-slate-950 block leading-tight">${escapeHtml(car.year || '')} ${escapeHtml(displayMakeText(car.make) || '')} ${escapeHtml(displayModelText(car.model) || '')}</strong>
         </div>
         <div class="text-[11px] text-slate-500 mt-1">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')} &bull; VIN: ${escapeHtml(car.vin || 'N/A')}</div>
         ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(displayLocation(car.location_name))}</span></div>` : ''}
@@ -3813,7 +3839,7 @@ function renderTableRows(cars) {
 
     <div>
   <strong class="text-xs font-bold text-slate-950 block leading-tight">
-    ${escapeHtml(car.year || '')} ${escapeHtml(car.make || '')} ${escapeHtml(car.model || '')}
+    ${escapeHtml(car.year || '')} ${escapeHtml(displayMakeText(car.make) || '')} ${escapeHtml(displayModelText(car.model) || '')}
   </strong>
 
   <div class="text-[10px] text-slate-500 mt-1">
@@ -4269,7 +4295,7 @@ async function saveExistingFbLink() {
 }
 
 function openVehicleDetailsModal(car) {
-  document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'} ${car.trim || ''}`;
+  document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'} ${car.trim || ''}`;
   document.getElementById("detailsModalVin").innerText = `VIN: ${car.vin || 'N/A'} • Stock: ${car.stock_num || car.stock_number || 'N/A'}`;
 
   let photoUrl = car.image_url;
@@ -4457,7 +4483,7 @@ const statusChip = blockedNoPhoto
                         ${
     car
     ? escapeHtml(`${car.year || ''} ${car.make || ''} ${car.model || ''}`.trim())
-    : escapeHtml(`${item.year || ''} ${item.make || ''} ${item.model || ''}`.trim() || 'Vehicle')
+    : escapeHtml(`${item.year || ''} ${displayMakeText(item.make) || ''} ${displayModelText(item.model) || ''}`.trim() || 'Vehicle')
 }
                     </div>
 
@@ -5615,7 +5641,7 @@ function renderWishlist(fresh) {
           </div>
           <div class="p-3 space-y-1">
             <div data-action="details" data-vin="${vinAttr}" class="cursor-pointer">
-              <strong class="text-xs font-bold text-slate-950 block leading-tight">${escapeHtml(car.year || '')} ${escapeHtml(car.make || '')} ${escapeHtml(car.model || '')}</strong>
+              <strong class="text-xs font-bold text-slate-950 block leading-tight">${escapeHtml(car.year || '')} ${escapeHtml(displayMakeText(car.make) || '')} ${escapeHtml(displayModelText(car.model) || '')}</strong>
             </div>
             <div class="text-[10px] text-slate-500">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')}</div>
             <div class="flex items-baseline gap-2">

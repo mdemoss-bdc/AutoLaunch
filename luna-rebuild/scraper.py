@@ -121,30 +121,72 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
 
         function parseFromUrl(url) {
             if (!url) return null;
-            // Matches formats like: /used-Huntington-2020-Lincoln-NAUTILUS-SUV-2LMPJ8K94LBL05090
-            const m = url.match(/(?:used|new|cpo|certified)-[^-]+-(\\d{4})-([A-Za-z0-9]+)-([A-Za-z0-9]+)(?:-([A-Za-z0-9_-]+))?/i);
-            if (m) {
-                let modelOut = m[3].charAt(0).toUpperCase() + m[3].slice(1).toLowerCase();
-                let trimOut = (m[4] || '');
-                const mu = m[3].toUpperCase();
-                // Hyphenated models are split by the regex above: the model
-                // token stops at the hyphen and the rest lands in trim.
-                // Re-join the known ones: HR-V, CR-V, CX-5/50/90, F-150/250/350
-                if ((mu === 'HR' || mu === 'CR') && /^V($|-)/i.test(trimOut)) {
-                    modelOut = mu + '-V';
-                    trimOut = trimOut.slice(1).replace(/^-/, '');
-                } else if ((mu === 'CX' || mu === 'F') && /^\d/.test(trimOut)) {
-                    const dm = trimOut.match(/^(\d+)(?:-(.*))?$/);
-                    if (dm) { modelOut = mu + '-' + dm[1]; trimOut = dm[2] || ''; }
-                }
-                return {
-                    year: parseInt(m[1]),
-                    make: m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase(),
-                    model: modelOut,
-                    trim: trimOut.replace(/SUV|Sedan|Truck|Coupe/gi, '').trim()
-                };
+            // DealerOn writes word separators two ways: hyphens in most
+            // slugs, '+' in others (CR+V, Grand+Cherokee, Santa+Fe,
+            // F+150) — and the CITY segment can itself contain a '+'
+            // ("St+Albans"), so the tail after the make is tokenized
+            // on BOTH separators instead of normalizing the whole URL
+            // (normalizing broke the hyphen-free city match). Without
+            // this, those models truncated to their first fragment in
+            // the database ("Cr", "Grand", "Super", "F", "Santa").
+            // Matches formats like:
+            // /used-Huntington-2020-Lincoln-NAUTILUS-SUV-2LMPJ8K94LBL05090
+            const m = url.match(/(?:used|new|cpo|certified)-[^-]+-(\\d{4})-([A-Za-z0-9]+)-(.+?)(?:\\?.*)?$/i);
+            if (!m) return null;
+            const titleWord = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+            let makeOut = titleWord(m[2]);
+            if (m[2].toUpperCase() === 'GMC') makeOut = 'GMC';
+            const tokens = m[3].split(/[-+]/).filter(Boolean);
+            if (!tokens.length) return null;
+            let modelOut = titleWord(tokens[0]);
+            let rest = tokens.slice(1);
+            const mu = tokens[0].toUpperCase();
+            // Hyphenated models are split by the tokenizer: the model
+            // token stops at the hyphen and the rest lands in trim.
+            // Re-join the known ones: HR-V, CR-V, CX-5/50/90, F-150/250/350
+            if ((mu === 'HR' || mu === 'CR') && rest.length && /^V$/i.test(rest[0])) {
+                modelOut = mu + '-V';
+                rest = rest.slice(1);
+            } else if ((mu === 'CX' || mu === 'F') && rest.length && /^\d+$/.test(rest[0])) {
+                modelOut = mu + '-' + rest[0];
+                rest = rest.slice(1);
             }
-            return null;
+            // Two-word models the first-token rule can never see whole.
+            const TWO_WORD = {
+                'GRAND CHEROKEE': 'Grand Cherokee', 'GRAND WAGONEER': 'Grand Wagoneer',
+                'GRAND HIGHLANDER': 'Grand Highlander', 'GRAND CARAVAN': 'Grand Caravan',
+                'SANTA FE': 'Santa Fe', 'SANTA CRUZ': 'Santa Cruz',
+                'LAND CRUISER': 'Land Cruiser', 'SUPER DUTY': 'Super Duty',
+                'TRANSIT CONNECT': 'Transit Connect'
+            };
+            if (rest.length) {
+                const pair = mu + ' ' + rest[0].toUpperCase();
+                if (TWO_WORD[pair]) { modelOut = TWO_WORD[pair]; rest = rest.slice(1); }
+            }
+            // Super Duty trucks carry their F-code inside the model name.
+            if (modelOut === 'Super Duty' && rest.length >= 2 && /^F$/i.test(rest[0]) && /^\d+$/.test(rest[1])) {
+                modelOut = 'Super Duty F-' + rest[1];
+                rest = rest.slice(2);
+            }
+            // Badge casing the title-caser mangles (Rav4 -> RAV4 etc.).
+            const MODEL_CASE = {
+                'RAV4': 'RAV4', '4RUNNER': '4Runner', 'RX': 'RX', 'TX': 'TX',
+                'NX': 'NX', 'GX': 'GX', 'LX': 'LX', 'UX': 'UX', 'ES': 'ES',
+                'IS': 'IS', 'LS': 'LS', 'RC': 'RC', 'MDX': 'MDX', 'RDX': 'RDX',
+                'ZDX': 'ZDX', 'ADX': 'ADX', 'TLX': 'TLX', 'ILX': 'ILX',
+                'CT4': 'CT4', 'CT5': 'CT5', 'XT4': 'XT4', 'XT5': 'XT5', 'XT6': 'XT6',
+                'XC40': 'XC40', 'XC60': 'XC60', 'XC90': 'XC90',
+                'GV60': 'GV60', 'GV70': 'GV70', 'GV80': 'GV80',
+                'GR86': 'GR86', 'MKZ': 'MKZ', 'NV': 'NV', 'BZ4X': 'bZ4X',
+                'IX': 'iX', 'I7': 'i7', 'XM': 'XM'
+            };
+            if (MODEL_CASE[modelOut.toUpperCase()]) modelOut = MODEL_CASE[modelOut.toUpperCase()];
+            return {
+                year: parseInt(m[1]),
+                make: makeOut,
+                model: modelOut,
+                trim: rest.join('-').replace(/SUV|Sedan|Truck|Coupe/gi, '').trim()
+            };
         }
 
         // FINAL-PRICE HELPER (price rule, 2026-10-22): the stored price is the
@@ -593,6 +635,12 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                         detectedMake = m;
                         const words = mMatch[1].split('\\n')[0].trim().split(' ').filter(Boolean);
                         detectedModel = words[0] || "Vehicle";
+                        // Two-word models (Grand Cherokee, Santa Fe…)
+                        const TWO_WORD_TITLES = ['Grand Cherokee', 'Grand Wagoneer', 'Grand Highlander', 'Grand Caravan', 'Santa Fe', 'Santa Cruz', 'Land Cruiser', 'Super Duty', 'Transit Connect'];
+                        if (words.length > 1 && TWO_WORD_TITLES.some(t => t.toLowerCase() === (words[0] + ' ' + words[1]).toLowerCase())) {
+                            detectedModel = words[0] + ' ' + words[1];
+                            words.splice(1, 1);
+                        }
                         if (words.length > 1) {
                             detectedTrim = words.slice(1).join(' ').replace(/SE|LE|XLE|Sport|AWD|4WD|FWD/gi, '').trim();
                         }
