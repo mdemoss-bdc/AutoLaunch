@@ -887,7 +887,24 @@
       const l = document.querySelector(`label[for="${el.id}"]`);
       if (l) lab = l.textContent || "";
     }
-    return (aria + " " + ph + " " + lab).toLowerCase();
+    // aria-labelledby (v2.1.22): Facebook's current dropdown
+    // controls are <label role="combobox" aria-labelledby="…">
+    // elements whose visible field name ("Exterior color", and by
+    // the same pattern "Year") lives in the referenced node — not
+    // in aria-label, placeholder, or a label[for]. Without
+    // resolving it, the control's own-label strategy is blind and
+    // location falls through to weaker strategies.
+    let labelledby = "";
+    const lb = typeof el.getAttribute === "function"
+      ? el.getAttribute("aria-labelledby") : null;
+    if (lb) {
+      for (const id of String(lb).split(/\s+/)) {
+        if (!id) continue;
+        const n = document.getElementById ? document.getElementById(id) : null;
+        if (n) labelledby += " " + (n.textContent || "");
+      }
+    }
+    return (aria + " " + ph + " " + lab + " " + labelledby).toLowerCase();
   }
 
   // Does a subtree contain the preview pane? (Node-capped walk; the
@@ -1185,11 +1202,25 @@
     return false;
   }
 
+  // A control whose popup is a DIALOG or a MENU is page/app
+  // chrome, never a form field (v2.1.22): the header notifications
+  // button that got laddered as "Year" twice carries
+  // aria-haspopup="dialog"; a field's popup is a listbox (or the
+  // attribute is absent). Deterministic, shape-based — unlike the
+  // banner-ancestor test, it does not depend on how Facebook
+  // happens to structure its header.
+  function hasNonFieldPopup(el) {
+    if (!el || typeof el.getAttribute !== "function") return false;
+    const hp = el.getAttribute("aria-haspopup");
+    return !!hp && hp !== "listbox";
+  }
+
   // One gate for every field-location candidate (v2.1.4; media
-  // exclusion added v2.1.5; page-chrome exclusion v2.1.21).
+  // exclusion added v2.1.5; page-chrome exclusion v2.1.21;
+  // non-field-popup exclusion v2.1.22).
   function isFormCandidate(el) {
     return !!el && !isChromeButton(el) && !isMediaChrome(el) &&
-      !isInPreview(el) && !isInPageChrome(el);
+      !isInPreview(el) && !isInPageChrome(el) && !hasNonFieldPopup(el);
   }
 
   // Locate a field in three tries, in an order that cannot move a

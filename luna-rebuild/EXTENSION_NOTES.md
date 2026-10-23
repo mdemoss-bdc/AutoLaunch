@@ -1577,3 +1577,30 @@ strategies — an ancestor's aggregated text mentions every
 field on the page, so it must never speak for a real control
 (the harness caught it labelling a Price input as "Year"
 through exactly that path). Harness: 6/6.
+
+## 28. The banner test missed; the popup shape is the tell (v2.1.22, 2026-10-23)
+
+The 2.1.21 graduation run (2027 Nissan Sentra) failed on Year
+AGAIN with the identical diag: the notifications button,
+rungs 1-3, readBack "". So Facebook's create-page header does
+NOT put that button under a role="banner"/<header> ancestor —
+the v2.1.21 exclusion never fired, and with no label-visible
+Year control, tier 2's nearby-text still served the button.
+
+Two harder fixes (content.js): (1) hasNonFieldPopup — a
+candidate whose aria-haspopup is anything but "listbox"
+(dialog, menu, …) is chrome by shape and never a field; the
+button carries aria-haspopup="dialog", a field's popup is a
+listbox. Shape-based, independent of header structure. (2)
+fieldLabel now resolves aria-labelledby: the current
+variant's dropdowns are <label role="combobox"
+aria-labelledby="…"> elements whose field name lives in the
+referenced node (proven by the ExteriorColor/InteriorColor
+diags in this very run — both SET correctly, readBack
+"Exterior colorBlack" / "Interior colorGray"; the 2.1.19
+color default also fired live: 'Sport' -> Gray defaulted).
+Year/Make/Model are presumably the same shape, invisible to
+the own-label strategy until now. Harness: 9/9.
+Also confirmed in this run: clean title is OPTIONAL — the
+form sat fully filled except Year with the box unchecked;
+it is an attestation badge, not a publish requirement.
