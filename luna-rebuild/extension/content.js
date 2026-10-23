@@ -1165,10 +1165,31 @@
     if (!aria) return false;
     return UI_CHROME_TEXTS.has(aria) || aria.startsWith("view ");
   }
+  // Page chrome is never form (v2.1.21, header note 27): Facebook's
+  // top navigation lives in a role="banner" subtree (or a <header>),
+  // and on 2026-10-23 the nearby-text strategy located "Year" as the
+  // header's notifications button ("Manage … notification
+  // settings", aria-haspopup="dialog") — DOM-first, label-plausible
+  // through an ancestor's text, and completely outside the form.
+  // No field has ever lived in the banner; exclude its whole
+  // subtree from candidacy.
+  function isInPageChrome(el) {
+    let node = el;
+    for (let depth = 0; depth < 12 && node; depth++) {
+      const tag = String(node.tagName || "").toUpperCase();
+      if (tag === "HEADER") return true;
+      if (typeof node.getAttribute === "function" &&
+          node.getAttribute("role") === "banner") return true;
+      node = node.parentElement;
+    }
+    return false;
+  }
+
   // One gate for every field-location candidate (v2.1.4; media
-  // exclusion added v2.1.5).
+  // exclusion added v2.1.5; page-chrome exclusion v2.1.21).
   function isFormCandidate(el) {
-    return !!el && !isChromeButton(el) && !isMediaChrome(el) && !isInPreview(el);
+    return !!el && !isChromeButton(el) && !isMediaChrome(el) &&
+      !isInPreview(el) && !isInPageChrome(el);
   }
 
   // Locate a field in three tries, in an order that cannot move a
@@ -1192,12 +1213,32 @@
     if (!stepHasRealControls()) return null;
     const all = Array.from(document.querySelectorAll(selector || FIELD_SELECTOR))
       .filter(isFormCandidate);
-    const own = all.find(el => keywords.some(k => fieldLabel(el).includes(k)));
-    if (own) return own;
-    const byContainer = all.filter(isVisibleEl)
-      .find(el => labelTextMatches(containerLabel(el), keywords));
-    if (byContainer) return byContainer;
-    return all.find(el => keywords.some(k => nearbyText(el).includes(k))) || null;
+    // Tiered search (v2.1.21, header note 27): the label-precise
+    // strategies (own label, then container label) run over REAL
+    // controls first (inputs, selects, comboboxes, listbox
+    // triggers), then over the wider clickable set. The fuzzy
+    // nearby-text strategy runs ONLY in the wide tier, after both
+    // label strategies there: an ancestor's aggregated text
+    // mentions every field on the page, so letting it speak for
+    // a real control is how the header's notifications button
+    // got laddered as "Year" (and how a Price input could be).
+    // A plain [role="button"] whose neighbourhood merely
+    // MENTIONS the keyword can no longer beat the form's actual
+    // dropdown trigger just by sitting earlier in the DOM.
+    const tiers = [all.filter(isRealFieldControl), all];
+    for (let t = 0; t < tiers.length; t++) {
+      const tier = tiers[t];
+      const own = tier.find(el => keywords.some(k => fieldLabel(el).includes(k)));
+      if (own) return own;
+      const byContainer = tier.filter(isVisibleEl)
+        .find(el => labelTextMatches(containerLabel(el), keywords));
+      if (byContainer) return byContainer;
+      if (t === tiers.length - 1) {
+        const near = tier.find(el => keywords.some(k => nearbyText(el).includes(k)));
+        if (near) return near;
+      }
+    }
+    return null;
   }
 
   function findField(keywords, selector) {

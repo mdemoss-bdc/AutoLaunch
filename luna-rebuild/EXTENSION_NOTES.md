@@ -1571,3 +1571,9 @@ deletes' clicks therefore executed immediately; only the
 reflection in the job tab lagged. The delayed-proof verdict
 above stands as the right fix either way: it judges from
 fresh page loads minutes later, not from the stale tab.
+Refinement while harness-testing: the fuzzy nearby-text
+strategy now runs ONLY in the wide tier, after both label
+strategies — an ancestor's aggregated text mentions every
+field on the page, so it must never speak for a real control
+(the harness caught it labelling a Price input as "Year"
+through exactly that path). Harness: 6/6.
