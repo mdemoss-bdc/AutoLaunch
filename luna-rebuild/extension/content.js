@@ -2200,9 +2200,11 @@
     if (Array.isArray(car.custom_photo_urls)) {
       car.custom_photo_urls.forEach(u => { if (typeof u === "string" && u.startsWith("http")) urls.push(u); });
     }
-    // Matthew's target: up to 12 photos per listing — counted AFTER
-    // normalization dedupe, so a photo at two sizes counts once (v3.1).
-    return dedupePhotoUrls(urls, 12);
+    // Matthew's target: up to 20 photos per listing — Facebook's
+    // ceiling, and what the scraper already stores (raised from 12
+    // on 2026-10-23 at his request). Counted AFTER normalization
+    // dedupe, so a photo at two sizes counts once (v3.1).
+    return dedupePhotoUrls(urls, 20);
   }
 
   // Preview tiles = the distinct photo previews Facebook rendered.
@@ -2365,23 +2367,29 @@
     return t.includes("checkpoint") || t.includes("confirm your identity");
   }
 
-  // ---- new-car mileage (Matthew, 2026-10-23) ---------------------------
-  // Facebook's vehicle form refuses mileage under 300, but a brand-new
-  // car legitimately has almost none — and when the dealer site does
-  // not publish miles, the scraper stores a default (1,000; it was 5
-  // before 2026-10-23, which got new listings blocked). Rule for NEW
-  // vehicles: stored miles missing or under Facebook's floor → the
-  // form gets 1,000, and the description discloses that the shown
-  // mileage is a listing default and actual miles may be less. Real
-  // published miles (300+) always post as-is; used cars never change.
+  // ---- listing mileage (Matthew, 2026-10-23; floor generalized
+  // v2.1.23) -------------------------------------------------------
+  // Facebook's vehicle form refuses mileage under 300 — a form
+  // carrying 0 (or an empty mileage) keeps its Next button
+  // disabled, so the job can fill and verify every required field
+  // and still never reach Publish. That is exactly what stopped
+  // the 2027 Sentra on 2.1.22: stored miles 0, everything else
+  // perfect, Next greyed. The original rule covered NEW cars
+  // (brand-new cars legitimately have almost no miles; the
+  // scraper defaults unpublished new-car miles to 1,000).
+  // v2.1.23 generalizes the floor to ANY car: stored miles missing
+  // or under 300 → the form gets 1,000 and the description
+  // discloses the default (the brand-new wording for new cars, an
+  // ask-us wording otherwise). Real published miles (300+) always
+  // post as-is; a stored 1,000 on a NEW car is the scraper's own
+  // default, so its disclosure still applies.
   function listingMileage() {
     const stored = car.mileage != null && car.mileage !== "" ? Number(car.mileage) : null;
     const isNew = /^new$/i.test(String(car.condition || "").trim());
-    if (!isNew) return { miles: stored, defaulted: false };
-    if (stored === null || stored < 300) return { miles: 1000, defaulted: true };
-    // A stored 1,000 on a new car is the scraper's own default, so
-    // the disclosure still applies; a higher figure is real data.
-    return { miles: stored, defaulted: stored === 1000 };
+    if (stored !== null && stored >= 300) {
+      return { miles: stored, defaulted: isNew && stored === 1000, isNew };
+    }
+    return { miles: 1000, defaulted: true, isNew };
   }
 
   // ---- description ------------------------------------------------------
@@ -2396,7 +2404,9 @@
       (car.transmission ? `Transmission: ${car.transmission}\n` : "") +
       (car.vin ? `VIN: ${car.vin}\n` : "") +
       (lm.defaulted
-        ? `\nBrand new vehicle — the mileage shown is a listing default; actual miles may be less.`
+        ? (lm.isNew
+          ? `\nBrand new vehicle — the mileage shown is a listing default; actual miles may be less.`
+          : `\nMileage shown is a listing default — exact miles were not published for this vehicle; ask us for the current odometer reading.`)
         : "") +
       `\nInspected and frontline ready. Message to set up a test drive!`
     );

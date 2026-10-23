@@ -1604,3 +1604,25 @@ the own-label strategy until now. Harness: 9/9.
 Also confirmed in this run: clean title is OPTIONAL — the
 form sat fully filled except Year with the box unchecked;
 it is an attestation badge, not a publish requirement.
+
+## 29. The mileage floor: a 0-mile car can fill perfectly and never reach Publish (v2.1.23, 2026-10-23)
+
+The 2.1.22 Sentra run is the proof the locator saga is over:
+preview title "2027 Nissan Sentra", every required field
+verified — and Full Auto then failed with
+publish_button_not_found because the form's Next button sat
+DISABLED (Matthew's screenshot: the details step, everything
+filled, Next greyed). Cause: the Sentra's stored mileage is
+0. listingMileage passed used-car miles through untouched,
+so the form got "0" — and Facebook refuses mileage under
+300, leaving the step invalid and Next shut. Every car that
+ever advanced had real miles >= 300 (Telluride 3,976 reached
+the audience step the same afternoon); the only sub-300 car
+was the only one stuck. Fix: the 1,000-mile listing default
+(Matthew's new-car rule) now applies to ANY car whose stored
+miles are missing or under the 300 floor, with the disclosure
+wording split — brand-new wording for new cars, an
+"exact miles were not published — ask us" wording otherwise.
+Real miles >= 300 always post as-is. Unit tests: 12/12.
+This build also carries the 12 -> 20 photo cap raise
+(Matthew's request, same day; the scraper already stores 20).
