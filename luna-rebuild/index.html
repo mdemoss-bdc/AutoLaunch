@@ -1241,6 +1241,9 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           <option value="price_asc">Price: Low to High</option>
           <option value="price_desc">Price: High to Low</option>
           <option value="miles_asc">Mileage: Lowest First</option>
+          <option value="miles_desc">Mileage: Highest First</option>
+          <option value="status_asc">Status: Not posted first</option>
+          <option value="status_desc">Status: Posted first</option>
         </select>
         <i class="fa-solid fa-arrow-down-short-wide absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[11px]"></i>
       </div>
@@ -1368,7 +1371,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
             <th class="py-3.5 px-4 w-10"></th>
             <th class="py-3.5 px-4 cursor-pointer select-none" onclick="toggleHeaderSort('make')" title="Click to sort by make">CAR <span id="sortArrowMake" class="text-blue-600"></span></th>
             <th class="py-3.5 px-4 cursor-pointer select-none" onclick="toggleHeaderSort('price')" title="Click to sort by price">PRICE & MILES <span id="sortArrowPrice" class="text-blue-600"></span></th>
-            <th class="py-3.5 px-4">STATUS</th>
+            <th class="py-3.5 px-4 cursor-pointer select-none" onclick="toggleHeaderSort('status')" title="Click to sort by status">STATUS <span id="sortArrowStatus" class="text-blue-600"></span></th>
             <th class="py-3.5 px-4 text-right">LAUNCH IT</th>
           </tr>
         </thead>
@@ -3407,13 +3410,16 @@ function toggleHeaderSort(kind) {
   if (!sel) return;
   if (kind === "make") sel.value = sel.value === "make_asc" ? "make_desc" : "make_asc";
   else if (kind === "price") sel.value = sel.value === "price_asc" ? "price_desc" : "price_asc";
+  else if (kind === "status") sel.value = sel.value === "status_asc" ? "status_desc" : "status_asc";
   applyFilters();
 }
 function syncSortArrows(sort) {
   const m = document.getElementById("sortArrowMake");
   const p = document.getElementById("sortArrowPrice");
+  const s = document.getElementById("sortArrowStatus");
   if (m) m.textContent = sort === "make_asc" ? "▲" : sort === "make_desc" ? "▼" : "";
   if (p) p.textContent = sort === "price_asc" ? "▲" : sort === "price_desc" ? "▼" : "";
+  if (s) s.textContent = sort === "status_asc" ? "▲" : sort === "status_desc" ? "▼" : "";
 }
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
@@ -3537,7 +3543,14 @@ if (filterMileageRange) {
     if (sort === "make_desc") return byMake(b, a);
     if (sort === "price_asc") return ((a.price || 999999) - (b.price || 999999)) || byMake(a, b);
     if (sort === "price_desc") return ((b.price || 0) - (a.price || 0)) || byMake(a, b);
-    if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
+    if (sort === "miles_asc") return ((a.mileage || 0) - (b.mileage || 0)) || byMake(a, b);
+    if (sort === "miles_desc") return ((b.mileage || 0) - (a.mileage || 0)) || byMake(a, b);
+    if (sort === "status_asc" || sort === "status_desc") {
+      // Status groups: 0 Not posted, 1 Queued, 2 Posted, 3 Sold.
+      const rank = (c) => isSold(c) ? 3 : c.marketplace_posted_at ? 2 : (postingQueue.some(i => i.vin === c.vin && i.status === "pending") ? 1 : 0);
+      const d = rank(a) - rank(b);
+      return (sort === "status_asc" ? d : -d) || byMake(a, b);
+    }
     return (b.year || 0) - (a.year || 0);
   });
   syncSortArrows(sort);
@@ -4334,7 +4347,21 @@ async function loadPostingQueue() {
 
         if (error) throw error;
 
-        postingQueue = data || [];
+        // QUEUE HYGIENE (Matthew, 2026-10-23): the queue is for work still
+        // to do — finished rows (posted / completed) are deleted on sight.
+        // The car's Posted state lives on the inventory row itself
+        // (marketplace_posted_at drives the Posted pill), so nothing is
+        // lost. Failed rows stay: they carry the error diagnostics.
+        const allRows = data || [];
+        const doneRows = allRows.filter(i => i.status === "posted" || i.status === "completed");
+        postingQueue = allRows.filter(i => i.status !== "posted" && i.status !== "completed");
+        if (doneRows.length) {
+            supabaseClient
+                .from("auto_posting_queue")
+                .delete()
+                .in("id", doneRows.map(i => i.id))
+                .then(() => {}, () => {});
+        }
 
         const pendingCount = postingQueue.filter(
             i => i.status === "pending"
