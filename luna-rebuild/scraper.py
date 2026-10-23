@@ -47,6 +47,17 @@ try:
 except ValueError:
     SCRAPE_LIMIT = 0
 
+# Sync modes (Matthew, 2026-10-23): a capped run belongs ONLY to the
+# account-setup test phase. Every scrape_jobs row carries sync_mode:
+# 'test' (setup, capped at TEST_SYNC_LIMIT so the dealer sees a fast
+# proof) or 'full' (the Sync Inventory button once setup has succeeded
+# — uncapped). When a run serves a pending job, the job's mode decides
+# the cap and overrides the SCRAPE_LIMIT env, because the dispatch
+# workflow passes its capped default (15) on every app-triggered run.
+# Manual Actions runs with no pending job keep honoring the env input
+# exactly as before (0 = the full refill Matthew runs by hand).
+TEST_SYNC_LIMIT = 15
+
 def get_user_configuration(uid: str):
     if not uid:
         print("[!] No USER_ID passed to scraper.")
@@ -1313,6 +1324,7 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
 async def run_scraper():
 
     active_job_id = None
+    active_job_mode = None
 
     target_uid = os.environ.get("USER_ID")
 
@@ -1344,6 +1356,7 @@ async def run_scraper():
             )
 
             active_job_id = latest_job["id"]
+            active_job_mode = latest_job.get("sync_mode")
 
         print(
             f"ACTIVE_JOB_ID => {active_job_id}"
@@ -1456,12 +1469,26 @@ async def run_scraper():
             user_seen_vins = set()
             user_had_error = False
 
+            # Effective cap for THIS user (see TEST_SYNC_LIMIT note): the
+            # pending job's sync_mode wins over the env when this run is
+            # serving that job; otherwise the env input rules.
+            effective_limit = SCRAPE_LIMIT
+            if active_job_mode and active_uid == (target_uid or "").strip():
+                if active_job_mode == "test":
+                    effective_limit = TEST_SYNC_LIMIT
+                elif active_job_mode == "full":
+                    effective_limit = 0
+                print(
+                    f"[*] Sync mode for this user: {active_job_mode} -> cap "
+                    f"{effective_limit if effective_limit else 'none (full pull)'}"
+                )
+
             for feed in feeds_to_crawl:
 
-                if SCRAPE_LIMIT and user_units_synced >= SCRAPE_LIMIT:
+                if effective_limit and user_units_synced >= effective_limit:
 
                     print(
-                        f"[*] SCRAPE_LIMIT of {SCRAPE_LIMIT} reached. Skipping remaining feeds for this user."
+                        f"[*] SCRAPE_LIMIT of {effective_limit} reached. Skipping remaining feeds for this user."
                     )
 
                     break
@@ -1540,14 +1567,14 @@ async def run_scraper():
 
                         break
 
-                    if SCRAPE_LIMIT:
+                    if effective_limit:
 
-                        remaining = SCRAPE_LIMIT - user_units_synced
+                        remaining = effective_limit - user_units_synced
 
                         if remaining <= 0:
 
                             print(
-                                f"[*] SCRAPE_LIMIT of {SCRAPE_LIMIT} reached for this user. Stopping test crawl."
+                                f"[*] SCRAPE_LIMIT of {effective_limit} reached for this user. Stopping test crawl."
                             )
 
                             break
@@ -1600,10 +1627,10 @@ async def run_scraper():
             # cars. Any navigation/extraction error, or an empty result,
             # means "we don't know" — and "don't know" never deactivates
             # a dealer's inventory.
-            if SCRAPE_LIMIT:
+            if effective_limit:
 
                 print(
-                    f"[!] Stale pass skipped for {store_name}: capped test run (SCRAPE_LIMIT={SCRAPE_LIMIT}) never deactivates inventory."
+                    f"[!] Stale pass skipped for {store_name}: capped test run (SCRAPE_LIMIT={effective_limit}) never deactivates inventory."
                 )
 
             elif user_seen_vins and not user_had_error:

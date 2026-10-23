@@ -4833,18 +4833,38 @@ async function triggerLiveLotCrawl(event) {
 
     try {
 
+        // SYNC MODE (Matthew, 2026-10-23): capped runs belong ONLY to
+        // the account-setup testing phase. Until this account has one
+        // successfully completed sync, a Sync click is still the test —
+        // capped at 15 cars for a fast proof. After the first success
+        // the account switches to uncapped and every Sync is a full
+        // pull. The mode rides on the job row; the scraper honors it
+        // over the workflow's capped default input.
+        const { data: doneJobs } = await supabaseClient
+            .from("scrape_jobs")
+            .select("id")
+            .eq("user_id", currentUser.id)
+            .eq("status", "completed")
+            .limit(1);
+
+        const syncMode =
+            doneJobs && doneJobs.length ? "full" : "test";
+
         const { error } = await supabaseClient
             .from("scrape_jobs")
             .insert({
                 user_id: currentUser.id,
                 status: "pending",
-                triggered_by: currentUser.email
+                triggered_by: currentUser.email,
+                sync_mode: syncMode
             });
 
         if (error) throw error;
 
         alert(
-            "✓ Inventory refresh started. Inventory will begin updating shortly!"
+            syncMode === "test"
+                ? "✓ Test sync started — we'll pull up to 15 cars to verify your inventory connection. After this first success, Sync pulls your full lot."
+                : "✓ Inventory refresh started. Inventory will begin updating shortly!"
         );
 
         setTimeout(() => {
@@ -4955,6 +4975,25 @@ async function finishSetup() {
         console.error(error);
         alert("Could not save your dealership settings: " + (error.message || "Unknown error") + "\n\nYour inventory URLs were NOT saved. Please try again.");
         return;
+    }
+
+    // SETUP TEST SYNC (Matthew, 2026-10-23): finishing setup kicks off
+    // the capped TEST sync (up to 15 cars) so the dealer sees real
+    // inventory land before setup completes. Once it succeeds, the
+    // account is out of the testing phase and Sync Inventory runs
+    // uncapped. Non-fatal: if this insert fails, setup still completes
+    // and the first manual Sync runs as the test instead.
+    try {
+        await supabaseClient
+            .from("scrape_jobs")
+            .insert({
+                user_id: currentUser.id,
+                status: "pending",
+                triggered_by: currentUser.email,
+                sync_mode: "test"
+            });
+    } catch (e) {
+        console.warn("Setup test sync could not be queued:", e);
     }
 
 }
