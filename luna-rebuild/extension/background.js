@@ -510,12 +510,20 @@ async function checkQueue() {
     // removes a listing, and a car whose photos vanished is exactly the
     // car whose listing should come down.
     if (!isDelete) {
-      const FALLBACK_PHOTO = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+      // Fallback placeholders are never real photos: the old hotlinked
+      // Unsplash URL (rows stored before 2.1.11 may still carry it), the
+      // local fallback asset in both the absolute Pages form a stored
+      // row could carry and the relative form the app now uses.
+      const FALLBACK_PHOTOS = [
+        "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80",
+        "https://mdemoss-bdc.github.io/AutoLaunch/luna-rebuild/assets/no-photo.png",
+        "assets/no-photo.png"
+      ];
       const usablePhoto = u => {
         if (!u || typeof u !== "string") return false;
         let s = u.trim();
         if (s.startsWith("//")) s = "https:" + s;
-        return /^https?:\/\//i.test(s) && !s.includes("/static/") && s !== FALLBACK_PHOTO;
+        return /^https?:\/\//i.test(s) && !s.includes("/static/") && !FALLBACK_PHOTOS.includes(s);
       };
       const hasPhoto = usablePhoto(carRow.image_url) ||
         (Array.isArray(carRow.custom_photo_urls) && carRow.custom_photo_urls.some(usablePhoto));

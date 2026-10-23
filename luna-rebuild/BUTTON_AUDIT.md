@@ -78,6 +78,21 @@ most-clicked part of the card before it could reach the card's own
   and its "Settings & how it works" link open the Settings modal via
   `openSettingsModal()`.
 
+> **Correction — 2026-10-22 (guides change, after this audit):** the
+> "no separate help system" point above no longer describes the links.
+> Today each ribbon card's "How it works" link carries its own
+> `openGuide('<key>')` handler (with `event.stopPropagation()`, so it
+> still never triggers the card's own click) and opens the one
+> reusable `#guideModal`, whose title, icon, what/steps/notes are
+> filled from the `GUIDES` map; the guide modal's "Open these
+> settings" button (`openGuideFeature()`) is what then opens the
+> same settings modal this item verified. The card clicks themselves
+> still open their settings modals exactly as fixed above. Also
+> since this audit: the status line under each ribbon card is
+> written solely by `renderRibbonStatuses()` — the one writer,
+> derived from the live switches/settings — so no card can show a
+> hardcoded status that disagrees with its switch.
+
 ### 4. List / Grid view toggle (dead buttons)
 The two view buttons next to the sort control had no handlers at all.
 **Now:** a real grid view. `setViewMode()` switches rendering — inventory

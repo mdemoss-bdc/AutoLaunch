@@ -1245,3 +1245,24 @@ the first real check is opening the Extension page with the helper
 installed and watching the status land on "Helper ready ✓" (and,
 with the helper removed/disabled, on "Helper not installed" after
 the ~1.5s timeout).
+
+## v2.1.11 — fallback asset localization (Phase F)
+
+The app's no-photo fallback is no longer a hotlinked Unsplash image.
+`index.html` now uses a local asset, `assets/no-photo.png` (a 1200×900
+deep-slate tile carrying the brand mark and a "No photo" caption), for
+both `FALLBACK_IMAGE` and the Photo Edits preview `<img>` — no external
+request, no third-party dependency, and the placeholder can never
+break because a hotlink host changed or went down.
+
+The worker's claim-time real-photo check keeps rejecting that fallback
+as "not a real photo" (the no-photo rule is unchanged: a vehicle with
+no real photos is never posted). The single `FALLBACK_PHOTO` string is
+now a `FALLBACK_PHOTOS` list, and `usablePhoto` rejects any of them:
+the old Unsplash URL (rows stored before this change may still carry
+it), the fallback's absolute GitHub Pages URL
+(`https://mdemoss-bdc.github.io/AutoLaunch/luna-rebuild/assets/no-photo.png`),
+and the relative form the app now uses (`assets/no-photo.png`). The
+rest of the check — http(s) only, no `/static/` placeholder paths —
+is identical. No claim, finish, CDP, photo-relay or diag behaviour
+changes.

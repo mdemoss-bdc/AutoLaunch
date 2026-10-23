@@ -2215,7 +2215,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
         </div>
 
         <div id="previewPhotoWrap" class="w-full aspect-[4/3] rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-inner">
-          <img id="previewPhotoEditImg" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80" class="w-full h-full object-cover" draggable="false">
+          <img id="previewPhotoEditImg" src="assets/no-photo.png" class="w-full h-full object-cover" draggable="false">
           <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/60 to-transparent p-2 text-center">
             <span id="previewCaptionText" class="text-[10px] text-white font-medium">Original photo</span>
           </div>
@@ -2783,7 +2783,7 @@ function getEnabledChannels() {
   return channels;
 }
 let activeDropdownVin = null;
-const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80";
+const FALLBACK_IMAGE = "assets/no-photo.png";
 
 function switchAuthMode(mode) {
   authMode = mode;
