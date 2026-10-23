@@ -185,6 +185,15 @@
 //     existing FIELD_DIAG / diag-compaction channels — no worker
 //     change was needed for them (delete failures already compact
 //     diagnostics into error_message, note 13).
+// 17. SETUP-PAGE PING (v2.1.10): the app's Chrome Extension page asks,
+//     through bridge.js, whether this worker is present and ready.
+//     {type:"AUTOLAUNCH_PING"} is answered {hasToken} — true exactly
+//     when a session token is currently stored under
+//     autolaunch_access_token in chrome.storage.local (the key the
+//     login handoff writes; read via storedAccessToken()). The token
+//     value itself is never returned, logged, or otherwise exposed —
+//     only the boolean. Purely additive: no claim, finish, CDP, photo
+//     or diag behaviour changes.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1024,6 +1033,20 @@ chrome.alarms.onAlarm.addListener(alarm => {
 // Handshake path 1 (the real one): bridge.js on the AutoLaunch origin.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return;
+
+  if (message.type === "AUTOLAUNCH_PING") {
+    // Setup-page liveness/readiness ping (header note 17). Only the
+    // bridge on the AutoLaunch origin may ask — same sender discipline
+    // as the login handoff below — and the answer is a boolean about
+    // the stored session token, never the token itself.
+    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    if (!fromApp) return;
+    (async () => {
+      const token = await storedAccessToken();
+      sendResponse({ hasToken: !!token });
+    })();
+    return true;
+  }
 
   if (message.type === "AUTOLAUNCH_SET_USER_ID" && message.userId) {
     const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");

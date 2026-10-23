@@ -17,12 +17,48 @@
 // app's window message and forwards user id + access token to the
 // background service worker via chrome.runtime.sendMessage, and ignores
 // everything else (including messages from other windows/frames).
+//
+// v2.1.10: it also carries the Extension setup page's LIVE STATUS ping.
+// The page posts {type:"AUTOLAUNCH_EXT_PING"}; the bridge forwards it to
+// the worker as {type:"AUTOLAUNCH_PING"} and posts the worker's reply
+// back to the window as {type:"AUTOLAUNCH_EXT_PONG", hasToken}. If the
+// worker cannot be reached at all, no pong is posted — the page's own
+// ~1.5s timeout is what reports "not installed", so a dead bridge never
+// masquerades as an installed-but-waiting helper.
 (function () {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     if (event.origin !== window.location.origin) return;
     const data = event.data;
-    if (!data || data.type !== "AUTOLAUNCH_EXT_LOGIN" || !data.userId) return;
+    if (!data) return;
+
+    if (data.type === "AUTOLAUNCH_EXT_PING") {
+      try {
+        chrome.runtime.sendMessage(
+          { type: "AUTOLAUNCH_PING" },
+          (response) => {
+            // A lastError here means the worker did not answer; post
+            // nothing and let the page's timeout speak for itself.
+            if (chrome.runtime.lastError) return;
+            try {
+              window.postMessage(
+                {
+                  type: "AUTOLAUNCH_EXT_PONG",
+                  hasToken: !!(response && response.hasToken)
+                },
+                window.location.origin
+              );
+            } catch (e) { /* page is gone — nothing to answer */ }
+          }
+        );
+      } catch (e) {
+        // Extension context invalidated (e.g. extension was reloaded).
+        // No pong: the page reports the helper as not reachable.
+      }
+      return;
+    }
+
+    if (data.type !== "AUTOLAUNCH_EXT_LOGIN" || !data.userId) return;
 
     try {
       chrome.runtime.sendMessage(

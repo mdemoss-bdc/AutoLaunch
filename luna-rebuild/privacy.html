@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — AutoLaunch</title>
+<link rel="icon" href="icons/favicon.ico">
+<style>
+  :root {
+    --page: #070D1A; --card: #101B30; --field: #0E1930;
+    --h: #E9EFF8; --body: #CBD5E1; --soft: #9FB0C7;
+    --edge: rgba(59, 130, 246, 0.22); --accent: #2E7CF6; --link: #58A6FF;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 18px 64px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(180deg, #0B1424 0%, var(--page) 55%);
+    color: var(--body); line-height: 1.65;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+  .brand img { width: 52px; height: 52px; border-radius: 14px; }
+  .brand .name { font-size: 26px; font-weight: 800; color: var(--h); letter-spacing: -0.02em; line-height: 1.1; }
+  .brand .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--link); }
+  .card {
+    background: var(--card); border: 1px solid var(--edge);
+    border-radius: 20px; padding: 34px 36px;
+    box-shadow: 0 12px 32px rgba(2, 6, 17, 0.5);
+  }
+  h1 { font-size: 28px; color: var(--h); margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 17px; color: var(--h); margin: 30px 0 8px; }
+  p, li { font-size: 15px; }
+  ul { padding-left: 20px; margin: 8px 0; }
+  li { margin: 5px 0; }
+  .updated { color: var(--soft); font-size: 13px; margin: 0 0 10px; }
+  a { color: var(--link); }
+  .placeholder {
+    background: rgba(245, 158, 11, 0.13); border: 1px dashed rgba(245, 158, 11, 0.55);
+    border-radius: 8px; padding: 1px 8px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: #FBBF24;
+  }
+  .note { background: var(--field); border: 1px solid var(--edge); border-radius: 12px; padding: 14px 18px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <img src="icons/logo-mark-512.png" alt="AutoLaunch logo">
+    <div>
+      <div class="name">AutoLaunch</div>
+      <div class="tag">Intelligence Suite</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: October 22, 2026</p>
+
+    <p>This policy covers the AutoLaunch web application and the
+    AutoLaunch Vehicle Assistant Chrome extension (together,
+    "AutoLaunch"). AutoLaunch is a listing syndication tool for car
+    dealerships and independent sales representatives: it takes a
+    dealership's own vehicle inventory and posts those vehicles to
+    sales channels — including Facebook Marketplace, through the
+    extension — at the user's direction.</p>
+
+    <h2>What data AutoLaunch handles</h2>
+    <ul>
+      <li><strong>Account information:</strong> your email address and
+      sign-in credentials, handled by our authentication provider
+      (Supabase). We use your email to identify your account.</li>
+      <li><strong>Dealership and inventory data:</strong> your
+      dealership name, your inventory feed URLs, and the vehicle data
+      they produce — year, make, model, trim, VIN, stock number,
+      price, mileage, colors, and listing photos.</li>
+      <li><strong>Posting settings and queue jobs:</strong> your
+      posting preferences (such as daily posting limits, automation
+      choices, and appearance settings), your customer wishlist
+      entries, and the queue of posting/removal jobs you create,
+      including each job's status and any failure reason.</li>
+      <li><strong>Facebook interaction, locally in your browser:</strong>
+      the extension works inside your own signed-in Facebook session in
+      Chrome. It fills in the Marketplace vehicle form, and deletes
+      listings you ask it to remove, using the data from your queue
+      job. Your Facebook password is never seen, collected, or stored
+      by AutoLaunch — Facebook's own sign-in stays between you and
+      Facebook.</li>
+      <li><strong>Your AutoLaunch session token, in the extension:</strong>
+      when you are signed in to AutoLaunch, the app hands your session
+      token to the extension so the extension can read and update
+      <em>your own</em> queue. The token is stored only in the
+      extension's local storage on your own computer, is used only as
+      the sign-in credential for your AutoLaunch backend requests, and
+      is never logged or sent anywhere else.</li>
+    </ul>
+
+    <h2>How the data is used</h2>
+    <p>Data is used only to operate AutoLaunch for you: syncing your
+    inventory, building and carrying out your posting queue, posting
+    and removing your listings on the channels you enable, showing you
+    job status and failure reasons, and keeping your account secure.
+    That is the only purpose.</p>
+
+    <h2>What we never do</h2>
+    <ul>
+      <li>We never sell your data, and we do not rent or share it with
+      third parties for their own marketing or any other purpose of
+      theirs.</li>
+      <li>We run no third-party analytics or advertising trackers in
+      the app or the extension.</li>
+      <li>The extension does not collect your browsing history and does
+      not read pages outside the AutoLaunch app, Facebook Marketplace,
+      and the vehicle photo locations contained in your own queue
+      jobs.</li>
+    </ul>
+
+    <h2>Where data lives and how it is protected</h2>
+    <ul>
+      <li>Account, inventory, settings, and queue data are stored in
+      AutoLaunch's backend database (Supabase), where access is locked
+      per user: each account can only see and modify its own rows.</li>
+      <li>Platform keys and service secrets are Matthew's (the
+      platform operator's), are kept server-side only, and are never
+      shipped to the app, the extension, or end users. End users never
+      handle API keys.</li>
+      <li>Photos for a listing are fetched by the extension from the
+      dealership photo source in your queue job and attached to your
+      listing on Facebook; they are not copied to any AutoLaunch
+      analytics or advertising system.</li>
+    </ul>
+
+    <h2>Your choices</h2>
+    <ul>
+      <li>You control posting: the extension's Confirm mode is the
+      default, and nothing is published until you click Publish (or
+      deliberately turn on Full Auto in Settings).</li>
+      <li>You can remove a listing at any time from AutoLaunch, sign
+      out (which ends the session the extension relies on), uninstall
+      the extension, and ask us to delete your account data.</li>
+    </ul>
+
+    <h2>Changes to this policy</h2>
+    <p>If this policy changes in a way that matters, the updated page
+    will be posted here with a new "last updated" date before the
+    change takes effect for new data.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about this policy or your data: contact AutoLaunch at
+    <span class="placeholder">[CONTACT EMAIL]</span>.</p>
+
+    <p class="note">For the operator: replace <span class="placeholder">[CONTACT EMAIL]</span>
+    with Matthew's business contact email before this page's URL is
+    submitted to the Chrome Web Store, Meta, or TikTok — reviewers
+    require a working contact.</p>
+  </div>
+
+</div>
+</body>
+</html>

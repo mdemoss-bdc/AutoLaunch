@@ -1190,3 +1190,58 @@ which is the point of the build.
   worker detaches as soon as filling ends. If a fourth live run shows
   rung 2 alone cracking the fields, rung 3 — and the permission — can
   be removed.
+
+## v2.1.10 — the setup-page ping (distribution prep, Phase E)
+
+The sidebar's "Chrome Extension" entry used to be a bare external
+link to the Chrome Web Store homepage — a dead end that told the
+user nothing. It now opens an in-app Extension page whose LIVE
+STATUS card is driven by a real handshake, built across all three
+layers:
+
+- **App (index.html):** `showExtensionPage()` follows the existing
+  page pattern (hides `<main>` / Get Started / Wishlist, lights the
+  sidebar pill via `setActiveNav("extension")`, and every other
+  page-switch function now hides `#extensionPage` too). On page show
+  — and on its "Check again" button — `checkExtensionStatus()` posts
+  `{type:"AUTOLAUNCH_EXT_PING"}` on the window and listens for
+  `{type:"AUTOLAUNCH_EXT_PONG", hasToken}` (same-window, same-origin
+  only). No pong within ~1.5s → "Helper not installed". Pong with
+  hasToken=false → "Helper installed — waiting for sign-in" (sign
+  in / hard-refresh the app tab so the helper receives the
+  session). Pong with hasToken=true → "Helper ready ✓". The page
+  also carries the click-by-click manual install steps and a
+  clearly-marked "Coming soon: one-click install from the Chrome
+  Web Store" placeholder — no fake store link. Its styles ride the
+  Phase C dark-shell utility mapping: `#extensionPage` was added to
+  that mapping's scope (and to the pages' canvas rule), so all 8
+  theme presets + custom themes hold on it.
+- **Bridge (bridge.js):** a second window-message branch forwards
+  `AUTOLAUNCH_EXT_PING` to the worker as the runtime message
+  `{type:"AUTOLAUNCH_PING"}` and posts the worker's reply back to
+  the window as `AUTOLAUNCH_EXT_PONG` (targeted at the page's own
+  origin). If the worker cannot be reached (runtime lastError or an
+  invalidated context), it posts NOTHING — the page's timeout is
+  what reports "not installed", so a stale bridge never
+  masquerades as an installed helper. The login forwarding is
+  unchanged.
+- **Worker (background.js, header note 17):** a new, purely
+  additive `AUTOLAUNCH_PING` handler. Sender discipline matches the
+  login handoff (the sender tab must be on the AutoLaunch origin).
+  It answers `{hasToken}` — true exactly when a session token is
+  currently stored under the real key `autolaunch_access_token` in
+  chrome.storage.local (read through the existing
+  `storedAccessToken()`), the same key the login handoff writes and
+  every Supabase REST call reads. The token value itself is never
+  returned or logged — only the boolean. No claim, finish, CDP,
+  photo-relay or diag behaviour changes.
+
+Verification: the v38 worker harness gains ping cases (stored
+token → `{hasToken:true}`; no stored token → `{hasToken:false}`;
+an off-origin sender gets no answer), and the v38/v39 regression
+suites stay green; bridge/background/content and the app's inline
+script all pass `node --check`. Not yet exercised live in Chrome —
+the first real check is opening the Extension page with the helper
+installed and watching the status land on "Helper ready ✓" (and,
+with the helper removed/disabled, on "Helper not installed" after
+the ~1.5s timeout).
