@@ -3074,6 +3074,99 @@
     try { window.location.reload(); } catch (e) { /* no-op */ }
   }
 
+  // ---- delayed delete proof (v2.1.20) -----------------------------------
+  // Armed from runDeleteListing when a genuine confirm click did
+  // not clear the card inside the local verify window. Facebook
+  // can take minutes to drop a deleted listing server-side (proven
+  // 2026-10-23, twice in a row), and this tab's DOM may never
+  // re-render the removal — so the verdict moves to fresh page
+  // loads on a minutes scale: first check ~75s after the click,
+  // one re-check ~75s after that. Delayed proof NEVER runs a
+  // second ladder attempt (the click already happened; re-clicking
+  // is not evidence) and NEVER fails as blocked_under_review (a
+  // deletion may already be in flight whatever the card's text
+  // says). Absent on a fresh, rendered Selling page = deleted;
+  // still present after the second check = honestly not removed.
+  async function armDelayedDeleteProof() {
+    try {
+      const cur = await chrome.storage.local.get(["current_posting_job"]);
+      const j = cur && cur.current_posting_job;
+      if (j && j.queueId === queueId) {
+        j.deleteDelayedProof = { armedAt: Date.now(), tries: 0 };
+        await chrome.storage.local.set({ current_posting_job: j });
+        return true;
+      }
+    } catch (e) { /* fall through: caller keeps the honest failure */ }
+    return false;
+  }
+
+  async function runDelayedDeleteProof() {
+    try {
+      say("Re-checking the removal on a fresh page load…");
+      const dp = (job && job.deleteDelayedProof) || {};
+      const armedAt = Number(dp.armedAt) || Date.now();
+      const waitMs = Math.max(0, 75000 - (Date.now() - armedAt));
+      if (waitMs) await sleep(waitMs);
+
+      const pageText = (document.body.innerText || "").toLowerCase();
+      if (window.location.href.includes("/login") ||
+          pageText.includes("checkpoint") ||
+          pageText.includes("confirm your identity") ||
+          pageText.includes("log in to facebook")) {
+        await fail(
+          "Facebook is asking for login or an identity check — the removal could not be confirmed.",
+          "facebook_checkpoint");
+        return;
+      }
+
+      if (!(await recoverToSellingPage("delayed_proof_start"))) return;
+
+      await settleSellingList();
+      const strict = findListingCards();
+      const titleOnly = strict.length ? [] : findListingCardsByTitle();
+      const foundCount = strict.length + titleOnly.length;
+      const tries = (Number(dp.tries) || 0) + 1;
+      recordStepNote("Delete", "delete_delayed_proof",
+        `check ${tries}/2 on a fresh page load after a wait: strict:${strict.length} title:${titleOnly.length}`,
+        String(foundCount));
+
+      if (!foundCount) {
+        if (!(await recoverToSellingPage("delayed_proof_verdict"))) return;
+        if (!sellingPageRendered()) {
+          await fail(
+            "The Selling page didn't finish loading, so the removal could not be confirmed. The listing may still be live — try Remove again.",
+            "delete_unproven");
+          return;
+        }
+        await cdpDetach();
+        say("Listing deleted on Facebook ✓", "#15803d");
+        await report("AUTOLAUNCH_JOB_DELETED", {});
+        return;
+      }
+
+      if (tries < 2) {
+        try {
+          const cur = await chrome.storage.local.get(["current_posting_job"]);
+          const j = cur && cur.current_posting_job;
+          if (j && j.queueId === queueId) {
+            j.deleteDelayedProof = { armedAt: Date.now(), tries };
+            await chrome.storage.local.set({ current_posting_job: j });
+          }
+        } catch (e) { /* the reload below simply ends this attempt */ }
+        say("Still listed — Facebook is taking its time dropping it. One more check in about a minute…");
+        await sleep(600);
+        try { window.location.reload(); } catch (e) { /* no-op */ }
+        return;
+      }
+
+      await fail("Clicked Delete and waited, checking twice on fresh page loads — the listing is still on your selling page, NOT removed.",
+        "delete_not_verified");
+    } catch (err) {
+      console.error("[AutoLaunch] delayed delete proof error:", err);
+      await fail("Unexpected error while confirming the removal: " + (err && err.message ? err.message : "unknown"));
+    }
+  }
+
   async function runDeleteProof() {
     try {
       say("Confirming the removal on a fresh page load…");
@@ -3409,6 +3502,27 @@
         gone = remaining === 0;
       }
       if (!gone) {
+        // v2.1.20: the local verify window is ~12 seconds of
+        // same-page DOM, but on 2026-10-23 (Corolla + Focus, back
+        // to back) Facebook executed both deletions server-side
+        // on a minutes-long delay — the cards never re-rendered
+        // away in this tab, the jobs failed as not_verified, and
+        // minutes later the seller's own fresh Selling page showed
+        // both listings gone. A genuine, audited confirm click
+        // has earned a slower verdict: defer to a delayed
+        // fresh-load proof (verdict at ~75s, one re-check at
+        // ~+75s more) instead of failing here. Only if the
+        // delayed proof cannot be armed does the honest failure
+        // stand.
+        recordStepNote("Delete", "delete_verify_deferred",
+          "card still rendered after the local verify window — " +
+          "deferring the verdict to a delayed fresh-load proof", "");
+        if (await armDelayedDeleteProof()) {
+          say("Facebook can take a minute to drop a deleted listing — re-checking on a fresh page shortly…");
+          await sleep(600);
+          try { window.location.reload(); } catch (e) { /* no-op */ }
+          return;
+        }
         await fail("Clicked Delete, but the listing is still on your selling page — NOT removed.",
           "delete_not_verified");
         return;
@@ -3529,6 +3643,13 @@
 
   // ---- main flow ----------------------------------------------------------
   if (jobAction === "delete") {
+    // A delete whose confirm click may have executed on a delay
+    // (v2.1.20) routes to the delayed proof, which only ever
+    // re-checks fresh page loads — it never re-runs the ladder.
+    if (job.deleteDelayedProof) {
+      await runDelayedDeleteProof();
+      return;
+    }
     // A delete that already made its attempt and reloaded for the
     // fresh-load proof (v2.1.15) routes to the proof, not a blind
     // restart of the whole flow.

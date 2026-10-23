@@ -1524,3 +1524,50 @@ interior names — 283 direct (2,020 cars), 58 keyword-mapped
 (352 cars), 78 default-only (184 cars), 82 cars with no
 interior color recorded. After this change, no car in the
 fleet can fail a post over an unset color field.
+
+## 26. Delayed delete proof: worked deletes are no longer reported failed (v2.1.20, 2026-10-23)
+
+Live evidence (2026-10-23 ~14:05-14:09 EDT, Matthew's own
+account): a bulk Remove Selected queued deletes for the
+Corolla and the Focus. Both ran the full ladder with genuine,
+click-target-audited confirm clicks — and both FAILED as
+delete_not_verified because the cards never left the job
+tab's DOM inside the ~12s local verify window. Minutes
+later Matthew opened his Selling page fresh: BOTH LISTINGS
+WERE GONE. Facebook had executed both deletions server-side
+on a minutes-long delay; the tab's DOM simply never
+re-rendered the removal. (The mirror image of the morning's
+false completions, where the card vanished from the DOM
+while the listing stayed alive. The job tab's live DOM is
+not the truth in either direction — only a fresh page load
+after a real wait is.)
+
+Fix (content.js): the ladder's not-gone branch no longer
+fails on the spot after a genuine confirm click. It records
+delete_verify_deferred and arms deleteDelayedProof on the
+stored job, then reloads. runDelayedDeleteProof waits until
+~75s after the click, scans a fresh Selling page (strict +
+title scans, page-identity guard, rendered gate — the same
+verdict discipline as runDeleteProof), and if the listing is
+still present, re-arms once for a second fresh check ~75s
+later. Absent = JOB_DELETED. Still present after the second
+check = honest delete_not_verified. The delayed path NEVER
+runs a second ladder attempt (the click already happened)
+and NEVER fails as delete_blocked_under_review (a deletion
+may be in flight whatever the card text says). If the proof
+cannot be armed (storage failure), the original honest
+failure stands. Luna cleared both cars' stamps from
+Matthew's fresh-page evidence; the bulk-remove feature
+itself was thereby proven — only the success reporting
+lagged.
+
+Addendum (same day, ~14:14 EDT): Matthew walked a manual
+delete of a hand-made listing with a screenshot per step
+and corrected the flow model: the plain confirm comes
+FIRST, the listing deletes the instant Delete is clicked,
+and the "Did you sell this item?" survey appears AFTER the
+deletion as feedback — it was never a gate. The bulk
+deletes' clicks therefore executed immediately; only the
+reflection in the job tab lagged. The delayed-proof verdict
+above stands as the right fix either way: it judges from
+fresh page loads minutes later, not from the stale tab.
