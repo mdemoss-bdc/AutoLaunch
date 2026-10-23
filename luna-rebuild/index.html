@@ -1229,7 +1229,10 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
     <div class="relative flex-1 max-w-xl">
       <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-      <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search name, VIN or stock #" class="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm">
+      <input type="text" id="searchInput" oninput="handleInventorySearch()" placeholder="Search partial VIN, stock #, year, make or model" class="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-9 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-sm">
+      <button type="button" id="clearSearchBtn" onclick="clearInventorySearch()" title="Clear search" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs cursor-pointer">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
     </div>
 
     <div class="flex items-center gap-2">
@@ -1354,12 +1357,20 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
       <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllCars(this)" class="rounded text-blue-600 w-4 h-4 cursor-pointer bg-white border-slate-300">
       <span>Showing <strong id="showingCountBold" class="text-slate-900">0</strong> cars</span>
     </div>
-    <button
-        onclick="bulkQueueSelectedVehicles()"
-        class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
-        <i class="fa-solid fa-play text-[10px]"></i>
-        <span>Post Selected</span>
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+          onclick="bulkRemoveSelectedFromFacebook()"
+          class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+          <i class="fa-solid fa-trash-can text-[10px]"></i>
+          <span>Remove Selected</span>
+      </button>
+      <button
+          onclick="bulkQueueSelectedVehicles()"
+          class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+          <i class="fa-solid fa-play text-[10px]"></i>
+          <span>Post Selected</span>
+      </button>
+    </div>
   </div>
 
   <!-- Table View -->
@@ -3425,6 +3436,59 @@ function syncSortArrows(sort) {
   if (mi) mi.textContent = sort === "miles_asc" ? "▲" : sort === "miles_desc" ? "▼" : "↕";
   if (s) s.textContent = sort === "status_asc" ? "▲" : sort === "status_desc" ? "▼" : "↕";
 }
+function normalizeInventorySearchText(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+function normalizeInventoryIdentifier(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function handleInventorySearch() {
+  const input = document.getElementById("searchInput");
+  const clearBtn = document.getElementById("clearSearchBtn");
+  if (clearBtn) clearBtn.classList.toggle("hidden", !(input && input.value));
+  applyFilters();
+}
+function clearInventorySearch() {
+  const input = document.getElementById("searchInput");
+  if (input) input.value = "";
+  const clearBtn = document.getElementById("clearSearchBtn");
+  if (clearBtn) clearBtn.classList.add("hidden");
+  applyFilters();
+  if (input) input.focus();
+}
+function carMatchesInventorySearch(car, query) {
+  const normalizedQuery = normalizeInventorySearchText(query);
+  if (!normalizedQuery) return true;
+
+  const searchableText = normalizeInventorySearchText([
+    car.year,
+    displayMakeText(car.make),
+    displayModelText(car.model),
+    car.trim,
+    car.condition,
+    car.color,
+    car.vin,
+    car.stock_num,
+    car.stock_number
+  ].filter(Boolean).join(" "));
+  // VINs and stock numbers also get a punctuation-free form, so
+  // fragments like "F33809" or a stock number typed without its
+  // hyphen still match. Both stock field spellings are checked
+  // because rows have carried stock_number while older UI code
+  // referred to stock_num.
+  const identifierText = [
+    normalizeInventoryIdentifier(car.vin),
+    normalizeInventoryIdentifier(car.stock_num),
+    normalizeInventoryIdentifier(car.stock_number)
+  ].join(" ");
+
+  if (searchableText.includes(normalizedQuery)) return true;
+  return normalizedQuery.split(" ").every(token => {
+    const identifierToken = normalizeInventoryIdentifier(token);
+    return searchableText.includes(token) ||
+      (identifierToken && identifierText.includes(identifierToken));
+  });
+}
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
   const sort = document.getElementById("sortSelect").value;
@@ -3532,8 +3596,7 @@ if (filterMileageRange) {
     if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
     if (needsPriceOnly && hasPrice(car)) return false;
 
-    const title = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.trim || ''} ${car.vin || ''} ${car.stock_num || ''}`.toLowerCase();
-    return !query || title.includes(query);
+    return carMatchesInventorySearch(car, query);
   });
   const byMake = (a, b) => {
     const mk = String(a.make || "").localeCompare(String(b.make || ""), undefined, { sensitivity: "base" });
@@ -4210,6 +4273,71 @@ async function removeVehicleFromFacebook(vin) {
       btn.innerHTML = '<i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook';
     }
   }
+}
+
+// BULK REMOVE FROM FACEBOOK (Matthew's request, 2026-10-23): one
+// click in the Posted view queues removals for every selected car
+// that has a live listing, instead of pressing Remove on each row.
+// It uses the exact same producer and double-dedupe as the single
+// Remove button. One confirmation covers the batch, and each car
+// stays marked Posted until the helper confirms that listing is
+// actually gone.
+async function bulkRemoveSelectedFromFacebook() {
+  if (!currentUser) return;
+
+  const selectedVehicles = [];
+  document.querySelectorAll(".car-select-chk").forEach((chk, index) => {
+    if (chk.checked && window.currentFilteredInventory?.[index]) {
+      selectedVehicles.push(window.currentFilteredInventory[index]);
+    }
+  });
+
+  if (!selectedVehicles.length) {
+    alert("Please select at least one vehicle.");
+    return;
+  }
+
+  // Only a car with a live listing can be removed. A posted car
+  // without a price is skipped because the helper's strict matcher
+  // needs year/make/model AND price to identify the listing safely.
+  const skippedNotPosted = selectedVehicles.filter(car => !car.marketplace_posted_at).length;
+  const skippedNoPrice = selectedVehicles.filter(car => car.marketplace_posted_at && !hasPrice(car)).length;
+  const vehiclesToRemove = selectedVehicles.filter(car => car.marketplace_posted_at && hasPrice(car));
+  const skipNote = [
+    skippedNotPosted ? `${skippedNotPosted} vehicle(s) were skipped — not posted on Facebook.` : "",
+    skippedNoPrice ? `${skippedNoPrice} vehicle(s) were skipped — no price on file, so the helper cannot match the listing safely. Add the price on the car's row first.` : ""
+  ].filter(Boolean).join("\n\n");
+
+  if (!vehiclesToRemove.length) {
+    alert(`Nothing was queued:\n\n${skipNote}`);
+    return;
+  }
+
+  if (!confirm(`Remove ${vehiclesToRemove.length} listing(s) from Facebook?\n\nThe AutoLaunch helper will delete them one at a time — a large batch can take a few minutes. Each car stays marked Posted here until the helper confirms its listing is actually gone.`)) {
+    return;
+  }
+
+  let queuedCount = 0;
+  let alreadyCount = 0;
+  let failedCount = 0;
+  for (const car of vehiclesToRemove) {
+    try {
+      const result = await queueListingRemoval(car);
+      if (result === "queued") queuedCount++;
+      else alreadyCount++;
+    } catch (e) {
+      failedCount++;
+    }
+  }
+
+  await loadPostingQueue();
+  applyFilters();
+
+  const parts = [];
+  if (queuedCount) parts.push(`${queuedCount} removal(s) queued. Watch the Post Queue for the results.`);
+  if (alreadyCount) parts.push(`${alreadyCount} vehicle(s) already had a removal queued.`);
+  if (failedCount) parts.push(`${failedCount} vehicle(s) could not be queued — try those individually.`);
+  alert((parts.join("\n\n") || "Nothing was queued.") + (skipNote ? `\n\n${skipNote}` : ""));
 }
 
 let targetPriceVin = null;
