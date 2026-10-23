@@ -669,8 +669,15 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             if (!detectedModel || detectedModel.toUpperCase() === 'VIN') detectedModel = "Vehicle";
 
             // 7. MILEAGE
+            // New-car default (Matthew, 2026-10-23): when the site
+            // publishes no mileage for a NEW vehicle, store 1,000 —
+            // Facebook's form refuses anything under 300, and the
+            // old placeholder (5) got brand-new listings blocked.
+            // The extension discloses in the listing description
+            // that a defaulted figure means actual miles may be
+            // less. Real published mileage always wins.
             const mileMatch = cardText.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})\\s*(?:miles|mi\\b)/i);
-            const mileage = mileMatch ? parseInt(mileMatch[1].replace(/,/g, '')) : (defaultCond === "New" ? 5 : null);
+            const mileage = mileMatch ? parseInt(mileMatch[1].replace(/,/g, '')) : (defaultCond === "New" ? 1000 : null);
 
             // 8. COLOR
             let color = "Standard";

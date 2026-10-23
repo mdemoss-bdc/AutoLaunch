@@ -2253,16 +2253,39 @@
     return t.includes("checkpoint") || t.includes("confirm your identity");
   }
 
+  // ---- new-car mileage (Matthew, 2026-10-23) ---------------------------
+  // Facebook's vehicle form refuses mileage under 300, but a brand-new
+  // car legitimately has almost none — and when the dealer site does
+  // not publish miles, the scraper stores a default (1,000; it was 5
+  // before 2026-10-23, which got new listings blocked). Rule for NEW
+  // vehicles: stored miles missing or under Facebook's floor → the
+  // form gets 1,000, and the description discloses that the shown
+  // mileage is a listing default and actual miles may be less. Real
+  // published miles (300+) always post as-is; used cars never change.
+  function listingMileage() {
+    const stored = car.mileage != null && car.mileage !== "" ? Number(car.mileage) : null;
+    const isNew = /^new$/i.test(String(car.condition || "").trim());
+    if (!isNew) return { miles: stored, defaulted: false };
+    if (stored === null || stored < 300) return { miles: 1000, defaulted: true };
+    // A stored 1,000 on a new car is the scraper's own default, so
+    // the disclosure still applies; a higher figure is real data.
+    return { miles: stored, defaulted: stored === 1000 };
+  }
+
   // ---- description ------------------------------------------------------
   function buildDescription() {
     const title = `${car.year || ""} ${car.make || ""} ${car.model || "Vehicle"} ${car.trim || ""}`.trim();
+    const lm = listingMileage();
     return (
       `${title}\n` +
       `Price: $${(car.price || 0).toLocaleString()}\n` +
-      (car.mileage != null ? `Mileage: ${Number(car.mileage).toLocaleString()} miles\n` : "") +
+      (lm.miles != null ? `Mileage: ${lm.miles.toLocaleString()} miles\n` : "") +
       (car.color && normText(car.color) !== "standard" ? `Exterior: ${car.color}\n` : "") +
       (car.transmission ? `Transmission: ${car.transmission}\n` : "") +
       (car.vin ? `VIN: ${car.vin}\n` : "") +
+      (lm.defaulted
+        ? `\nBrand new vehicle — the mileage shown is a listing default; actual miles may be less.`
+        : "") +
       `\nInspected and frontline ready. Message to set up a test drive!`
     );
   }
@@ -2362,7 +2385,8 @@
     if (priceField && car.price) { nativeSetValue(priceField, String(car.price)); await humanPause(); }
 
     const mileageField = findField(["mileage", "odometer"]);
-    if (mileageField && car.mileage != null) { nativeSetValue(mileageField, String(car.mileage)); await humanPause(); }
+    const lmFill = listingMileage();
+    if (mileageField && lmFill.miles != null) { nativeSetValue(mileageField, String(lmFill.miles)); await humanPause(); }
 
     // Step-2 fields — best-effort, never job-fatal (see verify set).
     const bodyCands = bodyStyleCandidates(car);
@@ -2623,18 +2647,23 @@
   // 2026-10-23 a delete declared a live, under-review listing
   // "already gone" from one early scan of a still-loading page).
   async function settleSellingList() {
+    // Trimmed in v2.1.15: on a long list the original 5 rounds x 16
+    // steps scrolled so much the user noticed and worried. Three
+    // rounds with an early exit on a stable census settles every
+    // list seen so far; the fresh-load proof (note: runDeleteProof)
+    // is the real correctness backstop now, not scroll volume.
     let last = -1;
-    for (let round = 0; round < 5; round++) {
+    for (let round = 0; round < 3; round++) {
       const h = Math.max(
         document.body ? document.body.scrollHeight : 0,
         document.documentElement ? document.documentElement.scrollHeight : 0);
-      const steps = Math.max(2, Math.min(16, Math.ceil(h / 900) + 1));
+      const steps = Math.max(2, Math.min(10, Math.ceil(h / 1100) + 1));
       for (let s = 0; s < steps; s++) {
         try { window.scrollTo(0, Math.floor((h * s) / Math.max(1, steps - 1))); } catch (e) {}
-        await sleep(220);
+        await sleep(180);
       }
       try { window.scrollTo(0, 0); } catch (e) {}
-      await sleep(1300);
+      await sleep(1100);
       const c = countSellingCards();
       if (c === last) break;
       last = c;
@@ -2782,6 +2811,106 @@
     }
   }
 
+  // ---- fresh-load delete proof (v2.1.15) --------------------------------
+  // Twice on 2026-10-23 (an F-250, then a Navigator, both on the
+  // son's account) a delete reported success while the listing
+  // stayed live: both listings were "being reviewed", and on the
+  // job's own page the card obligingly vanished and stayed vanished
+  // — every same-page check passed — while Facebook's server kept
+  // the listing. A Ctrl+F5 on the Selling page told the truth.
+  // So a delete may now only be CLAIMED from a fresh page load:
+  // when the attempt's local evidence says "gone", the flow arms
+  // deleteProof on the stored job and reloads; the reloaded script
+  // routes to runDeleteProof, whose settled scan of the fresh page
+  // is the verdict. Found + under review -> honest failure naming
+  // the review hold. Found otherwise -> ONE genuine second attempt
+  // (deleteProofDone makes its success report directly, so the
+  // loop always terminates). Absent -> JOB_DELETED, for real.
+  async function finishDeleteWithFreshProof() {
+    let stored = null;
+    try {
+      const cur = await chrome.storage.local.get(["current_posting_job"]);
+      stored = cur && cur.current_posting_job;
+    } catch (e) { /* fall through to arming */ }
+    if (stored && stored.queueId === queueId && stored.deleteProofDone) {
+      await cdpDetach();
+      say("Listing deleted on Facebook ✓", "#15803d");
+      await report("AUTOLAUNCH_JOB_DELETED", {});
+      return;
+    }
+    try {
+      const cur = await chrome.storage.local.get(["current_posting_job"]);
+      const j = cur && cur.current_posting_job;
+      if (j && j.queueId === queueId) {
+        j.deleteProof = { armedAt: new Date().toISOString() };
+        await chrome.storage.local.set({ current_posting_job: j });
+      }
+    } catch (e) { /* the reload is still the best next step */ }
+    say("Confirming the removal on a fresh page load…");
+    await sleep(600);
+    try { window.location.reload(); } catch (e) { /* no-op */ }
+  }
+
+  async function runDeleteProof() {
+    try {
+      say("Confirming the removal on a fresh page load…");
+      await sleep(3000); // let the selling page render
+
+      const pageText = (document.body.innerText || "").toLowerCase();
+      if (window.location.href.includes("/login") ||
+          pageText.includes("checkpoint") ||
+          pageText.includes("confirm your identity") ||
+          pageText.includes("log in to facebook")) {
+        await fail(
+          "Facebook is asking for login or an identity check — the removal could not be confirmed.",
+          "facebook_checkpoint");
+        return;
+      }
+
+      const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() || "vehicle";
+      await settleSellingList();
+      const strict = findListingCards();
+      const titleOnly = strict.length ? [] : findListingCardsByTitle();
+      const found = strict[0] || titleOnly[0] || null;
+      recordStepNote("Delete", "delete_fresh_proof",
+        `strict:${strict.length} title:${titleOnly.length} on a fresh page load`,
+        String(strict.length));
+
+      if (!found) {
+        await cdpDetach();
+        say("Listing deleted on Facebook ✓", "#15803d");
+        await report("AUTOLAUNCH_JOB_DELETED", {});
+        return;
+      }
+
+      const foundText = (found.textContent || "").toLowerCase();
+      if (/being reviewed|under review|in review/.test(foundText)) {
+        await fail(
+          `Facebook is still reviewing the ${title} listing, and a listing under review can't be removed — it is still live. Try Remove again once the review clears.`,
+          "delete_blocked_under_review");
+        return;
+      }
+
+      // Still listed, no review hold: one genuine second attempt.
+      // deleteProofDone makes that attempt's success report
+      // directly — no second reload, no loop.
+      try {
+        const cur = await chrome.storage.local.get(["current_posting_job"]);
+        const j = cur && cur.current_posting_job;
+        if (j && j.queueId === queueId) {
+          j.deleteProofDone = true;
+          await chrome.storage.local.set({ current_posting_job: j });
+        }
+      } catch (e) { /* runDeleteListing's own checks still guard */ }
+      recordStepNote("Delete", "delete_second_attempt",
+        "listing still present on a fresh load — deleting again", "");
+      await runDeleteListing();
+    } catch (err) {
+      console.error("[AutoLaunch] delete proof error:", err);
+      await fail("Unexpected error while confirming the removal: " + (err && err.message ? err.message : "unknown"));
+    }
+  }
+
   async function runDeleteListing() {
     try {
       say("Removing your listing from Facebook…");
@@ -2869,10 +2998,8 @@
         if (!cards.length && !titleCards.length && rendered) {
           recordStepNote("Delete", "delete_already_gone",
             `no listing for ${title} on the settled selling page after two looks — ` +
-            `the removal goal was already met`, "0");
-          await cdpDetach();
-          say("That listing is already gone from Facebook ✓", "#15803d");
-          await report("AUTOLAUNCH_JOB_DELETED", {});
+            `the removal goal looks met on this page; fresh-load proof decides`, "0");
+          await finishDeleteWithFreshProof();
           return;
         }
         if (!cards.length) {
@@ -3007,25 +3134,13 @@
           "delete_not_verified");
         return;
       }
-      // SETTLED RE-CHECK (v2.1.13): a card can leave the DOM while
-      // Facebook keeps the listing alive (optimistic removal, a
-      // review hold). The passes above watch the live DOM; before
-      // claiming the deletion, settle the list once more and look
-      // again — a strict match that reappears means NOT deleted.
-      await settleSellingList();
-      const reappeared = findListingCards().length;
-      recordStepNote("Delete", "verify_settled_recheck",
-        `strict matches after settle: ${reappeared}`, String(reappeared));
-      if (reappeared) {
-        await fail("Clicked Delete and the card vanished, but the listing is still on your selling page — NOT removed.",
-          "delete_not_verified");
-        return;
-      }
-      await cdpDetach();
+      // The DOM passes above are page-local evidence only: a card
+      // can leave this page's DOM while Facebook keeps the listing
+      // (proven 2026-10-23, twice — see runDeleteProof). The claim
+      // is therefore finished on a FRESH page load, never here.
       recordStepNote("Delete", "listing_deleted",
-        `${title} @ $${Number(car.price).toLocaleString()} — card verified gone`, "gone");
-      say("Listing deleted on Facebook ✓", "#15803d");
-      await report("AUTOLAUNCH_JOB_DELETED", {});
+        `${title} @ $${Number(car.price).toLocaleString()} — card gone from this page; fresh-load proof decides`, "gone");
+      await finishDeleteWithFreshProof();
     } catch (err) {
       console.error("[AutoLaunch] delete error:", err);
       await fail("Unexpected error during removal: " + (err && err.message ? err.message : "unknown"));
@@ -3135,6 +3250,13 @@
 
   // ---- main flow ----------------------------------------------------------
   if (jobAction === "delete") {
+    // A delete that already made its attempt and reloaded for the
+    // fresh-load proof (v2.1.15) routes to the proof, not a blind
+    // restart of the whole flow.
+    if (job.deleteProof && !job.deleteProofDone) {
+      await runDeleteProof();
+      return;
+    }
     await runDeleteListing();
     return;
   }

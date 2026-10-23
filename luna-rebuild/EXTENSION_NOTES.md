@@ -1330,3 +1330,63 @@ Note for the truck itself: the live listing carries the OLD title
 ("2026 Ford F"), while the corrected data says F-250 — an app
 delete would scan for the new title and not match the old card.
 That one listing has to be deleted by hand from the Selling page.
+
+## 20. New-car mileage default (ships in v2.1.15, 2026-10-23)
+
+Matthew's rule: new vehicles default to 1,000 miles for all users,
+with the listing description disclosing that the vehicle is brand
+new and actual miles may be less. Facebook's form rejects mileage
+under 300, and the scraper's old placeholder (5) blocked every
+brand-new listing (the son's F-250 hit exactly this). Changes:
+
+- Scraper: a NEW vehicle with no published mileage now stores
+  1,000 instead of 5. Real published mileage always wins.
+- Extension (content.js listingMileage): for New vehicles, stored
+  miles missing or under 300 -> the form is filled with 1,000;
+  buildDescription shows that figure and adds the line "Brand new
+  vehicle — the mileage shown is a listing default; actual miles
+  may be less." whenever the figure was defaulted (including a
+  stored 1,000, which is the scraper's default). Used cars are
+  never altered.
+- Data: every active New car in the database (1,531 — 1,294 Moses,
+  237 University Ford) sat at the placeholder 5; all are now 1,000.
+  Census showed zero new cars with any real published mileage, so
+  no real figure was overwritten.
+
+## 21. Deletes are only claimed on a fresh page load (v2.1.15, 2026-10-23)
+
+The Navigator delete on the son's account repeated the F-250
+failure WITH the 2.1.13 hardening in place: settled scans, clicked
+delete, card stayed gone on the job's page, row completed — and a
+Ctrl+F5 showed the listing still Active. Both stuck listings were
+"being reviewed". Lesson: same-page evidence can lie when Facebook
+holds a listing in review; the card leaves the page's DOM while
+the server keeps the listing. A fresh page load is the only honest
+witness.
+
+v2.1.15 (content.js): when a delete attempt's local evidence says
+"gone" (either the clicked-through verify or the already-gone
+branch), the flow no longer reports JOB_DELETED. It arms
+deleteProof on the stored job and reloads the selling page; the
+reloaded script routes to runDeleteProof, whose settled scan is
+the verdict:
+- Card absent on the fresh load -> JOB_DELETED (real).
+- Card present + "being reviewed" in its text -> FAILED with
+  delete_blocked_under_review and copy that names the review hold
+  and tells the user to retry Remove after the review clears.
+- Card present otherwise -> ONE genuine second delete attempt
+  (deleteProofDone makes its success report directly — the loop
+  always terminates).
+
+Also in this version: settleSellingList trimmed (3 rounds, <=10
+steps — Matthew watched the 2.1.13 settle scroll a long list "a
+bunch of times"; the fresh-load proof is the correctness backstop
+now, not scroll volume), and the redundant same-page settled
+recheck from 2.1.13 is removed (superseded by the fresh load).
+
+App-side consequence to know: a blocked delete now leaves the
+car's marketplace_posted_at stamp SET (the JOB_FAILED path), so
+the app keeps showing it Posted — which is the truth. The F-250
+and Navigator listings from the 2026-10-23 tests are still live
+under review; they can be Removed again once their reviews clear,
+or deleted by hand.
