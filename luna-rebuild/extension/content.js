@@ -309,6 +309,70 @@
 //     the stamp stays set. A page that never rendered its
 //     listings region (no markers) proves nothing and also stays
 //     a failure, as do login walls and ambiguous matches.
+// 19. DELETE STAGE DIAGNOSTICS + CLICK LADDER + EMPTY-STATE FIX
+//     (v2.1.9 — two live lessons from 2026-10-22 evening):
+//     (a) THE BLIND DELETE (twice, same evening): the delete flow
+//     found exactly 1 strict match, then failed with NOTHING in the
+//     queue diag past delete_match_scan — every post-scan stage
+//     (menu button, menu open, item click, confirm, verify) wrote
+//     no step notes, so a failure there was invisible by
+//     construction. It succeeded on another machine; the card's
+//     ⋯ menu DOES contain "Delete listing" (screenshot-verified:
+//     Mark as pending / View listing / List in more places / Edit
+//     listing / Delete listing / View messages). The post-scan
+//     section now records a step note at EVERY stage —
+//     menu_button_found (+ ancestor depth and the matched
+//     aria/text descriptor, element snapshot attached) /
+//     menu_button_not_found, menu_opened (winning strategy +
+//     poll time) / menu_never_opened, menu_items_seen (the actual
+//     visible item texts), delete_item_clicked (strategy),
+//     confirm_found / confirm_clicked / confirm_dialog_dump (the
+//     dialogs that DO exist when the confirm never appears), and
+//     verify_passes (one per pass, remaining strict count). A
+//     menu that opens without a Delete entry now fails with the
+//     NEW reason delete_item_not_found (the dumped item texts
+//     ride the diag) instead of the misleading
+//     delete_menu_not_found. The interaction is hardened to
+//     match: the card is scrolled into view with a settle before
+//     its menu is touched; the menu opens via a strategy ladder
+//     — realisticClick, cdpClickEl, then a NEW CDP mouse
+//     sequence (clickSeq: mouseMoved/mousePressed/pause/
+//     mouseReleased via cdpMouseSeqClickEl) — POLLING up to ~3s
+//     after EACH rung for a visible [role="menu"] or a found
+//     delete item instead of the old fixed 1.2s sleeps; the
+//     Delete item gets realisticClick first, a ~2s confirm poll,
+//     one cdpClickEl fallback, then a ~4s confirm poll. Strict
+//     matching, goal-achieved semantics, the price guard, the
+//     checkpoint guard and the verify loop's shape (8 × ~1.5s)
+//     are unchanged.
+//     (b) THE EMPTY-STATE FALSE FAILURE (~21:03 EDT): Matthew
+//     deleted a listing BY HAND, then a cleanup delete job ran on
+//     the now-EMPTY selling page and FAILED listing_not_found
+//     instead of completing delete_already_gone — even though the
+//     page showed the zero-listings empty state ("When you start
+//     selling, your listings will appear here.") with the Selling
+//     sidebar fully rendered. Root cause (code-provable): the
+//     rendered guard was NOT the blocker — that empty-state text
+//     matches the pre-existing "when you start selling" signal.
+//     The OTHER conjunct failed: the title-only scan counted a
+//     hit, and the only element GUARANTEED to carry the car's
+//     full title on an empty page is this script's OWN banner —
+//     say() had just set it to "Looking for your 2021 Chevrolet
+//     Silverado 1500 listing…", the banner is a visible <div>,
+//     and listingCardsIn scans every div in the document, so the
+//     banner satisfied listingTitleMatches and vetoed
+//     goal-achieved. Fixes: the banner carries an id and
+//     listingCardsIn excludes it (both scans — a banner that
+//     ever named a price could poison the strict scan too);
+//     sellingPageRendered() is rebuilt on an explicit signal set
+//     (sellingChromeSignals: sidebar/heading labels + listings
+//     search + empty-state text variants) so the empty state is
+//     POSITIVELY a rendered page while a bare loading page still
+//     proves nothing; and the zero-match branch records a
+//     delete_zero_match_probe note (strict count, title count,
+//     which signals fired, final verdict) BEFORE deciding, so
+//     the branch decision itself is diagnosable from
+//     error_message alone if it ever misjudges again.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -349,6 +413,12 @@
 
   // ---- visible status banner -------------------------------------------
   const banner = document.createElement("div");
+  // The id matters beyond styling (v2.1.9, header note 19b): the
+  // banner's own text names the car ("Looking for your <title>
+  // listing…"), and listingCardsIn excludes this element by id —
+  // otherwise the title-only scan matches OUR OWN banner on an
+  // empty selling page and vetoes the goal-achieved delete.
+  banner.id = "autolaunch-status-banner";
   banner.style.cssText =
     "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1d4ed8;" +
     "color:#fff;font:600 14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;" +
@@ -531,6 +601,7 @@
   function buildCdpAttach() { return { action: "attach" }; }
   function buildCdpDetach() { return { action: "detach" }; }
   function buildCdpClick(x, y) { return { action: "click", x, y }; }
+  function buildCdpClickSeq(x, y) { return { action: "clickSeq", x, y }; }
   function buildCdpInsertText(text) { return { action: "insertText", text: String(text) }; }
   function buildCdpKey(key, code, opts) {
     const cmd = { action: "key", key: String(key), code: String(code || key) };
@@ -1290,6 +1361,25 @@
     await sleep(150);
     const r = el.getBoundingClientRect();
     return cdpRequest(buildCdpClick(
+      Math.round(r.left + r.width / 2),
+      Math.round(r.top + r.height / 2)));
+  }
+
+  // Trusted mouse SEQUENCE at the element's center (v2.1.9, header
+  // note 19): the worker's clickSeq action dispatches mouseMoved,
+  // mousePressed, a brief pause, mouseReleased — some Facebook
+  // menus arm on hover/press timing that the instantaneous
+  // press+release pair in "click" never reproduces. Mirrors
+  // cdpClickEl exactly (attach first, scroll into view, center
+  // coordinates); the delete flow's menu ladder uses it as rung 3.
+  async function cdpMouseSeqClickEl(el) {
+    if (!(await cdpEnsure("CDP"))) {
+      return { ok: false, error: attemptsFor("CDP").cdpError || "cdp_attach_failed" };
+    }
+    try { el.scrollIntoView({ block: "center" }); } catch (e) {}
+    await sleep(150);
+    const r = el.getBoundingClientRect();
+    return cdpRequest(buildCdpClickSeq(
       Math.round(r.left + r.width / 2),
       Math.round(r.top + r.height / 2)));
   }
@@ -2454,6 +2544,12 @@
       : Array.from(document.querySelectorAll("div, article, li, section"));
     const hits = scope.filter(el => {
       if (!isVisibleEl(el)) return false;
+      // NEVER our own banner (v2.1.9, header note 19b): its text
+      // names the car being looked for, so it satisfies the
+      // title-only matcher on ANY page — on an empty selling page
+      // it was the ONLY "title card" and vetoed goal-achieved.
+      if (el === banner) return false;
+      try { if (el.id === "autolaunch-status-banner") return false; } catch (e) {}
       const text = el.textContent || "";
       if (!text || text.length > 1500) return false;
       return matches(text, car);
@@ -2473,19 +2569,44 @@
   function findListingCardsByTitle() {
     return listingCardsIn(null, listingTitleMatches);
   }
-  // Did the Selling page actually render its listings region?
-  // Goal-achieved delete semantics (note 18) may only conclude
-  // "gone" from a page that demonstrably loaded: the listings
-  // heading, the empty-state sentence, or the listings search box.
-  // A blank/broken render carries none of these and proves nothing.
-  function sellingPageRendered() {
-    const text = (document.body.innerText || "").toLowerCase();
-    if (text.includes("your listings") ||
-        text.includes("when you start selling")) return true;
+  // Did the Selling page actually render? Goal-achieved delete
+  // semantics (note 18) may only conclude "gone" from a page that
+  // demonstrably loaded. v2.1.9 (header note 19b): the check is
+  // now an explicit SIGNAL SET, so the zero-match branch can log
+  // exactly which evidence fired. The routing guard already
+  // confines this script to /marketplace/you/selling|dashboard,
+  // so page context is given; what must be proven POSITIVELY is
+  // selling chrome — sidebar/heading labels or the listings
+  // search box (a POPULATED page) — or the zero-listings empty
+  // state (an EMPTY page: "When you start selling, your listings
+  // will appear here." + Create new listing, with NO listings
+  // container at all). The pre-2.1.9 signals ("your listings",
+  // "when you start selling", listings search) are all kept. A
+  // bare still-loading page carries NONE of these and proves
+  // nothing — conservatism preserved.
+  function sellingChromeSignals() {
+    const text = (document.body.innerText || "")
+      .toLowerCase().replace(/[’‘]/g, "'");
     const inputs = Array.from(document.querySelectorAll("input"));
-    return inputs.some(i =>
-      String((typeof i.getAttribute === "function" && i.getAttribute("placeholder")) || "")
-        .toLowerCase().includes("listings"));
+    return {
+      yourListings: text.includes("your listings"),
+      sellerDashboard: text.includes("seller dashboard"),
+      yourPayouts: text.includes("your payouts"),
+      createNewListing: text.includes("create new listing"),
+      listingsSearch: inputs.some(i =>
+        String((typeof i.getAttribute === "function" && i.getAttribute("placeholder")) || "")
+          .toLowerCase().includes("listings")),
+      emptyStartSelling: text.includes("when you start selling"),
+      emptyWillAppear: text.includes("your listings will appear here"),
+      emptyDontHave: text.includes("you don't have any listings"),
+      emptyNoListingsYet: text.includes("no listings yet")
+    };
+  }
+  function sellingRenderedFromSignals(signals) {
+    return Object.keys(signals).some(k => signals[k]);
+  }
+  function sellingPageRendered() {
+    return sellingRenderedFromSignals(sellingChromeSignals());
   }
   // The card's ⋯ (options) button. Searched inside the card first,
   // then up the ancestor chain — but a level is only trusted while it
@@ -2543,6 +2664,92 @@
     return null;
   }
 
+  // ---- delete stage helpers (v2.1.9, header note 19) ---------------------
+  // How the menu button was found, for the menu_button_found note:
+  // the ancestor depth at which listingMenuButton's search level
+  // contains it, plus the aria/text descriptor that matched.
+  function menuButtonInfo(cardEl, btn) {
+    let depth = -1;
+    let node = cardEl;
+    for (let d = 0; d < 6 && node; d++) {
+      if (node === btn ||
+          (typeof node.contains === "function" && node.contains(btn))) { depth = d; break; }
+      node = node.parentElement;
+    }
+    const aria = (typeof btn.getAttribute === "function" && btn.getAttribute("aria-label")) || "";
+    const txt = String(btn.textContent || "").trim().replace(/\s+/g, " ");
+    const parts = [];
+    if (aria) parts.push('aria-label="' + aria + '"');
+    if (txt) parts.push('text="' + txt.slice(0, 40) + '"');
+    return { depth, descriptor: parts.join(" ") || "(no label)" };
+  }
+  // A menu counts as OPEN when a [role="menu"] is visible — the
+  // delete-item check is the caller's other witness (some variants
+  // render the entries in a listbox portal with no menu role).
+  function findVisibleMenu() {
+    const menus = Array.from(document.querySelectorAll('[role="menu"]'));
+    return menus.find(isVisibleEl) || null;
+  }
+  // The visible menu entries' texts, in document order, deduped —
+  // the menu_items_seen evidence (what Facebook actually offered).
+  function menuItemTexts() {
+    const texts = [];
+    const seen = new Set();
+    const push = raw => {
+      const s = String(raw || "").trim().replace(/\s+/g, " ");
+      if (s && !seen.has(s)) { seen.add(s); texts.push(s); }
+    };
+    const containers = Array.from(
+      document.querySelectorAll('[role="menu"], [role="listbox"]')).filter(isVisibleEl);
+    for (const c of containers) {
+      const els = Array.from(c.querySelectorAll
+        ? c.querySelectorAll('[role="menuitem"], [role="option"], [role="button"], button, a') : []);
+      for (const e of els) if (isVisibleEl(e)) push(e.textContent);
+      if (!texts.length) {
+        // Entries rendered as plain children with no item role.
+        const kids = c.children ? Array.from(c.children)
+          : Array.from(c.childNodes || []).filter(n => n && n.nodeType === 1);
+        for (const k of kids) if (isVisibleEl(k)) push(k.textContent);
+      }
+    }
+    return texts;
+  }
+  // What dialogs EXIST when the delete confirm never appears:
+  // "role: first ~80 chars" per dialog — the confirm_dialog_dump
+  // evidence, so a renamed/reworded confirm is legible in the DB.
+  function describeOpenDialogs() {
+    const dialogs = Array.from(
+      document.querySelectorAll('[role="dialog"], [role="alertdialog"]'));
+    if (!dialogs.length) return "(no dialogs in document)";
+    return dialogs.map(d => {
+      const role = (typeof d.getAttribute === "function" && d.getAttribute("role")) || "dialog";
+      const txt = String(d.textContent || "").trim().replace(/\s+/g, " ").slice(0, 80);
+      return role + ": " + txt;
+    }).join(" | ").slice(0, 200);
+  }
+  // Poll (never a fixed sleep) for the card menu to open: a visible
+  // [role="menu"] OR a locatable delete item ends the wait.
+  async function pollForMenuOpen(timeoutMs) {
+    const t0 = Date.now();
+    for (;;) {
+      const menu = findVisibleMenu();
+      const item = findDeleteMenuItem();
+      if (menu || item) return { menu, item, elapsed: Date.now() - t0 };
+      if (Date.now() - t0 >= timeoutMs) return { menu: null, item: null, elapsed: Date.now() - t0 };
+      await sleep(275);
+    }
+  }
+  // Poll for Facebook's delete confirmation button.
+  async function pollForDeleteConfirm(timeoutMs) {
+    const t0 = Date.now();
+    for (;;) {
+      const btn = findDeleteConfirmButton();
+      if (btn) return { btn, elapsed: Date.now() - t0 };
+      if (Date.now() - t0 >= timeoutMs) return { btn: null, elapsed: Date.now() - t0 };
+      await sleep(300);
+    }
+  }
+
   async function runDeleteListing() {
     try {
       say("Removing your listing from Facebook…");
@@ -2595,7 +2802,19 @@
         // untouched. A page whose listings region never rendered
         // proves nothing — also an honest failure.
         const titleCards = findListingCardsByTitle();
-        if (!titleCards.length && sellingPageRendered()) {
+        // PROBE BEFORE DECIDING (v2.1.9, header note 19b): the
+        // branch decision itself is recorded — strict count,
+        // title-only count, which rendered signals fired, and the
+        // final verdict — so if goal-achieved ever misjudges
+        // again, error_message alone explains why.
+        const signals = sellingChromeSignals();
+        const rendered = sellingRenderedFromSignals(signals);
+        const fired = Object.keys(signals).filter(k => signals[k]);
+        recordStepNote("Delete", "delete_zero_match_probe",
+          (`strict:0 title:${titleCards.length} rendered:${rendered} ` +
+           `signals:${fired.length ? fired.join(",") : "none"}`).slice(0, 200),
+          String(titleCards.length));
+        if (!titleCards.length && rendered) {
           recordStepNote("Delete", "delete_already_gone",
             `no listing for ${title} on the rendered selling page — ` +
             `the removal goal was already met`, "0");
@@ -2618,38 +2837,99 @@
 
       const card = cards[0];
       say("Found it — opening its menu…");
+      // Bring the card on screen and let the scroll settle before
+      // touching its menu (v2.1.9): a menu button measured or
+      // clicked mid-scroll / off-viewport is a classic silent miss
+      // on lazy-rendered selling pages.
+      try { card.scrollIntoView({ block: "center" }); } catch (e) {}
+      await sleep(600);
       await humanPause();
       const menuBtn = listingMenuButton(card);
       if (!menuBtn) {
+        recordStepNote("Delete", "menu_button_not_found",
+          "listingMenuButton returned null for the matched card", "0", card);
         await fail("Found the listing but not its options (⋯) menu — nothing was deleted.",
           "delete_menu_not_found");
         return;
       }
-      realisticClick(menuBtn);
-      await sleep(1200);
-      let deleteItem = findDeleteMenuItem();
-      if (!deleteItem) {
-        await cdpClickEl(menuBtn); // trusted click fallback, as elsewhere
-        await sleep(1200);
-        deleteItem = findDeleteMenuItem();
+      const btnInfo = menuButtonInfo(card, menuBtn);
+      recordStepNote("Delete", "menu_button_found",
+        `ancestor depth ${btnInfo.depth}; ${btnInfo.descriptor}`.slice(0, 200),
+        "", menuBtn);
+
+      // Menu-opening ladder (v2.1.9): after EACH strategy, POLL up
+      // to ~3s for a visible menu (or a located delete item)
+      // before escalating — a slow menu caught by polling must not
+      // be re-clicked shut by the next rung, and a menu that is
+      // already open stops the ladder wherever it opened.
+      const menuStrategies = [
+        { name: "realistic", run: async () => { realisticClick(menuBtn); } },
+        { name: "cdpClick", run: async () => { await cdpClickEl(menuBtn); } },
+        { name: "cdpClickSeq", run: async () => { await cdpMouseSeqClickEl(menuBtn); } }
+      ];
+      let menuOpenedBy = null;
+      let menuPollMs = 0;
+      let deleteItem = null;
+      for (const strat of menuStrategies) {
+        await strat.run();
+        const res = await pollForMenuOpen(3000);
+        menuPollMs = res.elapsed;
+        if (res.menu || res.item) {
+          menuOpenedBy = strat.name;
+          deleteItem = res.item || findDeleteMenuItem();
+          break;
+        }
       }
-      if (!deleteItem) {
-        await fail("The listing's menu did not offer a Delete entry — nothing was deleted.",
+      if (!menuOpenedBy) {
+        recordStepNote("Delete", "menu_never_opened",
+          "realistic, cdpClick and cdpClickSeq each polled ~3s — no visible menu, no delete item",
+          "0", menuBtn);
+        await fail("The listing's menu did not open — nothing was deleted.",
           "delete_menu_not_found");
+        return;
+      }
+      recordStepNote("Delete", "menu_opened",
+        `strategy ${menuOpenedBy}; poll ${menuPollMs}ms`, "", menuBtn);
+      const itemTexts = menuItemTexts();
+      recordStepNote("Delete", "menu_items_seen",
+        (itemTexts.length ? itemTexts.join(" | ") : "(no visible item texts)").slice(0, 200),
+        String(itemTexts.length));
+      if (!deleteItem) deleteItem = findDeleteMenuItem();
+      if (!deleteItem) {
+        // The menu IS open — it simply offers no Delete entry.
+        // That is a different fact from "menu never opened", and
+        // it gets its own reason (v2.1.9); the item texts above
+        // are the evidence.
+        await fail("The listing's menu did not offer a Delete entry — nothing was deleted.",
+          "delete_item_not_found");
         return;
       }
 
       say("Deleting the listing…");
       await humanPause();
       realisticClick(deleteItem);
-      await sleep(1500);
-      const confirmBtn = findDeleteConfirmButton();
+      recordStepNote("Delete", "delete_item_clicked",
+        "strategy realistic", "", deleteItem);
+      let conf = await pollForDeleteConfirm(2000);
+      if (!conf.btn) {
+        await cdpClickEl(deleteItem); // trusted click fallback, as elsewhere
+        recordStepNote("Delete", "delete_item_clicked",
+          "strategy cdpClick (fallback — no confirm after the realistic click)", "", deleteItem);
+        conf = await pollForDeleteConfirm(4000);
+      }
+      const confirmBtn = conf.btn;
       if (!confirmBtn) {
+        recordStepNote("Delete", "confirm_dialog_dump",
+          describeOpenDialogs(), "0");
         await fail("Facebook's delete confirmation did not appear — the listing was NOT removed.",
           "delete_confirm_not_found");
         return;
       }
+      recordStepNote("Delete", "confirm_found",
+        `confirm button located after poll ${conf.elapsed}ms`, "", confirmBtn);
       realisticClick(confirmBtn);
+      recordStepNote("Delete", "confirm_clicked",
+        "strategy realistic", "", confirmBtn);
 
       // Verify before claiming anything: the card must be GONE.
       let gone = false;
@@ -2660,7 +2940,11 @@
             "facebook_checkpoint");
           return;
         }
-        gone = !findListingCards().length;
+        const remaining = findListingCards().length;
+        recordStepNote("Delete", "verify_passes",
+          `pass ${i + 1}/8: ${remaining} strict match(es) remaining`,
+          String(remaining));
+        gone = remaining === 0;
       }
       if (!gone) {
         await fail("Clicked Delete, but the listing is still on your selling page — NOT removed.",

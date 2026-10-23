@@ -835,6 +835,132 @@ content.js is byte-unchanged in this build, so the content-side
 suites (v32–v37) exercise identical code; node --check clean
 on all three scripts.
 
+## v2.1.9 — delete stage diagnostics, the click ladder, and the
+## empty-state fix
+
+Built 2026-10-22 evening after TWO delete failures the same night
+left no evidence, plus a third that misjudged an empty page.
+
+**Failure evidence.** (1) The delete flow failed TWICE on a real
+machine after its scan found exactly 1 strict match — and the
+queue diag held nothing past `delete_match_scan`, because no
+post-scan stage (menu button, menu open, item click, confirm,
+verify) wrote a step note. The same flow succeeded on another
+machine. The card's ⋯ menu DOES contain "Delete listing"
+(screenshot-verified item list: Mark as pending / View listing /
+List in more places / Edit listing / Delete listing / View
+messages). (2) After Matthew deleted a listing BY HAND, a cleanup
+delete job ran on the now-EMPTY selling page and FAILED
+`listing_not_found` instead of completing `delete_already_gone`.
+The page was Facebook's zero-listings empty state: "When you
+start selling, your listings will appear here." + a Create new
+listing button, Selling sidebar fully rendered, NO listings
+container at all.
+
+**Empty-state root cause (code-provable, not a guess).** The
+2.1.7 rendered guard was NOT the blocker: the empty-state text
+matches its pre-existing "when you start selling" signal, so
+`sellingPageRendered()` would have returned true. The OTHER
+conjunct failed — the title-only scan counted a hit. The only
+element guaranteed to carry the car's full title on an empty
+page is the extension's OWN banner: `say()` had just set it to
+"Looking for your 2021 Chevrolet Silverado 1500 listing…", the
+banner is a visible `<div>`, and `listingCardsIn` scans every
+div in the document — so the banner satisfied
+`listingTitleMatches` and vetoed goal-achieved. Fixes, all
+minimal: the banner carries `id="autolaunch-status-banner"` and
+`listingCardsIn` excludes it in BOTH scans (a banner that ever
+named a price could poison the strict scan too); strict/title
+matching itself is untouched.
+
+**Rendered guard, rebuilt as a signal set.** `sellingPageRendered()`
+now derives from `sellingChromeSignals()` — booleans per signal:
+selling chrome (`yourListings`, `sellerDashboard`, `yourPayouts`,
+`createNewListing`, `listingsSearch` — the pre-2.1.9 signals are
+all kept) and empty-state variants (`emptyStartSelling`,
+`emptyWillAppear`, `emptyDontHave`, `emptyNoListingsYet`). The
+routing guard already confines the script to the selling pages,
+so any positive signal is positive evidence of a rendered page,
+populated OR empty; a bare still-loading page fires NONE and
+still fails `listing_not_found` honestly. And the zero-match
+branch records `delete_zero_match_probe` BEFORE deciding —
+strict count, title-only count, which signals fired, and the
+final rendered verdict — so the decision itself is diagnosable
+from `error_message` if it ever misjudges again.
+
+**Stage-note map (all field "Delete", via recordStepNote → the
+existing diag channels into `auto_posting_queue.error_message`).**
+Kept: `delete_match_scan`, `delete_already_gone`,
+`listing_deleted`, `delete_price_unavailable`. New:
+`menu_button_found` (ancestor depth + matched aria/text
+descriptor, element snapshot attached), `menu_button_not_found`,
+`menu_opened` (winning strategy + poll ms), `menu_never_opened`,
+`menu_items_seen` (visible item texts joined, capped),
+`delete_item_clicked` (per attempt, strategy named),
+`confirm_found`, `confirm_clicked`, `confirm_dialog_dump`
+(each existing dialog's role + first ~80 chars when the confirm
+never appears), `verify_passes` (one per pass, remaining strict
+count), `delete_zero_match_probe` (above). One NEW failure
+reason: `delete_item_not_found` — a menu that opened but offers
+no Delete entry is a different fact from `delete_menu_not_found`
+(menu button missing, or the menu never opened), and the dumped
+item texts ride its diag. All other reason slugs unchanged.
+
+**The click ladder (post-scan only).** The matched card is
+scrolled into view (`block:"center"`) with a settle before its
+menu is touched. Menu opening is a strategy ladder with POLLING
+instead of fixed sleeps — after EACH rung, poll up to ~3s
+(every ~275ms) for a visible `[role="menu"]` or a located
+delete item before escalating: (1) `realisticClick`, (2)
+`cdpClickEl`, (3) NEW `cdpMouseSeqClickEl` → the worker's new
+CDP action `clickSeq` (background.js header note 16:
+`Input.dispatchMouseEvent` mouseMoved → mousePressed → ~90ms
+pause → mouseReleased at the element center; same
+`{ok}/{ok:false,error}` contract and `cdp_not_attached` guard;
+`buildCdpClickSeq()` sits with the other pure builders in
+content.js). A menu that opens stops the ladder wherever it
+opened — a slow menu is never re-clicked shut. The Delete item:
+`realisticClick`, ~2s confirm poll, one `cdpClickEl` fallback,
+then a ~4s confirm poll, then the existing
+`delete_confirm_not_found` failure (now with the dialog dump).
+After the confirm click the verify loop keeps its shape
+(8 passes × ~1.5s, checkpoint guard) and records a
+`verify_passes` note per pass. Untouched: strict matching,
+goal-achieved zero-match semantics, the price guard, the
+checkpoint guard, tab rules, claim logic, finish paths.
+
+**Verification (node, DOM-stub harnesses).** NEW v39 harness
+(stub DOM + stub chrome.*, delete job in storage, CDP replies
+emulated): 58/58 — (a) happy path deletes with the full note
+chain (`menu_button_found` … `listing_deleted`) and the card
+scrolled into view; (b) a menu appearing ~1.2s after the click
+is caught by POLLING with strategy 1 still winning (no CDP
+used); (c) a realistic-no-op menu opens via `cdpClick` and the
+note names the CDP rung; (c2) only `clickSeq` opens it — note
+names `cdpClickSeq` and the payload carries the button's center;
+(d) a menu with no Delete entry fails `delete_item_not_found`
+with the item texts in the diag; (e1) zero matches on a rendered
+page → `delete_already_gone`; (f) the zero-listings EMPTY STATE
+(sidebar chrome + empty-state text, no listings container) →
+JOB_DELETED + `delete_already_gone`, probe showing
+`strict:0 title:0 rendered:true` — this case FAILS without the
+banner exclusion, because the stub banner carries the title
+exactly as live; (g) a bare still-loading page → honest
+`listing_not_found`, probe `rendered:false signals:none`;
+(e3) two strict matches → `listing_ambiguous`, no menu touched;
+(e4) confirm never appears → `delete_confirm_not_found`, both
+`delete_item_clicked` strategies recorded, dialog dump naming
+the decoy dialog; plus worker checks driving the REAL
+`handleCdp`: `clickSeq` guarded by `cdp_not_attached`, the
+moved→pressed→released sequence with coordinates, and the
+existing `click` action unchanged. Regressions: v38 worker
+harness 56/56; content.js is otherwise unchanged outside the
+delete flow, so the content-side suites exercise identical code
+there; `node --check` clean on all three scripts. It has NOT
+yet had a live Facebook run — the first live delete that fails
+post-scan will now land its stage notes in `error_message`,
+which is the point of the build.
+
 ## How to test it (Matthew)
 
 1. In Chrome: chrome://extensions -> Developer mode ON -> Load unpacked ->

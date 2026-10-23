@@ -171,6 +171,20 @@
 //     errors keep the session-expired semantics sbFetch already
 //     records. Every reconciliation action is logged — the old
 //     failure was invisible precisely because the skip was silent.
+// 16. DELETE CLICK LADDER — CDP MOUSE SEQUENCE (v2.1.9): the
+//     delete flow's menu-opening ladder gains a third rung above
+//     the instantaneous press+release "click": action "clickSeq"
+//     dispatches Input.dispatchMouseEvent mouseMoved, then
+//     mousePressed, a brief pause, then mouseReleased at the
+//     content-supplied coordinates — the hover/press timing some
+//     Facebook menus arm on. Same contract as every CDP action:
+//     {ok:true} / {ok:false, error}, and the cdp_not_attached
+//     guard applies unchanged. Purely additive: claim logic, the
+//     finish paths and every other action are untouched, and the
+//     delete stage notes the content script records ride the
+//     existing FIELD_DIAG / diag-compaction channels — no worker
+//     change was needed for them (delete failures already compact
+//     diagnostics into error_message, note 13).
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -598,6 +612,7 @@ async function fetchPhotoForContent(url) {
 // Minimal protocol the content script drives:
 //   { type: "AUTOLAUNCH_CDP", action: "attach" }
 //   { type: "AUTOLAUNCH_CDP", action: "click", x, y }
+//   { type: "AUTOLAUNCH_CDP", action: "clickSeq", x, y }  (v2.1.9)
 //   { type: "AUTOLAUNCH_CDP", action: "insertText", text }
 //   { type: "AUTOLAUNCH_CDP", action: "key", key, code, text?, modifiers? }
 //   { type: "AUTOLAUNCH_CDP", action: "detach" }
@@ -669,6 +684,23 @@ async function handleCdp(message, tabId) {
       if (!isFinite(x) || !isFinite(y)) return { ok: false, error: "cdp_bad_coordinates" };
       await cdpSendCommand(tabId, "Input.dispatchMouseEvent",
         { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+      await cdpSendCommand(tabId, "Input.dispatchMouseEvent",
+        { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+      return { ok: true };
+    }
+    case "clickSeq": {
+      // v2.1.9 (header note 16): a full mouse SEQUENCE — move,
+      // press, brief pause, release — for menus that arm on
+      // hover/press timing and shrug off the instantaneous
+      // press+release pair above.
+      if (!cdpSessions.has(tabId)) return { ok: false, error: "cdp_not_attached" };
+      const x = Number(message.x), y = Number(message.y);
+      if (!isFinite(x) || !isFinite(y)) return { ok: false, error: "cdp_bad_coordinates" };
+      await cdpSendCommand(tabId, "Input.dispatchMouseEvent",
+        { type: "mouseMoved", x, y });
+      await cdpSendCommand(tabId, "Input.dispatchMouseEvent",
+        { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+      await sleep(90);
       await cdpSendCommand(tabId, "Input.dispatchMouseEvent",
         { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
       return { ok: true };
