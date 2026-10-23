@@ -158,8 +158,12 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
             if ((mu === 'HR' || mu === 'CR') && rest.length && /^V$/i.test(rest[0])) {
                 modelOut = mu + '-V';
                 rest = rest.slice(1);
-            } else if ((mu === 'CX' || mu === 'F') && rest.length && /^\d+$/.test(rest[0])) {
-                modelOut = mu + '-' + rest[0];
+            } else if ((mu === 'CX' || mu === 'F') && rest.length && /^\d+(SD)?$/i.test(rest[0])) {
+                // Ford writes the Super Duty token two ways: "F-250"
+                // (pure digits) and "F+250SD" (digits + SD suffix,
+                // University Ford's slugs). Both mean model F-250 —
+                // without the SD allowance the model truncates to "F".
+                modelOut = mu + '-' + rest[0].replace(/SD$/i, '');
                 rest = rest.slice(1);
             }
             // Two-word models the first-token rule can never see whole.

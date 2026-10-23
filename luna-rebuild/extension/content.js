@@ -2608,6 +2608,38 @@
   function sellingPageRendered() {
     return sellingRenderedFromSignals(sellingChromeSignals());
   }
+  // One "Mark as sold" (or "Mark as available") button per listing
+  // card — a cheap census of how many cards the page has actually
+  // rendered, used to tell a settled list from a still-loading one.
+  function countSellingCards() {
+    const btns = Array.from(document.querySelectorAll('[role="button"], button'));
+    return btns.filter(b => isVisibleEl(b) &&
+      /^\s*mark as (sold|available)\b/i.test(b.textContent || "")).length;
+  }
+  // Scroll the selling list end to end (bounded) so lazy cards
+  // enter the DOM, repeating until the card census is stable across
+  // a round. The delete flow's scans are only trustworthy on a
+  // settled list (v2.1.13 delete-verification hardening: on
+  // 2026-10-23 a delete declared a live, under-review listing
+  // "already gone" from one early scan of a still-loading page).
+  async function settleSellingList() {
+    let last = -1;
+    for (let round = 0; round < 5; round++) {
+      const h = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.documentElement ? document.documentElement.scrollHeight : 0);
+      const steps = Math.max(2, Math.min(16, Math.ceil(h / 900) + 1));
+      for (let s = 0; s < steps; s++) {
+        try { window.scrollTo(0, Math.floor((h * s) / Math.max(1, steps - 1))); } catch (e) {}
+        await sleep(220);
+      }
+      try { window.scrollTo(0, 0); } catch (e) {}
+      await sleep(1300);
+      const c = countSellingCards();
+      if (c === last) break;
+      last = c;
+    }
+  }
   // The card's ⋯ (options) button. Searched inside the card first,
   // then up the ancestor chain — but a level is only trusted while it
   // still contains exactly ONE matching listing, so a neighbouring
@@ -2779,12 +2811,17 @@
       }
 
       say(`Looking for your ${title} listing…`);
+      // SETTLED SCAN (v2.1.13 delete-verification hardening): the
+      // selling list lazy-loads, and a just-published listing can
+      // take a while to appear on it. On 2026-10-23 the delete for
+      // a University Ford truck declared "already gone" from one
+      // early scan of a still-loading list while the listing sat
+      // live (under review) the whole time — the row completed and
+      // the posted stamp cleared over a listing that still exists.
+      // "Gone" must now survive a SETTLED list (scrolled through,
+      // card census stable) AND a delayed second look.
+      await settleSellingList();
       let cards = findListingCards();
-      // The selling page lazy-loads its cards; give them a moment.
-      for (let i = 0; i < 4 && !cards.length; i++) {
-        await sleep(1500);
-        cards = findListingCards();
-      }
       recordStepNote("Delete", "delete_match_scan",
         `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()}`,
         String(cards.length));
@@ -2800,8 +2837,10 @@
         // posted stamp. A title match at another price means the
         // car is still live — NOT achieved, honest failure, stamp
         // untouched. A page whose listings region never rendered
-        // proves nothing — also an honest failure.
-        const titleCards = findListingCardsByTitle();
+        // proves nothing — also an honest failure. Since v2.1.13
+        // the branch additionally requires the delayed second look
+        // below before it may conclude anything.
+        let titleCards = findListingCardsByTitle();
         // PROBE BEFORE DECIDING (v2.1.9, header note 19b): the
         // branch decision itself is recorded — strict count,
         // title-only count, which rendered signals fired, and the
@@ -2815,18 +2854,35 @@
            `signals:${fired.length ? fired.join(",") : "none"}`).slice(0, 200),
           String(titleCards.length));
         if (!titleCards.length && rendered) {
+          // DELAYED SECOND LOOK: give a just-published listing
+          // time to reach the selling list, then settle + rescan.
+          // If the card shows up, fall through and delete it for
+          // real; only a second settled zero earns "already gone".
+          await sleep(20000);
+          await settleSellingList();
+          cards = findListingCards();
+          titleCards = findListingCardsByTitle();
+          recordStepNote("Delete", "delete_zero_match_second_look",
+            `strict:${cards.length} title:${titleCards.length} after settle + 20s wait`,
+            String(cards.length));
+        }
+        if (!cards.length && !titleCards.length && rendered) {
           recordStepNote("Delete", "delete_already_gone",
-            `no listing for ${title} on the rendered selling page — ` +
+            `no listing for ${title} on the settled selling page after two looks — ` +
             `the removal goal was already met`, "0");
           await cdpDetach();
           say("That listing is already gone from Facebook ✓", "#15803d");
           await report("AUTOLAUNCH_JOB_DELETED", {});
           return;
         }
-        await fail(
-          `Could not find the ${title} listing on your selling page — nothing was deleted. It may already be gone.`,
-          "listing_not_found");
-        return;
+        if (!cards.length) {
+          await fail(
+            `Could not find the ${title} listing on your selling page — nothing was deleted. It may already be gone.`,
+            "listing_not_found");
+          return;
+        }
+        // The second look FOUND the card — fall through and delete
+        // it for real below.
       }
       if (cards.length > 1) {
         await fail(
@@ -2948,6 +3004,20 @@
       }
       if (!gone) {
         await fail("Clicked Delete, but the listing is still on your selling page — NOT removed.",
+          "delete_not_verified");
+        return;
+      }
+      // SETTLED RE-CHECK (v2.1.13): a card can leave the DOM while
+      // Facebook keeps the listing alive (optimistic removal, a
+      // review hold). The passes above watch the live DOM; before
+      // claiming the deletion, settle the list once more and look
+      // again — a strict match that reappears means NOT deleted.
+      await settleSellingList();
+      const reappeared = findListingCards().length;
+      recordStepNote("Delete", "verify_settled_recheck",
+        `strict matches after settle: ${reappeared}`, String(reappeared));
+      if (reappeared) {
+        await fail("Clicked Delete and the card vanished, but the listing is still on your selling page — NOT removed.",
           "delete_not_verified");
         return;
       }

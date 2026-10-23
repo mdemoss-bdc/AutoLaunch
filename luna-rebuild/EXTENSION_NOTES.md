@@ -1290,3 +1290,43 @@ still leave it open as evidence. Not yet proven live — the first
 Full Auto post after updating to 2.1.12 is the test: queue one car,
 stay on the AutoLaunch tab, and confirm the post completes without
 Chrome ever switching away.
+
+## 19. ALL job tabs in the background (v2.1.13, 2026-10-23)
+
+Matthew's call during his son's cross-account test: the confirm-mode
+post opened in front of him, and he wants the helper out of the way
+for every job. v2.1.13 drops the 2.1.12 confirm-mode exception — post
+tabs (confirm AND Full Auto) and delete tabs all open with
+active:false and autoDiscardable:false. A confirm-mode form sits
+filled in its background tab with the "review it, then click Publish"
+banner until the user clicks over to it; the 10-minute confirm watch
+runs the same as before. First live proof pending: reload the
+extension (card reads 2.1.13), queue a confirm-mode car, and confirm
+Chrome never switches away while the form fills in the background tab.
+
+## 19b. Delete verification hardened (same v2.1.13 push, 2026-10-23)
+
+The son's test truck exposed a false "completed" delete: the post
+had just gone live (still "being reviewed"), the delete job scanned
+a still-loading selling page, found zero matches, and the
+goal-achieved branch concluded "already gone" — row completed,
+posted stamp cleared — while the listing sat live the whole time.
+Ground truth beat the database: Matthew found it still Active on
+the Selling page. Two hardenings in content.js:
+
+1. Zero-match decisions now require a SETTLED list: the flow
+   scrolls the selling page end to end (bounded) until the
+   "Mark as sold" card census is stable, scans, and — before any
+   "already gone" verdict — waits 20s, settles again, and rescans
+   (delete_zero_match_second_look). If the second look finds the
+   card, the flow falls through and deletes it for real.
+2. A clicked-through delete must also survive a settled re-scan
+   (verify_settled_recheck) before JOB_DELETED is reported — a
+   card that vanishes from the DOM while Facebook keeps the
+   listing (optimistic removal, review hold) now fails honestly
+   as delete_not_verified instead of completing.
+
+Note for the truck itself: the live listing carries the OLD title
+("2026 Ford F"), while the corrected data says F-250 — an app
+delete would scan for the new title and not match the old card.
+That one listing has to be deleted by hand from the Selling page.

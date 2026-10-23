@@ -201,9 +201,13 @@
 //     jobs open with active:false, so the user can keep working in
 //     their current tab while the helper works in its own background
 //     tab, and the job tab is marked autoDiscardable:false so Chrome's
-//     memory saver cannot discard it mid-run. Confirm-mode posts are
-//     the deliberate exception — they still open in front because the
-//     user personally has to click Publish there.
+//     memory saver cannot discard it mid-run. Confirm-mode posts were
+//     the deliberate exception in 2.1.12 (they opened in front because
+//     the user personally has to click Publish there) — Matthew
+//     overruled that on 2026-10-23 after his son's cross-account
+//     test, so v2.1.13 opens EVERY job tab in the background; a
+//     confirm-mode form waits, filled and bannered, until the user
+//     clicks over to review and publish.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -563,14 +567,16 @@ async function checkQueue() {
     });
 
     await jitter(1500, 4000); // human pacing, never machine-gun tabs
-    // Background-tab rule (v2.1.12): fully automated jobs work in an
-    // inactive tab so they never pull the user away from what they
-    // are doing (and the user browsing elsewhere can't disturb the
-    // form). Confirm-mode posts open active — a human click on
-    // Publish is part of that flow, so the tab must be in front.
-    const runInBackground = isDelete || settings.fullAuto;
+    // Background-tab rule (v2.1.12, extended v2.1.13): EVERY job now
+    // works in an inactive tab so the helper never pulls the user
+    // away from what they are doing (and the user browsing elsewhere
+    // can't disturb the form). v2.1.12 kept confirm-mode posts in
+    // front because a human must click Publish; Matthew overruled
+    // that after watching his son's test — the filled tab simply
+    // waits in the background with its review banner, and the user
+    // clicks over to it when they are ready to publish.
     const jobTab = await chrome.tabs.create({
-      active: !runInBackground,
+      active: false,
       url: isDelete
         ? "https://www.facebook.com/marketplace/you/selling"
         : "https://www.facebook.com/marketplace/create/vehicle"
