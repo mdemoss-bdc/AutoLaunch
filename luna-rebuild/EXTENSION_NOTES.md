@@ -1457,3 +1457,30 @@ Retest protocol note: the user watches runs by clicking into
 the job tab — during a run, look but don't click inside the
 page; a human click mid-ladder contaminates the evidence and
 can itself navigate the SPA.
+
+## 24. Delete survey handled: "Did you sell this item?" (v2.1.18, 2026-10-23)
+
+Matthew's screenshot of the 2.1.17 F-250 run showed what no diag
+ever had: clicking "Delete listing" opens a SURVEY dialog —
+"Did you sell this item?" (Yes, sold on Facebook / Yes, sold
+elsewhere / No, haven't sold / I'd rather not answer) with a
+Next button — and only after Next does the real Delete confirm
+exist. That is the missing step behind the whole delete saga.
+
+v2.1.18 (content.js): after the Delete listing click, the flow
+first polls for the survey (handleDeleteSurveyIfPresent):
+selects "I'd rather not answer" (apostrophe-agnostic match —
+Facebook renders a curly ’; deepest visible element wins),
+waits for Next to become usable, clicks it, then proceeds to
+the existing usable-confirm + click-target-audit path. A survey
+that appears but can't be driven fails honestly as
+delete_survey_unhandled. If the plain confirm appears first
+(some sessions skip the survey), the flow proceeds as before;
+the CDP fallback click gets the same survey check.
+
+Context: on 2026-10-23 the Navigator delete completed under
+2.1.17 and the F-250 listing also ended up deleted (confirmed
+by the seller's own Selling-page searches) — most likely
+because the F-250 attempt had already opened the survey on the
+shared tab. 2.1.18 makes a lone, first-in-session delete work
+standalone; that is the retest it needs.

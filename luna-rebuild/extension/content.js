@@ -2836,6 +2836,88 @@
     }
   }
 
+  // ---- delete survey (v2.1.18) -------------------------------------------
+  // Facebook's real delete gate is a survey dialog — "Did you sell
+  // this item?" with radio answers and a Next button — and only
+  // after it does the actual Delete confirmation appear. Every
+  // version before this one polled straight for a Delete button
+  // and kept finding the final dialog's hidden template instead
+  // (the 2026-10-23 saga: three false completions, then honest
+  // failures). The neutral answer ("I'd rather not answer") keeps
+  // the seller's Facebook stats truthful — the car did not sell
+  // just because its listing is being removed.
+  function findDeleteSurvey() {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"]'));
+    for (const d of dialogs) {
+      if (!isVisibleEl(d)) continue;
+      if (!normText(d.textContent).includes("did you sell this item")) continue;
+      const candidates = Array.from(
+        d.querySelectorAll('[role="radio"], [role="option"], label, div, span'));
+      let answer = null;
+      for (const el of candidates) {
+        // Apostrophe-agnostic: Facebook renders a curly ’ here.
+        const t = normText(el.textContent).replace(/['’]/g, "");
+        if (t === "id rather not answer" && isVisibleEl(el)) {
+          if (!answer || answer.contains(el)) answer = el; // deepest match wins
+        }
+      }
+      const btns = Array.from(d.querySelectorAll('[role="button"], button'));
+      const next = btns.find(b => normText(b.textContent) === "next" &&
+        isVisibleEl(b)) || null;
+      return { dialog: d, answer, next };
+    }
+    return null;
+  }
+
+  // Waits for either the survey or the final confirm, whichever
+  // Facebook shows first, and completes the survey if it appears.
+  // Returns "handled" (survey answered, Next clicked), "confirm_first"
+  // (no survey — the confirm is already up), "absent" (neither showed
+  // within the wait), or "unhandled" (survey present but its answer
+  // or Next could not be driven).
+  async function handleDeleteSurveyIfPresent(timeoutMs) {
+    const t0 = Date.now();
+    for (;;) {
+      const s = findDeleteSurvey();
+      if (s) {
+        if (!s.answer) {
+          recordStepNote("Delete", "delete_survey_unhandled",
+            "survey present but the neutral answer was not found", "0");
+          return "unhandled";
+        }
+        realisticClick(s.answer);
+        recordStepNote("Delete", "delete_survey_answered",
+          "selected the neutral answer (I'd rather not answer)", "", s.answer);
+        await sleep(600);
+        // Next usually enables only once an answer is selected —
+        // poll for it to become usable, re-finding the dialog in
+        // case Facebook re-rendered it.
+        let nextBtn = null;
+        const n0 = Date.now();
+        for (;;) {
+          const cur = findDeleteSurvey();
+          const cand = cur && cur.next;
+          if (cand && isUsableConfirmButton(cand)) { nextBtn = cand; break; }
+          if (Date.now() - n0 >= 3000) break;
+          await sleep(300);
+        }
+        if (!nextBtn) {
+          recordStepNote("Delete", "delete_survey_unhandled",
+            "survey answered but Next never became usable", "0");
+          return "unhandled";
+        }
+        realisticClick(nextBtn);
+        recordStepNote("Delete", "delete_survey_next",
+          "clicked Next after the survey answer", "", nextBtn);
+        await sleep(600);
+        return "handled";
+      }
+      if (findDeleteConfirmButton()) return "confirm_first";
+      if (Date.now() - t0 >= timeoutMs) return "absent";
+      await sleep(300);
+    }
+  }
+
   // ---- fresh-load delete proof (v2.1.15) --------------------------------
   // Twice on 2026-10-23 (an F-250, then a Navigator, both on the
   // son's account) a delete reported success while the listing
@@ -3208,11 +3290,31 @@
       realisticClick(deleteItem);
       recordStepNote("Delete", "delete_item_clicked",
         "strategy realistic", "", deleteItem);
+      // The survey gate (v2.1.18): "Did you sell this item?" comes
+      // BEFORE the real Delete confirm. Answer it if it appears;
+      // an undrivable survey is an honest stop, not a dead end to
+      // click through blindly.
+      const surveyOutcome = await handleDeleteSurveyIfPresent(5000);
+      if (surveyOutcome === "unhandled") {
+        recordStepNote("Delete", "confirm_dialog_dump",
+          describeOpenDialogs(), "0");
+        await fail("Facebook's delete survey (\"Did you sell this item?\") couldn't be completed — the listing was NOT removed.",
+          "delete_survey_unhandled");
+        return;
+      }
       let conf = await pollForDeleteConfirm(2000);
       if (!conf.btn) {
         await cdpClickEl(deleteItem); // trusted click fallback, as elsewhere
         recordStepNote("Delete", "delete_item_clicked",
           "strategy cdpClick (fallback — no confirm after the realistic click)", "", deleteItem);
+        // The fallback click can surface the survey late — give it
+        // the same chance before the longer confirm poll.
+        const lateSurvey = await handleDeleteSurveyIfPresent(3000);
+        if (lateSurvey === "unhandled") {
+          await fail("Facebook's delete survey (\"Did you sell this item?\") couldn't be completed — the listing was NOT removed.",
+            "delete_survey_unhandled");
+          return;
+        }
         conf = await pollForDeleteConfirm(4000);
       }
       const confirmBtn = conf.btn;
