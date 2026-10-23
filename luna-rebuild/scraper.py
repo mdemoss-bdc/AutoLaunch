@@ -36,6 +36,7 @@ USER_ID = os.environ.get("USER_ID")
 db = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 MAX_PAGES_PER_FEED = 500
+MAX_SCROLL_ROUNDS = 40  # infinite-scroll harvest cap per page (2026-10-23)
 
 # Test mode: SCRAPE_LIMIT caps how many vehicles are synced per user in one
 # run (0 = no cap, normal production behavior). A capped run is a SAMPLE —
@@ -69,13 +70,42 @@ def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
     return f"{base_url}{mod}"
 
 async def extract_cards_from_page(page, default_condition: str = "Used", active_uid: str = "") -> List[dict]:
-    scroll_height = await page.evaluate("document.body.scrollHeight")
-    step = max(350, int(scroll_height / 10))
-    for y in range(0, scroll_height, step):
-        await page.evaluate(f"window.scrollTo(0, {y})")
-        await asyncio.sleep(0.15)
-    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-    await asyncio.sleep(1.0)
+    # INFINITE-SCROLL HARVEST (2026-10-23): scroll stepwise to the bottom,
+    # click any Load More / Show More button, then keep going while the
+    # page keeps growing (height or card count still changing). Stop after
+    # 2 stable rounds or at MAX_SCROLL_ROUNDS. Paginated sites stabilize
+    # immediately, so their behavior is unchanged apart from ~2 extra
+    # confirmation scrolls per page.
+    last_sig = None
+    stable_rounds = 0
+    for _round in range(MAX_SCROLL_ROUNDS):
+        scroll_height = await page.evaluate("document.body.scrollHeight")
+        step = max(350, int(scroll_height / 10))
+        for y in range(0, scroll_height, step):
+            await page.evaluate(f"window.scrollTo(0, {y})")
+            await asyncio.sleep(0.12)
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        try:
+            await page.evaluate("""() => {
+                const btns = Array.from(document.querySelectorAll('button, a'));
+                const b = btns.find(el => /load more|show more|view more/i.test(el.innerText || '') && el.offsetParent !== null);
+                if (b) { b.click(); return true; }
+                return false;
+            }""")
+        except Exception:
+            pass
+        await asyncio.sleep(1.2)
+        try:
+            sig = await page.evaluate("""() => document.body.scrollHeight + ':' + document.querySelectorAll('[data-vin], .vehicle-card, .inventory-item, .vehicle-overview, .vehicle-item, .inventory-list-item, .vehicleListCard, .vehicleCard, .v-card, .inventory-vehicle, .vehicle-list-item, .listing-card').length""")
+        except Exception:
+            sig = None
+        if sig is not None and sig == last_sig:
+            stable_rounds += 1
+            if stable_rounds >= 2:
+                break
+        else:
+            stable_rounds = 0
+            last_sig = sig
 
     vehicles = await page.evaluate("""([defaultCond, uid]) => {
         const results = [];
@@ -134,11 +164,17 @@ async def extract_cards_from_page(page, default_condition: str = "Used", active_
                 return (v >= 1000 && v <= 350000) ? v : null;
             };
             try {
-                const feat = scope.querySelector('.vehiclePricingHighlightAmount, [class*="vehiclePricingHighlightAmount"]');
-                if (feat) {
-                    const v = money(feat.innerText || feat.textContent);
-                    if (v) return v;
-                }
+                // New-car cards/pages render TWO highlight amounts: the
+                // SAVINGS figure first, the price second (2026-10-23 fix).
+                // Take the LARGEST highlight in scope, never the first.
+                const feats = scope.querySelectorAll('.vehiclePricingHighlightAmount, [class*="vehiclePricingHighlightAmount"]');
+                let bestFeat = null;
+                feats.forEach(el => {
+                    const v = money(el.innerText || el.textContent);
+                    if (v && (!bestFeat || v > bestFeat)) bestFeat = v;
+                });
+                if (bestFeat) return bestFeat;
+                const feat = null;
                 const featLi = scope.querySelector('.priceBlockItemFeaturedPrice, [class*="FeaturedPrice"]');
                 if (featLi && !feat) {
                     const v = money(featLi.innerText || featLi.textContent);
@@ -797,22 +833,85 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     # price. On DealerOn pages the JSON-LD offers.price is that same final
     # price (verified: Tucson 11327, Sentra 11222), so JSON-LD counts as
     # final whenever the page carries the DealerOn pricing stack.
-    feat = re.search(
-        r"vehiclePricingHighlightAmount[^>]*>\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})",
-        html,
-    )
-    feat_price = _money_int(feat.group(1)) if feat else None
+    # BUG FIX (2026-10-23): DealerOn renders MULTIPLE
+    # .vehiclePricingHighlightAmount elements on new-car VDPs — the FIRST
+    # is the "SAVINGS" highlight (a discount figure, e.g. $1,000), a later
+    # one is the actual advertised price (e.g. $115,715). First-match
+    # extraction stored the discount as the price on 339 new cars.
+    # JSON-LD offers.price is the dealer's own structured final price
+    # (verified against the stack on used + new) — trust it first; fall
+    # back to the LARGEST highlight amount (the price dwarfs the savings).
+    feat_amounts = [
+        _money_int(m.group(1))
+        for m in re.finditer(
+            r"vehiclePricingHighlightAmount[^>]*>\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})",
+            html,
+        )
+    ]
+    feat_amounts = [v for v in feat_amounts if v]
+    feat_price = max(feat_amounts) if feat_amounts else None
     has_stack = (
         feat_price is not None
         or "vehiclePricingStack" in html
         or "priceBlockItemPrice" in html
     )
-    if feat_price:
+    if jsonld_price is not None:
+        out["price"] = jsonld_price
+        out["price_is_final"] = has_stack or bool(feat_amounts)
+    elif feat_price:
         out["price"] = feat_price
         out["price_is_final"] = True
-    elif jsonld_price is not None:
-        out["price"] = jsonld_price
-        out["price_is_final"] = has_stack
+
+    if out["price"] is None:
+        # LABEL FALLBACK (Matthew's rule, 2026-10-23): the stored price is
+        # the dealer's ADVERTISED FINAL price, whatever they call it —
+        # "Moses Price", "Glockner Price", "Internet Price", "Sale Price",
+        # "Our Price", "Final Price", "Selling Price"... Scan visible text
+        # lines for a price label carrying a $ amount; adjustment lines
+        # (MSRP / retail / savings / discount / rebate / doc fee / payment /
+        # estimate / trade) never qualify. The LAST qualifying line wins:
+        # the final total sits at the bottom of the pricing stack.
+        try:
+            # Label and amount usually live in SEPARATE elements, so work
+            # on the flattened text: a $ amount qualifies when a "price"
+            # label sits within ~80 chars before it (or ~40 after) with no
+            # adjustment word in between. Last qualifying amount wins.
+            _text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
+            _text = re.sub(r"<[^>]+>", " ", _text).replace("&nbsp;", " ")
+            _text = re.sub(r"\s+", " ", _text)
+            _bad = re.compile(r"msrp|retail|savings|discount|rebate|doc fee|payment|per mo|/mo|list price|estimate|trade", re.I)
+            def _zone_ok(zone):
+                # A zone qualifies when its LAST "price" mention comes
+                # after its last adjustment word ("Doc Fee +$499 Glockner
+                # Price" qualifies; "Moses Price ... MSRP:" does not).
+                zl = zone.lower()
+                p_idx = zl.rfind("price")
+                if p_idx < 0:
+                    return False
+                b_idx = -1
+                for _bm in _bad.finditer(zl):
+                    b_idx = max(b_idx, _bm.start())
+                return p_idx > b_idx
+            _found = None
+            _matches = list(re.finditer(r"\$\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})", _text))
+            for _i, _m in enumerate(_matches):
+                _v = _money_int(_m.group(1))
+                if not _v:
+                    continue
+                # Label zone = text since the PREVIOUS $ amount (dense
+                # stacks pack adjustments tightly; a wide window would
+                # always contain an adjustment word and reject everything).
+                _prev_end = _matches[_i - 1].end() if _i > 0 else 0
+                _before = _text[max(_prev_end, _m.start() - 80):_m.start()]
+                _next_start = _matches[_i + 1].start() if _i + 1 < len(_matches) else len(_text)
+                _after = _text[_m.end():min(_next_start, _m.end() + 40)]
+                if _zone_ok(_before) or _zone_ok(_after):
+                    _found = _v
+            if _found:
+                out["price"] = _found
+                out["price_is_final"] = True
+        except Exception:
+            pass
 
     # ---- SPEC LIST colors (DealerOn .info__value blocks), exterior first
     for label, key in (("Exterior Color", "color"), ("Interior Color", "interior_color")):
@@ -872,6 +971,15 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
         # only fills a gap the SRP pass left empty.
         if d["price"] and (d["price_is_final"] or not car.get("price")):
             car["price"] = d["price"]
+        # Guard (2026-10-23): a NEW car can never cost under $5,000 — a
+        # value below that is an extractor artifact (a discount/payment
+        # figure), never a price. Store None (honest "no price") instead.
+        if (
+            str(car.get("condition") or "").lower().startswith("new")
+            and car.get("price")
+            and car["price"] < 5000
+        ):
+            car["price"] = None
         if d["color"]:
             car["color"] = d["color"]
         if d["interior_color"]:

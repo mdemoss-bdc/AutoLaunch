@@ -1236,6 +1236,8 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
       <div class="relative">
         <select id="sortSelect" onchange="applyFilters()" class="appearance-none bg-white border border-slate-300 hover:bg-slate-50 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-slate-700 focus:outline-none shadow-sm cursor-pointer">
           <option value="newest_first">Newest first</option>
+          <option value="make_asc">Make: A to Z</option>
+          <option value="make_desc">Make: Z to A</option>
           <option value="price_asc">Price: Low to High</option>
           <option value="price_desc">Price: High to Low</option>
           <option value="miles_asc">Mileage: Lowest First</option>
@@ -1336,6 +1338,9 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <button onclick="setPillFilter('ALL')" id="pillAll" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer shadow-sm">
       All <span id="pillAllCount">0</span>
     </button>
+    <button onclick="toggleNeedsPriceOnly()" id="needsPriceChip" style="display:none" class="px-3.5 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm cursor-pointer items-center gap-1.5">
+      <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> <span id="needsPriceCount">0</span> need a price
+    </button>
   </div>
 
   <!-- Selection Counter + Post Selected (moved here from the page header:
@@ -1361,8 +1366,8 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
         <thead class="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px] bg-slate-50/80">
           <tr>
             <th class="py-3.5 px-4 w-10"></th>
-            <th class="py-3.5 px-4">CAR</th>
-            <th class="py-3.5 px-4">PRICE & MILES</th>
+            <th class="py-3.5 px-4 cursor-pointer select-none" onclick="toggleHeaderSort('make')" title="Click to sort by make">CAR <span id="sortArrowMake" class="text-blue-600"></span></th>
+            <th class="py-3.5 px-4 cursor-pointer select-none" onclick="toggleHeaderSort('price')" title="Click to sort by price">PRICE & MILES <span id="sortArrowPrice" class="text-blue-600"></span></th>
             <th class="py-3.5 px-4">STATUS</th>
             <th class="py-3.5 px-4 text-right">LAUNCH IT</th>
           </tr>
@@ -1499,7 +1504,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
   <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
     <div class="flex items-center justify-between border-b border-slate-200 pb-3">
       <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
-        <i class="fa-solid fa-tag text-blue-600"></i> Change Price
+        <i class="fa-solid fa-tag text-blue-600"></i> <span id="changePriceTitle">Change Price</span>
       </h3>
       <button onclick="closeModal('changePriceModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
     </div>
@@ -3395,6 +3400,21 @@ function populateFilterDropdowns() {
     }
 
 }
+// Sorting (Matthew, 2026-10-23): clickable CAR / PRICE & MILES headers toggle
+// direction and mirror into the sort dropdown; the dropdown keeps every mode.
+function toggleHeaderSort(kind) {
+  const sel = document.getElementById("sortSelect");
+  if (!sel) return;
+  if (kind === "make") sel.value = sel.value === "make_asc" ? "make_desc" : "make_asc";
+  else if (kind === "price") sel.value = sel.value === "price_asc" ? "price_desc" : "price_asc";
+  applyFilters();
+}
+function syncSortArrows(sort) {
+  const m = document.getElementById("sortArrowMake");
+  const p = document.getElementById("sortArrowPrice");
+  if (m) m.textContent = sort === "make_asc" ? "▲" : sort === "make_desc" ? "▼" : "";
+  if (p) p.textContent = sort === "price_asc" ? "▲" : sort === "price_desc" ? "▼" : "";
+}
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
   const sort = document.getElementById("sortSelect").value;
@@ -3500,21 +3520,42 @@ if (filterMileageRange) {
     if (activePillFilter === 'ACTIVE' && isSold(car)) return false;
     if (activePillFilter === 'POSTED' && !car.marketplace_posted_at) return false;
     if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
+    if (needsPriceOnly && hasPrice(car)) return false;
 
     const title = `${car.year || ''} ${car.make || ''} ${car.model || ''} ${car.trim || ''} ${car.vin || ''} ${car.stock_num || ''}`.toLowerCase();
     return !query || title.includes(query);
   });
+  const byMake = (a, b) => {
+    const mk = String(a.make || "").localeCompare(String(b.make || ""), undefined, { sensitivity: "base" });
+    if (mk) return mk;
+    const md = String(a.model || "").localeCompare(String(b.model || ""), undefined, { sensitivity: "base" });
+    if (md) return md;
+    return (b.year || 0) - (a.year || 0);
+  };
   filtered.sort((a, b) => {
-    if (sort === "price_asc") return (a.price || 999999) - (b.price || 999999);
-    if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
+    if (sort === "make_asc") return byMake(a, b);
+    if (sort === "make_desc") return byMake(b, a);
+    if (sort === "price_asc") return ((a.price || 999999) - (b.price || 999999)) || byMake(a, b);
+    if (sort === "price_desc") return ((b.price || 0) - (a.price || 0)) || byMake(a, b);
     if (sort === "miles_asc") return (a.mileage || 0) - (b.mileage || 0);
     return (b.year || 0) - (a.year || 0);
   });
+  syncSortArrows(sort);
   window.currentFilteredInventory = filtered;
 
 document.getElementById("showingCountBold").innerText = filtered.length;
 renderTableRows(filtered);
 updateClearFiltersVisibility();
+// NO-PRICE RULE: keep the amber alert chip honest after every render.
+const npChip = document.getElementById("needsPriceChip");
+if (npChip) {
+  const npCount = rawInventory.filter(c => !isSold(c) && !hasPrice(c)).length;
+  document.getElementById("needsPriceCount").innerText = npCount;
+  npChip.style.display = npCount > 0 ? "inline-flex" : "none";
+  npChip.classList.toggle("ring-2", needsPriceOnly);
+  npChip.classList.toggle("ring-amber-800", needsPriceOnly);
+  npChip.classList.toggle("bg-amber-700", needsPriceOnly);
+}
 }
 // Button Audit: list/grid view toggle. Only ONE view is rendered at a time
 // so .car-select-chk checkboxes always line up 1:1 (by DOM order) with
@@ -3566,6 +3607,22 @@ function hasRealPhoto(car) {
     return car.custom_photo_urls.some(isUsablePhotoUrl);
   }
   return false;
+}
+
+// NO-PRICE RULE (Matthew, 2026-10-23): when the scraper can't pull a car's
+// price, the app must say so loudly and let the user type the price in.
+// A price-less car is never posted (same hard rule as no-photo): guarded
+// at both queue sites, flagged on its row ("Price needed — add"), counted
+// in the amber "need a price" chip in the pills bar (click = show only
+// those cars), and blocked in the Post Queue ("No price — won't post").
+function hasPrice(car) {
+  return !!(car && car.price && Number(car.price) > 0);
+}
+
+let needsPriceOnly = false;
+function toggleNeedsPriceOnly() {
+  needsPriceOnly = !needsPriceOnly;
+  applyFilters();
 }
 
 function renderGridRows(cars) {
@@ -3627,6 +3684,11 @@ function renderGridRows(cars) {
            <i class="fa-solid fa-ban text-[10px]"></i>
            <span>No photo — can't post</span>
          </span>`
+      : !hasPrice(car)
+      ? `<button data-action="change-price" data-vin="${vinAttr}" class="flex-1 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
+           <i class="fa-solid fa-tag text-[10px]"></i>
+           <span>Add price to post</span>
+         </button>`
       : `<button data-action="enqueue" data-vin="${vinAttr}" class="flex-1 px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
            <i class="fa-solid fa-paper-plane text-[10px]"></i>
            <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
@@ -3649,7 +3711,9 @@ function renderGridRows(cars) {
         <div class="text-[11px] text-slate-500 mt-1">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')} &bull; VIN: ${escapeHtml(car.vin || 'N/A')}</div>
         ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(displayLocation(car.location_name))}</span></div>` : ''}
         <div class="flex items-baseline gap-2.5 pt-2">
-          <span class="text-sm font-bold text-blue-600">${priceText}</span>
+          ${hasPrice(car)
+            ? `<span class="text-sm font-bold text-blue-600">${priceText}</span>`
+            : `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">⚠ Price needed — tap to add</button>`}
           <span class="text-[11px] text-slate-500">${milesText}</span>
         </div>
       </div>
@@ -3738,7 +3802,9 @@ ${car.location_name ? `
 </td>
 
       <td class="py-4 px-4 font-sans">
-        <span class="text-xs font-bold text-blue-600 block leading-tight">${priceText}</span>
+        ${hasPrice(car)
+          ? `<span class="text-xs font-bold text-blue-600 block leading-tight">${priceText}</span>`
+          : `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">⚠ Price needed — tap to add</button>`}
         <span class="text-[11px] text-slate-500 block">${milesText}</span>
       </td>
 
@@ -3806,6 +3872,11 @@ ${car.location_name ? `
                  <i class="fa-solid fa-ban text-[10px]"></i>
                  <span>No photo — can't post</span>
                </span>`
+            : !hasPrice(car)
+            ? `<button data-action="change-price" data-vin="${vinAttr}" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs inline-flex items-center gap-2 cursor-pointer shadow-sm transition">
+                 <i class="fa-solid fa-tag text-[10px]"></i>
+                 <span>Add price to post</span>
+               </button>`
             : `<button data-action="enqueue" data-vin="${vinAttr}" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
                  <i class="fa-solid fa-paper-plane text-[10px]"></i>
                  <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
@@ -4081,6 +4152,8 @@ function openChangePriceModal(vin, currentPrice) {
   targetPriceVin = vin;
   const input = document.getElementById("inputNewVehiclePrice");
   if (input) input.value = currentPrice || "";
+  const title = document.getElementById("changePriceTitle");
+  if (title) title.textContent = currentPrice ? "Change Price" : "Add Price — needed to post";
   document.getElementById("changePriceModal").classList.remove("hidden");
 }
 
@@ -4306,11 +4379,14 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 // extension fails it rather than handing it to the poster. Delete
 // jobs are exempt: they remove a listing, photos are irrelevant.
 const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && !!car && !hasRealPhoto(car);
+const blockedNoPrice = item.status === "pending" && item.action !== "delete" && !!car && hasRealPhoto(car) && !hasPrice(car);
 // Phase B: a DELETE job (e.g. a sold car's listing removal) must read as
 // a removal at every stage — pending = queued, processing = in flight,
 // completed = removed — never as a generic post "Pending".
 const statusChip = blockedNoPhoto
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No photos — won't post</span>`
+    : blockedNoPrice
+    ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No price — won't post</span>`
     : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
 
     return `
@@ -4500,10 +4576,12 @@ document.addEventListener("visibilitychange", function () {
     // counted as sold even if it also has no photos (never double-counted).
     const skippedSold = selectedVehicles.filter(car => isSold(car)).length;
     const skippedNoPhoto = selectedVehicles.filter(car => !isSold(car) && !hasRealPhoto(car)).length;
-    const vehiclesToQueue = selectedVehicles.filter(car => !isSold(car) && hasRealPhoto(car));
+    const skippedNoPrice = selectedVehicles.filter(car => !isSold(car) && hasRealPhoto(car) && !hasPrice(car)).length;
+    const vehiclesToQueue = selectedVehicles.filter(car => !isSold(car) && hasRealPhoto(car) && hasPrice(car));
     const skipNote = [
         skippedSold ? `${skippedSold} vehicle(s) were skipped — sold. Sold vehicles are never posted.` : "",
-        skippedNoPhoto ? `${skippedNoPhoto} vehicle(s) were skipped — no photos. Vehicles without real photos are never posted.` : ""
+        skippedNoPhoto ? `${skippedNoPhoto} vehicle(s) were skipped — no photos. Vehicles without real photos are never posted.` : "",
+        skippedNoPrice ? `${skippedNoPrice} vehicle(s) were skipped — no price. Add the price on the car's row first (tap "Price needed").` : ""
     ].filter(Boolean).join("\n\n");
     if (!vehiclesToQueue.length) {
         alert(`Nothing was queued:\n\n${skipNote}`);
@@ -4622,6 +4700,10 @@ async function enqueueMarketplaceCar(vin) {
   }
   if (carForQueue && !hasRealPhoto(carForQueue)) {
     alert("That vehicle has no photos, so it can't be posted.\n\nVehicles without real photos are never posted — the car needs real photos on the dealer's site first.");
+    return;
+  }
+  if (carForQueue && !hasPrice(carForQueue)) {
+    alert("That vehicle has no price yet, so it can't be posted.\n\nAdd the price first — tap \"Price needed\" on the car's row and type it in.");
     return;
   }
   try {
