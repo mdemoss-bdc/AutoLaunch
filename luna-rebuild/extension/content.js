@@ -2714,12 +2714,37 @@
   // "Delete" (the menu entry says "Delete listing" — the exact text
   // is what separates the two steps). No dialog, no click: failing
   // honestly beats guessing at a bare button.
+  // A confirm button is only usable when a human could click it
+  // (v2.1.17): Facebook keeps hidden, disabled dialog TEMPLATES in
+  // the DOM, and the pre-2.1.17 finder returned one of those in
+  // ~0ms — the "confirm click" then landed on whatever actually
+  // sat at the template's coordinates, the card obligingly
+  // vanished from the page, and the server never deleted anything
+  // (both 2.1.16 test deletes died exactly there).
+  function isUsableConfirmButton(b) {
+    if (!b || !isVisibleEl(b)) return false;
+    if (b.disabled) return false;
+    if (typeof b.getAttribute === "function") {
+      if (b.getAttribute("aria-disabled") === "true") return false;
+      if (b.getAttribute("aria-hidden") === "true") return false;
+    }
+    if (typeof b.closest === "function" && b.closest('[aria-hidden="true"]')) return false;
+    const r = typeof b.getBoundingClientRect === "function"
+      ? b.getBoundingClientRect() : null;
+    if (!r || r.width < 4 || r.height < 4) return false;
+    return true;
+  }
+
   function findDeleteConfirmButton() {
     const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"]'));
     for (const d of dialogs) {
+      if (!isVisibleEl(d)) continue;
+      if (typeof d.getAttribute === "function" &&
+          d.getAttribute("aria-hidden") === "true") continue;
       const btns = Array.from(
         d.querySelectorAll ? d.querySelectorAll('[role="button"], button') : []);
-      const hit = btns.find(b => normText(b.textContent) === "delete");
+      const hit = btns.find(b => normText(b.textContent) === "delete" &&
+        isUsableConfirmButton(b));
       if (hit) return hit;
     }
     return null;
@@ -2880,6 +2905,22 @@
     await sleep(400);
     try { window.location.href = "https://www.facebook.com/marketplace/you/selling"; } catch (e) { /* no-op */ }
     return false;
+  }
+
+  // Real ladder progress in THIS incarnation earns the recovery
+  // budget back (v2.1.17): on the 2.1.16 test, restarts from
+  // before the attempt had already spent the budget, so when the
+  // tab drifted at the finish line the job failed instead of
+  // going back to prove the delete.
+  async function resetNavRecoveries() {
+    try {
+      const cur = await chrome.storage.local.get(["current_posting_job"]);
+      const j = cur && cur.current_posting_job;
+      if (j && j.queueId === queueId && j.deleteNavRecoveries) {
+        j.deleteNavRecoveries = 0;
+        await chrome.storage.local.set({ current_posting_job: j });
+      }
+    } catch (e) { /* best-effort */ }
   }
 
   async function finishDeleteWithFreshProof() {
@@ -3184,6 +3225,28 @@
       }
       recordStepNote("Delete", "confirm_found",
         `confirm button located after poll ${conf.elapsed}ms`, "", confirmBtn);
+      await resetNavRecoveries();
+      // Click-target audit (v2.1.17): never fire the confirm click
+      // at coordinates whose topmost element is something else —
+      // a covered button means the click would go to the covering
+      // element (a header icon, a notification, the page behind).
+      const cr = confirmBtn.getBoundingClientRect();
+      const cx = Math.round(cr.left + cr.width / 2);
+      const cy = Math.round(cr.top + cr.height / 2);
+      const topEl = document.elementFromPoint(cx, cy);
+      const topOk = !!topEl && (topEl === confirmBtn ||
+        (typeof confirmBtn.contains === "function" && confirmBtn.contains(topEl)) ||
+        (typeof topEl.contains === "function" && topEl.contains(confirmBtn)));
+      recordStepNote("Delete", "confirm_click_target",
+        `at (${cx},${cy}): ${topEl
+          ? topEl.tagName + " " + String(topEl.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40)
+          : "(nothing)"} — aligned:${topOk}`,
+        topOk ? "1" : "0");
+      if (!topOk) {
+        await fail("Something was covering Facebook's delete confirmation, so the click was withheld — the listing was NOT removed.",
+          "delete_confirm_occluded");
+        return;
+      }
       realisticClick(confirmBtn);
       recordStepNote("Delete", "confirm_clicked",
         "strategy realistic", "", confirmBtn);

@@ -1425,3 +1425,35 @@ CLAIMED from the Selling page at verdict time.
 Matthew's call (2026-10-23): the son's duplicate-flagged
 "didn't post" listings stay in place during testing on purpose —
 the helper should prove it works in the real, messy list.
+
+## 23. The confirm click was blind — usable-button rule + click-target audit (v2.1.17, 2026-10-23)
+
+The 2.1.16 failures carried the evidence in their own diags:
+findDeleteConfirmButton accepted the FIRST dialog button named
+"Delete" with no visibility check, and Facebook keeps hidden,
+aria-disabled dialog templates in the DOM — so the poll
+"found" the confirm in 0-2ms and realisticClick fired at a
+template's coordinates. The card still vanished locally (the
+page obliges), the server never deleted, and the tab kept
+ending up on a Friend Requests notification URL. A second
+defect compounded it: deleteNavRecoveries from pre-attempt
+restarts had already spent the 3-recovery budget, so the
+finish-line drift failed the job instead of recovering.
+
+v2.1.17 (content.js):
+- isUsableConfirmButton: the confirm must be visible, enabled,
+  not aria-hidden (nor inside an aria-hidden subtree), with a
+  real on-screen rect; the dialog itself must be visible too.
+  The poll now waits for the REAL dialog instead of a template.
+- Click-target audit: before the confirm click, elementFromPoint
+  at the click coordinates must be the button (or its child /
+  wrapper); the finding is recorded as confirm_click_target and
+  a misaligned click is withheld as delete_confirm_occluded.
+- resetNavRecoveries: a ladder that reaches a genuine confirm
+  earns the recovery budget back, so a finish-line drift
+  recovers to the Selling page and proves the delete there.
+
+Retest protocol note: the user watches runs by clicking into
+the job tab — during a run, look but don't click inside the
+page; a human click mid-ladder contaminates the evidence and
+can itself navigate the SPA.
