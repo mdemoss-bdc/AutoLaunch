@@ -9,7 +9,7 @@ on:
       user_id:
         description: 'User UUID to crawl for'
         required: true
-        default: '40a95557-504a-400f-a493-462bb2b4f25e'
+        default: '40a95557-504a-460f-a891-462bb2b4f25c'
 
 jobs:
   scrape:
@@ -32,5 +32,5 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          USER_ID: ${{ github.event.inputs.user_id || '40a95557-504a-400f-a493-462bb2b4f25e' }}
+          USER_ID: ${{ github.event.inputs.user_id || '40a95557-504a-460f-a891-462bb2b4f25c' }}
         run: python scraper.py
