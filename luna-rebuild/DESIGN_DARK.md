@@ -1,8 +1,8 @@
 # AutoLaunch — Dark Command-Center Design System
 
-Status: **template live on the Inventory screen only** (sidebar + inventory workspace).
-Modals, auth, Get Started, and Wishlist still use the light theme until Matthew
-approves the template and the rollout pass applies these same tokens there.
+Status: **template live app-wide** (Phase C rollout, 2026-10-22): sidebar +
+inventory workspace, all modals, the auth overlay, the row action dropdown,
+and the Get Started / Wishlist pages all consume the same tokens.
 
 Direction (Matthew, 2026-10-22): "Dark command-center — navy + electric blue,
 BDC Manager energy." Deep navy shell, dark slate surfaces, uppercase micro-labels,
@@ -12,8 +12,12 @@ glowing status accents — with AutoLaunch electric blue instead of BDC Manager'
 
 - `body.dark-shell` gates everything. All rules live in one delimited block at the
   end of the `<style>` in `index.html` ("DARK COMMAND-CENTER TEMPLATE").
-- Rules are scoped to `:is(aside, main)` (shell + inventory) so body-level modals
-  are untouched. JS-rendered rows/cards are covered because overrides key off the
+- The original rules are scoped to `:is(aside, main)` (shell + inventory).
+  The Phase C block at the end of the same `<style>` section re-applies the
+  identical utility mapping scoped to the body-level surfaces (each modal by
+  id, `#authOverlay`, `#vehicleActionDropdown`, `#wishlistToast`) and to
+  `#getStartedPage` / `#wishlistPage`, which sit outside `<main>`.
+  JS-rendered rows/cards are covered because overrides key off the
   same Tailwind utility classes the renderers emit — no JS changes were needed.
 - State classes swapped by JS (`setPillFilter`, `setViewMode`, peer-checked
   toggles) reuse those utilities, so states re-skin automatically. The active
@@ -124,13 +128,16 @@ presets + 8 hostile custom pairs (white+yellow, black+black, mid-gray,
 pure red, lime+magenta, white+white…) produce valid colors with
 heading/body/link ≥ 4.5:1 against card and page.
 
-Scope note: themes recolor the shell + Inventory (the surfaces the dark
-template covers). Modals stay light and Get Started / Wishlist stay
-pinned until the rollout pass; they will consume the same tokens then.
+Scope note: themes recolor every surface the dark template covers — since
+Phase C that is the shell, Inventory, all modals, auth, the row dropdown,
+and Get Started / Wishlist. The Phase C rules consume only the --d-*
+tokens / accent RGB triplets (semantic status hues stay fixed, written in
+rgb()/rgba() form), so all presets + custom themes, light ones included,
+hold on the new surfaces with no extra work.
 
 Interactive elements follow the accent everywhere, modals included
 (2026-10-22): the base `.btn-gradient` builds its gradient + shadow from
-`--btn-rgb` / `--d-electric-deep`, and a CSS block at the end of the
+`--btn-rgb` / `--d-electric-deep`, and a CSS block in the
 dark-shell section re-points the remaining hard-coded blue affordances
 at the same tokens — toggle ON tracks (a `body.dark-shell`-prefixed
 mirror of Tailwind's peer-checked selector, 0,4,1 over its 0,3,0),
@@ -143,14 +150,27 @@ overlays. Semantic status colors (emerald / amber / rose chips, the
 amber safety meter) deliberately stay fixed. Under Midnight Blue every
 one of these values equals the literal it replaced.
 
-## Rollout notes (for the next pass)
+## Rollout notes (Phase C — done 2026-10-22)
 
-- `#getStartedPage` and `#wishlistPage` are temporarily pinned to the old light
-  canvas (`background:#f0f4f8`) so their headings don't sit on navy before their
-  content is re-skinned. Remove the pin when each view is rolled out.
-- `#vehicleActionDropdown` (row "…" menu) is body-level and still light, like the
-  modals — re-skin it with the modal pass.
-- The auth/login overlay now sits over a navy body background (its own card and
-  backdrop are unchanged); check it during the modal pass.
-- Reuse the utility-mapping approach: dark values are keyed to the existing
-  Tailwind classes, so most surfaces convert without markup changes.
+- `#getStartedPage` / `#wishlistPage` light-canvas pins removed: both pages
+  now use the same token gradient canvas as `<main>`, and their cards,
+  fields, and JS-rendered wishlist cards are skinned by the Phase C block.
+- `#vehicleActionDropdown` (row "…" menu) and `#wishlistToast` are skinned
+  as card roots in the Phase C block (their own surface is the card).
+- All 13 modal overlays (settings incl. tab panels, queue, guide, elite
+  info, wishlist form, change price, add FB link, vehicle details,
+  auto-post, auto-repost, photo edits, posting safety, posting
+  preferences) are skinned: cards → `--d-card`, fields → `--d-field`
+  (including the Settings panels' unclassed border-only inputs, via a
+  generic field rule), text → the `--d-h`…`--d-fainter` scale, dividers →
+  `--d-edge` / `--d-line`. Modal backdrops stay `slate-900/40`.
+- Auth overlay checked and skinned with the same modal treatment; the
+  logo/branding lockup is unchanged.
+- Dashboard has no separate surface: the Dashboard nav entry returns to
+  the inventory/dashboard view (`showInventoryPage('dashboard')`), which
+  was already dark.
+- Residuals left deliberately: the photo-preview caption gradient
+  (`from-slate-900/60`, painted over a photo), toggle knobs
+  (`after:bg-white`), solid status dots (`bg-rose-500` etc.), and the
+  Settings → Appearance swatches' JS-set inline preview styles — all
+  intentional in both modes, matching the shell template's treatment.
