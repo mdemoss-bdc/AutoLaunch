@@ -1266,3 +1266,27 @@ and the relative form the app now uses (`assets/no-photo.png`). The
 rest of the check — http(s) only, no `/static/` placeholder paths —
 is identical. No claim, finish, CDP, photo-relay or diag behaviour
 changes.
+
+## v2.1.12 — background job tabs (Matthew's request)
+
+**The risk this answers:** if the user manually navigates the
+helper's Facebook tab to another page while the content script is
+populating the form, that attempt is destroyed — the page (and
+everything filled into it) is gone, the dead script cannot report
+back, and the queue row sits in `processing` until the v2.1.8
+reconciliation fails it as orphaned after 45 minutes. Browsing in
+*other* tabs never hurt a run; only the job's own tab is fragile.
+
+**The change (worker only):** fully automated jobs — Full Auto posts
+and every delete job — now open their Facebook tab with
+`active: false`. The tab loads and works in the background without
+stealing focus, and the worker immediately marks it
+`autoDiscardable: false` so Chrome's Memory Saver cannot discard it
+mid-run. Confirm-mode posts still open in front on purpose: the
+user has to click Publish there, so the tab must be visible.
+
+Success still auto-closes exactly the worker-opened tab; failures
+still leave it open as evidence. Not yet proven live — the first
+Full Auto post after updating to 2.1.12 is the test: queue one car,
+stay on the AutoLaunch tab, and confirm the post completes without
+Chrome ever switching away.

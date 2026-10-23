@@ -194,6 +194,16 @@
 //     value itself is never returned, logged, or otherwise exposed —
 //     only the boolean. Purely additive: no claim, finish, CDP, photo
 //     or diag behaviour changes.
+// 18. BACKGROUND JOB TABS (v2.1.12, Matthew's request): navigating the
+//     helper's Facebook tab away mid-fill destroys that attempt's page
+//     and everything typed into it. Fully automated work therefore no
+//     longer steals the user's place: Full Auto posts and all delete
+//     jobs open with active:false, so the user can keep working in
+//     their current tab while the helper works in its own background
+//     tab, and the job tab is marked autoDiscardable:false so Chrome's
+//     memory saver cannot discard it mid-run. Confirm-mode posts are
+//     the deliberate exception — they still open in front because the
+//     user personally has to click Publish there.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -553,11 +563,25 @@ async function checkQueue() {
     });
 
     await jitter(1500, 4000); // human pacing, never machine-gun tabs
+    // Background-tab rule (v2.1.12): fully automated jobs work in an
+    // inactive tab so they never pull the user away from what they
+    // are doing (and the user browsing elsewhere can't disturb the
+    // form). Confirm-mode posts open active — a human click on
+    // Publish is part of that flow, so the tab must be in front.
+    const runInBackground = isDelete || settings.fullAuto;
     const jobTab = await chrome.tabs.create({
+      active: !runInBackground,
       url: isDelete
         ? "https://www.facebook.com/marketplace/you/selling"
         : "https://www.facebook.com/marketplace/create/vehicle"
     });
+    if (jobTab && jobTab.id != null && chrome.tabs.update) {
+      try {
+        // A background tab must not be discarded by Memory Saver
+        // while the content script is mid-run.
+        await chrome.tabs.update(jobTab.id, { autoDiscardable: false });
+      } catch (e) { /* non-fatal: the job still runs, just unprotected */ }
+    }
     // Record the tab THIS worker opened for THIS job (note 14):
     // a successful finish closes exactly that tab ~4s after the
     // success banner lands. Written as a follow-up merge because
