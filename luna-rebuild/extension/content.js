@@ -719,17 +719,17 @@
   // and "Passion Purple Pearl" with no purple on offer ranks nothing
   // (a known hue, honestly unmatched) instead of a wrong Gray.
   const COLOR_RULES = [
-    { tokens: ["mojave", "sandstone", "sand", "desert", "khaki", "tan", "beige", "cashmere", "almond", "dune", "sahara", "camel"], prefer: ["Beige", "Tan"] },
-    { tokens: ["charcoal", "graphite", "granite", "carbon", "slate", "gunmetal", "anthracite", "magnetic", "ash"], prefer: ["Gray", "Silver"] },
+    { tokens: ["mojave", "sandstone", "sand", "desert", "khaki", "tan", "beige", "cashmere", "almond", "dune", "sahara", "camel", "parchment"], prefer: ["Beige", "Tan"] },
+    { tokens: ["charcoal", "graphite", "granite", "carbon", "slate", "gunmetal", "anthracite", "magnetic", "ash", "stone", "flint", "boulder", "grigio", "pebble"], prefer: ["Gray", "Silver"] },
     { tokens: ["silver", "platinum", "chrome", "steel", "pewter", "tungsten"], prefer: ["Silver", "Gray"] },
     { tokens: ["gray", "grey"], prefer: ["Gray", "Silver"] },
-    { tokens: ["white", "ivory", "cream", "arctic", "alpine", "glacier", "snow", "frost"], prefer: ["White", "Beige"] },
+    { tokens: ["white", "ivory", "cream", "arctic", "alpine", "glacier", "snow", "frost", "linen", "bone"], prefer: ["White", "Beige"] },
     { tokens: ["black", "onyx", "ebony", "jet", "obsidian"], prefer: ["Black"] },
     { tokens: ["crimson", "burgundy", "maroon", "ruby", "wine", "cherry", "garnet", "claret", "red"], prefer: ["Red"] },
     { tokens: ["navy", "sapphire", "cobalt", "azure", "aqua", "sky", "royal", "blue"], prefer: ["Blue", "Teal"] },
     { tokens: ["teal"], prefer: ["Teal", "Blue", "Green"] },
     { tokens: ["emerald", "forest", "olive", "sage", "mint", "green"], prefer: ["Green", "Teal"] },
-    { tokens: ["chocolate", "espresso", "mocha", "coffee", "walnut", "cocoa", "bronze", "copper", "brown"], prefer: ["Brown", "Beige"] },
+    { tokens: ["chocolate", "espresso", "mocha", "coffee", "walnut", "cocoa", "bronze", "copper", "brown", "cognac", "truffle", "mahogany"], prefer: ["Brown", "Beige"] },
     { tokens: ["champagne", "gold"], prefer: ["Gold", "Beige", "Tan"] },
     { tokens: ["tangerine", "sunset", "orange"], prefer: ["Orange", "Red"] },
     { tokens: ["violet", "plum", "lavender", "eggplant", "purple"], prefer: ["Purple", "Pink"] },
@@ -785,6 +785,32 @@
       if (rawWords.includes(o.norm)) push(o.text);
     }
     return ranked;
+  }
+  // v2.1.19 — last-resort coordinating default. rankColorOptions
+  // returning [] used to leave the color UNSET, and Facebook keeps
+  // the form's Next button disabled while a required color is
+  // unset: the 2026-10-23 Focus post filled perfectly, then died
+  // at "could not reach the Publish button" because the dealer's
+  // interior name ("Medium Light Stone") matched no rule. When the
+  // name carries no recognizable hue at all — or the car has NO
+  // color recorded — Matthew's call is to default to a coordinating
+  // neutral rather than lose the post: Gray when offered, else
+  // Charcoal, else the first offered option. The caller records a
+  // color_defaulted step note whenever this fires, so a defaulted
+  // color is never a silent one.
+  function defaultColorOption(optionTexts) {
+    if (!Array.isArray(optionTexts)) return null;
+    const offered = [];
+    for (const t of optionTexts) {
+      const text = String(t == null ? "" : t);
+      if (normText(text) && !offered.some(o => normText(o) === normText(text))) offered.push(text);
+    }
+    if (!offered.length) return null;
+    for (const pref of ["gray", "charcoal"]) {
+      const hit = offered.find(t => normText(t) === pref);
+      if (hit) return hit;
+    }
+    return offered[0];
   }
   // [PURE-COLOR-END]
 
@@ -1757,7 +1783,12 @@
       if ((trigger.tagName || "").toUpperCase() === "SELECT") {
         const optTexts = Array.from(trigger.options || [])
           .map(o => String(o.text || o.value || ""));
-        const rankedSel = rankColorOptions(requested, optTexts);
+        let rankedSel = rankColorOptions(requested, optTexts);
+        let defaultedSel = false;
+        if (!rankedSel.length) {
+          const dflt = defaultColorOption(optTexts);
+          if (dflt) { rankedSel = [dflt]; defaultedSel = true; }
+        }
         if (!rankedSel.length) {
           recordStepNote(fieldName, "color_no_option_match",
             "requested '" + requested + "'; options: " + optTexts.join(" / "),
@@ -1774,15 +1805,17 @@
         }
         const rbSel = extractValue(trigger);
         const goodSel = colorReadBackOk(rbSel, rankedSel[0]);
-        recordStepNote(fieldName, goodSel ? "color_set" : "color_readback_mismatch",
-          "requested '" + requested + "' -> option '" + rankedSel[0] + "'",
+        recordStepNote(fieldName,
+          goodSel && defaultedSel ? "color_defaulted" : (goodSel ? "color_set" : "color_readback_mismatch"),
+          "requested '" + requested + "' -> option '" + rankedSel[0] + "'" +
+            (defaultedSel ? " (defaulted: no coordinating match)" : ""),
           rbSel, trigger);
         return goodSel;
       }
       // Already showing a defensible color (a re-run, or an earlier
       // step pass set it)? Don't churn the dropdown.
       const before = extractValue(trigger);
-      if (before && rankColorOptions(requested, [before]).length) {
+      if (before && (rankColorOptions(requested, [before]).length || !normText(requested))) {
         recordStepNote(fieldName, "color_already_set",
           "requested '" + requested + "'", before, trigger);
         return true;
@@ -1802,6 +1835,11 @@
       }
       const ranked = rankColorOptions(requested,
         options.map(o => String(o.textContent || "")));
+      let defaulted = false;
+      if (!ranked.length) {
+        const dflt = defaultColorOption(options.map(o => String(o.textContent || "")));
+        if (dflt) { ranked.push(dflt); defaulted = true; }
+      }
       if (!ranked.length) {
         recordStepNote(fieldName, "color_no_option_match",
           "requested '" + requested + "'; options: " +
@@ -1838,8 +1876,9 @@
         if (t3) trigger = t3;
         lastRead = extractValue(trigger);
         if (colorReadBackOk(lastRead, wanted)) {
-          recordStepNote(fieldName, "color_set",
-            "requested '" + requested + "' -> option '" + wanted + "'",
+          recordStepNote(fieldName, defaulted ? "color_defaulted" : "color_set",
+            "requested '" + requested + "' -> option '" + wanted + "'" +
+              (defaulted ? " (defaulted: no coordinating match)" : ""),
             lastRead, trigger);
           return true;
         }
@@ -1850,8 +1889,9 @@
           if (t4) trigger = t4;
           lastRead = extractValue(trigger);
           if (colorReadBackOk(lastRead, wanted)) {
-            recordStepNote(fieldName, "color_set",
-              "requested '" + requested + "' -> option '" + wanted + "' (cdp click)",
+            recordStepNote(fieldName, defaulted ? "color_defaulted" : "color_set",
+              "requested '" + requested + "' -> option '" + wanted + "' (cdp click)" +
+                (defaulted ? " (defaulted: no coordinating match)" : ""),
               lastRead, trigger);
             return true;
           }

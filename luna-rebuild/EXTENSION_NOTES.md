@@ -1484,3 +1484,43 @@ by the seller's own Selling-page searches) — most likely
 because the F-250 attempt had already opened the survey on the
 shared tab. 2.1.18 makes a lone, first-in-session delete work
 standalone; that is the retest it needs.
+
+## 25. Color default: an unmatched color can no longer kill a post (v2.1.19, 2026-10-23)
+
+Live failure (2026-10-23 ~13:49 EDT, Matthew's own account):
+the 2016 Ford Focus filled perfectly — photos, price, VIN,
+description, exterior color ('Ruby Red Metallic Tinted
+Clearcoat' -> Red) — then FAILED with "Full Auto could not
+reach Facebook's Publish button". Matthew's console screenshot
+showed why: the interior color step note read
+color_no_option_match for the dealer's name "Medium Light
+Stone" (Facebook offers only Black/Blue/Brown/Gold/Green/
+Gray/Purple/Red/Silver/Orange/White/Yellow/Charcoal/Off
+white/Tan). The field stayed unset, and Facebook keeps the
+form's Next button disabled while a required color is unset —
+so Publish was never reachable. Matthew rescued the post by
+hand (set Gray, published; Luna set the app's posted stamp
+from his Selling-page proof).
+
+Fix (content.js, PURE-COLOR block + fillColorDropdown):
+(a) new rule tokens for real dealer names seen across the
+live inventory — stone/flint/boulder/grigio/pebble -> Gray
+family; parchment -> Tan family; linen/bone -> White family;
+cognac/truffle/mahogany -> Brown family. "Medium Light Stone"
+now ranks Gray directly.
+(b) defaultColorOption(): when rankColorOptions still finds
+no coordinating match — an unrecognizable name ("Sport") or
+NO color recorded at all (82 active cars) — the filler now
+sets a coordinating neutral default instead of leaving the
+field blank: Gray when offered, else Charcoal, else the
+first offered option. Matthew approved the approach ("make
+it default to a color that coordinates with it"). Every
+default is recorded as a color_defaulted step note, never
+silent. The already-set early check also leaves an existing
+value alone when the request itself is empty.
+
+Inventory coverage (checked 2026-10-23): 420 distinct
+interior names — 283 direct (2,020 cars), 58 keyword-mapped
+(352 cars), 78 default-only (184 cars), 82 cars with no
+interior color recorded. After this change, no car in the
+fleet can fail a post over an unset color field.
