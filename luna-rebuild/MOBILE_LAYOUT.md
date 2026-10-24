@@ -107,3 +107,15 @@ No data flow, filtering, queue/posting logic, or table markup changed.
 8. Known cosmetic edge: widening a phone browser (or rotating a tablet)
    across 768px while chunked keeps the Show more button until the next
    filter/search/sort re-render, which then paints the full grid.
+
+## Addendum 2026-10-24 — collapsible header box (Matthew's request)
+
+On phones, the entire Inventory header (title/status line, Refresh +
+Configure buttons, and the 6-card automation ribbon) collapses into
+ONE compact bar: menu button, "Inventory", a live one-line summary
+("Automations on · 0 of 10 today", fed by the ribbon's own labels via
+`updateMobileHeaderSummary()`), and a Details toggle. Implementation:
+header + ribbon carry `.mobile-collapsible-header`; a
+`@media (max-width: 767px)` rule hides them unless `.mobile-header-open`;
+state persists per device in localStorage `al_mobile_header` (default
+closed). Desktop never matches the media query — zero change.

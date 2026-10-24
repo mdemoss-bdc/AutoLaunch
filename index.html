@@ -528,6 +528,12 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 @media (max-width: 767px) {
   #filterBar:not(.mobile-filters-open) { display: none; }
 }
+/* Phone layout: the Inventory header bar + automation ribbon collapse
+   behind the phone-only compact bar (toggleMobileHeader adds
+   .mobile-header-open). At >=768px this rule does not apply. */
+@media (max-width: 767px) {
+  .mobile-collapsible-header:not(.mobile-header-open) { display: none; }
+}
 </style>
 </head>
 <!-- ============================================================================== -->
@@ -1046,9 +1052,23 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 <!-- ============================================================================= -->
   <main class="flex-1 min-w-0 overflow-y-auto px-8 py-6 space-y-5 h-screen">
 
+  <!-- Mobile compact header bar (phones only): the full header below collapses into this -->
+  <div class="md:hidden glass-card rounded-xl px-3 py-2.5 flex items-center gap-2.5 shadow-sm">
+    <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="shrink-0 w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-700 flex items-center justify-center cursor-pointer">
+      <i class="fa-solid fa-bars"></i>
+    </button>
+    <div class="flex-1 min-w-0">
+      <p class="text-sm font-black text-slate-900 leading-tight">Inventory</p>
+      <p id="mobileHeaderSummary" class="text-[11px] text-slate-500 truncate">Automations</p>
+    </div>
+    <button type="button" onclick="toggleMobileHeader()" aria-label="Show or hide header details" class="shrink-0 h-9 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+      Details <i id="mobileHeaderChevron" class="fa-solid fa-chevron-down text-[10px] transition-transform"></i>
+    </button>
+  </div>
+
   <!-- Header Bar -->
 
-<div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+<div class="mobile-collapsible-header flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
 
   <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
     <i class="fa-solid fa-bars"></i>
@@ -1124,7 +1144,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 </div>
 
   <!-- 6-Card Vibrant Automation Ribbon -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+  <div class="mobile-collapsible-header grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
     
     <!-- 1. Automations -->
     <div onclick="openSettingsModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
@@ -3160,6 +3180,7 @@ async function initAppSession(user) {
   // phones) through the same path the view toggle uses, so the containers
   // and toggle buttons match the mode before the first inventory render.
   setViewMode(initialInventoryViewMode(), false);
+  initMobileHeader();
   document.getElementById("authOverlay").classList.add("hidden");
   const userPrefix = user.email.split("@")[0];
   document.getElementById("userDisplayName").innerText = userPrefix;
@@ -3972,6 +3993,41 @@ function showMoreGridCars() {
 function toggleMobileFilters() {
   const bar = document.getElementById("filterBar");
   if (bar) bar.classList.toggle("mobile-filters-open");
+}
+
+// Phone header collapse: the header bar + automation ribbon
+// (.mobile-collapsible-header) hide behind the compact bar on phones.
+// State persists per device; desktop never sees the hiding rule.
+function updateMobileHeaderSummary() {
+  const el = document.getElementById("mobileHeaderSummary");
+  if (!el) return;
+  const chk = document.getElementById("chkRibbonAutoMain");
+  const autoTxt = chk ? (chk.checked ? "Automations on" : "Automations off") : "Automations";
+  const lim = document.getElementById("ribbonSafetyLimitLabel");
+  el.innerText = autoTxt + (lim && lim.innerText ? " \u00B7 " + lim.innerText.trim() : "");
+}
+
+function toggleMobileHeader() {
+  let open = false;
+  document.querySelectorAll(".mobile-collapsible-header").forEach(el => {
+    el.classList.toggle("mobile-header-open");
+    open = el.classList.contains("mobile-header-open");
+  });
+  const ch = document.getElementById("mobileHeaderChevron");
+  if (ch) ch.style.transform = open ? "rotate(180deg)" : "";
+  try { localStorage.setItem("al_mobile_header", open ? "open" : "closed"); } catch (e) {}
+  updateMobileHeaderSummary();
+}
+
+function initMobileHeader() {
+  let open = false;
+  try { open = localStorage.getItem("al_mobile_header") === "open"; } catch (e) {}
+  if (open) {
+    document.querySelectorAll(".mobile-collapsible-header").forEach(el => el.classList.add("mobile-header-open"));
+    const ch = document.getElementById("mobileHeaderChevron");
+    if (ch) ch.style.transform = "rotate(180deg)";
+  }
+  updateMobileHeaderSummary();
 }
 
 // Count badge on the phone Filters button: how many of the 8 bar selects
@@ -7260,6 +7316,7 @@ async function toggleRibbonSetting(k) {
   }
   syncRibbonMasterCheckbox();
   renderRibbonStatuses();
+  updateMobileHeaderSummary();
 }
 
 // Phase 6: per-channel switches. Columns live in user_settings once the
@@ -7656,6 +7713,7 @@ async function refreshSafetyCounter() {
   if (!currentUser) return;
   const used = await getDailyPostUsage();
   updateSafetyCounterUI(used, userDailyPostLimit);
+  updateMobileHeaderSummary();
 }
 function toggleSelectAllCars(master) {
   const filtered = Array.isArray(window.currentFilteredInventory)
