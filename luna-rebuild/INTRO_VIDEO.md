@@ -1,17 +1,22 @@
-# Intro Video — spec (no code yet)
+# Intro Video — spec + Phase 1 build record
 
 Matthew's idea, 2026-10-24, sparked by the boss-requested walkaround video
-he filmed that morning. Status: **spec only — nothing built, nothing
-changed.** When built, it is built in `luna-rebuild/` only and reaches the
-live app solely on Matthew's explicit approval, like every feature this
-week.
+he filmed that morning. Status: **APPROVED by Matthew 2026-10-24, with a
+multi-video expansion he added the same day** (below); **Phase 1 (app
+side) is BUILT** — see "Build phases". The expansion: a user may upload
+**multiple** intro videos, pin one as the selection, or choose a
+**random-per-post** mode; each video can be deleted individually. The
+selection/mode stays exactly as the user left it until they change it.
+Backend (bucket, table, settings columns) was applied live 2026-10-24;
+the app changes were built in `luna-rebuild/` and the root copy, like
+every feature this week.
 
 ## The idea in one line
 
-A salesperson records ONE short personal intro video, uploads it once,
-and AutoLaunch attaches it to their posts automatically — so every
-listing carries the same human face, and buyers start recognizing the rep
-before they ever message.
+A salesperson records one or more short personal intro videos, uploads
+them once, and AutoLaunch attaches one to their posts automatically —
+so every listing carries the same human face, and buyers start
+recognizing the rep before they ever message.
 
 This is the *evergreen* video (same for every post). Per-car walkaround
 videos (like the Civic one) are a different thing and are out of scope
@@ -19,40 +24,61 @@ here.
 
 ## What the rep sees
 
-Settings → **Dealership** tab, a new card **"My intro video"** sitting
-beside the logo upload (same mental home: your brand). It reuses the
-logo's proven upload pattern.
+Settings → **Dealership** tab, a new card **"My Intro Videos"** sitting
+immediately after the Dealership Configuration card (same mental home:
+your brand). It reuses the logo's proven upload pattern.
 
-Card states:
-- **Empty:** "No intro video yet" + Upload button + one guidance line:
-  *Shoot it vertical, 10–20 seconds: your name, your store, one line
-  that sounds like you.*
-- **Uploading:** progress, then an inline preview player.
-- **Ready:** preview player, **Replace**, **Remove**. Replacing
-  overwrites — there is only ever one intro video per user.
-
-Below the card, one toggle: **"Attach my intro video to my posts"** —
-**default OFF**. Below that, one honest line naming which channels
-currently use it (updated as phases land), so nobody believes it is
-attached somewhere it is not.
+Card contents (as built):
+- One guidance line: *Shoot it vertical, 10–20 seconds: your name, your
+  store, one line that sounds like you.*
+- A toggle: **"Attach an intro video to my posts"** — **default OFF**,
+  saved the moment it is flipped.
+- A mode control with two choices: **Use selected video** and **Pick
+  randomly each post**. Random mode says plainly that a random one of
+  the videos below is chosen for each post.
+- An **Upload intro video** button accepting MP4/MOV/WebM, multiple
+  files at once, with per-file progress in a status line.
+- **Empty:** "No intro videos yet."
+- **Each video:** an inline preview player, a **Use this one** button
+  (shown as **Selected ✓** on the pinned video while mode is
+  'selected'), and a **Delete** button (asks first; deletes the storage
+  file and the record; deleting the selected video clears the
+  selection). The first video a user ever uploads becomes the selection
+  automatically.
+- One honest footer line naming which channels currently use it
+  (updated as phases land), so nobody believes it is attached somewhere
+  it is not: attaching goes live channel by channel — TikTok and
+  Instagram first — and Phase 1 changes no posts.
 
 Upload rules (enforced before upload, on the device):
 - MP4, MOV, or WebM; **≤ 50 MB**.
 - Duration read on-device: **warn** over 30 seconds ("long for an
   intro"), **block** over 90 seconds. Recommended: 10–20.
 
-## Storage & data (additive only)
+## Storage & data (additive only) — AS SHIPPED 2026-10-24
 
 - New public Storage bucket **`intro-videos`** (kept separate from
-  `branding` so video size/lifecycle never tangles with logos), path
-  `{user_id}/intro.<ext>` — same per-user pattern the logo uses.
-- `user_settings` gains exactly two columns, via an additive migration
-  draft in `supabase/migrations_draft/` (drafted, **not applied** until
-  a build is approved — same pattern as the wishlist migration):
-  - `intro_video_url` (text, nullable)
+  `branding` so video size/lifecycle never tangles with logos), per-user
+  folder, path `{user_id}/intro-<timestamp>-<index>.<ext>`; its RLS
+  mirrors the `branding` bucket.
+- New table **`user_intro_videos`** (owner CRUD via RLS): `id` (uuid),
+  `user_id`, `video_url` (text), `storage_path` (text), `created_at`.
+  One row per uploaded video — this is what makes multiple videos,
+  per-video selection, and per-video delete work.
+- `user_settings` gained exactly three columns:
   - `intro_video_enabled` (boolean, **default false**)
+  - `intro_video_mode` (text, **default 'selected'** — 'selected' |
+    'random')
+  - `intro_selected_video_id` (uuid, nullable, FK →
+    `user_intro_videos.id` **ON DELETE SET NULL**, so deleting the
+    selected video clears the selection by itself)
+- The bucket, table, and columns were applied live via an additive
+  migration on **2026-10-24** (Matthew's approval above). An earlier
+  draft of this spec had a single `intro_video_url` column on
+  user_settings instead — superseded by the table when Matthew asked
+  for multiple videos.
 - Nothing is added to queue rows or inventory. Every reader looks the
-  video up in settings at the moment it is needed, so **Remove** and the
+  video up in settings at the moment it is needed, so **Delete** and the
   toggle take effect everywhere immediately.
 
 ## What happens per channel
@@ -75,16 +101,19 @@ Upload rules (enforced before upload, on the device):
    limits, delete logic, and the post→delete flow graduated on
    2026-10-23 (ext 2.1.23) are not modified. The only new behavior is a
    settings lookup at post-prep time.
-4. **Instant kill switch.** Toggle off, or Remove, and it is detached
-   everywhere from the next post onward — no cleanup queue, no residue.
+4. **Instant kill switch.** Toggle off, or Delete the videos, and it is
+   detached everywhere from the next post onward — no cleanup queue, no
+   residue.
 5. **Rebuild-only until approved.** Tested on Matthew's account in the
    test copy first; live merge only on his word.
 
 ## Build phases
 
-- **P1 — App side only.** Upload/preview/replace/remove, toggle, storage,
-  migration draft. Fully visible and testable; affects **no** channel
-  yet. This is the only phase this spec asks to approve.
+- **P1 — App side only. ✅ BUILT 2026-10-24.** Upload (multiple files,
+  with the size/duration guards below), preview players, per-video
+  select + random mode, per-video delete, toggle, storage, table and
+  settings columns (migration applied live the same day). Fully visible
+  and testable; affects **no** channel yet.
 - **P2 — TikTok/IG bookend.** Lands with the generated-video build; also
   strengthens the TikTok sandbox demo (a real end-to-end flow to film).
 - **P3 — Facebook Page attach.** Lands with the Page channel.
@@ -97,7 +126,9 @@ Upload rules (enforced before upload, on the device):
    variant can come later without re-uploading.)
 2. **Length policy.** Recommendation as specced: warn > 30s, block >
    90s.
-3. **Approve P1** to build in the rebuild — or park the spec here.
+3. **Approve P1** — ✅ decided 2026-10-24: Matthew approved P1 and
+   expanded it the same day to multiple videos + per-video select +
+   random-per-post mode + per-video delete (all shipped in P1, above).
 
 ## Test plan (when P1+ is built)
 

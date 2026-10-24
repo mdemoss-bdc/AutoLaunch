@@ -1780,6 +1780,56 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 
         </div>
 
+        <!-- INTRO VIDEOS CARD -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <h3 class="font-bold text-lg mb-2">
+            My Intro Videos
+          </h3>
+
+          <p class="text-xs text-slate-400 mb-5">
+            Shoot it vertical, 10–20 seconds: your name, your store, one line that sounds like you. Upload one or a few — you can pin one, or let AutoLaunch pick at random.
+          </p>
+
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <p class="text-sm font-semibold text-slate-800">Attach an intro video to my posts</p>
+              <p class="text-xs text-slate-500">Off by default. Your choice saves right away.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkIntroVideoEnabled" onchange="toggleIntroEnabled(this)" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+            </label>
+          </div>
+
+          <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Which video to use
+          </label>
+
+          <div class="inline-flex rounded-xl bg-slate-100 p-1 gap-1 mb-2">
+            <button type="button" id="introModeSelectedBtn" onclick="setIntroMode('selected')" class="px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer">Use selected video</button>
+            <button type="button" id="introModeRandomBtn" onclick="setIntroMode('random')" class="px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer">Pick randomly each post</button>
+          </div>
+
+          <p id="introModeHint" class="text-xs text-slate-400 mb-5"></p>
+
+          <div id="introVideoList" class="space-y-3 mb-5"></div>
+
+          <input type="file" id="introVideoFileInput" accept="video/mp4,video/quicktime,video/webm" multiple class="hidden" onchange="onIntroVideosChosen(this)">
+
+          <button type="button" onclick="document.getElementById('introVideoFileInput').click()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl px-4 py-3 cursor-pointer">
+            Upload intro video
+          </button>
+
+          <p id="introVideoStatus" class="text-xs text-slate-500 mt-3"></p>
+
+          <p class="text-xs text-slate-400 mt-4">
+            Attaching goes live channel by channel — TikTok and Instagram first. Turning this on saves your preference now; posts are unchanged until the channel support lands.
+          </p>
+
+        </div>
+
         <!-- ACCOUNT CARD -->
 
         <div class="glass-card rounded-2xl p-6">
@@ -6239,7 +6289,7 @@ async function saveWishlistForm() {
   }
 }
 
-function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); renderLocationGroupsSettings(); renderThemePicker(); refreshTikTokStatus(); }
+function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); renderLocationGroupsSettings(); renderThemePicker(); refreshTikTokStatus(); safeLoadIntroVideos(); }
 function renderUserId() { const el = document.getElementById("settingsUserId"); if (el) el.textContent = (currentUser && currentUser.id) ? currentUser.id : "—"; }
 async function copyUserId() {
   const id = (currentUser && currentUser.id) ? currentUser.id : "";
@@ -6264,6 +6314,7 @@ function switchSettingsTab(tab) {
     const active = btn.getAttribute("data-settings-tab") === tab;
     btn.className = "w-full text-left px-4 py-3 rounded-xl cursor-pointer " + (active ? "bg-blue-600 text-white font-bold" : "bg-slate-100 text-slate-600 font-semibold");
   });
+  if (tab === "dealership") safeLoadIntroVideos();
 }
 // ==============================================================================
 // ====================== TIKTOK CONNECT (SANDBOX) START ========================
@@ -6432,6 +6483,229 @@ async function sendTikTokTestPost() {
   } catch (e) { /* never let a toast break page load */ }
 })();
 // ======================= TIKTOK CONNECT (SANDBOX) END ========================
+// ==============================================================================
+// ====================== INTRO VIDEOS (PHASE 1) START ==========================
+// ==============================================================================
+// Settings → Dealership → "My Intro Videos". A rep uploads one or more
+// short personal intro videos; the app stores them (bucket intro-videos,
+// table user_intro_videos) plus three preferences on user_settings:
+// intro_video_enabled (default OFF), intro_video_mode ('selected' |
+// 'random') and intro_selected_video_id. PHASE 1 IS APP-SIDE ONLY — no
+// posting channel reads any of this yet, so nothing about posting can
+// change. See luna-rebuild/INTRO_VIDEO.md.
+// ==============================================================================
+let introVideosState = { videos: [], enabled: false, mode: "selected", selectedId: null };
+
+function setIntroStatus(msg) {
+  const el = document.getElementById("introVideoStatus");
+  if (el) el.innerText = msg || "";
+}
+
+// Guarded entry point for the settings hooks: a failure here must never
+// break opening Settings.
+function safeLoadIntroVideos() {
+  try {
+    if (typeof currentUser !== "undefined" && currentUser) loadIntroVideos();
+  } catch (e) { console.error("[IntroVideos] loader hook failed:", e); }
+}
+
+// Persist intro preferences on user_settings: update first; if no row
+// exists yet, fall back to an upsert carrying just user_id + the patch
+// (same best-effort spirit as persistBrandingSettings).
+async function persistIntroSettings(patch) {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient.from("user_settings")
+      .update(patch).eq("user_id", currentUser.id).select("user_id");
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      const row = Object.assign({ user_id: currentUser.id }, patch);
+      const { error: upErr } = await supabaseClient.from("user_settings")
+        .upsert(row, { onConflict: "user_id" });
+      if (upErr) throw upErr;
+    }
+  } catch (err) {
+    console.error("[IntroVideos] settings save failed:", err);
+    setIntroStatus("Couldn't save that setting: " + (err.message || "please try again"));
+  }
+}
+
+async function loadIntroVideos() {
+  if (!document.getElementById("introVideoList")) return;
+  if (!currentUser || !supabaseClient) { renderIntroVideos(); return; }
+  try {
+    const [videosRes, settingsRes] = await Promise.all([
+      supabaseClient.from("user_intro_videos")
+        .select("id, video_url, storage_path, created_at")
+        .eq("user_id", currentUser.id)
+        .order("created_at", { ascending: true }),
+      supabaseClient.from("user_settings")
+        .select("intro_video_enabled, intro_video_mode, intro_selected_video_id")
+        .eq("user_id", currentUser.id)
+        .maybeSingle()
+    ]);
+    if (videosRes.error) throw videosRes.error;
+    introVideosState.videos = videosRes.data || [];
+    const s = settingsRes.data || {};
+    introVideosState.enabled = !!s.intro_video_enabled;
+    introVideosState.mode = s.intro_video_mode === "random" ? "random" : "selected";
+    introVideosState.selectedId = s.intro_selected_video_id || null;
+  } catch (err) {
+    console.error("[IntroVideos] load failed:", err);
+    introVideosState.videos = [];
+  }
+  renderIntroVideos();
+}
+
+function renderIntroVideos() {
+  const chk = document.getElementById("chkIntroVideoEnabled");
+  if (chk) chk.checked = !!introVideosState.enabled;
+  const activeCls = "px-4 py-2 rounded-lg text-sm bg-blue-600 text-white font-bold cursor-pointer";
+  const idleCls = "px-4 py-2 rounded-lg text-sm text-slate-600 font-semibold cursor-pointer";
+  const selBtn = document.getElementById("introModeSelectedBtn");
+  const rndBtn = document.getElementById("introModeRandomBtn");
+  if (selBtn) selBtn.className = introVideosState.mode === "selected" ? activeCls : idleCls;
+  if (rndBtn) rndBtn.className = introVideosState.mode === "random" ? activeCls : idleCls;
+  const hint = document.getElementById("introModeHint");
+  if (hint) hint.innerText = introVideosState.mode === "random"
+    ? "A random one of the videos below is chosen for each post."
+    : "Each post uses the video marked Selected below.";
+  const listEl = document.getElementById("introVideoList");
+  if (!listEl) return;
+  const videos = introVideosState.videos || [];
+  if (!videos.length) {
+    listEl.innerHTML = '<p class="text-sm text-slate-400">No intro videos yet.</p>';
+    return;
+  }
+  listEl.innerHTML = videos.map(function (v) {
+    const isSelected = introVideosState.mode === "selected" && introVideosState.selectedId === v.id;
+    const idArg = String(v.id || "").replace(/[^a-zA-Z0-9-]/g, "");
+    const pathArg = String(v.storage_path || "").replace(/[^a-zA-Z0-9\-._\/]/g, "");
+    const selectBtn = isSelected
+      ? '<button type="button" disabled class="px-4 py-2 rounded-xl bg-emerald-100 text-emerald-700 text-sm font-bold cursor-default">Selected ✓</button>'
+      : '<button type="button" onclick="selectIntroVideo(\'' + idArg + '\')" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold cursor-pointer">Use this one</button>';
+    return '<div class="flex flex-wrap items-start gap-4 border border-slate-200 rounded-2xl p-3">' +
+      '<video src="' + v.video_url + '" controls preload="metadata" playsinline class="h-40 w-auto max-w-full rounded-xl bg-black"></video>' +
+      '<div class="flex flex-col gap-2 pt-1">' + selectBtn +
+      '<button type="button" onclick="deleteIntroVideo(\'' + idArg + '\', \'' + pathArg + '\')" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-700 text-sm font-semibold cursor-pointer">Delete</button>' +
+      '</div></div>';
+  }).join("");
+}
+
+// Read a candidate file's duration on-device (seconds; 0 if unreadable).
+function introVideoDuration(file) {
+  return new Promise((resolve) => {
+    let url = null;
+    try {
+      url = URL.createObjectURL(file);
+      const probe = document.createElement("video");
+      probe.preload = "metadata";
+      probe.onloadedmetadata = function () {
+        const d = probe.duration;
+        if (url) URL.revokeObjectURL(url);
+        resolve(isFinite(d) ? d : 0);
+      };
+      probe.onerror = function () {
+        if (url) URL.revokeObjectURL(url);
+        resolve(0);
+      };
+      probe.src = url;
+    } catch (e) { resolve(0); }
+  });
+}
+
+async function onIntroVideosChosen(input) {
+  const files = Array.prototype.slice.call((input && input.files) || []);
+  if (input) input.value = "";
+  if (!files.length || !currentUser) return;
+  const hadVideos = (introVideosState.videos || []).length > 0;
+  let uploaded = 0;
+  let anyLongWarning = false;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    try {
+      if (file.size > 50 * 1024 * 1024) {
+        setIntroStatus("Skipped \u201C" + file.name + "\u201D — bigger than 50 MB.");
+        continue;
+      }
+      const duration = await introVideoDuration(file);
+      if (duration > 90) {
+        setIntroStatus("Skipped \u201C" + file.name + "\u201D — " + Math.round(duration) + "s is too long for an intro (90s max).");
+        continue;
+      }
+      if (duration > 30) anyLongWarning = true; // warn, but allow
+      setIntroStatus("Uploading " + (i + 1) + " of " + files.length + "…");
+      const extMatch = (file.name || "").match(/\.([a-z0-9]+)$/i);
+      const ext = extMatch ? extMatch[1].toLowerCase() : "mp4";
+      const path = currentUser.id + "/intro-" + Date.now() + "-" + i + "." + ext;
+      const { error: upErr } = await supabaseClient.storage.from("intro-videos")
+        .upload(path, file, { upsert: false, contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { data: pub } = supabaseClient.storage.from("intro-videos").getPublicUrl(path);
+      const { data: row, error: insErr } = await supabaseClient.from("user_intro_videos")
+        .insert({ user_id: currentUser.id, video_url: pub.publicUrl, storage_path: path })
+        .select("id").single();
+      if (insErr) throw insErr;
+      uploaded++;
+      // The first video a user ever adds becomes the selection, so the
+      // default state is sensible without an extra click.
+      if (!hadVideos && uploaded === 1 && !introVideosState.selectedId && row && row.id) {
+        introVideosState.selectedId = row.id;
+        await persistIntroSettings({ intro_selected_video_id: row.id });
+      }
+    } catch (err) {
+      console.error("[IntroVideos] upload failed:", err);
+      setIntroStatus("Upload failed for \u201C" + file.name + "\u201D: " + (err.message || "please try again"));
+    }
+  }
+  await loadIntroVideos();
+  if (uploaded > 0) {
+    setIntroStatus((uploaded === 1 ? "Intro video saved." : uploaded + " intro videos saved.") +
+      (anyLongWarning ? " Heads up: one is over 30s — long for an intro." : ""));
+  }
+}
+
+async function toggleIntroEnabled(checkbox) {
+  introVideosState.enabled = !!(checkbox && checkbox.checked);
+  await persistIntroSettings({ intro_video_enabled: introVideosState.enabled });
+}
+
+async function setIntroMode(mode) {
+  introVideosState.mode = mode === "random" ? "random" : "selected";
+  await persistIntroSettings({ intro_video_mode: introVideosState.mode });
+  renderIntroVideos();
+}
+
+async function selectIntroVideo(id) {
+  introVideosState.mode = "selected";
+  introVideosState.selectedId = id;
+  await persistIntroSettings({ intro_video_mode: "selected", intro_selected_video_id: id });
+  renderIntroVideos();
+  setIntroStatus("That video is now your selected intro.");
+}
+
+async function deleteIntroVideo(id, storagePath) {
+  if (!confirm("Delete this intro video? This can't be undone.")) return;
+  if (!currentUser) return;
+  try {
+    if (storagePath) {
+      const { error: rmErr } = await supabaseClient.storage.from("intro-videos").remove([storagePath]);
+      if (rmErr) console.warn("[IntroVideos] storage cleanup failed:", rmErr.message);
+    }
+    const { error } = await supabaseClient.from("user_intro_videos")
+      .delete().eq("id", id).eq("user_id", currentUser.id);
+    if (error) throw error;
+    // Deleting the selected video clears the selection (the FK does this
+    // server-side too: intro_selected_video_id is ON DELETE SET NULL).
+    if (introVideosState.selectedId === id) introVideosState.selectedId = null;
+    setIntroStatus("Intro video deleted.");
+  } catch (err) {
+    console.error("[IntroVideos] delete failed:", err);
+    setIntroStatus("Couldn't delete that video: " + (err.message || "please try again"));
+  }
+  await loadIntroVideos();
+}
+// ====================== INTRO VIDEOS (PHASE 1) END ============================
 // ==============================================================================
 // ====================== COLOR THEME ENGINE START ==============================
 // ==============================================================================
