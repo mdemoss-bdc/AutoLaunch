@@ -113,7 +113,12 @@ Upload rules (enforced before upload, on the device):
   with the size/duration guards below), preview players, per-video
   select + random mode, per-video delete, toggle, storage, table and
   settings columns (migration applied live the same day). Fully visible
-  and testable; affects **no** channel yet.
+  and testable; affects **no** channel yet. Follow-up the same day:
+  per-user cap of **6 videos** (bounds worst-case storage per account)
+  and a **1080p recording tip** in the card — the 50 MB per-file cap is
+  the Supabase free plan's global limit (paid tier raises it to
+  500 MB); at ~20 MB per typical intro, even 1,000 users ≈ 60 GB,
+  inside the paid tier's included 100 GB.
 - **P2 — TikTok/IG bookend.** Lands with the generated-video build; also
   strengthens the TikTok sandbox demo (a real end-to-end flow to film).
 - **P3 — Facebook Page attach.** Lands with the Page channel.

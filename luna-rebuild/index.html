@@ -1789,7 +1789,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           </h3>
 
           <p class="text-xs text-slate-400 mb-5">
-            Shoot it vertical, 10–20 seconds: your name, your store, one line that sounds like you. Upload one or a few — you can pin one, or let AutoLaunch pick at random.
+            Shoot it vertical, 10–20 seconds: your name, your store, one line that sounds like you. Tip: record at 1080p — 4K clips are too big to upload (50 MB max per video). Keep up to 6 videos — pin one, or let AutoLaunch pick at random.
           </p>
 
           <div class="flex items-center justify-between mb-5">
@@ -6495,6 +6495,7 @@ async function sendTikTokTestPost() {
 // change. See luna-rebuild/INTRO_VIDEO.md.
 // ==============================================================================
 let introVideosState = { videos: [], enabled: false, mode: "selected", selectedId: null };
+const INTRO_VIDEO_MAX = 6; // per-user cap: bounds worst-case storage per account
 
 function setIntroStatus(msg) {
   const el = document.getElementById("introVideoStatus");
@@ -6623,6 +6624,10 @@ async function onIntroVideosChosen(input) {
   let anyLongWarning = false;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+    if ((introVideosState.videos || []).length + uploaded >= INTRO_VIDEO_MAX) {
+      setIntroStatus("You're at the " + INTRO_VIDEO_MAX + "-video limit — delete one to add another.");
+      break;
+    }
     try {
       if (file.size > 50 * 1024 * 1024) {
         setIntroStatus("Skipped \u201C" + file.name + "\u201D — bigger than 50 MB.");
