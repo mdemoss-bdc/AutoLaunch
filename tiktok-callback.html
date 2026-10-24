@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connecting TikTok — AutoLaunch</title>
+<link rel="icon" href="icons/favicon.ico">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --page: #070D1A; --card: #101B30; --field: #0E1930;
+    --h: #E9EFF8; --body: #CBD5E1; --soft: #9FB0C7;
+    --edge: rgba(59, 130, 246, 0.22); --accent: #2E7CF6; --link: #58A6FF;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 18px 64px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(180deg, #0B1424 0%, var(--page) 55%);
+    color: var(--body); line-height: 1.65;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+  .brand img { width: 52px; height: 52px; border-radius: 14px; }
+  .brand .name { font-size: 26px; font-weight: 800; color: var(--h); letter-spacing: -0.02em; line-height: 1.1; }
+  .brand .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--link); }
+  .card {
+    background: var(--card); border: 1px solid var(--edge);
+    border-radius: 20px; padding: 34px 36px;
+    box-shadow: 0 12px 32px rgba(2, 6, 17, 0.5);
+    text-align: center;
+  }
+  h1 { font-size: 28px; color: var(--h); margin: 0 0 6px; letter-spacing: -0.01em; }
+  p, li { font-size: 15px; }
+  .status { color: var(--soft); font-size: 15px; margin: 10px 0 4px; min-height: 24px; }
+  .status.ok { color: #34D399; font-weight: 700; }
+  .status.err { color: #FB7185; font-weight: 700; }
+  .spinner {
+    width: 34px; height: 34px; margin: 18px auto 6px;
+    border: 3px solid var(--edge); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  a { color: var(--link); }
+  .btn {
+    display: inline-block; margin-top: 16px; padding: 10px 22px;
+    background: var(--accent); color: #fff; font-weight: 700; font-size: 14px;
+    border-radius: 12px; text-decoration: none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <img src="icons/logo-mark-512.png" alt="AutoLaunch logo">
+    <div>
+      <div class="name">AutoLaunch</div>
+      <div class="tag">Intelligence Suite</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h1>Connecting TikTok</h1>
+    <div id="spinner" class="spinner"></div>
+    <p id="status" class="status">Finishing your TikTok connection…</p>
+    <p id="action" style="display:none"><a class="btn" href="./index.html">Back to AutoLaunch</a></p>
+  </div>
+
+</div>
+
+<script>
+// TikTok Login Kit redirect target. TikTok sends the browser here with
+// ?code=…&state=… after the user authorizes (or ?error=… if they don't).
+// The code is handed to the tiktok-auth Edge Function, which performs
+// the secret-bearing token exchange server-side — this page never sees
+// or logs any token.
+const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
+const SUPABASE_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const statusEl = document.getElementById("status");
+const spinnerEl = document.getElementById("spinner");
+const actionEl = document.getElementById("action");
+
+function showResult(kind, message) {
+  spinnerEl.style.display = "none";
+  statusEl.className = "status " + kind;
+  statusEl.textContent = message;
+  if (kind === "err") actionEl.style.display = "block";
+}
+
+(async function () {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  const state = params.get("state");
+  const ttError = params.get("error_description") || params.get("error");
+
+  if (ttError) {
+    showResult("err", "TikTok didn't complete the connection: " + ttError);
+    return;
+  }
+  if (!code) {
+    showResult("err", "No authorization code came back from TikTok. Start the connection again from AutoLaunch Settings.");
+    return;
+  }
+
+  // The exchange must be tied to the signed-in AutoLaunch user — the
+  // auth function derives the owner from this session token.
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session || !session.access_token) {
+    showResult("err", "Sign in to AutoLaunch first, then try connecting again.");
+    return;
+  }
+  if (state && state !== session.user.id) {
+    showResult("err", "This TikTok connection was started from a different AutoLaunch account. Sign in to that account and try again.");
+    return;
+  }
+
+  try {
+    const res = await fetch(SUPABASE_URL + "/functions/v1/tiktok-auth/exchange", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + session.access_token,
+      },
+      body: JSON.stringify({ code: code }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      showResult("err", "TikTok connection failed: " + (data.message || data.error || ("HTTP " + res.status)) + ". Go back and try connecting again.");
+      return;
+    }
+    const who = data.username ? " as @" + data.username : "";
+    showResult("ok", "TikTok connected" + who + ". Taking you back to AutoLaunch…");
+    setTimeout(() => { window.location.href = "./index.html?tiktok=connected"; }, 1500);
+  } catch (e) {
+    showResult("err", "Couldn't reach the AutoLaunch server to finish connecting. Check your connection and try again.");
+  }
+})();
+</script>
+</body>
+</html>
