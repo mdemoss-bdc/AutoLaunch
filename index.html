@@ -312,8 +312,7 @@ body.dark-shell main .btn-gradient {
 /* Whichever pill is active (JS swaps in .bg-blue-600) gets the electric fill */
 body.dark-shell main #pillActive.bg-blue-600,
 body.dark-shell main #pillUnposted.bg-blue-600,
-body.dark-shell main #pillPosted.bg-blue-600,
-body.dark-shell main #pillAll.bg-blue-600 {
+body.dark-shell main #pillPosted.bg-blue-600 {
   background-image: linear-gradient(135deg, var(--d-electric), var(--d-electric-deep));
   box-shadow: 0 4px 16px rgba(var(--glow-rgb), 0.45);
   border-color: transparent;
@@ -534,6 +533,9 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 @media (max-width: 767px) {
   .mobile-collapsible-header:not(.mobile-header-open) { display: none; }
 }
+/* Pills bar scrolls internally on narrow screens instead of widening the page */
+.pills-scroll { scrollbar-width: none; }
+.pills-scroll::-webkit-scrollbar { display: none; }
 </style>
 </head>
 <!-- ============================================================================== -->
@@ -1378,20 +1380,17 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
   </div>
 
   <!-- Filter Pills Bar -->
-  <div class="flex items-center gap-2 text-xs pt-0.5">
-    <button onclick="setPillFilter('ACTIVE')" id="pillActive" class="px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer">
+  <div class="flex items-center gap-2 text-xs pt-0.5 flex-nowrap overflow-x-auto pills-scroll">
+    <button onclick="setPillFilter('ACTIVE')" id="pillActive" class="px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer shrink-0 whitespace-nowrap">
       Active <span id="pillActiveCount">0</span>
     </button>
-    <button onclick="setPillFilter('UNPOSTED')" id="pillUnposted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
+    <button onclick="setPillFilter('UNPOSTED')" id="pillUnposted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap">
       <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Not posted yet <span id="pillUnpostedCount">0</span>
     </button>
-    <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm">
+    <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap">
       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">0</span>
     </button>
-    <button onclick="setPillFilter('ALL')" id="pillAll" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer shadow-sm">
-      All <span id="pillAllCount">0</span>
-    </button>
-    <button onclick="toggleNeedsPriceOnly()" id="needsPriceChip" style="display:none" class="px-3.5 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm cursor-pointer items-center gap-1.5">
+    <button onclick="toggleNeedsPriceOnly()" id="needsPriceChip" style="display:none" class="px-3.5 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm cursor-pointer items-center gap-1.5 shrink-0 whitespace-nowrap">
       <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> <span id="needsPriceCount">0</span> need a price
     </button>
   </div>
@@ -3535,7 +3534,6 @@ async function fetchLiveInventory(isManual) {
     document.getElementById("pillActiveCount").innerText = activeCount;
     document.getElementById("pillUnpostedCount").innerText = unpostedCount;
     document.getElementById("pillPostedCount").innerText = postedCount;
-    document.getElementById("pillAllCount").innerText = rawInventory.length;
 
     applyFilters();
     checkWishlistMatches(); // Customer Wishlist: flag new matches (badge + toast)
@@ -3550,16 +3548,15 @@ function setPillFilter(filter) {
   const pills = {
     ACTIVE: "pillActive",
     UNPOSTED: "pillUnposted",
-    POSTED: "pillPosted",
-    ALL: "pillAll"
+    POSTED: "pillPosted"
   };
 
   Object.keys(pills).forEach(k => {
     const el = document.getElementById(pills[k]);
     if (k === filter) {
-      el.className = "px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer";
+      el.className = "px-3.5 py-1 rounded-full bg-blue-600 text-white font-bold shadow-sm cursor-pointer shrink-0 whitespace-nowrap";
     } else {
-      el.className = "px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm";
+      el.className = "px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap";
     }
   });
 
