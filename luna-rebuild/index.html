@@ -522,6 +522,12 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+/* Phone layout: the Inventory filter bar starts collapsed behind the
+   phone-only Filters button (toggleMobileFilters adds .mobile-filters-open).
+   At >=768px this rule does not apply and the bar shows exactly as before. */
+@media (max-width: 767px) {
+  #filterBar:not(.mobile-filters-open) { display: none; }
+}
 </style>
 </head>
 <!-- ============================================================================== -->
@@ -1042,7 +1048,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 
   <!-- Header Bar -->
 
-<div class="flex items-center justify-between">
+<div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
 
   <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
     <i class="fa-solid fa-bars"></i>
@@ -1054,7 +1060,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
       Inventory
     </h1>
 
-    <div class="flex items-center gap-2 pt-0.5 text-xs text-slate-500">
+    <div class="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-slate-500">
 
       <i class="fa-solid fa-globe text-blue-600 text-[11px]"></i>
 
@@ -1270,7 +1276,20 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     </div>
   </div>
 
-  <!-- Filter Bar (always visible — replaces the old Filters modal, per Matthew) -->
+  <!-- Phone-only Filters toggle: on <md the bar below starts collapsed
+       (head stylesheet, max-width:767px) behind this button. Desktop never
+       sees the button and the bar behaves exactly as before. -->
+  <div class="md:hidden pt-1">
+    <button type="button" id="mobileFiltersBtn" onclick="toggleMobileFilters()" class="flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-700 focus:outline-none shadow-sm cursor-pointer">
+      <i class="fa-solid fa-filter text-slate-400"></i>
+      <span>Filters</span>
+      <span id="mobileFiltersBadge" class="hidden min-w-5 h-5 px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold items-center justify-center">0</span>
+      <i class="fa-solid fa-chevron-down text-slate-400 text-[10px]"></i>
+    </button>
+  </div>
+
+  <!-- Filter Bar (always visible on desktop — replaces the old Filters modal,
+       per Matthew; on phones it starts collapsed behind the Filters button) -->
   <div id="filterBar" class="flex flex-wrap items-end gap-2 pt-1">
     <div class="flex flex-col gap-1">
       <label for="filterLocation" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Location</label>
@@ -3137,6 +3156,10 @@ function postExtLogin(user, accessToken) {
 
 async function initAppSession(user) {
   currentUser = user;
+  // Phone layout: open on the initial view (saved choice, else cards on
+  // phones) through the same path the view toggle uses, so the containers
+  // and toggle buttons match the mode before the first inventory render.
+  setViewMode(initialInventoryViewMode(), false);
   document.getElementById("authOverlay").classList.add("hidden");
   const userPrefix = user.email.split("@")[0];
   document.getElementById("userDisplayName").innerText = userPrefix;
@@ -3840,6 +3863,7 @@ document.getElementById("showingCountBold").innerText = filtered.length;
 renderTableRows(filtered);
 syncInventorySelectionUI();
 updateClearFiltersVisibility();
+updateMobileFilterBadge();
 // NO-PRICE RULE: keep the amber alert chip honest after every render.
 const npChip = document.getElementById("needsPriceChip");
 if (npChip) {
@@ -3854,8 +3878,14 @@ if (npChip) {
 // Button Audit: list/grid view toggle. Only ONE view is rendered at a
 // time. Bulk selection is stored by VIN in selectedCarVins, so switching
 // views (like sorting or filtering) preserves the checked cars.
-function setViewMode(mode) {
+function setViewMode(mode, savePref) {
   inventoryViewMode = mode === "grid" ? "grid" : "list";
+  // Phone layout: the toggle buttons (which call this with no second
+  // argument) persist the user's explicit choice; automatic switches
+  // (initial phone default, resize) pass false so they never overwrite it.
+  if (savePref !== false) {
+    try { localStorage.setItem("al_inv_view", inventoryViewMode); } catch (e) {}
+  }
   const on = "w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs cursor-pointer";
   const off = "w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs cursor-pointer";
   const listBtn = document.getElementById("viewBtnList");
@@ -3867,6 +3897,96 @@ function setViewMode(mode) {
   if (wrap) wrap.classList.toggle("hidden", inventoryViewMode === "grid");
   if (grid) grid.classList.toggle("hidden", inventoryViewMode !== "grid");
   applyFilters();
+}
+
+// ==============================================================================
+// ==================== PHONE LAYOUT (INVENTORY) ================================
+// ==============================================================================
+// Phones (<768px) get the card (grid) view by default, chunked rendering and
+// a collapsed filter bar. Desktop is untouched. A view the user picked with
+// the list/grid toggle is saved in localStorage ("al_inv_view") and always
+// wins over every automatic rule below.
+
+// The user's saved view choice, or null when they never used the toggle.
+function savedInventoryViewPref() {
+  try {
+    const v = localStorage.getItem("al_inv_view");
+    return v === "list" || v === "grid" ? v : null;
+  } catch (e) { return null; }
+}
+
+// View to open with: saved choice first, else cards on phones, list on wide.
+function initialInventoryViewMode() {
+  return savedInventoryViewPref() || (window.innerWidth < 768 ? "grid" : "list");
+}
+
+// Crossing the 768px boundary with NO saved choice follows the screen
+// (phone -> cards, wide -> list). A saved choice is never overridden.
+// (iOS Safari fires resize on scroll when the URL bar collapses, but that
+// changes innerHeight only — the width side does not flip, so no switch.)
+let inventoryWidthSide = window.innerWidth < 768 ? "phone" : "wide";
+let inventoryResizeTimer = null;
+window.addEventListener("resize", function () {
+  if (inventoryResizeTimer) clearTimeout(inventoryResizeTimer);
+  inventoryResizeTimer = setTimeout(function () {
+    const side = window.innerWidth < 768 ? "phone" : "wide";
+    if (side === inventoryWidthSide) return;
+    inventoryWidthSide = side;
+    if (savedInventoryViewPref()) return;
+    setViewMode(side === "phone" ? "grid" : "list", false);
+  }, 200);
+});
+
+// Phone grid rendering is chunked (see renderGridRows): first chunk painted
+// by renderGridRows, later chunks appended by showMoreGridCars().
+const GRID_CHUNK_SIZE = 60;
+let gridChunkState = { cars: [], shown: 0 };
+
+function gridShowMoreButtonHtml() {
+  const remaining = gridChunkState.cars.length - gridChunkState.shown;
+  return `<button type="button" id="gridShowMoreBtn" onclick="showMoreGridCars()" class="col-span-full w-full py-3.5 rounded-2xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-sm shadow-sm cursor-pointer">Show more cars <span class="text-slate-400 font-semibold">(${remaining} more)</span></button>`;
+}
+
+function showMoreGridCars() {
+  const grid = document.getElementById("inventoryGridView");
+  if (!grid || !gridChunkState.cars.length) return;
+  const start = gridChunkState.shown;
+  if (start >= gridChunkState.cars.length) return;
+  const next = Math.min(start + GRID_CHUNK_SIZE, gridChunkState.cars.length);
+  const chunkHtml = gridChunkState.cars.slice(start, next).map(gridCardHtml).join("");
+  gridChunkState.shown = next;
+  const btn = document.getElementById("gridShowMoreBtn");
+  if (btn) btn.remove();
+  grid.insertAdjacentHTML("beforeend", chunkHtml);
+  if (gridChunkState.shown < gridChunkState.cars.length) {
+    grid.insertAdjacentHTML("beforeend", gridShowMoreButtonHtml());
+  }
+  // Selection truth lives in selectedCarVins; re-sync the freshly painted
+  // checkboxes from it, exactly like a full render does.
+  syncInventorySelectionUI();
+}
+
+// Phone filter bar: show/hide the 8-select bar (phones only — the CSS rule
+// that hides it does not exist at >=768px, and this toggle is only reachable
+// from the md:hidden Filters button).
+function toggleMobileFilters() {
+  const bar = document.getElementById("filterBar");
+  if (bar) bar.classList.toggle("mobile-filters-open");
+}
+
+// Count badge on the phone Filters button: how many of the 8 bar selects
+// are off their "All/Any" default (value ""). Kept honest by applyFilters.
+const MOBILE_FILTER_IDS = ["filterLocation", "filterYear", "filterMake", "filterModel", "filterCondition", "filterColor", "filterPriceRange", "filterMileageRange"];
+function updateMobileFilterBadge() {
+  const badge = document.getElementById("mobileFiltersBadge");
+  if (!badge) return;
+  const count = MOBILE_FILTER_IDS.filter(id => {
+    const el = document.getElementById(id);
+    return el && el.value !== "";
+  }).length;
+  badge.innerText = count;
+  badge.classList.toggle("hidden", count === 0);
+  badge.classList.toggle("flex", count > 0);
 }
 
 // ==============================================================================
@@ -3967,19 +4087,10 @@ function toggleNeedsPriceOnly() {
   applyFilters();
 }
 
-function renderGridRows(cars) {
-  const grid = document.getElementById("inventoryGridView");
-  const tbody = document.getElementById("inventoryTableBody");
-  if (!grid) return;
-  if (tbody) tbody.innerHTML = ""; // only the active view owns row markup
-
-  if (!cars.length) {
-    grid.innerHTML = '<div class="col-span-full py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</div>';
-    return;
-  }
-
-  let html = "";
-  cars.forEach(car => {
+// One grid card's markup — the exact template renderGridRows has always
+// painted, shared by the full render and by the phone chunk appender
+// (showMoreGridCars), so both paths produce identical cards.
+function gridCardHtml(car) {
     let photoUrl = car.image_url;
     if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
     if (!photoUrl || photoUrl.includes('/static/') || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
@@ -4036,10 +4147,10 @@ function renderGridRows(cars) {
            <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
          </button>`;
 
-    html += `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+    return `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
       <div class="relative">
         <div data-action="details" data-vin="${vinAttr}" class="cursor-pointer">
-          <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-full h-44 object-cover">
+          <img loading="lazy" src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-full h-44 object-cover">
         </div>
         <label class="absolute top-2 left-2 bg-white/95 rounded-lg px-1.5 py-1 shadow-sm cursor-pointer flex items-center">
           <input type="checkbox" data-vin="${vinAttr}" ${selectedCarVins.has(car.vin) ? "checked" : ""} class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
@@ -4066,9 +4177,33 @@ function renderGridRows(cars) {
         </button>
       </div>
     </div>`;
-  });
+}
 
-  grid.innerHTML = html;
+// Renders the grid view. Desktop paints every filtered car at once, exactly
+// as before. On phone-width screens the render is chunked (first
+// GRID_CHUNK_SIZE cards + a "Show more cars" button) so a 2,000-car lot
+// does not jank the phone; selection is unaffected because checkbox state
+// comes from selectedCarVins, not from the DOM.
+function renderGridRows(cars) {
+  const grid = document.getElementById("inventoryGridView");
+  const tbody = document.getElementById("inventoryTableBody");
+  if (!grid) return;
+  if (tbody) tbody.innerHTML = ""; // only the active view owns row markup
+
+  gridChunkState = { cars: cars, shown: cars.length };
+
+  if (!cars.length) {
+    grid.innerHTML = '<div class="col-span-full py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</div>';
+    return;
+  }
+
+  if (window.innerWidth < 768 && cars.length > GRID_CHUNK_SIZE) {
+    gridChunkState.shown = GRID_CHUNK_SIZE;
+    grid.innerHTML = cars.slice(0, GRID_CHUNK_SIZE).map(gridCardHtml).join("") + gridShowMoreButtonHtml();
+    return;
+  }
+
+  grid.innerHTML = cars.map(gridCardHtml).join("");
 }
 
 function renderTableRows(cars) {
