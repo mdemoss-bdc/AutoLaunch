@@ -6284,9 +6284,9 @@ function switchSettingsTab(tab) {
 // used by the "Send test post" button. Replace with the demo car's
 // generated listing video once it exists.
 const TIKTOK_SBX_CLIENT_KEY = "sbawyhfkhy1r3hsg3g";
-const TIKTOK_SAMPLE_VIDEO_URL = "REPLACE_WITH_SAMPLE_VIDEO_URL";
+const TIKTOK_SAMPLE_VIDEO_URL = "https://mdemoss-bdc.github.io/AutoLaunch/assets/demo-corvette.mp4";
 const TIKTOK_REDIRECT_URI = "https://mdemoss-bdc.github.io/AutoLaunch/tiktok-callback.html";
-const TIKTOK_SAMPLE_TITLE = "AutoLaunch test post — fresh on the lot! 🚗 #cars #dealership";
+const TIKTOK_SAMPLE_TITLE = "2027 Chevrolet Corvette Grand Sport — $115,795 at Moses Chevrolet 🚗 #corvette #cars";
 // ========================== /CONFIG — SET ME =================================
 
 let tiktokToastTimer = null;
@@ -6322,7 +6322,7 @@ function renderTikTokStatus(state) {
   const testBtn = document.getElementById("tiktokTestPostBtn");
   if (!status || !connectBtn || !disconnectBtn || !testBtn) return;
   if (state && state.connected) {
-    status.textContent = "Connected as @" + (state.username || "unknown") + (state.display_name ? " (" + state.display_name + ")" : "");
+    status.textContent = "Connected as " + (state.display_name || (state.username ? "@" + state.username : "your TikTok account"));
     connectBtn.classList.add("hidden");
     disconnectBtn.classList.remove("hidden");
     testBtn.classList.remove("hidden");

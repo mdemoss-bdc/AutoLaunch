@@ -45,7 +45,7 @@ const DEFAULT_REDIRECT_URI =
   "https://mdemoss-bdc.github.io/AutoLaunch/tiktok-callback.html";
 const TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/";
 const TIKTOK_USER_INFO_URL =
-  "https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url,username";
+  "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,display_name,avatar_url";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -158,7 +158,6 @@ async function handleExchange(req: Request, userId: string): Promise<Response> {
     const user = info?.data?.user;
     if (user) {
       openId = user.open_id ?? openId;
-      username = user.username ?? null;
       displayName = user.display_name ?? null;
     }
   } catch (e) {
