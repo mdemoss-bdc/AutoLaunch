@@ -2565,6 +2565,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <div id="queueBulkBar" style="display:none" class="items-center justify-between gap-2">
       <span class="text-xs text-slate-500">Tick items to remove just those — or clear the whole queue.</span>
       <div class="flex items-center gap-2 shrink-0">
+        <button id="queueRetryFailedBtn" onclick="retryAllFailedQueueItems()" class="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg cursor-pointer" style="display:none">Retry Failed</button>
         <button id="queueRemoveSelectedBtn" onclick="removeSelectedQueueItems()" class="text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" disabled>Remove Selected</button>
         <button onclick="removeAllQueueItems()" class="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg cursor-pointer">Remove All</button>
       </div>
@@ -3109,6 +3110,8 @@ document.addEventListener("click", function (e) {
     }, vin);
   } else if (action === "queue-remove") {
     removeQueueItem(el.dataset.id);
+  } else if (action === "queue-retry") {
+    retryQueueItem(el.dataset.id);
   } else if (action === "queue-select") {
     const qid = el.dataset.id;
     if (selectedQueueIds.has(qid)) selectedQueueIds.delete(qid);
@@ -5342,6 +5345,47 @@ function syncQueueBulkBar() {
             ? `Remove Selected (${selectedQueueIds.size})`
             : "Remove Selected";
     }
+    const retryBtn = document.getElementById("queueRetryFailedBtn");
+    if (retryBtn) {
+        const failedCount = postingQueue.filter(i => i.status === "failed").length;
+        retryBtn.style.display = failedCount ? "" : "none";
+        retryBtn.innerText = failedCount > 1 ? `Retry Failed (${failedCount})` : "Retry Failed";
+    }
+}
+// Retry (Matthew, 2026-10-25): a failed job goes back to pending so
+// the helper claims it again — for after the thing that failed it has
+// been fixed. The .eq("status","failed") guard means a retry can
+// never resurrect a job that's already running or done.
+async function retryQueueItem(id) {
+    if (!id || !currentUser) return;
+    try {
+        const { error } = await supabaseClient
+            .from("auto_posting_queue")
+            .update({ status: "pending", error_message: null, executed_at: null })
+            .eq("id", id)
+            .eq("user_id", currentUser.id)
+            .eq("status", "failed");
+        if (error) throw error;
+        await loadPostingQueue();
+    } catch (err) {
+        console.error(err);
+        alert("Could not retry that item — please try again.");
+    }
+}
+async function retryAllFailedQueueItems() {
+    if (!currentUser) return;
+    try {
+        const { error } = await supabaseClient
+            .from("auto_posting_queue")
+            .update({ status: "pending", error_message: null, executed_at: null })
+            .eq("user_id", currentUser.id)
+            .eq("status", "failed");
+        if (error) throw error;
+        await loadPostingQueue();
+    } catch (err) {
+        console.error(err);
+        alert("Could not retry the failed items — please try again.");
+    }
 }
 async function removeQueueItemsByIds(ids, confirmText) {
     if (!ids.length) return;
@@ -5510,6 +5554,14 @@ const statusChip = blockedNoPhoto
                         Remove
 
                     </button>
+
+                    ${item.status === "failed" ? `<button
+                        data-action="queue-retry" data-id="${escapeHtml(item.id)}"
+                        class="text-xs text-blue-600 hover:text-blue-700 font-semibold">
+
+                        Retry
+
+                    </button>` : ``}
 
                 </div>
 
@@ -6300,7 +6352,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.25";
+const EXPECTED_EXT_VERSION = "2.1.26";
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }

@@ -2521,11 +2521,18 @@
     // the outcome is recorded as a step note. Best-effort still —
     // a color miss never fails the job. "Standard" in the data
     // means "we don't know" — never try to post it as a color.
-    if (car.color && normText(car.color) !== "standard" && fieldPresent(["exterior color", "exterior"])) {
+    // v2.1.26: fill whenever the FIELD is present, even when the car
+    // has no color recorded (or only "Standard" = unknown). The
+    // v2.1.19 last-resort default inside fillColorDropdown exists for
+    // exactly that case, but these callers used to skip the call
+    // entirely when the data was missing — leaving a required color
+    // unset, Facebook's Next disabled, and the job dead at "could
+    // not reach the Publish button" (2026-10-25 HR-V, interior null).
+    if (fieldPresent(["exterior color", "exterior"])) {
       await fillColorDropdown("ExteriorColor", ["exterior color", "exterior"], car.color);
       await humanPause();
     }
-    if (car.interior_color && normText(car.interior_color) !== "standard" && fieldPresent(["interior color", "interior"])) {
+    if (fieldPresent(["interior color", "interior"])) {
       await fillColorDropdown("InteriorColor", ["interior color", "interior"], car.interior_color);
       await humanPause();
     }
