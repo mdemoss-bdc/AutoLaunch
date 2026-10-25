@@ -932,7 +932,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <div class="flex items-start justify-between gap-4 flex-wrap">
       <div>
         <h1 class="text-3xl font-black text-slate-900">Customer Wishlist</h1>
-        <p class="text-slate-500 mt-1">Tell AutoLaunch what your customers are hunting for — it watches every arrival on your lot and flags the matches.</p>
+        <p class="text-slate-500 mt-1">Tell AutoLaunch what your customers are hunting for — it watches every arrival on your lot and flags the matches. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('wishlist')">How the Wishlist works →</span></p>
       </div>
       <div class="flex items-center gap-2.5">
         <button onclick="checkWishlistMatchesNow()" class="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm">
@@ -969,7 +969,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <div class="flex items-start justify-between gap-4 flex-wrap">
       <div>
         <h1 class="text-3xl font-black text-slate-900">Prospects</h1>
-        <p class="text-slate-500 mt-1">Everyone who reached out about a car — and where they are in the buying process. Not a CRM. Just the list, kept current.</p>
+        <p class="text-slate-500 mt-1">Everyone who reached out about a car — and where they are in the buying process. Not a CRM. Just the list, kept current. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('prospects')">How Prospects works →</span></p>
       </div>
       <button onclick="openProspectForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
         <i class="fa-solid fa-plus text-[10px]"></i>
@@ -999,11 +999,11 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 
     <div>
       <h1 class="text-3xl font-black text-slate-900">Luca <span class="text-slate-400 font-bold text-xl">· AI Assistant</span></h1>
-      <p class="text-slate-500 mt-1">Luca answers your buyer chats the way <em>you</em> would. He learns from your corrections, follows the instructions you give him, and hands the chat back the moment it needs a human. Set him up below — chat capture and draft replies arrive in the next phase.</p>
+      <p class="text-slate-500 mt-1">Luca answers your buyer chats the way <em>you</em> would. He learns from your corrections, follows the instructions you give him, and hands the chat back the moment it needs a human. Set him up below. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('luca')">How Luca works →</span></p>
     </div>
 
     <div class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-900 leading-relaxed">
-      🌙 <strong>Luca is in setup.</strong> Your profile below is what he'll work from: your name, your schedule, your credit-app link, your rules. Nothing is sent to any buyer until you turn a mode on.
+      🌙 <strong>Luca only drafts — you always send.</strong> Your profile below is what he works from: your name, your schedule, your lot, your credit-app link, your rules. He answers buyers from your live inventory and never invents a price, a payment, or a promise.
     </div>
 
     <div id="closerStorageNotice" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed">
@@ -1153,7 +1153,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           <select id="clMode" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
             <option value="draft">Draft — Luca writes it, you tap send (recommended)</option>
             <option value="off">Off — capture prospects only</option>
-            <option value="auto" disabled>Auto — Luca sends on his own (coming in Phase 4)</option>
+            <option value="auto" disabled>Auto — not available: Luca always drafts, you always send</option>
           </select>
         </div>
       </div>
@@ -1191,7 +1191,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 
     <div>
       <h1 class="text-3xl font-black text-slate-900">Chrome Extension</h1>
-      <p class="text-slate-500 mt-1">The AutoLaunch posting helper runs in your Chrome and posts your queued cars to Facebook Marketplace for you. This page checks — live, in this tab — whether the helper is actually here and ready.</p>
+      <p class="text-slate-500 mt-1">The AutoLaunch posting helper runs in your Chrome and posts your queued cars to Facebook Marketplace for you. This page checks — live, in this tab — whether the helper is actually here and ready. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('extension')">How the helper works →</span></p>
     </div>
 
     <!-- LIVE STATUS (real bridge handshake: AUTOLAUNCH_EXT_PING / PONG) -->
@@ -1356,6 +1356,9 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
   <!-- Header Actions -->
 
   <div class="flex items-center gap-2.5">
+
+    <span class="text-xs text-blue-600 font-semibold cursor-pointer" onclick="openGuide('inventory')">How inventory works</span>
+    <span class="text-xs text-blue-600 font-semibold cursor-pointer" onclick="openGuide('locations')">Location groups</span>
 
     <button
         onclick="triggerLiveLotCrawl(event)"
@@ -2152,7 +2155,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           </h3>
 
           <p class="text-xs text-slate-400 mb-5">
-            Shoot it vertical, 10–20 seconds: your name, your store, one line that sounds like you. Tip: record at 1080p — 4K clips are too big to upload (50 MB max per video). Keep up to 6 videos — pin one, or let AutoLaunch pick at random.
+            Shoot it vertical, 10–20 seconds: your name, your store, one line that sounds like you. Tip: record at 1080p — 4K clips are too big to upload (50 MB max per video). Keep up to 6 videos — pin one, or let AutoLaunch pick at random. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('introvideos')">How intro videos work →</span>
           </p>
 
           <div class="flex items-center justify-between mb-5">
@@ -2227,7 +2230,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           </h3>
 
           <p class="text-xs text-slate-400 mb-5">
-            Two stores in the same building? Merge their location names into one. Cars keep their original location in the data — a group only changes what's shown on the car cards and how the Location filter works.
+            Two stores in the same building? Merge their location names into one. Cars keep their original location in the data — a group only changes what's shown on the car cards and how the Location filter works. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('locations')">How location groups work →</span>
           </p>
 
           <div id="locationGroupsList" class="space-y-3 mb-6"></div>
@@ -2453,7 +2456,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           <p class="text-sm text-slate-500">
             Connect your TikTok account so AutoLaunch can post your vehicle videos
             straight to TikTok. You sign in on TikTok's own site — AutoLaunch
-            never sees your TikTok password, and there is no key to paste here.
+            never sees your TikTok password, and there is no key to paste here. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('channels')">How channels work →</span>
             This connection currently runs against TikTok's Sandbox while the
             app completes TikTok's review, so test posts are private (only you
             can see them) until TikTok approves AutoLaunch for public posting.
@@ -2601,6 +2604,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <div class="flex items-center justify-between border-b border-slate-200 pb-3">
       <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
         <i class="fa-solid fa-list-check text-blue-600"></i> Active Post Queue
+        <span class="text-[11px] text-blue-600 font-semibold cursor-pointer ml-1" onclick="openGuide('queue')">How it works</span>
       </h3>
       <button onclick="closeModal('queueModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
@@ -8952,6 +8956,168 @@ const GUIDES = {
     notes: [
       "Changes save to your account and apply to posts made after you save. Posts already live on Marketplace do not change.",
       "These are the same settings the posting flow uses, so what you set here is what buyers see."
+    ]
+  },
+  extension: {
+    title: "The Chrome extension (your posting helper)",
+    icon: "fa-brands fa-chrome",
+    iconClasses: "bg-blue-50 text-blue-600 border-blue-200",
+    modal: null,
+    what: "AutoLaunch posts through a small Chrome extension — the helper — because Facebook Marketplace posting happens in YOUR signed-in Facebook session. The helper also powers Luca: it captures Marketplace chats into Prospects and delivers the replies you send from AutoLaunch. No helper, no posting and no chat sync — but your inventory, wishlist and settings live in AutoLaunch itself and work without it.",
+    steps: [
+      "Open the Chrome Extension page in AutoLaunch and follow the install steps there (download, unzip, load it in chrome://extensions with Developer mode on). A one-click Chrome Web Store install is coming.",
+      "Sign in to the helper with the same AutoLaunch account, and keep Chrome signed in to your Facebook account.",
+      "Leave one computer as your hub: it must be AWAKE (locked is fine), with Chrome open and a Facebook or Messenger tab open. Posting, reposts, chat capture and reply delivery all run from that machine.",
+      "In Chrome settings, exempt facebook.com from Memory Saver / tab sleeping — a slept Facebook tab can't post or sync.",
+      "Confirm vs Full Auto: Confirm mode fills each listing in and waits for your click on Publish. Full Auto posts on its own. Start in Confirm until you trust the flow."
+    ],
+    notes: [
+      "After the helper updates, REFRESH your open tabs (the AutoLaunch tab first, then Messenger) — an updated extension can't talk to tabs that were already open.",
+      "The Chrome Extension page in AutoLaunch shows the helper's real status, checked live — if it says the helper isn't answering, that status is the truth, not a guess.",
+      "Never click around inside the tab the helper is posting in while it works, and don't delete a listing in the first 15–20 minutes after it posts — Facebook needs a moment to settle.",
+      "If Facebook asks you to log in or verify your identity, the helper stops and marks the job failed. It never types into login or verification screens."
+    ]
+  },
+  inventory: {
+    title: "Inventory",
+    icon: "fa-solid fa-car",
+    iconClasses: "bg-indigo-50 text-indigo-600 border-indigo-200",
+    modal: null,
+    what: "Every vehicle AutoLaunch knows about, synced from your dealership website. Sync runs automatically overnight, and the Refresh Inventory button pulls a fresh copy on demand. This list is the single source of truth for posting — and for Luca's answers.",
+    steps: [
+      "Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.",
+      "Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.",
+      "Fix flags before posting: a car with no price or a missing color shows 'need attention' and can't post until it's resolved — click through and complete what's missing.",
+      "Select cars and use Post Selected, or post one car from its row. Everything goes through the Post Queue."
+    ],
+    notes: [
+      "Prices post at the advertised final price from your website. A car whose price can't be determined is never guessed — it's flagged instead, so a wrong price never reaches Marketplace.",
+      "A vehicle with no photos on your website is never posted. No exceptions.",
+      "Luca answers buyers ONLY from this inventory. If a car is missing or wrong here, fix it here — his answers follow within the next draft.",
+      "Cars that sell or leave your website drop off automatically on the next sync and are never reposted."
+    ]
+  },
+  locations: {
+    title: "Location groups (combining rooftops)",
+    icon: "fa-solid fa-location-dot",
+    iconClasses: "bg-rose-50 text-rose-600 border-rose-200",
+    modal: null,
+    what: "If your group runs several rooftops that share one lot or one team, combine them into a single location. Groups are a display layer on top of the real rooftop names from your website — the underlying data never changes. The Inventory filter shows your group names, and Luca treats every rooftop inside your home group as 'your lot'.",
+    steps: [
+      "Open Settings and find Location Groups.",
+      "Name the group the way you think of it (for example, two stores that share a lot).",
+      "Tick every rooftop that belongs in it and save. Ungrouped rooftops keep their own names.",
+      "On the Luca · AI Assistant page, pick that group as 'Your lot' so Luca's answers match how you actually sell."
+    ],
+    notes: [
+      "A vehicle at a rooftop outside your home group is a 'sister lot' car for Luca: he'll present it, say it can be brought to your lot, and confirm the buyer is good with the price before anyone commits to moving it.",
+      "Changing groups later is safe — Luca reads your groups fresh every time he drafts, and the Inventory filter updates with them."
+    ]
+  },
+  queue: {
+    title: "Post Queue",
+    icon: "fa-solid fa-list-check",
+    iconClasses: "bg-slate-100 text-slate-600 border-slate-200",
+    modal: null,
+    what: "Every post, repost and delete waits here for the helper to work through it, in order, at a human pace. The queue is also your receipt book: what posted, what's waiting, and what failed — with the reason.",
+    steps: [
+      "Queue cars from Inventory (Post Selected or a row's Post button), or let automations queue them for you.",
+      "Watch statuses here: queued, working, posted, failed. A failed job says why — read it before retrying.",
+      "Use a failed job's Retry button once you've fixed the cause (signed back in to Facebook, refreshed the tab, completed a missing field).",
+      "Deleting a listing can be verified on Facebook itself — the listing disappearing from your Facebook selling page is the proof, not just the queue row."
+    ],
+    notes: [
+      "Every queue item counts against your daily posting limit, including reposts.",
+      "Don't click inside the helper's tab while a job is running — it can knock the job off course.",
+      "If a job fails because Facebook wants a login or an identity check, the helper stops on purpose. Handle it in Facebook yourself, then retry."
+    ]
+  },
+  wishlist: {
+    title: "Customer Wishlist",
+    icon: "fa-solid fa-heart",
+    iconClasses: "bg-pink-50 text-pink-600 border-pink-200",
+    modal: null,
+    what: "Your customers' standing wants. Add what a buyer is hunting for — make, model, year range, budget — and AutoLaunch checks every arrival against the list. When a car lands that matches, you hear about it before anyone else knows it's there.",
+    steps: [
+      "Add Customer Want: the customer's name and what they're after, as loosely or tightly as they described it.",
+      "Matches are checked automatically whenever your inventory syncs, or any time with 'Check for matches now'.",
+      "The sidebar badge only lights for NEW matches you haven't seen — open the Wishlist and it clears. No noise.",
+      "Reach out your way: wishlist outreach goes through your own phone's Messages app, never a paid texting service."
+    ],
+    notes: [
+      "A match means the car fits what the customer asked for — year, make/model and price where you set them. Looser wants match more cars.",
+      "Sold or departed cars stop matching on the next sync."
+    ]
+  },
+  prospects: {
+    title: "Prospects",
+    icon: "fa-solid fa-users",
+    iconClasses: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    modal: null,
+    what: "Everyone who reached out about a car, and where they are in the process: New → Talking → Visit set → Came in → Sold / Not now. Deliberately NOT a CRM — no logging busywork, just the list, kept current. Luca fills it for you: Marketplace chats are captured automatically, and you can add anyone by hand.",
+    steps: [
+      "Marketplace chats appear on their own once the helper is running — opening a Marketplace conversation is enough; Luca saves the buyer and the thread.",
+      "Chats that did NOT start on Marketplace are never added automatically. Add those yourself (Add Prospect), or use the 'Capture chat for Luca' button inside the Messenger thread.",
+      "Open a card's conversation to read the whole thread, draft with Luca, or reply right from the card — the helper delivers your reply into Messenger for you.",
+      "Move the stage as things progress. The ✕ Close chat buttons collapse an open conversation and take you back to the list."
+    ],
+    notes: [
+      "The sidebar number is an attention light, not a headcount: it only shows for updates you haven't seen — a new buyer message or a brand-new captured prospect — and clears when you open Prospects.",
+      "Replying from a card needs the helper hub running (PC awake, Chrome open, Messenger tab open) — same rule as posting.",
+      "Prospects are yours alone: chats are never shared between accounts."
+    ]
+  },
+  luca: {
+    title: "Luca · AI Assistant",
+    icon: "fa-solid fa-moon",
+    iconClasses: "bg-violet-50 text-violet-600 border-violet-200",
+    modal: null,
+    what: "Luca drafts your Marketplace replies the way YOU would write them — grounded in your live inventory, your schedule and your rules. He only ever drafts: you review and send every message yourself. He never invents a price, a payment or a promise, and he hands the chat back the moment it needs a human (haggling, financing specifics, trade values, an upset buyer).",
+    steps: [
+      "Set up his profile on the Luca · AI Assistant page: your name, your credit-app link, the store hours AND your own hours (he only offers times you'd actually be there).",
+      "Set 'Your lot' — the location you sell from. If you combined rooftops in Settings → Location Groups, pick the combined name.",
+      "Write in the 🎓 Teach Luca box, in your own words: your goals and house rules ('always get them to the lot', 'always ask for the appointment'). He follows it in every draft.",
+      "On any Prospects card, tap 'Draft reply with Luca'. Edit freely — when you copy an edited version, he keeps both and learns how you phrase things."
+    ],
+    notes: [
+      "Luca learns your voice from the replies you actually send in chats — the more real conversations get captured, the more he sounds like you. Your voice is never shared with other accounts.",
+      "He answers about vehicles ONLY from your live inventory — misspellings and run-together words included — and when he says 'we don't have one', that's a search he just ran and verified, not a guess. Cars at sister lots come with the transfer talk: he'll confirm the buyer's good with the price before anyone moves a car.",
+      "Luca needs the helper hub (PC awake, Chrome open with a Messenger/Facebook tab, signed in) to capture chats and deliver replies. He drafts in AutoLaunch even when the hub is asleep — sending waits for the hub.",
+      "There is no auto-send. That's by design, permanently: a human sends every message."
+    ]
+  },
+  channels: {
+    title: "Syndication channels (TikTok, Instagram, Facebook Pages)",
+    icon: "fa-solid fa-share-nodes",
+    iconClasses: "bg-cyan-50 text-cyan-600 border-cyan-200",
+    modal: null,
+    what: "Marketplace is the home channel; the same cars can also go out as video and posts. TikTok posting is built and connects from Settings; Instagram follows once your business verification clears with Meta; your Facebook Page can carry listings alongside your personal Marketplace posts.",
+    steps: [
+      "Open Settings and find the channel connections (TikTok first).",
+      "Connect the account you actually sell from — posting runs in that account's name.",
+      "Turn channels on per automation in Settings → Automation → Syndication Channels.",
+      "Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel."
+    ],
+    notes: [
+      "Channel rules differ (video-first on TikTok, business accounts on Instagram). AutoLaunch formats per channel — you write nothing per platform.",
+      "If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
+    ]
+  },
+  introvideos: {
+    title: "My Intro Videos",
+    icon: "fa-solid fa-clapperboard",
+    iconClasses: "bg-amber-50 text-amber-600 border-amber-200",
+    modal: null,
+    what: "A short clip of YOU — your face, your name, your lot — that can bookend your vehicle videos on channels like TikTok, so buyers meet the salesperson, not just the car. Filmed once on your phone, used everywhere.",
+    steps: [
+      "Open Settings → Dealership → My Intro Videos and upload (up to 6 clips, each under 50 MB and 90 seconds — under 30 seconds works best).",
+      "Pick whether channels use one selected clip or rotate randomly.",
+      "Flip the master toggle on when you're ready for clips to be used.",
+      "Keep it simple: name, store, and one line about how you work. Buyers decide in the first three seconds."
+    ],
+    notes: [
+      "Intro videos never affect Marketplace posting — if a clip has any problem, posting carries on without it.",
+      "Clips are stored on your account only."
     ]
   }
 };
