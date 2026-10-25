@@ -124,6 +124,8 @@
       // set is Matthew's live thread (2026-10-25): header card labels,
       // group-system lines, and pane furniture that are NOT messages.
       if (/^(Seen|Delivered|Sent|Type a message|Aa|Search|Active now|You're friends on Facebook|You're both on Facebook)/.test(t)) continue;
+      if (/^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(t)) continue; // timestamp dividers ("1:57 PM") are not messages
+      if (t === "Message sent" || t === "Message delivered") continue; // status furniture, not a message
       if (/^(View buyer|More options|Privacy & support|Messages|Send a quick response|Marketplace)$/.test(t)) continue;
       if (/^Conversation titled /.test(t)) continue;
       if (/ created this group$/.test(t)) continue;
@@ -247,6 +249,7 @@
       if (nm.length > 30) nm = "";
       if (!nm || /\$/.test(nm) || /^(Chats|Marketplace|New message)/i.test(nm)) nm = "";
       var vm = rowText.match(/\$\d[\d,]*\s*-\s*[^·]{4,80}/);
+      if (!vm) vm = rowText.match(/\b(19|20)\d{2}\s+[A-Z][A-Za-z]+\s+[A-Z][A-Za-z0-9]+/); // year/make/model label also proves Marketplace
       // Commerce gate (v2.1.34): the plain /messages list mixes in
       // personal chats, business-page chats and the Meta AI chat —
       // none of those are buyers. A row becomes a prospect ONLY with
@@ -309,6 +312,12 @@
   }
 
   function sendCapture(capture) {
+    // Every caller of this shared sender is an AUTO path (list pass,
+    // observer, app-driven sync) — tag it so the worker can apply
+    // the Marketplace-only auto rule. The manual Capture button has
+    // its own send and stays untagged (a deliberate click is how a
+    // rep adds a non-Marketplace thread).
+    capture = Object.assign({}, capture, { auto: true });
     // Returns a promise that resolves when the worker has finished
     // (its handler responds only after the database write), so the
     // app-driven sync below can report TRUE completion.

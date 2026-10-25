@@ -325,6 +325,15 @@ async function handleCaptureChat(capture) {
   if (!prospect) {
     prospect = rows.find(r => norm(r.name) === norm(name) && (!vehicleText || norm(r.vehicle_label) === norm(vehicleText)));
   }
+  // Marketplace-only auto rule (Matthew, 2026-10-25): AUTO captures
+  // may only bring in Marketplace threads — a listing label in the
+  // capture is the evidence. Merely opening a Messenger chat must
+  // never create a prospect or save its messages; the manual Capture
+  // button (no auto flag) is how a rep adds anything else. Auto
+  // updates to an already-known prospect's thread still flow.
+  if (capture.auto && !prospect && !vehicleText) {
+    return { prospectName: null, added: 0, skipped: "not_marketplace" };
+  }
   if (!prospect) {
     const created = await sbPost("prospects", {
       user_id: userId,
@@ -355,13 +364,20 @@ async function handleCaptureChat(capture) {
   const seen = new Set(existing.map(m => m.direction + "|" + m.body));
   const fresh = (capture.messages || []).filter(m => m && m.body && !seen.has(m.direction + "|" + m.body));
   if (fresh.length) {
-    await sbPost("closer_messages", fresh.map(m => ({
+    // Sequential created_at stamps (v2.1.40): one bulk insert shares
+    // a single transaction timestamp, which scrambled the thread
+    // order in the conversation view (Matthew: "texts come in out
+    // of order"). Stamping each row +1ms in scrape order makes
+    // created_at a faithful chronology.
+    const baseTs = Date.now();
+    await sbPost("closer_messages", fresh.map((m, idx) => ({
       user_id: userId,
       prospect_id: prospect.id,
       thread_ref: (capture.threadUrl || "").slice(0, 300) || null,
       direction: m.direction === "out" ? "out" : "in",
       origin: m.direction === "out" ? "rep" : "buyer",
-      body: String(m.body).slice(0, 2000)
+      body: String(m.body).slice(0, 2000),
+      created_at: new Date(baseTs + idx).toISOString()
     })));
     // Snippet-partial cleanup (v2.1.33): a full capture supersedes the
     // truncated one-line rows the inbox-list snippet sync saved for the
