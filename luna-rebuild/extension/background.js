@@ -460,7 +460,30 @@ async function checkOutboundReplies() {
       luca_pending_delivery: { messageId: row.id, threadRef: row.thread_ref, body: row.body, tabId: tab.id, at: Date.now() }
     });
     if (key && (tab.url || "").includes("/t/" + key)) {
-      chrome.tabs.sendMessage(tab.id, { type: "AUTOLAUNCH_DELIVER_NOW" }, () => { void chrome.runtime.lastError; });
+      // Poke — but demand an ACK (v2.1.35). A tab whose capture script
+      // died (the classic case: the helper was updated while the tab
+      // sat open) never answers; reloading that tab re-injects the
+      // current script, which picks the pending delivery up from
+      // storage on load. Without this, a dead tab silently eats the
+      // reply until the 3-minute timeout fails it (seen live
+      // 2026-10-25 on the first reply attempt).
+      const acked = await new Promise(resolve => {
+        let done = false;
+        const timer = setTimeout(() => { if (!done) { done = true; resolve(false); } }, 6000);
+        try {
+          chrome.tabs.sendMessage(tab.id, { type: "AUTOLAUNCH_DELIVER_NOW" }, resp => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve(!chrome.runtime.lastError && !!(resp && resp.accepted));
+          });
+        } catch (e) {
+          if (!done) { done = true; clearTimeout(timer); resolve(false); }
+        }
+      });
+      if (!acked) {
+        try { await chrome.tabs.reload(tab.id); } catch (e) { /* the timeout sweep fails it honestly */ }
+      }
     } else {
       await chrome.tabs.update(tab.id, { url: row.thread_ref });
     }

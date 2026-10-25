@@ -489,8 +489,14 @@
     }
   }
 
-  chrome.runtime.onMessage.addListener(function (msg) {
-    if (msg && msg.type === "AUTOLAUNCH_DELIVER_NOW") maybeDeliverPending();
+  chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+    if (msg && msg.type === "AUTOLAUNCH_DELIVER_NOW") {
+      // ACK first (v2.1.35): the worker treats no-ACK as a dead
+      // script and reloads the tab, so answering is what proves this
+      // script is alive. Delivery itself proceeds async.
+      try { sendResponse({ accepted: true }); } catch (e) { /* channel quirks are non-fatal */ }
+      maybeDeliverPending();
+    }
   });
   setTimeout(maybeDeliverPending, 2500);
   setInterval(maybeDeliverPending, 20000);
