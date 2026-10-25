@@ -172,6 +172,11 @@
     ].join(";");
     btn.addEventListener("click", function () {
       var capture = scrape();
+      if (!capture.messages.length && !capture.buyerName && onInboxListSurface()) {
+        autoPass();
+        setBtnLabel(btn, "Synced ✓", true);
+        return;
+      }
       if (!capture.messages.length && !capture.buyerName) {
         setBtnLabel(btn, "Nothing found — open a chat first", false);
         return;
@@ -192,7 +197,86 @@
     document.body.appendChild(btn);
   }
 
+  // ---- AUTO-CAPTURE v1 (v2.1.31, Matthew's ask): no more clicking
+  // Capture per chat. While an inbox surface is open in Chrome:
+  //  - every visible thread-list row becomes a STUB capture (the
+  //    prospect exists in AutoLaunch with its thread link; the worker
+  //    matches by thread, so rows never duplicate a real prospect);
+  //  - the OPEN thread (full view or floating popup) is fully captured
+  //    whenever its content changes (new message = new hash).
+  // The helper never clicks or navigates anything — it only reads
+  // what is already on screen, on a slow timer.
+  function onInboxListSurface() {
+    var p = window.location.pathname || "";
+    return p.indexOf("/messages") === 0 || p.indexOf("/marketplace/inbox") === 0;
+  }
+
+  function threadKeyOf(url) {
+    var m = String(url || "").match(/\/t\/(\d+)/);
+    return m ? m[1] : "";
+  }
+
+  function collectThreadStubs() {
+    var out = [];
+    var seen = {};
+    var links = document.querySelectorAll('a[href*="/messages/t/"]');
+    for (var i = 0; i < links.length && out.length < 15; i++) {
+      var key = threadKeyOf(links[i].href || "");
+      if (!key || seen[key]) continue;
+      var rowText = textOf(links[i]);
+      if (!rowText || rowText.length < 3) continue;
+      seen[key] = true;
+      // Rows lead with the buyer name, then separators/snippets. The
+      // worker self-heals names from later full captures, so a rough
+      // name here is acceptable — a wrong THREAD never is, and the
+      // thread key comes from the href, not the text.
+      var nm = rowText.split(" · ")[0].trim();
+      if (nm.length > 40) nm = nm.slice(0, 40).trim();
+      if (!nm || /\$/.test(nm) || /^(Chats|Marketplace|New message)/i.test(nm)) nm = "";
+      var vm = rowText.match(/\$\d[\d,]*\s*-\s*[^·]{4,80}/);
+      out.push({
+        buyerName: nm,
+        vehicleText: vm ? cleanListingLabel(vm[0]) : "",
+        itemUrl: "",
+        threadUrl: "https://www.facebook.com/messages/t/" + key,
+        messages: [],
+        stub: true
+      });
+    }
+    return out;
+  }
+
+  function sendCapture(capture) {
+    try {
+      chrome.runtime.sendMessage({ type: "AUTOLAUNCH_CAPTURE_CHAT", capture: capture }, function () {
+        void chrome.runtime.lastError;
+      });
+    } catch (e) { /* next pass retries */ }
+  }
+
+  var lastFullHash = "";
+  function autoFullCapture() {
+    if (!onChatSurface()) return;
+    var c = scrape();
+    if (!c.messages.length && !c.buyerName) return;
+    var h = (c.threadUrl || "") + "|" + c.messages.map(function (m) { return m.direction + ":" + m.body; }).join("~");
+    if (h === lastFullHash) return;
+    lastFullHash = h;
+    sendCapture(c);
+  }
+
+  function autoPass() {
+    try {
+      if (onInboxListSurface()) collectThreadStubs().forEach(sendCapture);
+      autoFullCapture();
+      var btn = document.getElementById(BTN_ID);
+      if (btn && onInboxListSurface()) btn.textContent = "🌙 Luca auto-sync on · Capture now";
+    } catch (e) { /* heuristics must never break the page */ }
+  }
+
   // Facebook is a SPA: the button must survive route changes.
   setInterval(injectButton, 1500);
   injectButton();
+  setTimeout(autoPass, 3500);
+  setInterval(autoPass, 45000);
 })();

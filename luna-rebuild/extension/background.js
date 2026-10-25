@@ -309,9 +309,18 @@ async function handleCaptureChat(capture) {
   const norm = (s) => (s || "").trim().toLowerCase();
   const name = (capture.buyerName || "").trim() || "Marketplace buyer";
   const vehicleText = (capture.vehicleText || "").trim();
+  const threadRef = (capture.threadUrl || "").slice(0, 300);
 
-  const rows = await sbGet(`prospects?user_id=eq.${userId}&select=id,name,vehicle_label&order=created_at.desc&limit=200`);
-  let prospect = rows.find(r => norm(r.name) === norm(name) && (!vehicleText || norm(r.vehicle_label) === norm(vehicleText)));
+  // Match order (auto-capture, v2.1.31): the THREAD is the identity —
+  // the same conversation must never become two prospects just because
+  // a list-row name or a listing label scraped differently this time.
+  // Name+label matching stays as the fallback for captures with no URL.
+  const rows = await sbGet(`prospects?user_id=eq.${userId}&select=id,name,vehicle_label,thread_ref&order=created_at.desc&limit=200`);
+  let prospect = null;
+  if (threadRef) prospect = rows.find(r => r.thread_ref && norm(r.thread_ref) === norm(threadRef));
+  if (!prospect) {
+    prospect = rows.find(r => norm(r.name) === norm(name) && (!vehicleText || norm(r.vehicle_label) === norm(vehicleText)));
+  }
   if (!prospect) {
     const created = await sbPost("prospects", {
       user_id: userId,
@@ -319,10 +328,23 @@ async function handleCaptureChat(capture) {
       vehicle_label: vehicleText || null,
       stage: "new",
       source: "marketplace",
-      thread_ref: (capture.threadUrl || "").slice(0, 300) || null,
-      notes: "Captured from a Marketplace chat by Luca."
+      thread_ref: threadRef || null,
+      notes: capture.stub
+        ? "Found in your Messenger inbox by Luca auto-sync. Open the chat and Luca will capture the conversation."
+        : "Captured from a Marketplace chat by Luca."
     });
     prospect = created[0];
+  } else {
+    // Self-heal older/rougher captures: backfill a placeholder name, a
+    // missing label, or a missing thread link when this capture has
+    // better data. Never overwrite good data with rougher data.
+    const patch = {};
+    if (norm(prospect.name) === "marketplace buyer" && norm(name) !== "marketplace buyer") patch.name = name;
+    if (!prospect.vehicle_label && vehicleText) patch.vehicle_label = vehicleText;
+    if (!prospect.thread_ref && threadRef) patch.thread_ref = threadRef;
+    if (Object.keys(patch).length) {
+      try { await sbPatch(`prospects?id=eq.${prospect.id}`, patch); Object.assign(prospect, patch); } catch (e) { /* cosmetic */ }
+    }
   }
 
   const existing = await sbGet(`closer_messages?user_id=eq.${userId}&prospect_id=eq.${prospect.id}&select=body,direction&order=created_at.desc&limit=200`);
