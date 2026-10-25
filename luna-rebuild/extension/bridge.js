@@ -60,6 +60,27 @@
       return;
     }
 
+    if (data.type === "AUTOLAUNCH_EXT_SYNC_REQUEST") {
+      // App-driven inbound sync (v2.1.38): forward the Prospects
+      // screen's "sync now" to the worker and post its confirmation
+      // back as a PONG so the page can repaint with fresh data.
+      try {
+        chrome.runtime.sendMessage(
+          { type: "AUTOLAUNCH_SYNC_REQUEST" },
+          (response) => {
+            if (chrome.runtime.lastError) return;
+            try {
+              window.postMessage(
+                { type: "AUTOLAUNCH_EXT_SYNC_PONG", reqId: data.reqId || null, ok: !!(response && response.ok) },
+                window.location.origin
+              );
+            } catch (e) { /* page is gone */ }
+          }
+        );
+      } catch (e) { /* no pong — the page's fallback refresh covers it */ }
+      return;
+    }
+
     if (data.type === "AUTOLAUNCH_EXT_NUDGE_OUTBOUND") {
       // Realtime fast path (2026-10-25): the app just queued a reply —
       // tell the worker to claim it now instead of at its next 1-minute

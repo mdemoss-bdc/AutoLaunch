@@ -301,22 +301,56 @@
   }
 
   function sendCapture(capture) {
-    try {
-      chrome.runtime.sendMessage({ type: "AUTOLAUNCH_CAPTURE_CHAT", capture: capture }, function () {
-        void chrome.runtime.lastError;
-      });
-    } catch (e) { /* next pass retries */ }
+    // Returns a promise that resolves when the worker has finished
+    // (its handler responds only after the database write), so the
+    // app-driven sync below can report TRUE completion.
+    return new Promise(function (resolve) {
+      try {
+        chrome.runtime.sendMessage({ type: "AUTOLAUNCH_CAPTURE_CHAT", capture: capture }, function (resp) {
+          void chrome.runtime.lastError;
+          resolve(resp || null);
+        });
+      } catch (e) { resolve(null); }
+    });
   }
 
   var lastFullHash = "";
   function autoFullCapture() {
-    if (!onChatSurface()) return;
+    if (!onChatSurface()) return null;
     var c = scrape();
-    if (!c.messages.length && !c.buyerName) return;
+    if (!c.messages.length && !c.buyerName) return null;
     var h = (c.threadUrl || "") + "|" + c.messages.map(function (m) { return m.direction + ":" + m.body; }).join("~");
-    if (h === lastFullHash) return;
+    if (h === lastFullHash) return null;
     lastFullHash = h;
-    sendCapture(c);
+    return sendCapture(c);
+  }
+
+  // App-driven sync (v2.1.38): the AutoLaunch page asks (through the
+  // worker) for a capture RIGHT NOW and waits for the writes to land.
+  // This exists because a BACKGROUND tab's own timers are throttled
+  // by Chrome to ~1/minute — the exact lag Matthew measured — while a
+  // runtime message wakes the script immediately.
+  async function autoPassSync() {
+    var jobs = [];
+    try {
+      if (onInboxListSurface()) {
+        collectThreadStubs().forEach(function (c) { jobs.push(sendCapture(c)); });
+        var snippets = collectThreadSnippets();
+        if (snippets.length) {
+          jobs.push(new Promise(function (resolve) {
+            try {
+              chrome.runtime.sendMessage({ type: "AUTOLAUNCH_CHAT_SNIPPETS", snippets: snippets }, function () {
+                void chrome.runtime.lastError;
+                resolve(null);
+              });
+            } catch (e) { resolve(null); }
+          }));
+        }
+      }
+      var full = autoFullCapture();
+      if (full) jobs.push(full);
+    } catch (e) { /* partial completion still counts */ }
+    await Promise.all(jobs);
   }
 
   function autoPass() {
@@ -346,7 +380,7 @@
   var observedTimer = null;
   try {
     var listObserver = new MutationObserver(function () {
-      if (!onInboxListSurface()) return;
+      if (!onInboxListSurface() && !onChatSurface()) return;
       if (observedTimer) return;
       observedTimer = setTimeout(function () {
         observedTimer = null;
@@ -505,6 +539,16 @@
       // script is alive. Delivery itself proceeds async.
       try { sendResponse({ accepted: true }); } catch (e) { /* channel quirks are non-fatal */ }
       maybeDeliverPending();
+      return;
+    }
+    if (msg && msg.type === "AUTOLAUNCH_SYNC_NOW") {
+      // App-driven sync (v2.1.38): run a pass and answer only when
+      // the worker has confirmed the database writes, so the app can
+      // repaint with the new messages already in place.
+      autoPassSync().then(function () {
+        try { sendResponse({ ok: true }); } catch (e) { /* page moved on */ }
+      });
+      return true;
     }
   });
   setTimeout(maybeDeliverPending, 2500);

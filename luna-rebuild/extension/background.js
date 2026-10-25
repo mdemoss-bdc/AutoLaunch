@@ -1371,6 +1371,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "AUTOLAUNCH_SYNC_REQUEST") {
+    // App-driven inbound sync (v2.1.38): the Prospects screen asks for
+    // a capture pass NOW because the Facebook tab's own timers are
+    // throttled while it sits in the background. Only the bridge on
+    // the AutoLaunch origin may ask. We drive the best Facebook tab's
+    // capture script and answer only when it confirms the writes.
+    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    if (!fromApp) return;
+    (async () => {
+      let synced = false;
+      try {
+        const tabs = await chrome.tabs.query({ url: ["https://www.facebook.com/*"] });
+        const rank = (t) => {
+          const u = t.url || "";
+          if (u.includes("/messages") || u.includes("/marketplace")) return 0;
+          return 1;
+        };
+        const ordered = tabs.slice().sort((a, b) => rank(a) - rank(b));
+        for (const t of ordered.slice(0, 2)) {
+          const ok = await new Promise(resolve => {
+            let done = false;
+            const timer = setTimeout(() => { if (!done) { done = true; resolve(false); } }, 8000);
+            try {
+              chrome.tabs.sendMessage(t.id, { type: "AUTOLAUNCH_SYNC_NOW" }, resp => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                resolve(!chrome.runtime.lastError && !!(resp && resp.ok));
+              });
+            } catch (e) {
+              if (!done) { done = true; clearTimeout(timer); resolve(false); }
+            }
+          });
+          if (ok) { synced = true; break; }
+        }
+      } catch (e) { /* answer what we have */ }
+      sendResponse({ ok: synced });
+    })();
+    return true;
+  }
+
   if (message.type === "AUTOLAUNCH_NUDGE_OUTBOUND") {
     // Only the bridge on the AutoLaunch origin may nudge (same sender
     // discipline as the login handoff). Runs the outbound claim

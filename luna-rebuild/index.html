@@ -6496,7 +6496,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.37";
+const EXPECTED_EXT_VERSION = "2.1.38";
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }
@@ -7388,7 +7388,29 @@ async function refreshProspectsSoft() {
     prospectsSoftBusy = false;
   }
 }
-setInterval(refreshProspectsSoft, 8000);
+// The 8-second driver asks the HELPER to sync first (event-driven —
+// a background tab's timers are throttled to ~1/min, which was the
+// inbound lag Matthew measured), then repaints when the helper
+// confirms. If no confirmation arrives in 4s, repaint anyway from
+// whatever is already stored.
+let lucaSyncReqSeq = 0;
+let lucaSyncFallbackTimer = null;
+window.addEventListener("message", (event) => {
+  if (event.origin !== window.location.origin) return;
+  const d = event.data;
+  if (d && d.type === "AUTOLAUNCH_EXT_SYNC_PONG") {
+    if (lucaSyncFallbackTimer) { clearTimeout(lucaSyncFallbackTimer); lucaSyncFallbackTimer = null; }
+    setTimeout(() => refreshProspectsSoft(), 600);
+  }
+});
+setInterval(() => {
+  if (document.hidden) return;
+  const list = document.getElementById("prospectsList");
+  if (!list || list.offsetParent === null) return;
+  try { window.postMessage({ type: "AUTOLAUNCH_EXT_SYNC_REQUEST", reqId: ++lucaSyncReqSeq }, "*"); } catch (e) { /* repaint fallback below */ }
+  if (lucaSyncFallbackTimer) clearTimeout(lucaSyncFallbackTimer);
+  lucaSyncFallbackTimer = setTimeout(() => refreshProspectsSoft(), 4000);
+}, 8000);
 
 // OUTBOUND REPLIES (Prospects inbox step 2, 2026-10-25): the rep types
 // in AutoLaunch; the row lands in closer_messages with status "queued";
