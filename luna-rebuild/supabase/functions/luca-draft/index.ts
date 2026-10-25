@@ -165,6 +165,30 @@ Deno.serve(async (req) => {
     .from("closer_profiles").select("*").eq("user_id", user.id).maybeSingle();
   const profile = (profileRow && (profileRow as any).profile) || {};
 
+  // Location groups (v10): the app lets a rep COMBINE rooftops into
+  // one display location (user_settings.location_groups, Settings ->
+  // Location Groups — the same labels the Inventory filter shows).
+  // Luca must see locations through that exact layer: every rooftop
+  // inside the rep's home group is "here"; anything else is a sister
+  // lot. Read with the caller's client (owner RLS), fail-open to no
+  // groups. The saved home value may be a group's display name OR a
+  // raw rooftop inside it — normalize it through the same mapping.
+  let locGroups: any[] = [];
+  try {
+    const { data: settingsRow } = await supabase
+      .from("user_settings").select("location_groups").eq("user_id", user.id).maybeSingle();
+    if (settingsRow && Array.isArray((settingsRow as any).location_groups)) locGroups = (settingsRow as any).location_groups;
+  } catch (_) { /* no settings row -> raw names, no groups */ }
+  const displayLoc = (raw: string | null | undefined): string => {
+    if (!raw) return "";
+    for (const g of locGroups) {
+      if (g && Array.isArray(g.members) && g.members.includes(raw)) return String(g.name || raw);
+    }
+    return String(raw);
+  };
+  const homeRaw = String((profile as any).home_location || "").trim();
+  const homeLabel = homeRaw ? displayLoc(homeRaw) : "";
+
   // ---- Voice learning (2026-10-25, Matthew's ask): Luca learns how
   // a rep talks from the replies they ALREADY send — no draft-editing
   // required. Auto-capture saves every rep reply (origin 'rep'), so
@@ -244,7 +268,7 @@ Deno.serve(async (req) => {
     c.interior_color ? "Interior: " + c.interior_color : null,
     c.transmission || null,
     c._vinSpecs || null,
-    c.location_name ? "at " + c.location_name : null,
+    c.location_name ? "at " + displayLoc(c.location_name) + (homeLabel ? (displayLoc(c.location_name) === homeLabel ? " (the salesperson's own lot)" : " (a sister lot)") : "") : null,
     c.stock_number ? "Stock #" + c.stock_number : null,
     c.detail_url || null,
   ].filter(Boolean).join(" · ");
@@ -434,9 +458,9 @@ Deno.serve(async (req) => {
     "It is currently: " + now + " (salesperson's local time).",
     "Availability rules: only suggest coming in on days the STORE is open AND the salesperson works (profile.store_schedule / profile.schedule). Suggest the salesperson's own hours, never store hours they are not there for.",
     "If the buyer wants to apply for financing or asks for the credit application, include the credit-app link from the profile — that hand-off is allowed and encouraged. Do not discuss rates, approvals, or terms.",
-    ...((profile as any).home_location ? [
+    ...(homeLabel ? [
       "",
-      "LOCATION & TRANSFERS — the salesperson works at " + (profile as any).home_location + ". Each vehicle fact line says where that vehicle sits ('at <lot>'):",
+      "LOCATION & TRANSFERS — the salesperson works at " + homeLabel + ". Each vehicle fact line ends with where that vehicle sits: '(the salesperson's own lot)' or '(a sister lot)'. Combined rooftops the salesperson grouped together all count as their own lot:",
       "- A vehicle at the salesperson's own lot is HERE — talk about it normally.",
       "- A vehicle at a SISTER lot is not here, but the group can bring it to the salesperson's lot for the buyer. Present it warmly and be upfront: it's at a sister location, and we can have it brought over for them.",
       "- Moving a vehicle is a commitment, so BEFORE promising any transfer, get the buyer comfortable with the PRICE as it stands: the move makes sense once they agree the price works for them, assuming they like how it drives and it checks out when it's here. Ask for that confirmation naturally. Never promise the transfer itself, an arrival day/time, or any transfer fee — those are the salesperson's call.",

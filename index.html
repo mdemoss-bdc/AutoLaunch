@@ -1031,7 +1031,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
         <select id="clHomeLocation" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
           <option value="">Not set — Luca won't talk about locations or transfers</option>
         </select>
-        <p class="text-[11px] text-slate-400 mt-1">Your inventory spans several lots. When a vehicle a buyer wants sits at a sister lot, Luca will say so — and that you can have it brought to your lot — but he'll confirm they're good with the price first, before anyone commits to moving it.</p>
+        <p class="text-[11px] text-slate-400 mt-1">These are the same locations your Inventory filter shows — if you combined rooftops in Settings → Location Groups, pick the combined name and every rooftop in it counts as your lot. When a vehicle a buyer wants sits at a sister lot, Luca will say so — and that you can have it brought over — but he'll confirm they're good with the price first, before anyone commits to moving it.</p>
       </div>
 
       <div>
@@ -7712,9 +7712,14 @@ async function fillHomeLocationOptions() {
       .eq("is_active", true)
       .not("location_name", "is", null)
       .limit(4000);
-    const names = [...new Set((data || []).map(r => (r.location_name || "").trim()).filter(Boolean))].sort();
+    // Show the same DISPLAY locations the Inventory filter shows:
+    // raw rooftops the user combined in Settings -> Location Groups
+    // collapse to the group name, so picking a group makes every
+    // rooftop in it count as the rep's own lot for Luca.
+    const dispOf = (raw) => (typeof displayLocation === "function" ? displayLocation(raw) : raw);
+    const names = [...new Set((data || []).map(r => dispOf((r.location_name || "").trim())).filter(Boolean))].sort();
     if (!names.length) return;
-    const current = sel.value;
+    const current = sel.value ? dispOf(sel.value) : "";
     sel.innerHTML = '<option value="">Not set — Luca won\'t talk about locations or transfers</option>' +
       names.map(n => `<option value="${n.replace(/"/g, "&quot;")}">${n}</option>`).join("");
     if (current && !names.includes(current)) {
@@ -7735,14 +7740,18 @@ function fillCloserForm() {
   // Your-lot select: seed it with the saved value immediately (so the
   // saved lot shows even before the inventory query returns), then let
   // fillHomeLocationOptions widen it to every lot in the inventory.
+  // The saved value may be a raw rooftop that now lives inside one of
+  // the user's location groups — display it as the group name, the
+  // same label the Inventory filter uses.
+  const hlDisp = p.home_location && typeof displayLocation === "function" ? displayLocation(p.home_location) : (p.home_location || "");
   const hlSeed = document.getElementById("clHomeLocation");
-  if (hlSeed && p.home_location && ![...hlSeed.options].some(o => o.value === p.home_location)) {
+  if (hlSeed && hlDisp && ![...hlSeed.options].some(o => o.value === hlDisp)) {
     const opt = document.createElement("option");
-    opt.value = p.home_location;
-    opt.textContent = p.home_location;
+    opt.value = hlDisp;
+    opt.textContent = hlDisp;
     hlSeed.appendChild(opt);
   }
-  set("clHomeLocation", p.home_location || "");
+  set("clHomeLocation", hlDisp || "");
   fillHomeLocationOptions();
   set("clTone", p.tone || "casual_short");
   set("clInstructions", p.instructions || "");
