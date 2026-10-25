@@ -34,7 +34,8 @@
     {
       "matches": [
         "https://www.facebook.com/messages/*",
-        "https://www.facebook.com/marketplace/inbox*"
+        "https://www.facebook.com/marketplace/inbox*",
+        "https://www.facebook.com/marketplace/*"
       ],
       "js": [
         "chat_capture.js"
@@ -63,5 +64,5 @@
     "alarms",
     "debugger"
   ],
-  "version": "2.1.27"
+  "version": "2.1.28"
 }

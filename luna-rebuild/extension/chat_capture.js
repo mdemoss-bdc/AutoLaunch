@@ -19,9 +19,33 @@
 
   var BTN_ID = "autolaunch-luca-capture-btn";
 
+  // The floating chat popup (v2.1.28): sellers often read Marketplace
+  // chats in the docked mini-window on a listing page, not the full
+  // Messenger view — Matthew hit exactly that on 2026-10-25 and there
+  // was no Capture button. The popup lives in a fixed-position
+  // container holding a message box; the full Messenger thread is in
+  // normal flow, so this returns null there and behavior is unchanged.
+  function findChatPopup() {
+    try {
+      var inputs = document.querySelectorAll('[role="textbox"][aria-label], [contenteditable="true"][aria-label]');
+      for (var i = 0; i < inputs.length; i++) {
+        var lab = (inputs[i].getAttribute("aria-label") || "").toLowerCase();
+        if (lab.indexOf("message") === -1 && lab !== "aa") continue;
+        var node = inputs[i];
+        for (var up = 0; up < 10 && node && node !== document.body; up++) {
+          node = node.parentElement;
+          if (!node) break;
+          var cs = window.getComputedStyle ? window.getComputedStyle(node) : null;
+          if (cs && cs.position === "fixed" && node.querySelectorAll('[dir="auto"]').length) return node;
+        }
+      }
+    } catch (e) { /* heuristic only — never break the page */ }
+    return null;
+  }
+
   function onChatSurface() {
     var p = window.location.pathname || "";
-    return p.indexOf("/messages/") === 0 || p.indexOf("/marketplace/inbox") === 0;
+    return p.indexOf("/messages/") === 0 || p.indexOf("/marketplace/inbox") === 0 || !!findChatPopup();
   }
 
   function textOf(el) {
@@ -31,7 +55,7 @@
   function findBuyerName() {
     // Thread header usually carries the buyer's name in a heading.
     var main = document.querySelector('[role="main"]');
-    var scopes = [main, document].filter(Boolean);
+    var scopes = [findChatPopup(), main, document].filter(Boolean);
     for (var i = 0; i < scopes.length; i++) {
       var heads = scopes[i].querySelectorAll("h1, h2");
       for (var j = 0; j < heads.length; j++) {
@@ -59,7 +83,11 @@
   }
 
   function findMessages() {
-    var main = document.querySelector('[role="main"]') || document.body;
+    // Popup first: when the chat is the floating mini-window, scope to
+    // it — its own midpoint is what separates buyer (left) from rep
+    // (right); measured against the whole page the popup sits right of
+    // center and every bubble would read as the rep's.
+    var main = findChatPopup() || document.querySelector('[role="main"]') || document.body;
     // Message text lives in dir="auto" blocks; a bubble is the closest
     // reasonably-sized container around one.
     var nodes = main.querySelectorAll('[dir="auto"]');
