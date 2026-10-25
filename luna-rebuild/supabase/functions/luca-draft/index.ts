@@ -298,11 +298,18 @@ Deno.serve(async (req) => {
     }
     if (currentCar) currentCar._vinSpecs = await carSpecs(currentCar);
   }
-  const STOP = new Set("the,you,have,any,car,cars,vehicle,vehicles,price,much,what,when,with,that,this,for,are,got,get,one,ones,looking,look,need,want,know,about,there,them,they,from,will,would,come,still,available,lot,your,just,like,show,see,send,info,more,details,please,thanks,thank,hey,hello,interested,anything,something".split(","));
-  const buyerText = thread.filter((m: any) => m.direction === "in").slice(-3)
-    .map((m: any) => String(m.body || "")).join(" ").toLowerCase();
+  const STOP = new Set("the,you,have,any,car,cars,vehicle,vehicles,price,much,what,when,with,that,this,for,are,got,get,one,ones,looking,look,need,want,know,about,there,them,they,from,will,would,come,still,available,lot,your,just,like,show,see,send,info,more,details,please,thanks,thank,hey,hello,interested,anything,something,how,many,does,and,also,can,could,should,than,then,was,were,has,had,did,been,its".split(","));
+  const buyerRaw = thread.filter((m: any) => m.direction === "in").slice(-3)
+    .map((m: any) => String(m.body || "")).join(" ");
+  const buyerText = buyerRaw.toLowerCase();
+  // Capitalized words in the buyer's own text are usually the vehicle
+  // names (Jetta, Civics) — search those FIRST. v5 searched in
+  // sentence order and the token cap cut "civics" off entirely,
+  // so a stocked model read as "not in stock" (caught in E2E test).
+  const capWords = new Set((buyerRaw.match(/\b[A-Z][a-z0-9]+(?:-[A-Za-z0-9]+)?/g) || []).map(w => w.toLowerCase()));
   const rawTokens = (buyerText.match(/[a-z0-9]+(?:-[a-z0-9]+)?/g) || [])
-    .filter(t => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
+    .filter(t => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t))
+    .sort((a, b) => (capWords.has(a) ? 0 : 1) - (capWords.has(b) ? 0 : 1));
   // Singularize too: buyers type "civics"/"trucks", inventory says
   // "Civic"/"Truck" — an ILIKE contains-match misses the plural.
   const tokens = Array.from(new Set(rawTokens.flatMap(t => {
@@ -310,7 +317,7 @@ Deno.serve(async (req) => {
     if (t.endsWith("es") && t.length > 4) forms.push(t.slice(0, -2));
     if (t.endsWith("s") && t.length > 3) forms.push(t.slice(0, -1));
     return forms;
-  }))).slice(0, 8);
+  }))).slice(0, 10);
   let invMatches: any[] = [];
   {
     const seenKey = new Set<string>();
