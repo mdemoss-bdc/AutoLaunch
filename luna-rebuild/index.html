@@ -7271,7 +7271,8 @@ async function draftLucaReply(id, btn) {
     lucaDrafts[id] = data.draft;
     panel.innerHTML = `
       ${data.needs_human ? `<p class="mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">⚠ Luca flagged this one for you personally${data.reason ? " — " + escapeHtml(data.reason) : ""}. The draft below is just a safe holding reply.</p>` : ""}
-      <div class="mt-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-slate-800 whitespace-pre-wrap">${escapeHtml(data.draft)}</div>
+      <textarea id="lucaDraftText-${escapeHtml(String(id))}" rows="3" class="mt-2 w-full p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600">${escapeHtml(data.draft)}</textarea>
+      <p class="mt-1 text-[11px] text-slate-400">Edit it right here if you want — when you copy an edited version, Luca keeps both so he learns how you phrase things.</p>
       <div class="mt-2 flex items-center gap-2 flex-wrap">
         <button data-prospect-action="copy-draft" data-prospect-id="${escapeHtml(String(id))}" class="px-3 py-1.5 rounded-lg btn-gradient text-white text-[11px] font-bold cursor-pointer">Copy draft</button>
         <span class="text-[11px] text-slate-400">Paste it into the Facebook chat — in Draft mode, Luca never sends for you.</span>
@@ -7284,9 +7285,29 @@ async function draftLucaReply(id, btn) {
   }
 }
 
+// CORRECTIONS BANK (Phase 3 foundation, 2026-10-25): when the rep
+// edits a draft before copying, save draft -> final to
+// closer_corrections (keyed by thread). Fire-and-forget: a failed save
+// never blocks the copy. The drafting function will read these as
+// few-shot examples so Luca converges on the rep's own phrasing.
+async function recordLucaCorrection(id, draft, final) {
+  try {
+    if (!currentUser || !supabaseClient) return;
+    const p = prospects.find(x => String(x.id) === String(id));
+    await supabaseClient.from("closer_corrections").insert({
+      user_id: currentUser.id,
+      thread_ref: p ? (p.thread_ref || null) : null,
+      draft, final,
+    });
+  } catch (e) { /* learning is best-effort; the copy matters more */ }
+}
+
 function copyLucaDraft(id, btn) {
-  const text = lucaDrafts[id] || "";
+  const ta = document.getElementById("lucaDraftText-" + id);
+  const text = (ta ? ta.value : lucaDrafts[id] || "").trim();
   if (!text) return;
+  const original = lucaDrafts[id] || "";
+  if (original && text !== original) recordLucaCorrection(id, original, text);
   const done = () => { const o = btn.innerHTML; btn.innerHTML = "Copied ✓"; setTimeout(() => { btn.innerHTML = o; }, 2000); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(done).catch(done);
