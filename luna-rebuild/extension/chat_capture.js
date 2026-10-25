@@ -246,6 +246,45 @@
     return out;
   }
 
+  // Snippet sync (v2.1.33): each list row also carries the conversation's
+  // NEWEST line as a preview — and that preview updates live when a
+  // buyer writes, no click needed. We forward those lines for every
+  // visible row; the worker stores them only for threads that already
+  // belong to a prospect (personal chats are never pulled in). "You:"
+  // prefixes mark the rep's own latest line.
+  function collectThreadSnippets() {
+    var out = [];
+    var seen = {};
+    var timeLike = /^(\d{1,2}:\d{2}\s?(AM|PM)?|\d+\s?[mhdw]|Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan \d+|Feb \d+|Mar \d+|Apr \d+|May \d+|Jun \d+|Jul \d+|Aug \d+|Sep \d+|Oct \d+|Nov \d+|Dec \d+|Just now|Yesterday)$/i;
+    var links = document.querySelectorAll('a[href*="/messages/t/"]');
+    for (var i = 0; i < links.length && out.length < 15; i++) {
+      var key = threadKeyOf(links[i].href || "");
+      if (!key || seen[key]) continue;
+      var rowText = textOf(links[i]);
+      if (!rowText || rowText.length < 3) continue;
+      seen[key] = true;
+      var segs = rowText.split(" · ").map(function (s) { return s.trim(); }).filter(Boolean);
+      if (segs.length < 2) continue;
+      var rest = segs.slice(1).filter(function (s) {
+        return !timeLike.test(s) && !/^\$[\d,]+\s*-/.test(s) && s.length > 1;
+      });
+      if (!rest.length) continue;
+      var snippet = rest.reduce(function (a, b) { return b.length > a.length ? b : a; }, "");
+      var direction = "in";
+      if (/^You[:\s]/i.test(snippet)) {
+        direction = "out";
+        snippet = snippet.replace(/^You[:\s]+/i, "").trim();
+      }
+      if (snippet.length < 2) continue;
+      out.push({
+        threadRef: "https://www.facebook.com/messages/t/" + key,
+        snippet: snippet.slice(0, 140),
+        direction: direction
+      });
+    }
+    return out;
+  }
+
   function sendCapture(capture) {
     try {
       chrome.runtime.sendMessage({ type: "AUTOLAUNCH_CAPTURE_CHAT", capture: capture }, function () {
@@ -267,12 +306,42 @@
 
   function autoPass() {
     try {
-      if (onInboxListSurface()) collectThreadStubs().forEach(sendCapture);
+      if (onInboxListSurface()) {
+        collectThreadStubs().forEach(sendCapture);
+        var snippets = collectThreadSnippets();
+        if (snippets.length) {
+          try {
+            chrome.runtime.sendMessage({ type: "AUTOLAUNCH_CHAT_SNIPPETS", snippets: snippets }, function () {
+              void chrome.runtime.lastError;
+            });
+          } catch (e) { /* next pass retries */ }
+        }
+      }
       autoFullCapture();
       var btn = document.getElementById(BTN_ID);
       if (btn && onInboxListSurface()) btn.textContent = "🌙 Luca auto-sync on · Capture now";
     } catch (e) { /* heuristics must never break the page */ }
   }
+
+  // Fast pickup (v2.1.33): a new buyer message rewrites its list row
+  // within seconds. Watch the list for changes and run a pass shortly
+  // after (debounced, at most ~4x a minute) instead of waiting out the
+  // 45-second timer. The worker dedupes anything unchanged.
+  var lastObservedPass = 0;
+  var observedTimer = null;
+  try {
+    var listObserver = new MutationObserver(function () {
+      if (!onInboxListSurface()) return;
+      if (observedTimer) return;
+      observedTimer = setTimeout(function () {
+        observedTimer = null;
+        if (Date.now() - lastObservedPass < 12000) return;
+        lastObservedPass = Date.now();
+        autoPass();
+      }, 5000);
+    });
+    listObserver.observe(document.documentElement, { childList: true, subtree: true });
+  } catch (e) { /* the 45s timer still covers it */ }
 
   // Facebook is a SPA: the button must survive route changes.
   setInterval(injectButton, 1500);

@@ -291,6 +291,10 @@ async function sbPatch(path, body) {
   });
 }
 
+async function sbDelete(path) {
+  return sbFetch(path, { method: "DELETE", headers: await sbHeaders({}) });
+}
+
 async function sbPost(path, body) {
   return sbFetch(path, {
     method: "POST",
@@ -347,7 +351,7 @@ async function handleCaptureChat(capture) {
     }
   }
 
-  const existing = await sbGet(`closer_messages?user_id=eq.${userId}&prospect_id=eq.${prospect.id}&select=body,direction&order=created_at.desc&limit=200`);
+  const existing = await sbGet(`closer_messages?user_id=eq.${userId}&prospect_id=eq.${prospect.id}&select=id,body,direction&order=created_at.desc&limit=200`);
   const seen = new Set(existing.map(m => m.direction + "|" + m.body));
   const fresh = (capture.messages || []).filter(m => m && m.body && !seen.has(m.direction + "|" + m.body));
   if (fresh.length) {
@@ -359,8 +363,61 @@ async function handleCaptureChat(capture) {
       origin: m.direction === "out" ? "rep" : "buyer",
       body: String(m.body).slice(0, 2000)
     })));
+    // Snippet-partial cleanup (v2.1.33): a full capture supersedes the
+    // truncated one-line rows the inbox-list snippet sync saved for the
+    // same message. An existing row counts as a partial when a fresh
+    // full body (same direction, longer) starts with its text.
+    const partialIds = existing.filter(e => {
+      const core = String(e.body || "").replace(/[…]+$/, "").replace(/\.\.\.$/, "");
+      if (core.length < 20) return false;
+      return fresh.some(f => f.direction === e.direction
+        && String(f.body).length > core.length
+        && String(f.body).indexOf(core.slice(0, 40)) === 0);
+    }).map(e => e.id).filter(Boolean);
+    if (partialIds.length) {
+      try { await sbDelete(`closer_messages?id=in.(${partialIds.join(",")})`); } catch (e) { /* cosmetic */ }
+    }
   }
   return { prospectName: prospect.name || name, added: fresh.length };
+}
+
+// Snippet sync (v2.1.33): the inbox LIST only shows each conversation's
+// newest line — but that line updates live when a buyer writes, with no
+// click from anyone. chat_capture.js sends those lines here; a line is
+// stored ONLY for a thread that already belongs to a known prospect
+// (personal chats are never pulled in), and only when it is genuinely
+// new against what we already hold for that prospect.
+async function handleChatSnippets(snippets) {
+  const { autolaunch_user_id: userId } = await chrome.storage.local.get(["autolaunch_user_id"]);
+  if (!userId || !Array.isArray(snippets) || !snippets.length) return { stored: 0 };
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const rows = await sbGet(`prospects?user_id=eq.${userId}&select=id,thread_ref&order=created_at.desc&limit=200`);
+  const byThread = new Map();
+  rows.forEach(r => { if (r.thread_ref) byThread.set(norm(r.thread_ref), r); });
+  let stored = 0;
+  for (const sn of snippets.slice(0, 15)) {
+    const prospect = byThread.get(norm(sn.threadRef || ""));
+    const body = String(sn.snippet || "").trim();
+    if (!prospect || body.length < 2) continue;
+    const direction = sn.direction === "out" ? "out" : "in";
+    const recent = await sbGet(`closer_messages?user_id=eq.${userId}&prospect_id=eq.${prospect.id}&select=body,direction&order=created_at.desc&limit=30`);
+    const covered = recent.some(m => {
+      const b = norm(m.body);
+      const s = norm(body);
+      return b === s || b.indexOf(s.slice(0, 30)) === 0 || s.indexOf(b.slice(0, 30)) === 0;
+    });
+    if (covered) continue;
+    await sbPost("closer_messages", [{
+      user_id: userId,
+      prospect_id: prospect.id,
+      thread_ref: (sn.threadRef || "").slice(0, 300) || null,
+      direction,
+      origin: direction === "out" ? "rep" : "buyer",
+      body: body.slice(0, 500)
+    }]);
+    stored++;
+  }
+  return { stored };
 }
 
 // --- Outbound replies (Prospects inbox step 2, v2.1.32) -------------------
@@ -1233,6 +1290,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.warn("[AutoLaunch] chat capture failed:", err && err.message ? err.message : err);
         sendResponse({ ok: false });
       }
+    })();
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_CHAT_SNIPPETS" && Array.isArray(message.snippets)) {
+    const fromFbSnip = (sender.tab && sender.tab.url || "").startsWith("https://www.facebook.com/");
+    if (!fromFbSnip) return;
+    (async () => {
+      try { await handleChatSnippets(message.snippets); } catch (e) { /* next pass retries */ }
+      sendResponse({ ok: true });
     })();
     return true;
   }
