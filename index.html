@@ -2631,7 +2631,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     </div>
 
     <p class="text-xs text-slate-600 leading-relaxed">
-      Every new arrival from your website gets queued automatically — no review before they post. That's the whole idea: every car, in front of buyers, fast.
+      Pick which locations and conditions the auto poster works from. It queues every matching car that hasn't been posted yet — new arrivals and the cars already sitting on your lot — and works through them at your daily posting limit. No review before they post: that's the whole idea, every car in front of buyers, fast.
     </p>
 
     <div class="space-y-4 text-xs">
@@ -2644,6 +2644,18 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           <button type="button" data-min-photos="10" onclick="setMinPhotos(10)" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">10 photos</button>
         </div>
         <p class="text-[11px] text-slate-500 mt-2">Logos and "photo coming soon" pictures don't count. A car still waiting for photos posts by itself once they're on your website.</p>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Post from these locations</label>
+        <div id="autoPostLocations" class="space-y-1.5 max-h-44 overflow-y-auto pr-1"></div>
+        <p class="text-[11px] text-slate-500 mt-2">Nothing ticked = every location posts. A location group counts as one pick and covers all its lots.</p>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Only these conditions</label>
+        <div id="autoPostConditions" class="flex flex-wrap gap-2"></div>
+        <p class="text-[11px] text-slate-500 mt-2">Nothing picked = new, used and certified all post.</p>
       </div>
     </div>
 
@@ -3576,6 +3588,8 @@ updateLastSyncDisplay();
         if (selectEl) selectEl.value = String(data.repost_frequency_days);
       }
       if (data.auto_post_mode) ribbonState.autoPostMode = data.auto_post_mode;
+      if (Array.isArray(data.auto_post_locations)) autoPostFilter.locations = data.auto_post_locations.map(String);
+      if (Array.isArray(data.auto_post_conditions)) autoPostFilter.conditions = data.auto_post_conditions.map(String);
 
       if (data.auto_crop_enabled !== undefined) {
         const chkCrop = document.getElementById("chkAutoCrop");
@@ -8640,7 +8654,54 @@ function openQueueModal() {
   loadPostingQueue(); // fresh state the moment it opens, not the page-load snapshot
   syncQueuePoller();  // and keep it live while it stays open
 }
-function openAutoPostModal() { document.getElementById("autoPostModal").classList.remove("hidden"); }
+// Auto-post location x condition filter (Matthew, 2026-10-25). Empty
+// arrays mean "everything": no locations ticked = all locations,
+// no conditions picked = all conditions. The scraper's auto-post
+// pass reads these two columns on every run and queues matching
+// unposted cars up to the daily limit.
+let autoPostFilter = { locations: [], conditions: [] };
+const AUTO_POST_CONDITIONS = ["New", "Used", "Certified Pre-Owned"];
+
+function escAttrText(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function renderAutoPostFilterControls() {
+  const locWrap = document.getElementById("autoPostLocations");
+  if (locWrap) {
+    const names = [...new Set(rawInventory.map(c => displayLocation(c.location_name)).filter(Boolean))].sort();
+    locWrap.innerHTML = names.length ? names.map(n => {
+      const on = autoPostFilter.locations.includes(n);
+      return `<label class="flex items-center gap-2.5 px-3 py-2 rounded-xl border ${on ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-slate-50"} cursor-pointer">
+        <input type="checkbox" data-ap-location="${escAttrText(n)}" ${on ? "checked" : ""} onchange="toggleAutoPostLocation(this)" class="w-4 h-4 accent-blue-600">
+        <span class="font-semibold text-slate-700">${escAttrText(n)}</span></label>`;
+    }).join("") : `<p class="text-[11px] text-slate-500">Your locations appear here after your first inventory sync.</p>`;
+  }
+  const condWrap = document.getElementById("autoPostConditions");
+  if (condWrap) {
+    condWrap.innerHTML = AUTO_POST_CONDITIONS.map(c => {
+      const on = autoPostFilter.conditions.includes(c);
+      return `<button type="button" onclick="toggleAutoPostCondition('${c}')" class="px-3.5 py-2 rounded-xl border font-bold cursor-pointer ${on ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-slate-50 text-slate-600"}">${c}</button>`;
+    }).join("");
+  }
+}
+
+function toggleAutoPostLocation(el) {
+  const name = el.getAttribute("data-ap-location");
+  const i = autoPostFilter.locations.indexOf(name);
+  if (el.checked && i < 0) autoPostFilter.locations.push(name);
+  if (!el.checked && i >= 0) autoPostFilter.locations.splice(i, 1);
+  renderAutoPostFilterControls();
+}
+
+function toggleAutoPostCondition(c) {
+  const i = autoPostFilter.conditions.indexOf(c);
+  if (i >= 0) autoPostFilter.conditions.splice(i, 1);
+  else autoPostFilter.conditions.push(c);
+  renderAutoPostFilterControls();
+}
+
+function openAutoPostModal() { renderAutoPostFilterControls(); document.getElementById("autoPostModal").classList.remove("hidden"); }
 function openAutoRepostModal() { document.getElementById("autoRepostModal").classList.remove("hidden"); }
 function openAutoPhotoEditsModal() {
   document.getElementById("autoPhotoEditsModal").classList.remove("hidden");
@@ -8872,15 +8933,16 @@ const GUIDES = {
     icon: "fa-solid fa-paper-plane",
     iconClasses: "bg-purple-50 text-purple-600 border-purple-200",
     modal: "autoPostModal",
-    what: "When a vehicle first shows up in your website feed, AutoLaunch queues it for posting automatically — no picking cars one by one. Queued cars go to Facebook Marketplace, plus Instagram, TikTok or your Facebook Page if you have switched those channels on.",
+    what: "Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus Instagram, TikTok or your Facebook Page if you have switched those channels on.",
     steps: [
       "Flip the switch on this card — or open the card and press Done, because saving turns it on.",
-      "Every new arrival is queued — Auto-post covers all new cars.",
+      "Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.",
       "Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.",
+      "Set how many it may post per day under Safe posting limits — the auto poster queues up to that many a day, newest cars first.",
       "Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels."
     ],
     notes: [
-      "New arrivals are picked up when your inventory syncs from your website feed.",
+      "Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you press Refresh Inventory.",
       "Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.",
       "Every auto-posted car counts against your daily posting limit, same as cars you queue by hand.",
       "A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website."
@@ -9191,9 +9253,14 @@ function renderRibbonStatuses() {
 
   const apLbl = document.getElementById("ribbonAutoPostStatusLabel");
   if (apLbl) {
-    apLbl.innerText = !arrivalsOn
-      ? "Off"
-      : "On — all new arrivals";
+    if (!arrivalsOn) {
+      apLbl.innerText = "Off";
+    } else {
+      const conds = (autoPostFilter.conditions || []).join(" + ");
+      const locs = autoPostFilter.locations || [];
+      const locTxt = !locs.length ? "every location" : locs.length === 1 ? locs[0] : locs.length + " locations";
+      apLbl.innerText = "On — " + (conds ? conds + " · " : "All conditions · ") + locTxt;
+    }
   }
 
   const rpLbl = document.getElementById("repostFrequencyLabel");
@@ -9886,14 +9953,16 @@ function setMinPhotos(n) {
 
 async function saveAutoPostPreferences() {
   if (!currentUser) return;
-  // One honest mode: auto-post queues ALL new arrivals. (Saved-filter
-  // presets are a roadmap item — they return as saved filter-bar presets
-  // if dealers ask for subset posting.)
+  // Auto-post scope = the location x condition filter picked in this
+  // modal (empty = everything). The scraper's auto-post pass reads
+  // these columns on every sync and queues matching unposted cars.
   try {
     const { error } = await supabaseClient.from("user_settings").upsert({
       user_id: currentUser.id,
       auto_post_enabled: true,
       auto_post_mode: "all",
+      auto_post_locations: autoPostFilter.locations,
+      auto_post_conditions: autoPostFilter.conditions,
       updated_at: new Date().toISOString()
     }, { onConflict: "user_id" });
 
@@ -9923,7 +9992,9 @@ async function saveAutoPostPreferences() {
     } catch (e) { /* non-fatal: session state already holds the choice */ }
 
     closeModal('autoPostModal');
-    alert("✓ Auto-post new arrivals preferences saved and activated!" + extraNote);
+    const locTxt = autoPostFilter.locations.length ? autoPostFilter.locations.join(", ") : "all locations";
+    const condTxt = autoPostFilter.conditions.length ? autoPostFilter.conditions.join(" + ") : "all conditions";
+    alert(`✓ Auto-post is ON — ${condTxt} · ${locTxt}.\n\nMatching cars that haven't been posted yet queue up on the next inventory sync, paced by your daily posting limit.` + extraNote);
   } catch (err) {
     alert("Could not save preferences: " + err.message);
   }

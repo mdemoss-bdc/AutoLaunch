@@ -1294,6 +1294,262 @@ def _queue_exit_listing_removals(uid: str, posted_rows: list) -> int:
     )
     return len(rows)
 
+# =============================================================================
+# ==================== AUTO-POST (LOCATION x CONDITION) ======================
+# =============================================================================
+# Matthew's ask (2026-10-25): the auto poster takes a location x
+# condition filter from user_settings and queues EVERY matching car
+# that has never been posted — new arrivals and the existing backlog
+# alike — paced by the user's daily post limit. Before this pass the
+# auto-post switch existed in the app but nothing ever queued cars
+# automatically; this pass is the implementation. The guards mirror
+# the app's queueing rules exactly: never sold, never no-price,
+# never missing a Facebook-required color, and the real-photo count
+# must meet the user's minimum-photos choice. Fail-open throughout:
+# a failure here must never break the scrape.
+
+def _usable_photo_count(car: dict) -> int:
+    """Count REAL photos the way the app does: usable http(s) URLs
+    across image_url + photos + custom_photo_urls, deduped, skipping
+    /static/ paths and the no-photo fallback asset."""
+    urls = set()
+
+    def add(u):
+        if not isinstance(u, str):
+            return
+        u = u.strip()
+        if not u:
+            return
+        if u.startswith("//"):
+            u = "https:" + u
+        if not (u.startswith("http://") or u.startswith("https://")):
+            return
+        if "/static/" in u:
+            return
+        if u.endswith("assets/no-photo.png"):
+            return
+        urls.add(u)
+
+    add(car.get("image_url"))
+    for key in ("photos", "custom_photo_urls"):
+        v = car.get(key)
+        if isinstance(v, list):
+            for u in v:
+                add(u)
+    return len(urls)
+
+
+def _condition_matches(condition: str, selected: list) -> bool:
+    """Empty selection = every condition. Stored values are 'New',
+    'Used', 'Certified Pre-Owned'; matching is by prefix so small
+    label drift never silently excludes a whole condition."""
+    if not selected:
+        return True
+    c = (condition or "").strip().lower()
+    for s in selected:
+        sl = str(s).strip().lower()
+        if sl == "new" and c.startswith("new"):
+            return True
+        if sl == "used" and c.startswith("used"):
+            return True
+        if sl.startswith("certified") and c.startswith("certified"):
+            return True
+    return False
+
+
+def _auto_post_allowed_locations(settings_row: dict):
+    """None = all locations. Otherwise the set of RAW location names
+    the selected DISPLAY locations cover: a selected location-group
+    name expands to its members (the same location_groups mapping
+    the app and Luca use); an ungrouped name is its own raw name."""
+    selected = settings_row.get("auto_post_locations")
+    if not isinstance(selected, list) or not selected:
+        return None
+    members_by_name = {}
+    groups = settings_row.get("location_groups")
+    if isinstance(groups, list):
+        for g in groups:
+            if isinstance(g, dict) and g.get("name"):
+                members_by_name[str(g["name"])] = [
+                    str(m) for m in (g.get("members") or [])
+                ]
+    allowed = set()
+    for name in selected:
+        n = str(name)
+        if n in members_by_name:
+            allowed.update(members_by_name[n])
+        else:
+            allowed.add(n)
+    return allowed
+
+
+def _auto_post_filtered(uid: str) -> int:
+    """Queue post jobs for every unposted car matching the user's
+    location x condition filter, up to today's remaining daily
+    allowance. Returns the number of CARS queued. Never raises."""
+    try:
+        res = (
+            db.table("user_settings")
+            .select("auto_post_enabled, auto_post_min_photos, auto_post_locations, auto_post_conditions, location_groups, daily_post_limit, channel_instagram_enabled, channel_tiktok_enabled, channel_facebook_page_enabled")
+            .eq("user_id", uid)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if not rows:
+            return 0
+        s = rows[0]
+        if s.get("auto_post_enabled") is not True:
+            return 0
+        try:
+            min_photos = max(1, int(s.get("auto_post_min_photos") or 1))
+        except Exception:
+            min_photos = 1
+        conditions = s.get("auto_post_conditions")
+        if not isinstance(conditions, list):
+            conditions = []
+        allowed_locations = _auto_post_allowed_locations(s)
+        try:
+            limit = int(s.get("daily_post_limit"))
+        except Exception:
+            limit = 10
+        unlimited = limit >= 999
+
+        # Today's usage, mirroring the app's getDailyPostUsage: today's
+        # marketplace queue rows that did not fail, plus cars posted
+        # today that are not already counted. (UTC day boundary; the
+        # app/extension count from local midnight — a pacing cap does
+        # not need to agree to the minute.)
+        from datetime import datetime, timezone
+        start_iso = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+        used = 0
+        counted_vins = set()
+        q = (
+            db.table("auto_posting_queue")
+            .select("vin, status")
+            .eq("user_id", uid)
+            .eq("target_channel", "marketplace")
+            .gte("created_at", start_iso)
+            .execute()
+        ).data or []
+        for r in q:
+            if r.get("status") != "failed":
+                used += 1
+                if r.get("vin"):
+                    counted_vins.add(r["vin"])
+        p = (
+            db.table("scraped_inventory")
+            .select("vin")
+            .eq("user_id", uid)
+            .gte("marketplace_posted_at", start_iso)
+            .execute()
+        ).data or []
+        for r in p:
+            if r.get("vin") and r["vin"] not in counted_vins:
+                used += 1
+        allowance = None if unlimited else max(0, limit - used)
+        if allowance is not None and allowance <= 0:
+            print(f"[*] Auto-post for user {uid[:8]}: daily limit already reached ({used}/{limit}).")
+            return 0
+
+        # A VIN already holding a live post job never gets a second.
+        live = (
+            db.table("auto_posting_queue")
+            .select("vin, target_channel")
+            .eq("user_id", uid)
+            .in_("status", ["pending", "processing"])
+            .execute()
+        ).data or []
+        live_keys = {
+            (r.get("vin"), r.get("target_channel") or "marketplace")
+            for r in live if r.get("vin")
+        }
+
+        inv = (
+            db.table("scraped_inventory")
+            .select("vin, year, make, model, price, condition, color, interior_color, status, location_name, stock_number, image_url, photos, custom_photo_urls, first_seen")
+            .eq("user_id", uid)
+            .eq("is_active", True)
+            .filter("marketplace_posted_at", "is", "null")
+            .order("first_seen", desc=True)
+            .limit(4000)
+            .execute()
+        ).data or []
+
+        channels = ["marketplace"]
+        if s.get("channel_instagram_enabled") is True:
+            channels.append("instagram")
+        if s.get("channel_tiktok_enabled") is True:
+            channels.append("tiktok")
+        if s.get("channel_facebook_page_enabled") is True:
+            channels.append("facebook_page")
+
+        def _missing_color(v):
+            t = str(v or "").strip().lower()
+            return not t or t == "standard"
+
+        queue_rows = []
+        cars_queued = 0
+        for car in inv:
+            if allowance is not None and cars_queued >= allowance:
+                break
+            if (car.get("status") or "").lower() == "sold":
+                continue
+            if allowed_locations is not None and (car.get("location_name") or "") not in allowed_locations:
+                continue
+            if not _condition_matches(car.get("condition") or "", conditions):
+                continue
+            try:
+                price_ok = bool(car.get("price")) and float(car["price"]) > 0
+            except Exception:
+                price_ok = False
+            if not price_ok:
+                continue
+            if _missing_color(car.get("color")) or _missing_color(car.get("interior_color")):
+                continue
+            if _usable_photo_count(car) < min_photos:
+                continue
+            vin = car.get("vin")
+            if not vin:
+                continue
+            new_rows = []
+            for ch in channels:
+                if (vin, ch) in live_keys:
+                    continue
+                new_rows.append({
+                    "user_id": uid,
+                    "vin": vin,
+                    "target_channel": ch,
+                    "status": "pending",
+                    "year": car.get("year"),
+                    "make": car.get("make"),
+                    "model": car.get("model"),
+                    "stock_num": car.get("stock_number"),
+                    "price": car.get("price"),
+                })
+                live_keys.add((vin, ch))
+            if new_rows:
+                queue_rows.extend(new_rows)
+                cars_queued += 1
+        if not queue_rows:
+            print(f"[*] Auto-post for user {uid[:8]}: no unposted cars match the filter right now.")
+            return 0
+        db.table("auto_posting_queue").insert(queue_rows).execute()
+        print(
+            f"[✓] Auto-post for user {uid[:8]}: queued {cars_queued} car(s) "
+            f"across {len(channels)} channel(s) "
+            f"(locations={'all' if allowed_locations is None else len(allowed_locations)}, "
+            f"conditions={conditions or 'all'}, photos>={min_photos}, "
+            f"used today {used}/{'unlimited' if unlimited else limit})."
+        )
+        return cars_queued
+    except Exception as e:
+        print(f"[!] Auto-post pass warning for user {uid[:8]} (non-fatal): {e}")
+        return 0
+
+
 def mark_stale_inventory(uid: str, seen_vins: set) -> int:
     """Flag inventory that a fully successful crawl did not see.
 
@@ -1444,6 +1700,7 @@ async def run_scraper():
     )
 
     total_synced_all = 0
+    auto_post_uids = set()
 
     async with async_playwright() as p:
 
@@ -1687,6 +1944,11 @@ async def run_scraper():
 
                 mark_stale_inventory(active_uid, user_seen_vins)
 
+                # A clean, full crawl also earns the auto-post pass
+                # (it runs once per user after the crawl loop).
+                if active_uid:
+                    auto_post_uids.add(active_uid)
+
             elif user_seen_vins and user_had_error:
 
                 print(
@@ -1696,6 +1958,11 @@ async def run_scraper():
             print(
                 f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced."
             )
+
+        # Auto-post pass (location x condition filter): once per user
+        # whose crawl was clean and complete. Fail-open inside.
+        for _uid in auto_post_uids:
+            _auto_post_filtered(_uid)
 
         await browser.close()
 
