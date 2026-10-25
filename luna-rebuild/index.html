@@ -6300,7 +6300,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.24";
+const EXPECTED_EXT_VERSION = "2.1.25";
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }
@@ -6834,6 +6834,7 @@ function prospectStage(key) {
   return PROSPECT_STAGES.find(s => s.key === key) || PROSPECT_STAGES[0];
 }
 let prospects = [];
+let prospectChats = {}; // prospect_id -> {count, latest, direction} from closer_messages
 let prospectsStorageMode = "server"; // flips to "local" if the table is missing
 let editingProspectId = null;
 let prospectsStageFilter = "all";
@@ -6859,6 +6860,23 @@ async function loadProspects() {
       .order("updated_at", { ascending: false });
     if (error) throw error;
     prospects = data || [];
+    // Captured chats (Luca Phase 2): count + latest line per prospect.
+    // Non-fatal — a missing messages table just means no chat lines.
+    try {
+      const { data: msgs } = await supabaseClient
+        .from("closer_messages")
+        .select("prospect_id, body, direction, created_at")
+        .eq("user_id", currentUser.id)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      prospectChats = {};
+      (msgs || []).forEach(m => {
+        if (!m.prospect_id) return;
+        const slot = prospectChats[m.prospect_id] || (prospectChats[m.prospect_id] = { count: 0, latest: "", direction: "in" });
+        slot.count++;
+        if (!slot.latest) { slot.latest = m.body || ""; slot.direction = m.direction || "in"; }
+      });
+    } catch (e) { prospectChats = {}; }
   } catch (err) {
     if (isMissingTableError(err)) prospectsStorageMode = "local";
     else console.warn("Prospects load failed:", err);
@@ -7001,6 +7019,7 @@ function renderProspects() {
           ${contact ? `<p class="text-xs text-slate-500 mt-0.5">${contact}</p>` : ""}
           ${p.vehicle_label ? `<p class="text-xs text-slate-600 mt-1"><span class="font-semibold text-slate-900">Asking about:</span> ${escapeHtml(p.vehicle_label)}</p>` : ""}
           ${p.notes ? `<p class="text-xs text-slate-500 mt-0.5 italic">"${escapeHtml(p.notes)}"</p>` : ""}
+          ${prospectChats[p.id] ? `<p class="text-xs text-slate-500 mt-0.5">💬 ${prospectChats[p.id].count} captured · last: “${escapeHtml(String(prospectChats[p.id].latest || "").slice(0, 90))}”</p>` : ""}
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
           <select data-prospect-stage="${escapeHtml(String(p.id))}" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-600">${options}</select>

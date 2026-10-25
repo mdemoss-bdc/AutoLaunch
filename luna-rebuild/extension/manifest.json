@@ -30,6 +30,16 @@
         "https://www.facebook.com/marketplace/you/dashboard*"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.facebook.com/messages/*",
+        "https://www.facebook.com/marketplace/inbox*"
+      ],
+      "js": [
+        "chat_capture.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "description": "Automated Facebook Marketplace helper for AutoLaunch users.",
@@ -53,5 +63,5 @@
     "alarms",
     "debugger"
   ],
-  "version": "2.1.24"
+  "version": "2.1.25"
 }

@@ -291,6 +291,56 @@ async function sbPatch(path, body) {
   });
 }
 
+async function sbPost(path, body) {
+  return sbFetch(path, {
+    method: "POST",
+    headers: await sbHeaders({ "Prefer": "return=representation" }),
+    body: JSON.stringify(body)
+  });
+}
+
+// Luca chat capture (Phase 2): a chat_capture.js scrape of an open
+// Messenger/Marketplace thread lands here. Find-or-create the buyer as
+// a Prospect, then store only the messages we don't already have.
+// Runs on the rep's own stored session, so RLS keeps every row theirs.
+async function handleCaptureChat(capture) {
+  const { autolaunch_user_id: userId } = await chrome.storage.local.get(["autolaunch_user_id"]);
+  if (!userId) throw new Error("no stored user id — open AutoLaunch and sign in first");
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const name = (capture.buyerName || "").trim() || "Marketplace buyer";
+  const vehicleText = (capture.vehicleText || "").trim();
+
+  const rows = await sbGet(`prospects?user_id=eq.${userId}&select=id,name,vehicle_label&order=created_at.desc&limit=200`);
+  let prospect = rows.find(r => norm(r.name) === norm(name) && (!vehicleText || norm(r.vehicle_label) === norm(vehicleText)));
+  if (!prospect) {
+    const created = await sbPost("prospects", {
+      user_id: userId,
+      name: name,
+      vehicle_label: vehicleText || null,
+      stage: "new",
+      source: "marketplace",
+      thread_ref: (capture.threadUrl || "").slice(0, 300) || null,
+      notes: "Captured from a Marketplace chat by Luca."
+    });
+    prospect = created[0];
+  }
+
+  const existing = await sbGet(`closer_messages?user_id=eq.${userId}&prospect_id=eq.${prospect.id}&select=body,direction&order=created_at.desc&limit=200`);
+  const seen = new Set(existing.map(m => m.direction + "|" + m.body));
+  const fresh = (capture.messages || []).filter(m => m && m.body && !seen.has(m.direction + "|" + m.body));
+  if (fresh.length) {
+    await sbPost("closer_messages", fresh.map(m => ({
+      user_id: userId,
+      prospect_id: prospect.id,
+      thread_ref: (capture.threadUrl || "").slice(0, 300) || null,
+      direction: m.direction === "out" ? "out" : "in",
+      origin: m.direction === "out" ? "rep" : "buyer",
+      body: String(m.body).slice(0, 2000)
+    })));
+  }
+  return { prospectName: prospect.name || name, added: fresh.length };
+}
+
 function startOfTodayISO() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -1086,6 +1136,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       let version = null;
       try { version = chrome.runtime.getManifest().version || null; } catch (e) { /* keep null */ }
       sendResponse({ hasToken: !!token, version });
+    })();
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_CAPTURE_CHAT" && message.capture) {
+    // Only the capture script on facebook.com may hand us a chat —
+    // same sender discipline as the ping above.
+    const fromFb = (sender.tab && sender.tab.url || "").startsWith("https://www.facebook.com/");
+    if (!fromFb) return;
+    (async () => {
+      try {
+        const result = await handleCaptureChat(message.capture);
+        sendResponse(Object.assign({ ok: true }, result));
+      } catch (err) {
+        console.warn("[AutoLaunch] chat capture failed:", err && err.message ? err.message : err);
+        sendResponse({ ok: false });
+      }
     })();
     return true;
   }

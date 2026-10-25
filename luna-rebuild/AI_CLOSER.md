@@ -149,3 +149,14 @@ All RLS owner-only, mirroring the wishlist/intro-video tables.
   short.)
 - Model choice for replies is Luna's pick (fast/cheap hosted model;
   grounded in listing data only) unless Matthew wants a say.
+
+## Cost rule (Matthew, 2026-10-25): $0 until users
+
+Matthew will not pay for AI before AutoLaunch has users and revenue.
+Drafting therefore runs on **Google Gemini's free tier** (AI Studio key,
+no credit card; Flash ≈1,500 requests/day — far above solo volume).
+Accepted trade-off for now: free-tier content may be used by Google to
+improve its models; flipping to a paid key (pennies per draft, out of
+revenue) ends that. The drafting Edge Function is **provider-agnostic**
+— provider + model + key are server config, so the flip is a settings
+change, never a rebuild. If the product flops, total AI spend stays $0.
