@@ -128,6 +128,14 @@
       if (/^Conversation titled /.test(t)) continue;
       if (/ created this group$/.test(t)) continue;
       if (/mutual friends/.test(t) || /badge on Marketplace/.test(t)) continue;
+      // Info-panel guard (v2.1.39): the thread page's right rail
+      // (Media, files and links) lives inside [role=main] too — its
+      // attachment rows (filenames, sizes, dates) are not messages.
+      // Seen live 2026-10-25 vacuuming a files list into a thread.
+      if (nodes[i].closest && nodes[i].closest('[role="complementary"]')) continue;
+      if (/\.(csv|txt|pdf|jpe?g|png|gif|mp3|wav|zip|docx?|xlsx?)$/i.test(t)) continue;
+      if (/^\d+(\.\d+)?\s?(KB|MB|GB|B)$/.test(t)) continue;
+      if (/Unread message:/.test(t)) continue;
       var r = nodes[i].getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       var key = t + "|" + (r.left > paneMid ? "R" : "L");

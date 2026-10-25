@@ -1383,29 +1383,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       let synced = false;
       try {
         const tabs = await chrome.tabs.query({ url: ["https://www.facebook.com/*"] });
-        const rank = (t) => {
-          const u = t.url || "";
-          if (u.includes("/messages") || u.includes("/marketplace")) return 0;
-          return 1;
-        };
-        const ordered = tabs.slice().sort((a, b) => rank(a) - rank(b));
-        for (const t of ordered.slice(0, 2)) {
-          const ok = await new Promise(resolve => {
-            let done = false;
-            const timer = setTimeout(() => { if (!done) { done = true; resolve(false); } }, 8000);
-            try {
-              chrome.tabs.sendMessage(t.id, { type: "AUTOLAUNCH_SYNC_NOW" }, resp => {
-                if (done) return;
-                done = true;
-                clearTimeout(timer);
-                resolve(!chrome.runtime.lastError && !!(resp && resp.ok));
-              });
-            } catch (e) {
-              if (!done) { done = true; clearTimeout(timer); resolve(false); }
-            }
-          });
-          if (ok) { synced = true; break; }
-        }
+        // Ask EVERY Facebook tab (v2.1.39): each one captures what
+        // IT can see — a list tab contributes snippets, the thread's
+        // own tab the full conversation. The first version stopped at
+        // the first tab that answered, which starved the thread tab
+        // whenever another tab replied first.
+        const attempts = tabs.slice(0, 3).map(t => new Promise(resolve => {
+          let done = false;
+          const timer = setTimeout(() => { if (!done) { done = true; resolve(false); } }, 8000);
+          try {
+            chrome.tabs.sendMessage(t.id, { type: "AUTOLAUNCH_SYNC_NOW" }, resp => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              resolve(!chrome.runtime.lastError && !!(resp && resp.ok));
+            });
+          } catch (e) {
+            if (!done) { done = true; clearTimeout(timer); resolve(false); }
+          }
+        }));
+        const results = await Promise.all(attempts);
+        synced = results.some(Boolean);
       } catch (e) { /* answer what we have */ }
       sendResponse({ ok: synced });
     })();
