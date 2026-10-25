@@ -345,10 +345,18 @@ Deno.serve(async (req) => {
     if (currentCar) currentCar._vinSpecs = await carSpecs(currentCar);
   }
   const STOP = new Set("the,you,have,any,car,cars,vehicle,vehicles,price,much,what,when,with,that,this,for,are,got,get,one,ones,looking,look,need,want,know,about,there,them,they,from,will,would,come,still,available,lot,your,just,like,show,see,send,info,more,details,please,thanks,thank,hey,hello,interested,anything,something,how,many,does,and,also,can,could,should,than,then,was,were,has,had,did,been,its".split(","));
-  const buyerRaw = thread.filter((m: any) => m.direction === "in").slice(-3)
-    .map((m: any) => String(m.body || "")).join(" ");
-  const buyerText = buyerRaw.toLowerCase();
-  const rawTokens = (buyerText.match(/[a-z0-9]+(?:-[a-z0-9]+)?/g) || [])
+  // FOCUS-FIRST (v12): the buyer's LATEST message is the question
+  // being answered, so its vehicle words are resolved and searched
+  // FIRST and can never be crowded out. Caught live 2026-10-25: the
+  // old oldest-first order + a shared 40-row accumulation cap let
+  // "colorados" (23 rows) and "expeditons" (18) exhaust the search
+  // before "beetle" was ever queried — a Beetle sat ACTIVE at the
+  // rep's own lot while Luca said "I don't have any Beetles."
+  const buyerMsgs = thread.filter((m: any) => m.direction === "in").slice(-3)
+    .map((m: any) => String(m.body || ""));
+  const latestBuyer = buyerMsgs.length ? buyerMsgs[buyerMsgs.length - 1] : "";
+  const buyerText = buyerMsgs.join(" ").toLowerCase();
+  const tokensOf = (text: string) => (text.toLowerCase().match(/[a-z0-9]+(?:-[a-z0-9]+)?/g) || [])
     .filter(t => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
 
   // ---- Vocabulary-first matching (v7, Matthew's ask): buyers
@@ -410,26 +418,41 @@ Deno.serve(async (req) => {
     }
     return bestD <= maxD ? best : null;
   };
-  const tokens = Array.from(new Set(
-    rawTokens.map(resolveTerm).filter((x): x is string => !!x),
-  )).slice(0, 6);
+  const resolveAll = (text: string) => Array.from(new Set(
+    tokensOf(text).map(resolveTerm).filter((x): x is string => !!x),
+  ));
+  const focusTerms = resolveAll(latestBuyer).slice(0, 4);
+  const extraTerms = resolveAll(buyerMsgs.slice(0, -1).join(" "))
+    .filter(t => !focusTerms.includes(t)).slice(0, Math.max(0, 6 - focusTerms.length));
+  const focusCounts = new Map<string, number>();
   let invMatches: any[] = [];
   {
     const seenKey = new Set<string>();
-    for (const t of tokens) {
+    const searchTerm = async (t: string, focus: boolean) => {
       const { data: rows } = await supabase
         .from("scraped_inventory")
         .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin, location_name")
         .eq("is_active", true)
         .or(`model.ilike.%${t}%,make.ilike.%${t}%`)
         .limit(25);
+      if (focus) focusCounts.set(t, (rows || []).length);
       for (const r of rows || []) {
         const k = String((r as any).vin || (r as any).stock_number || JSON.stringify(r));
-        if (!seenKey.has(k)) { seenKey.add(k); invMatches.push(r); }
+        if (!seenKey.has(k)) { seenKey.add(k); (r as any)._focus = focus; invMatches.push(r); }
       }
+    };
+    // Focus terms ALWAYS run to completion — no shared cap can
+    // starve the question actually being answered.
+    for (const t of focusTerms) await searchTerm(t, true);
+    for (const t of extraTerms) {
       if (invMatches.length >= 40) break;
+      await searchTerm(t, false);
     }
   }
+  // A focus term that was searched and matched NOTHING is a verified
+  // fact, not a gap: the prompt gets an explicit VERIFIED line, which
+  // is the only basis on which Luca may ever say "we don't have any."
+  const verifiedNone = focusTerms.filter(t => (focusCounts.get(t) || 0) === 0);
   const wantsUsed = /\bused\b|\bpre-owned\b|\bpreowned\b/.test(buyerText);
   const wantsNew = !wantsUsed && /\bnew\b/.test(buyerText);
   const ceilMatch = buyerText.match(/(?:under|below|less than|max|around|about)\s*\$?\s*([\d,]+)\s*(k)?/);
@@ -439,7 +462,9 @@ Deno.serve(async (req) => {
     return wantsUsed ? (cd.includes("used") || cd.includes("certified")) : wantsNew ? cd.includes("new") : true;
   };
   const byPrice = (a: any, b: any) => (a.price || 1e12) - (b.price || 1e12);
-  const invPrimary = invMatches.filter(c => condOk(c) && (!ceiling || (c.price && c.price <= ceiling))).sort(byPrice).slice(0, 5);
+  const focusMatches = invMatches.filter(c => (c as any)._focus);
+  const primaryPool = focusMatches.length ? focusMatches : invMatches;
+  const invPrimary = primaryPool.filter(c => condOk(c) && (!ceiling || (c.price && c.price <= ceiling))).sort(byPrice).slice(0, 5);
   const invAlt = invMatches.filter(c => !invPrimary.includes(c)).sort(byPrice).slice(0, 3);
   // Drivetrain/fuel/engine for the matches too (parallel VIN decodes),
   // so "is that one AWD?" about a recommended car also has an answer.
@@ -469,7 +494,7 @@ Deno.serve(async (req) => {
     "HARD RULES — never break these:",
     "- Never invent or guess a price, monthly payment, APR, financing term, discount, or trade-in value. The only prices you may mention are ones that appear in the listing label, the conversation, or the INVENTORY RESULTS block.",
     "- Vehicle facts (stock number, mileage, colors, transmission, drivetrain, fuel, engine, listing link) may ONLY come from the CURRENT VEHICLE or INVENTORY RESULTS blocks, stated exactly as written. When you recommend a vehicle from the results, include its stock # and its link. If a spec the buyer asks about is not in the blocks, say you'll double-check rather than guessing it.",
-    "- If the buyer asks whether you have a particular vehicle and NO block in this request covers it, you do not know either way: never claim to have it OR not have it, and never name a specific alternative vehicle. Say you'll check the lot and get right back to them.",
+    "- If the buyer asks whether you have a particular vehicle and NO block in this request covers it, you do not know either way: never claim to have it OR not have it, and never name a specific alternative vehicle. Say you'll check the lot and get right back to them. The ONE exception: a VERIFIED — NONE IN STOCK line is a completed inventory search — for the vehicles it names, you may say plainly that you don't have one on the lot right now.",
     "- Never promise the vehicle is available as a fact beyond what the conversation shows; phrase it as the salesperson checking/confirming ('Yes, it's still here as of today' is fine when the thread implies a live listing).",
     "- If the buyer is haggling on price, asking financing specifics, asking trade-in value, threatening, or upset: set needs_human to true, give a one-line reason, and make the draft a short polite holding reply that says the salesperson will check and get right back to them.",
     "- Keep drafts SHORT and natural for Messenger: 1–3 sentences, no corporate fluff, no emoji unless the profile tone asks for it. End with a question or a concrete next step when it fits (ideally a visit).",
@@ -491,6 +516,11 @@ Deno.serve(async (req) => {
     "",
     "CORRECTIONS — Luca's earlier drafts vs what this salesperson actually sent. Their version wins; do not repeat phrasing they removed:",
     ...corrPairs.map((c: any) => "LUCA WROTE: " + String(c.draft).slice(0, 300) + "\nSALESPERSON SENT: " + String(c.final).slice(0, 300)),
+  ] : [];
+
+  const noneBlock = verifiedNone.length ? [
+    "",
+    "VERIFIED — NONE IN STOCK: an inventory search just confirmed there are currently NO vehicles matching: " + verifiedNone.join(", ") + ". For these you MAY tell the buyer plainly that you don't have one on the lot right now (and offer to keep an eye out).",
   ] : [];
 
   const invBlock = invMatches.length ? [
@@ -519,6 +549,7 @@ Deno.serve(async (req) => {
     ...voiceBlock,
     ...corrBlock,
     ...invBlock,
+    ...noneBlock,
     "",
     "Write the salesperson's next reply.",
   ].filter(Boolean).join("\n");

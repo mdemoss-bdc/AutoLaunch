@@ -650,7 +650,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
       </a>
       <a href="#" data-nav="closer" onclick="showCloserPage(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <i class="fa-solid fa-robot w-4 text-blue-600 text-xs"></i>
-        <span>Luca · AI Closer</span>
+        <span>Luca · AI Assistant</span>
       </a>
       <a href="#" onclick="showEliteInfo('Calendar'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
@@ -998,7 +998,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
   <div class="max-w-6xl mx-auto space-y-6">
 
     <div>
-      <h1 class="text-3xl font-black text-slate-900">Luca <span class="text-slate-400 font-bold text-xl">· AI Closer</span></h1>
+      <h1 class="text-3xl font-black text-slate-900">Luca <span class="text-slate-400 font-bold text-xl">· AI Assistant</span></h1>
       <p class="text-slate-500 mt-1">Luca answers your buyer chats the way <em>you</em> would. He learns from your corrections, follows the instructions you give him, and hands the chat back the moment it needs a human. Set him up below — chat capture and draft replies arrive in the next phase.</p>
     </div>
 
@@ -7210,7 +7210,7 @@ function renderProspects() {
     list.innerHTML = `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-10 text-center space-y-3">
       <i class="fa-solid fa-user-plus text-3xl text-emerald-300"></i>
       <p class="text-sm font-bold text-slate-900">No prospects yet</p>
-      <p class="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">When someone reaches out about a car, put them here — name, where they're from, and where they are in the buying process. Soon the AI Closer will add them for you.</p>
+      <p class="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">When someone reaches out about a car, put them here — name, where they're from, and where they are in the buying process. Luca, your AI Assistant, adds Marketplace buyers here for you automatically.</p>
       <button onclick="openProspectForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Add your first Prospect</button>
     </div>`;
     return;
@@ -7226,7 +7226,7 @@ function renderProspects() {
     const contact = [where, p.email ? escapeHtml(p.email) : ""].filter(Boolean).join(" • ");
     const options = PROSPECT_STAGES.map(s =>
       `<option value="${s.key}" ${s.key === (p.stage || "new") ? "selected" : ""}>${s.label}</option>`).join("");
-    return `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
+    return `<div data-prospect-card="${escapeHtml(String(p.id))}" class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
       <div class="flex items-start justify-between gap-3 flex-wrap">
         <div class="min-w-0">
           <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
@@ -7248,7 +7248,14 @@ function renderProspects() {
         <button data-prospect-action="draft" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm">🌙 Draft reply with Luca</button>
         <div id="lucaDraft-${escapeHtml(String(p.id))}"></div>
         <button data-prospect-action="toggle-thread" data-prospect-id="${escapeHtml(String(p.id))}" class="ml-2 px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">💬 View conversation (${prospectChats[p.id].count}) ▾</button>
-        <div id="lucaThread-${escapeHtml(String(p.id))}" class="hidden mt-3 rounded-2xl bg-slate-50 border border-slate-200 p-3 max-h-96 overflow-y-auto">${threadBubblesHtml(p)}</div>
+        <div id="lucaThreadWrap-${escapeHtml(String(p.id))}" class="hidden mt-3 rounded-2xl bg-slate-50 border border-slate-200 overflow-hidden">
+          <div class="flex items-center justify-between gap-2 px-3 py-2 bg-white border-b border-slate-200">
+            <span class="text-[11px] font-black text-slate-500 uppercase tracking-wider">💬 Chat with ${escapeHtml(p.name || "buyer")}</span>
+            <button data-prospect-action="close-thread" data-prospect-id="${escapeHtml(String(p.id))}" class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-700 text-white text-[11px] font-bold cursor-pointer">✕ Close chat</button>
+          </div>
+          <div id="lucaThread-${escapeHtml(String(p.id))}" class="p-3 max-h-96 overflow-y-auto">${threadBubblesHtml(p)}</div>
+          <button data-prospect-action="close-thread" data-prospect-id="${escapeHtml(String(p.id))}" class="w-full py-2 bg-white border-t border-slate-200 text-[11px] font-bold text-slate-600 hover:text-slate-900 cursor-pointer">✕ Close chat — back to all prospects</button>
+        </div>
         ${p.thread_ref ? `<div class="mt-2.5 flex items-start gap-2">
           <textarea id="lucaReplyText-${escapeHtml(String(p.id))}" rows="2" placeholder="Type your reply — AutoLaunch sends it through Messenger for you…" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
           <button data-prospect-action="reply" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm shrink-0">Send reply</button>
@@ -7261,12 +7268,13 @@ function renderProspects() {
   // Reopen conversation panels that were expanded before this render
   // (soft refresh / filter changes re-render the list).
   expandedThreadIds.forEach(id => {
-    const panel = document.getElementById("lucaThread-" + id);
-    if (!panel) return;
-    panel.classList.remove("hidden");
+    const wrap = document.getElementById("lucaThreadWrap-" + id);
+    if (!wrap) return;
+    wrap.classList.remove("hidden");
     const btn = document.querySelector(`[data-prospect-action="toggle-thread"][data-prospect-id="${id}"]`);
     if (btn) btn.innerHTML = "💬 Hide conversation ▴";
-    panel.scrollTop = panel.scrollHeight;
+    const panel = document.getElementById("lucaThread-" + id);
+    if (panel) panel.scrollTop = panel.scrollHeight;
   });
 }
 
@@ -7286,6 +7294,7 @@ document.addEventListener("click", function (e) {
   else if (act === "copy-draft") copyLucaDraft(id, el);
   else if (act === "reply") sendLucaReply(id, el);
   else if (act === "toggle-thread") toggleThread(id, el);
+  else if (act === "close-thread") closeThread(id);
   else if (act === "copy-msg") copyProspectMsg(el.getAttribute("data-msg-id"), el);
 });
 
@@ -7323,14 +7332,32 @@ function threadBubblesHtml(p) {
 }
 
 function toggleThread(id, btn) {
-  const panel = document.getElementById("lucaThread-" + id);
-  if (!panel) return;
-  const opening = panel.classList.contains("hidden");
-  panel.classList.toggle("hidden");
+  const wrap = document.getElementById("lucaThreadWrap-" + id);
+  if (!wrap) return;
+  const opening = wrap.classList.contains("hidden");
+  wrap.classList.toggle("hidden");
   if (opening) expandedThreadIds.add(String(id)); else expandedThreadIds.delete(String(id));
   const count = (prospectMessages[id] || []).length;
-  btn.innerHTML = opening ? "💬 Hide conversation ▴" : `💬 View conversation (${count}) ▾`;
-  if (opening) panel.scrollTop = panel.scrollHeight;
+  if (btn) btn.innerHTML = opening ? "💬 Hide conversation ▴" : `💬 View conversation (${count}) ▾`;
+  if (opening) {
+    const panel = document.getElementById("lucaThread-" + id);
+    if (panel) panel.scrollTop = panel.scrollHeight;
+  }
+}
+
+// Close-chat (Matthew's ask, 2026-10-25): an unmissable way out of an
+// open conversation — collapse the panel and land back on the card in
+// the prospects list. Wired to the ✕ buttons at the panel's top and
+// bottom (long threads scroll internally, so one is always in reach).
+function closeThread(id) {
+  const wrap = document.getElementById("lucaThreadWrap-" + id);
+  if (wrap) wrap.classList.add("hidden");
+  expandedThreadIds.delete(String(id));
+  const btn = document.querySelector(`[data-prospect-action="toggle-thread"][data-prospect-id="${id}"]`);
+  const count = (prospectMessages[id] || []).length;
+  if (btn) btn.innerHTML = `💬 View conversation (${count}) ▾`;
+  const card = document.querySelector(`[data-prospect-card="${id}"]`);
+  if (card) card.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
 function copyProspectMsg(msgId, btn) {
@@ -7381,7 +7408,8 @@ async function refreshProspectsSoft() {
       const line = document.getElementById("lucaChatLine-" + p.id);
       if (line && chat) line.innerHTML = `💬 ${chat.count} captured · last: “${escapeHtml(String(chat.latest || "").slice(0, 90))}”`;
       const panel = document.getElementById("lucaThread-" + p.id);
-      if (panel && !panel.classList.contains("hidden")) {
+      const wrap = document.getElementById("lucaThreadWrap-" + p.id);
+      if (panel && wrap && !wrap.classList.contains("hidden")) {
         const nearBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 80;
         panel.innerHTML = threadBubblesHtml(p);
         if (nearBottom) panel.scrollTop = panel.scrollHeight;
