@@ -127,6 +127,7 @@
       if (/^(View buyer|More options|Privacy & support|Messages|Send a quick response|Marketplace)$/.test(t)) continue;
       if (/^Conversation titled /.test(t)) continue;
       if (/ created this group$/.test(t)) continue;
+      if (/mutual friends/.test(t) || /badge on Marketplace/.test(t)) continue;
       var r = nodes[i].getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       var key = t + "|" + (r.left > paneMid ? "R" : "L");

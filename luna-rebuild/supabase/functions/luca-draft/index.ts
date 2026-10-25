@@ -1,0 +1,177 @@
+// =====================================================================
+// luca-draft — Luca (AI Closer) reply drafting, Phase 2.
+//
+// DEPLOYED 2026-10-25 (Management API multipart, verify_jwt=false; the
+// caller's JWT is verified manually below, same pattern as tiktok-*).
+// Secret: GEMINI_API_KEY (Google AI Studio, FREE tier — Matthew's cost
+// rule: no paid AI until users/revenue). Provider-agnostic by config:
+// PROVIDER/MODELS below are the only provider-specific lines.
+//
+// POST body: { prospect_id: uuid }
+// Flow: verify caller JWT -> load the caller's prospect + its recent
+// closer_messages + closer_profiles (all RLS owner-scoped) -> build a
+// grounded prompt (rep profile: name/tone/schedules/credit link/
+// standing instructions; hard floor below) -> Gemini -> save the draft
+// as a closer_messages row (direction 'out', origin 'ai') so the
+// corrections/outcome loop can learn from it later -> return
+// { ok, draft, needs_human, reason }.
+//
+// HARD FLOOR (never configurable): the draft must not invent a price,
+// payment, APR, or financing promise, nor state availability as fact
+// beyond what the thread/listing shows. Haggling, financing specifics,
+// trade-in value, or an upset buyer -> needs_human with a short, safe
+// holding draft instead of an answer.
+// =====================================================================
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "apikey, authorization, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const PROVIDER = "gemini";
+const MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
+}
+
+async function callGemini(apiKey: string, system: string, user: string) {
+  let lastErr = "";
+  for (const model of MODELS) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: user }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 400,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
+    if (res.status === 404) { lastErr = "model " + model + " not found"; continue; }
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error("Gemini HTTP " + res.status + ": " + t.slice(0, 200));
+    }
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "";
+    if (!text) throw new Error("Gemini returned an empty draft");
+    return text;
+  }
+  throw new Error("No Gemini model available: " + lastErr);
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return json({ ok: false, error: "POST only" }, 405);
+
+  const apiKey = Deno.env.get("GEMINI_API_KEY") || "";
+  if (!apiKey) return json({ ok: false, error: "GEMINI_API_KEY secret is not set" }, 500);
+
+  const auth = req.headers.get("Authorization") || "";
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: auth } } },
+  );
+  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !userData?.user) return json({ ok: false, error: "Not signed in" }, 401);
+  const user = userData.user;
+
+  let prospectId = "";
+  try { prospectId = (await req.json())?.prospect_id || ""; } catch { /* handled below */ }
+  if (!prospectId) return json({ ok: false, error: "prospect_id is required" }, 400);
+
+  const { data: prospect, error: pErr } = await supabase
+    .from("prospects").select("*").eq("id", prospectId).single();
+  if (pErr || !prospect) return json({ ok: false, error: "Prospect not found" }, 404);
+
+  const { data: msgs } = await supabase
+    .from("closer_messages")
+    .select("direction, origin, body, created_at")
+    .eq("prospect_id", prospectId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  const thread = (msgs || []).slice().reverse();
+  if (!thread.length) {
+    return json({ ok: false, error: "No captured conversation yet — capture the chat first, then ask Luca for a draft." }, 422);
+  }
+
+  const { data: profileRow } = await supabase
+    .from("closer_profiles").select("*").eq("user_id", user.id).maybeSingle();
+  const profile = (profileRow && (profileRow as any).profile) || {};
+
+  const now = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", weekday: "long", hour: "numeric", minute: "2-digit",
+    month: "long", day: "numeric",
+  }).format(new Date());
+
+  const system = [
+    "You are Luca, an AI assistant who drafts Facebook Marketplace replies FOR a car salesperson. The salesperson reviews and sends every draft personally — write exactly what they would send, in first person as the salesperson.",
+    "",
+    "SALESPERSON PROFILE (JSON): " + JSON.stringify(profile),
+    "",
+    "It is currently: " + now + " (salesperson's local time).",
+    "Availability rules: only suggest coming in on days the STORE is open AND the salesperson works (profile.store_schedule / profile.schedule). Suggest the salesperson's own hours, never store hours they are not there for.",
+    "If the buyer wants to apply for financing or asks for the credit application, include the credit-app link from the profile — that hand-off is allowed and encouraged. Do not discuss rates, approvals, or terms.",
+    "",
+    "HARD RULES — never break these:",
+    "- Never invent or guess a price, monthly payment, APR, financing term, discount, or trade-in value. The only price you may mention is one that appears in the listing label or the conversation.",
+    "- Never promise the vehicle is available as a fact beyond what the conversation shows; phrase it as the salesperson checking/confirming ('Yes, it's still here as of today' is fine when the thread implies a live listing).",
+    "- If the buyer is haggling on price, asking financing specifics, asking trade-in value, threatening, or upset: set needs_human to true, give a one-line reason, and make the draft a short polite holding reply that says the salesperson will check and get right back to them.",
+    "- Keep drafts SHORT and natural for Messenger: 1–3 sentences, no corporate fluff, no emoji unless the profile tone asks for it. End with a question or a concrete next step when it fits (ideally a visit).",
+    "- Follow the salesperson's standing instructions in the profile above everything except these hard rules.",
+    "",
+    'Reply with ONLY a JSON object: {"draft": string, "needs_human": boolean, "reason": string}',
+  ].join("\n");
+
+  const transcript = thread
+    .map((m: any) => (m.direction === "in" ? "BUYER: " : m.origin === "ai" ? "REP (Luca draft): " : "REP: ") + m.body)
+    .join("\n");
+  const userPrompt = [
+    "Listing the buyer is asking about: " + (prospect.vehicle_label || "(unknown)"),
+    "Buyer name: " + (prospect.name || "(unknown)"),
+    prospect.city || prospect.state ? "Buyer location: " + [prospect.city, prospect.state].filter(Boolean).join(", ") : "",
+    "",
+    "Conversation so far (oldest first):",
+    transcript,
+    "",
+    "Write the salesperson's next reply.",
+  ].filter(Boolean).join("\n");
+
+  let parsed: any = null;
+  try {
+    const raw = await callGemini(apiKey, system, userPrompt);
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    return json({ ok: false, error: "Drafting failed: " + (e as Error).message }, 502);
+  }
+  const draft = String(parsed?.draft || "").trim();
+  if (!draft) return json({ ok: false, error: "Luca returned an empty draft" }, 502);
+  const needsHuman = !!parsed?.needs_human;
+  const reason = String(parsed?.reason || "");
+
+  // Save the draft so the corrections/outcome loop can learn from it.
+  await supabase.from("closer_messages").insert({
+    user_id: user.id,
+    prospect_id: prospect.id,
+    thread_ref: prospect.thread_ref || null,
+    direction: "out",
+    origin: "ai",
+    body: draft,
+  });
+
+  return json({ ok: true, draft, needs_human: needsHuman, reason, provider: PROVIDER });
+});

@@ -6496,7 +6496,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.29";
+const EXPECTED_EXT_VERSION = "2.1.30";
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }
@@ -7223,6 +7223,10 @@ function renderProspects() {
           <button data-prospect-action="delete" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold cursor-pointer">Delete</button>
         </div>
       </div>
+      ${prospectChats[p.id] ? `<div class="mt-3 pt-3 border-t border-slate-100">
+        <button data-prospect-action="draft" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm">🌙 Draft reply with Luca</button>
+        <div id="lucaDraft-${escapeHtml(String(p.id))}"></div>
+      </div>` : ""}
     </div>`;
   }).join("");
 }
@@ -7239,7 +7243,63 @@ document.addEventListener("click", function (e) {
   const act = el.getAttribute("data-prospect-action");
   if (act === "edit") openProspectForm(id);
   else if (act === "delete") deleteProspect(id);
+  else if (act === "draft") draftLucaReply(id, el);
+  else if (act === "copy-draft") copyLucaDraft(id, el);
 });
+
+// LUCA DRAFTING (Phase 2, 2026-10-25): ask the luca-draft Edge Function
+// (Gemini free tier, rep profile + hard floor server-side) for a reply
+// to the captured conversation. Draft mode: the rep copies the draft
+// into Facebook themselves — Luca never sends. The function also saves
+// each draft as an origin:"ai" closer_message for later learning.
+const lucaDrafts = {};
+async function draftLucaReply(id, btn) {
+  const panel = document.getElementById("lucaDraft-" + id);
+  if (!panel) return;
+  const headers = await tiktokFunctionHeaders();
+  if (!headers) { panel.innerHTML = `<p class="mt-2 text-xs text-rose-600 font-semibold">Sign in to AutoLaunch first.</p>`; return; }
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "Luca is thinking…";
+  panel.innerHTML = "";
+  try {
+    const res = await fetch(SUPABASE_URL + "/functions/v1/luca-draft", {
+      method: "POST", headers, body: JSON.stringify({ prospect_id: id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP " + res.status));
+    lucaDrafts[id] = data.draft;
+    panel.innerHTML = `
+      ${data.needs_human ? `<p class="mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">⚠ Luca flagged this one for you personally${data.reason ? " — " + escapeHtml(data.reason) : ""}. The draft below is just a safe holding reply.</p>` : ""}
+      <div class="mt-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-slate-800 whitespace-pre-wrap">${escapeHtml(data.draft)}</div>
+      <div class="mt-2 flex items-center gap-2 flex-wrap">
+        <button data-prospect-action="copy-draft" data-prospect-id="${escapeHtml(String(id))}" class="px-3 py-1.5 rounded-lg btn-gradient text-white text-[11px] font-bold cursor-pointer">Copy draft</button>
+        <span class="text-[11px] text-slate-400">Paste it into the Facebook chat — in Draft mode, Luca never sends for you.</span>
+      </div>`;
+  } catch (err) {
+    panel.innerHTML = `<p class="mt-2 text-xs text-rose-600 font-semibold">Luca couldn't draft: ${escapeHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+function copyLucaDraft(id, btn) {
+  const text = lucaDrafts[id] || "";
+  if (!text) return;
+  const done = () => { const o = btn.innerHTML; btn.innerHTML = "Copied ✓"; setTimeout(() => { btn.innerHTML = o; }, 2000); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(done);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* best effort */ }
+    ta.remove();
+    done();
+  }
+}
 document.addEventListener("change", function (e) {
   const el = e.target && e.target.closest ? e.target.closest("[data-prospect-stage]") : null;
   if (!el) return;
