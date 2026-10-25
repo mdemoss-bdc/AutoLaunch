@@ -231,9 +231,24 @@
       // name here is acceptable — a wrong THREAD never is, and the
       // thread key comes from the href, not the text.
       var nm = rowText.split(" · ")[0].trim();
-      if (nm.length > 40) nm = nm.slice(0, 40).trim();
+      var youAt = nm.indexOf("You:");
+      if (youAt > 0) nm = nm.slice(0, youAt).trim();
+      // A long first segment means the name fused with the snippet —
+      // a placeholder (which full captures self-heal) beats a wrong
+      // name that never gets corrected.
+      if (nm.length > 30) nm = "";
       if (!nm || /\$/.test(nm) || /^(Chats|Marketplace|New message)/i.test(nm)) nm = "";
       var vm = rowText.match(/\$\d[\d,]*\s*-\s*[^·]{4,80}/);
+      // Commerce gate (v2.1.34): the plain /messages list mixes in
+      // personal chats, business-page chats and the Meta AI chat —
+      // none of those are buyers. A row becomes a prospect ONLY with
+      // Marketplace evidence: a priced listing label, a year/make/
+      // model label, or the Marketplace inbox surface itself (which
+      // is commerce-only by construction).
+      var onMarketplaceInbox = (window.location.pathname || "").indexOf("/marketplace/inbox") === 0;
+      var yearMake = /\b(19|20)\d{2}\s+[A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+/.test(rowText);
+      if (!onMarketplaceInbox && !vm && !yearMake) continue;
+      if (/^(Meta AI|Facebook user)\b/i.test(nm) && !vm) continue;
       out.push({
         buyerName: nm,
         vehicleText: vm ? cleanListingLabel(vm[0]) : "",
