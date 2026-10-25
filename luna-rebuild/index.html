@@ -6198,7 +6198,7 @@ function showInventoryPage(navKey) {
    {type:"AUTOLAUNCH_EXT_PING"} on the window; bridge.js (the
    extension's content script on this origin) forwards it to the
    worker as chrome.runtime {type:"AUTOLAUNCH_PING"} and posts the
-   worker's reply back as {type:"AUTOLAUNCH_EXT_PONG", hasToken}.
+   worker's reply back as {type:"AUTOLAUNCH_EXT_PONG", hasToken, version}.
    The worker answers hasToken from the session token it actually
    holds in chrome.storage.local (autolaunch_access_token — the same
    token the login handoff stores). No pong within ~1.5s means no
@@ -6247,7 +6247,14 @@ function checkExtensionStatus() {
         const data = event.data;
         if (!data || data.type !== "AUTOLAUNCH_EXT_PONG") return;
         clearExtPing();
-        renderExtStatus(data.hasToken ? "ready" : "waiting");
+        if (!data.hasToken) { renderExtStatus("waiting"); return; }
+        // Helpers older than v2.1.24 don't report a version at all —
+        // that silence is itself the out-of-date signal.
+        if (!data.version || !extVersionAtLeast(data.version, EXPECTED_EXT_VERSION)) {
+            renderExtStatus("stale", { installed: data.version || null, expected: EXPECTED_EXT_VERSION });
+        } else {
+            renderExtStatus("ready", { installed: data.version });
+        }
     };
     window.addEventListener("message", extPongListener);
     extPingTimer = setTimeout(function () {

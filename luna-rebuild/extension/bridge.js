@@ -21,7 +21,8 @@
 // v2.1.10: it also carries the Extension setup page's LIVE STATUS ping.
 // The page posts {type:"AUTOLAUNCH_EXT_PING"}; the bridge forwards it to
 // the worker as {type:"AUTOLAUNCH_PING"} and posts the worker's reply
-// back to the window as {type:"AUTOLAUNCH_EXT_PONG", hasToken}. If the
+// back to the window as {type:"AUTOLAUNCH_EXT_PONG", hasToken, version}
+// (version added v2.1.24 so the page can flag an out-of-date helper). If the
 // worker cannot be reached at all, no pong is posted — the page's own
 // ~1.5s timeout is what reports "not installed", so a dead bridge never
 // masquerades as an installed-but-waiting helper.
@@ -44,7 +45,8 @@
               window.postMessage(
                 {
                   type: "AUTOLAUNCH_EXT_PONG",
-                  hasToken: !!(response && response.hasToken)
+                  hasToken: !!(response && response.hasToken),
+                  version: (response && response.version) || null
                 },
                 window.location.origin
               );

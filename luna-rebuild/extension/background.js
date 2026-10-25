@@ -1081,7 +1081,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!fromApp) return;
     (async () => {
       const token = await storedAccessToken();
-      sendResponse({ hasToken: !!token });
+      // v2.1.24: report our own version so the setup page can say
+      // "out of date" instead of a bare "ready" for an old helper.
+      let version = null;
+      try { version = chrome.runtime.getManifest().version || null; } catch (e) { /* keep null */ }
+      sendResponse({ hasToken: !!token, version });
     })();
     return true;
   }
