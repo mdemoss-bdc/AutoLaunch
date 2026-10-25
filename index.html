@@ -1027,6 +1027,14 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
       </div>
 
       <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Your lot — the location you sell from</label>
+        <select id="clHomeLocation" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          <option value="">Not set — Luca won't talk about locations or transfers</option>
+        </select>
+        <p class="text-[11px] text-slate-400 mt-1">Your inventory spans several lots. When a vehicle a buyer wants sits at a sister lot, Luca will say so — and that you can have it brought to your lot — but he'll confirm they're good with the price first, before anyone commits to moving it.</p>
+      </div>
+
+      <div>
         <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Store hours</label>
         <div class="space-y-2" id="clStoreSchedule">
           <div class="flex items-center gap-2 flex-wrap">
@@ -1151,9 +1159,9 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
       </div>
 
       <div>
-        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Standing instructions for Luca</label>
-        <textarea id="clInstructions" rows="4" placeholder="Talk to Luca like you'd talk to a person. e.g. 'Always ask about a trade-in first.' 'Never message after 9 pm.' 'If they ask about the Sienna, mention the new tires.'" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
-        <p class="text-[11px] text-slate-400 mt-1">These are Luca's standing orders. In a later phase you'll also be able to give him one-off jobs ("message everyone who asked about the F-150 — it dropped $500").</p>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">🎓 Teach Luca — your goals &amp; house rules</label>
+        <textarea id="clInstructions" rows="5" placeholder="Tell Luca how you sell, in your own words — he follows this in every draft. e.g. 'Our goal is to always get the customer to show up at the lot.' 'Always try to turn the chat into a set appointment.' 'Ask about a trade-in early.' 'Never message a buyer after 9 pm.'" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
+        <p class="text-[11px] text-slate-400 mt-1">Anything you write here becomes Luca's standing orders — your goals, your phrases, your rules. He also learns your voice on his own from the replies you actually send (see Prospects). Safety rules he can never break — no invented prices, payments, or promises — still win over anything written here.</p>
       </div>
 
       <div class="flex items-center gap-3 pt-1">
@@ -7692,11 +7700,50 @@ function clSyncDayRow(day) {
   });
 }
 
+let clHomeLocFilled = false;
+async function fillHomeLocationOptions() {
+  const sel = document.getElementById("clHomeLocation");
+  if (!sel || clHomeLocFilled) return;
+  clHomeLocFilled = true;
+  try {
+    const { data } = await supabaseClient
+      .from("scraped_inventory")
+      .select("location_name")
+      .eq("is_active", true)
+      .not("location_name", "is", null)
+      .limit(4000);
+    const names = [...new Set((data || []).map(r => (r.location_name || "").trim()).filter(Boolean))].sort();
+    if (!names.length) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Not set — Luca won\'t talk about locations or transfers</option>' +
+      names.map(n => `<option value="${n.replace(/"/g, "&quot;")}">${n}</option>`).join("");
+    if (current && !names.includes(current)) {
+      const opt = document.createElement("option");
+      opt.value = current;
+      opt.textContent = current;
+      sel.appendChild(opt);
+    }
+    sel.value = current || "";
+  } catch (e) { /* the seeded/saved option stays usable */ }
+}
+
 function fillCloserForm() {
   const p = closerRecord.profile || {};
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : v; };
   set("clRepName", p.rep_name || "");
   set("clCreditUrl", p.credit_app_url || "");
+  // Your-lot select: seed it with the saved value immediately (so the
+  // saved lot shows even before the inventory query returns), then let
+  // fillHomeLocationOptions widen it to every lot in the inventory.
+  const hlSeed = document.getElementById("clHomeLocation");
+  if (hlSeed && p.home_location && ![...hlSeed.options].some(o => o.value === p.home_location)) {
+    const opt = document.createElement("option");
+    opt.value = p.home_location;
+    opt.textContent = p.home_location;
+    hlSeed.appendChild(opt);
+  }
+  set("clHomeLocation", p.home_location || "");
+  fillHomeLocationOptions();
   set("clTone", p.tone || "casual_short");
   set("clInstructions", p.instructions || "");
   const modeEl = document.getElementById("clMode");
@@ -7753,6 +7800,7 @@ async function saveCloserProfileForm() {
       work_start: firstOn ? firstOn.start : "09:00",
       work_end: firstOn ? firstOn.end : "19:00",
       tone: document.getElementById("clTone").value || "casual_short",
+      home_location: (document.getElementById("clHomeLocation") || {}).value || "",
       instructions: document.getElementById("clInstructions").value.trim()
     }
   };

@@ -244,6 +244,7 @@ Deno.serve(async (req) => {
     c.interior_color ? "Interior: " + c.interior_color : null,
     c.transmission || null,
     c._vinSpecs || null,
+    c.location_name ? "at " + c.location_name : null,
     c.stock_number ? "Stock #" + c.stock_number : null,
     c.detail_url || null,
   ].filter(Boolean).join(" · ");
@@ -394,7 +395,7 @@ Deno.serve(async (req) => {
     for (const t of tokens) {
       const { data: rows } = await supabase
         .from("scraped_inventory")
-        .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin")
+        .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin, location_name")
         .eq("is_active", true)
         .or(`model.ilike.%${t}%,make.ilike.%${t}%`)
         .limit(25);
@@ -433,6 +434,13 @@ Deno.serve(async (req) => {
     "It is currently: " + now + " (salesperson's local time).",
     "Availability rules: only suggest coming in on days the STORE is open AND the salesperson works (profile.store_schedule / profile.schedule). Suggest the salesperson's own hours, never store hours they are not there for.",
     "If the buyer wants to apply for financing or asks for the credit application, include the credit-app link from the profile — that hand-off is allowed and encouraged. Do not discuss rates, approvals, or terms.",
+    ...((profile as any).home_location ? [
+      "",
+      "LOCATION & TRANSFERS — the salesperson works at " + (profile as any).home_location + ". Each vehicle fact line says where that vehicle sits ('at <lot>'):",
+      "- A vehicle at the salesperson's own lot is HERE — talk about it normally.",
+      "- A vehicle at a SISTER lot is not here, but the group can bring it to the salesperson's lot for the buyer. Present it warmly and be upfront: it's at a sister location, and we can have it brought over for them.",
+      "- Moving a vehicle is a commitment, so BEFORE promising any transfer, get the buyer comfortable with the PRICE as it stands: the move makes sense once they agree the price works for them, assuming they like how it drives and it checks out when it's here. Ask for that confirmation naturally. Never promise the transfer itself, an arrival day/time, or any transfer fee — those are the salesperson's call.",
+    ] : []),
     "",
     "HARD RULES — never break these:",
     "- Never invent or guess a price, monthly payment, APR, financing term, discount, or trade-in value. The only prices you may mention are ones that appear in the listing label, the conversation, or the INVENTORY RESULTS block.",
