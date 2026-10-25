@@ -207,7 +207,7 @@ body.dark-shell main {
    same token canvas as the Inventory workspace (their content is skinned
    by the Phase C block at the end of this section). */
 body.dark-shell #getStartedPage,
-body.dark-shell #wishlistPage,
+body.dark-shell #wishlistPage, #prospectsPage, #closerPage,
 body.dark-shell #extensionPage {
   background:
     radial-gradient(1100px 480px at 72% -8%, rgba(var(--glow-rgb), 0.13), rgba(var(--glow-rgb), 0) 60%),
@@ -390,7 +390,7 @@ body.dark-shell div.fixed.inset-0 :is(input, select, textarea):focus {
 /* ---- Phase C rollout: modals, auth, dropdown, Get Started, Wishlist -------
    The surfaces below are body-level siblings of the shell (the overlays,
    #vehicleActionDropdown, #wishlistToast) or top-level pages outside
-   <main> (#getStartedPage, #wishlistPage, #extensionPage), so the :is(aside, main) rules
+   <main> (#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage), so the :is(aside, main) rules
    above never reach them. This block re-applies the SAME utility mapping
    keyed to the SAME tokens, scoped to those containers only: light mode
    (no .dark-shell) is untouched, and every value comes from the --d-*
@@ -411,111 +411,111 @@ body.dark-shell #wishlistToast {
   color: var(--d-body);
 }
 /* Surfaces */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-white { background-color: var(--d-field); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-white\/95 { background-color: var(--d-veil); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-slate-50 { background-color: var(--d-deep); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-slate-50\/80 { background-color: var(--d-deep); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-slate-100 { background-color: rgba(148, 163, 184, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-slate-200 { background-color: var(--d-track); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-slate-300 { background-color: var(--d-track); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-blue-50 { background-color: rgba(var(--accent-rgb), 0.14); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-indigo-50 { background-color: rgba(var(--accent-rgb), 0.14); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-amber-50 { background-color: rgba(245, 158, 11, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-pink-50 { background-color: rgba(236, 72, 153, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-purple-50 { background-color: rgba(168, 85, 247, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-cyan-50 { background-color: rgba(6, 182, 212, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .bg-violet-50 { background-color: rgba(139, 92, 246, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .glass-card {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-white { background-color: var(--d-field); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-white\/95 { background-color: var(--d-veil); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-50 { background-color: var(--d-deep); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-50\/80 { background-color: var(--d-deep); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-100 { background-color: rgba(148, 163, 184, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-200 { background-color: var(--d-track); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-300 { background-color: var(--d-track); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-blue-50 { background-color: rgba(var(--accent-rgb), 0.14); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-indigo-50 { background-color: rgba(var(--accent-rgb), 0.14); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-amber-50 { background-color: rgba(245, 158, 11, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-pink-50 { background-color: rgba(236, 72, 153, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-purple-50 { background-color: rgba(168, 85, 247, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-cyan-50 { background-color: rgba(6, 182, 212, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-violet-50 { background-color: rgba(139, 92, 246, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .glass-card {
   background-color: var(--d-card);
   border-color: var(--d-edge);
   box-shadow: 0 10px 24px rgba(2, 6, 17, 0.45);
   color: var(--d-body);
 }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .glass-card:hover {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .glass-card:hover {
   border-color: rgba(var(--accent-strong-rgb), 0.35);
   box-shadow: 0 14px 30px rgba(2, 6, 17, 0.55);
 }
 /* Text */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-slate-950,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-slate-900 { color: var(--d-h); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-slate-800,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-slate-700 { color: var(--d-body); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-slate-600 { color: var(--d-soft); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-slate-500 { color: var(--d-micro); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-slate-400 { color: var(--d-faint); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-slate-300 { color: var(--d-fainter); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-blue-600 { color: var(--d-link); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-indigo-700 { color: var(--d-link-bright); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-sky-600 { color: var(--d-link-bright); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-purple-600,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-purple-300 { color: rgb(192, 155, 255); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-violet-700,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-violet-500 { color: rgb(167, 139, 250); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-pink-600 { color: rgb(244, 114, 182); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-cyan-600 { color: rgb(56, 189, 248); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-emerald-700,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-emerald-600 { color: rgb(52, 211, 153); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-amber-700,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-amber-800,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-amber-600 { color: rgb(251, 191, 36); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-rose-700,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-rose-600,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .text-red-600 { color: rgb(251, 113, 133); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-950,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-900 { color: var(--d-h); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-800,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-700 { color: var(--d-body); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-600 { color: var(--d-soft); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-500 { color: var(--d-micro); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-400 { color: var(--d-faint); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-300 { color: var(--d-fainter); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-blue-600 { color: var(--d-link); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-indigo-700 { color: var(--d-link-bright); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-sky-600 { color: var(--d-link-bright); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-purple-600,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-purple-300 { color: rgb(192, 155, 255); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-violet-700,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-violet-500 { color: rgb(167, 139, 250); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-pink-600 { color: rgb(244, 114, 182); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-cyan-600 { color: rgb(56, 189, 248); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-emerald-700,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-emerald-600 { color: rgb(52, 211, 153); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-amber-700,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-amber-800,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-amber-600 { color: rgb(251, 191, 36); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-rose-700,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-rose-600,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-red-600 { color: rgb(251, 113, 133); }
 /* Borders & dividers */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-slate-200 { border-color: var(--d-edge); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-slate-300 { border-color: var(--d-field-edge); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-slate-100 { border-color: var(--d-line); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-blue-200 { border-color: rgba(var(--accent-rgb), 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-indigo-200 { border-color: rgba(var(--accent-rgb), 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-red-200 { border-color: rgba(244, 63, 94, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-pink-200 { border-color: rgba(236, 72, 153, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-purple-200 { border-color: rgba(168, 85, 247, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-cyan-200 { border-color: rgba(6, 182, 212, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .border-violet-200 { border-color: rgba(139, 92, 246, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--d-line); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-slate-200 { border-color: var(--d-edge); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-slate-300 { border-color: var(--d-field-edge); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-slate-100 { border-color: var(--d-line); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-blue-200 { border-color: rgba(var(--accent-rgb), 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-indigo-200 { border-color: rgba(var(--accent-rgb), 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-red-200 { border-color: rgba(244, 63, 94, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-pink-200 { border-color: rgba(236, 72, 153, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-purple-200 { border-color: rgba(168, 85, 247, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-cyan-200 { border-color: rgba(6, 182, 212, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-violet-200 { border-color: rgba(139, 92, 246, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--d-line); }
 /* Fields: covers classed fields (bg-slate-50 / bg-white above) AND the
    unclassed inputs the Settings panels emit (border-only markup). Native
    checkbox / radio / file / color inputs keep their own painting (the
    global accent-color rule above already themes checkbox + radio). */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]), select, textarea) {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]), select, textarea) {
   background-color: var(--d-field);
   color: var(--d-h);
   border-color: var(--d-field-edge);
 }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) input::placeholder,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) textarea::placeholder { color: var(--d-placeholder); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) select option {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) input::placeholder,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) textarea::placeholder { color: var(--d-placeholder); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) select option {
   background-color: var(--d-field);
   color: var(--d-h);
 }
 /* Hover states */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:bg-slate-50:hover { background-color: rgba(var(--accent-rgb), 0.07); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:bg-slate-100:hover { background-color: rgba(var(--accent-rgb), 0.09); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:bg-slate-200:hover { background-color: rgba(var(--accent-rgb), 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:bg-red-50:hover { background-color: rgba(244, 63, 94, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:bg-rose-100:hover { background-color: rgba(244, 63, 94, 0.20); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:text-slate-900:hover,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:text-slate-700:hover { color: var(--d-h); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:text-blue-800:hover { color: var(--d-link-bright); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:text-rose-600:hover,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:text-rose-700:hover,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:text-rose-800:hover,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:text-red-700:hover { color: rgb(251, 113, 133); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) .hover\:border-blue-300:hover { border-color: var(--d-edge-strong); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-slate-50:hover { background-color: rgba(var(--accent-rgb), 0.07); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-slate-100:hover { background-color: rgba(var(--accent-rgb), 0.09); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-slate-200:hover { background-color: rgba(var(--accent-rgb), 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-red-50:hover { background-color: rgba(244, 63, 94, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-rose-100:hover { background-color: rgba(244, 63, 94, 0.20); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-slate-900:hover,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-slate-700:hover { color: var(--d-h); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-blue-800:hover { color: var(--d-link-bright); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-rose-600:hover,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-rose-700:hover,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-rose-800:hover,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-red-700:hover { color: rgb(251, 113, 133); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:border-blue-300:hover { border-color: var(--d-edge-strong); }
 /* Scrollbars inside the rolled-out surfaces + the two pages themselves */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) * { scrollbar-width: thin; scrollbar-color: var(--d-track) transparent; }
-body.dark-shell :is(#getStartedPage, #wishlistPage, #extensionPage)::-webkit-scrollbar,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) ::-webkit-scrollbar { width: 10px; height: 10px; }
-body.dark-shell :is(#getStartedPage, #wishlistPage, #extensionPage)::-webkit-scrollbar-track,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) ::-webkit-scrollbar-track { background: transparent; }
-body.dark-shell :is(#getStartedPage, #wishlistPage, #extensionPage)::-webkit-scrollbar-thumb,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #changePriceModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #extensionPage) ::-webkit-scrollbar-thumb {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) * { scrollbar-width: thin; scrollbar-color: var(--d-track) transparent; }
+body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage)::-webkit-scrollbar,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) ::-webkit-scrollbar { width: 10px; height: 10px; }
+body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage)::-webkit-scrollbar-track,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) ::-webkit-scrollbar-track { background: transparent; }
+body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage)::-webkit-scrollbar-thumb,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eliteInfoModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) ::-webkit-scrollbar-thumb {
   background: var(--d-track);
   border-radius: 8px;
   border: 2px solid transparent;
@@ -640,6 +640,17 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           <span>Customer Wishlist</span>
         </div>
         <span id="wishlistMatchBadge" class="hidden px-1.5 py-0.2 rounded-full bg-rose-500 text-[10px] font-mono font-bold text-white">0</span>
+      </a>
+      <a href="#" data-nav="prospects" onclick="showProspectsPage(); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-user-plus w-4 text-emerald-600 text-xs"></i>
+          <span>Prospects</span>
+        </div>
+        <span id="prospectsNewBadge" class="hidden px-1.5 py-0.2 rounded-full bg-emerald-500 text-[10px] font-mono font-bold text-white">0</span>
+      </a>
+      <a href="#" data-nav="closer" onclick="showCloserPage(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <i class="fa-solid fa-robot w-4 text-blue-600 text-xs"></i>
+        <span>Luca · AI Closer</span>
       </a>
       <a href="#" onclick="showEliteInfo('Calendar'); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
         <div class="flex items-center gap-2.5">
@@ -943,6 +954,221 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 
     <div id="wishlistList" class="space-y-5">
       <p class="text-sm text-slate-400">Loading your wishlist…</p>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ============================================================================= -->
+<!-- ============================ PROSPECTS PAGE ================================= -->
+<!-- ============================================================================= -->
+<div id="prospectsPage" class="hidden flex-1 overflow-y-auto p-8">
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 class="text-3xl font-black text-slate-900">Prospects</h1>
+        <p class="text-slate-500 mt-1">Everyone who reached out about a car — and where they are in the buying process. Not a CRM. Just the list, kept current.</p>
+      </div>
+      <button onclick="openProspectForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-plus text-[10px]"></i>
+        <span>Add Prospect</span>
+      </button>
+    </div>
+
+    <div id="prospectsStorageNotice" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed">
+      📱 <strong>Saved on this device for now.</strong> Your prospects are stored in this browser until the prospects table is enabled in Supabase (applying <span class="font-mono">supabase/migrations_draft/ai_closer_migration_APPLIED_2026-10-25.sql</span>). Nothing is lost; they just won't sync to your other devices yet.
+    </div>
+
+    <div id="prospectsStagePills" class="flex items-center gap-2 flex-wrap"></div>
+
+    <div id="prospectsList" class="space-y-4">
+      <p class="text-sm text-slate-400">Loading your prospects…</p>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ============================================================================= -->
+<!-- ========================== LUCA · AI CLOSER PAGE ============================ -->
+<!-- ============================================================================= -->
+<div id="closerPage" class="hidden flex-1 overflow-y-auto p-8">
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <div>
+      <h1 class="text-3xl font-black text-slate-900">Luca <span class="text-slate-400 font-bold text-xl">· AI Closer</span></h1>
+      <p class="text-slate-500 mt-1">Luca answers your buyer chats the way <em>you</em> would. He learns from your corrections, follows the instructions you give him, and hands the chat back the moment it needs a human. Set him up below — chat capture and draft replies arrive in the next phase.</p>
+    </div>
+
+    <div class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-900 leading-relaxed">
+      🌙 <strong>Luca is in setup.</strong> Your profile below is what he'll work from: your name, your schedule, your credit-app link, your rules. Nothing is sent to any buyer until you turn a mode on.
+    </div>
+
+    <div id="closerStorageNotice" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed">
+      📱 <strong>Saved on this device for now.</strong> Luca's profile is stored in this browser until the closer table is enabled in Supabase. Nothing is lost; it just won't sync to your other devices yet.
+    </div>
+
+    <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+      <h2 class="text-base font-black text-slate-900">Your profile</h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Your name</label>
+          <input type="text" id="clRepName" placeholder="e.g. Matthew" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          <p class="text-[11px] text-slate-400 mt-1">Luca assists you — and signs as you when he replies.</p>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Online credit-app link</label>
+          <input type="url" id="clCreditUrl" placeholder="https://yourstore.com/credit-application" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          <p class="text-[11px] text-slate-400 mt-1">When a prospect wants to apply, Luca sends them this link — he never talks rates or promises approvals.</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Store hours</label>
+        <div class="space-y-2" id="clStoreSchedule">
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-mon" class="hidden" onchange="clSyncStoreRow('mon')">Mon</label>
+            <input type="time" id="clStoreStart-mon" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-mon" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-mon" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-tue" class="hidden" onchange="clSyncStoreRow('tue')">Tue</label>
+            <input type="time" id="clStoreStart-tue" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-tue" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-tue" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-wed" class="hidden" onchange="clSyncStoreRow('wed')">Wed</label>
+            <input type="time" id="clStoreStart-wed" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-wed" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-wed" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-thu" class="hidden" onchange="clSyncStoreRow('thu')">Thu</label>
+            <input type="time" id="clStoreStart-thu" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-thu" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-thu" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-fri" class="hidden" onchange="clSyncStoreRow('fri')">Fri</label>
+            <input type="time" id="clStoreStart-fri" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-fri" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-fri" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-sat" class="hidden" onchange="clSyncStoreRow('sat')">Sat</label>
+            <input type="time" id="clStoreStart-sat" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-sat" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-sat" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-sun" class="hidden" onchange="clSyncStoreRow('sun')">Sun</label>
+            <input type="time" id="clStoreStart-sun" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-sun" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-sun" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-2">When the store is open. Switch a day off and it's a closed day — Luca never offers a closed day to a prospect.</p>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Your hours — each day its own</label>
+        <div class="space-y-2" id="clSchedule">
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-mon" class="hidden" onchange="clSyncDayRow('mon')">Mon</label>
+            <input type="time" id="clStart-mon" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-mon" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-tue" class="hidden" onchange="clSyncDayRow('tue')">Tue</label>
+            <input type="time" id="clStart-tue" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-tue" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-wed" class="hidden" onchange="clSyncDayRow('wed')">Wed</label>
+            <input type="time" id="clStart-wed" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-wed" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-thu" class="hidden" onchange="clSyncDayRow('thu')">Thu</label>
+            <input type="time" id="clStart-thu" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-thu" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-fri" class="hidden" onchange="clSyncDayRow('fri')">Fri</label>
+            <input type="time" id="clStart-fri" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-fri" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-sat" class="hidden" onchange="clSyncDayRow('sat')">Sat</label>
+            <input type="time" id="clStart-sat" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-sat" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-sun" class="hidden" onchange="clSyncDayRow('sun')">Sun</label>
+            <input type="time" id="clStart-sun" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-sun" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-2">Tap a day off for your day off — the store may still be open that day, so Luca offers your next work day instead. This same week repeats all year, and Luca books visits inside your hours on the days you're in.</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">How Luca should sound</label>
+          <select id="clTone" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <option value="casual_short">Casual &amp; short — like texting</option>
+            <option value="friendly_detailed">Friendly &amp; detailed</option>
+            <option value="professional">Professional</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Mode</label>
+          <select id="clMode" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <option value="draft">Draft — Luca writes it, you tap send (recommended)</option>
+            <option value="off">Off — capture prospects only</option>
+            <option value="auto" disabled>Auto — Luca sends on his own (coming in Phase 4)</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Standing instructions for Luca</label>
+        <textarea id="clInstructions" rows="4" placeholder="Talk to Luca like you'd talk to a person. e.g. 'Always ask about a trade-in first.' 'Never message after 9 pm.' 'If they ask about the Sienna, mention the new tires.'" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
+        <p class="text-[11px] text-slate-400 mt-1">These are Luca's standing orders. In a later phase you'll also be able to give him one-off jobs ("message everyone who asked about the F-150 — it dropped $500").</p>
+      </div>
+
+      <div class="flex items-center gap-3 pt-1">
+        <button onclick="saveCloserProfileForm()" class="px-5 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Save Luca's profile</button>
+        <span id="closerSavedNote" class="hidden text-xs font-bold text-emerald-600">Saved ✓</span>
+      </div>
+    </div>
+
+    <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      <h2 class="text-sm font-black text-slate-900">Luca's floor — never changes</h2>
+      <ul class="text-sm text-slate-600 mt-2 leading-relaxed list-disc pl-5 space-y-1">
+        <li>He never invents a price, a payment, an APR, or a financing promise — prices come only from your listings.</li>
+        <li>Haggling, financing numbers, trade-in values, or an upset buyer → the chat hands straight back to you.</li>
+        <li>Every reply he drafts or sends is logged where you can read it.</li>
+      </ul>
     </div>
 
   </div>
@@ -1390,8 +1616,8 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap">
       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">0</span>
     </button>
-    <button onclick="toggleNeedsPriceOnly()" id="needsPriceChip" style="display:none" class="px-3.5 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm cursor-pointer items-center gap-1.5 shrink-0 whitespace-nowrap">
-      <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> <span id="needsPriceCount">0</span> need a price
+    <button onclick="toggleNeedsAttentionOnly()" id="needsPriceChip" style="display:none" class="px-3.5 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm cursor-pointer items-center gap-1.5 shrink-0 whitespace-nowrap">
+      <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> <span id="needsPriceCount">0</span> need attention
     </button>
   </div>
 
@@ -1567,6 +1793,63 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
   </div>
 </div>
 
+<!-- 1d. Prospects: Add/Edit Form Modal -->
+<div id="prospectFormModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 id="prospectFormTitle" class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-user-plus text-emerald-600"></i> Add Prospect
+      </h3>
+      <button onclick="closeModal('prospectFormModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="col-span-2">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Name *</label>
+        <input type="text" id="prName" placeholder="e.g. James R." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">City</label>
+        <input type="text" id="prCity" placeholder="e.g. Huntington" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">State</label>
+        <input type="text" id="prState" placeholder="e.g. WV" maxlength="30" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div class="col-span-2">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Email</label>
+        <input type="email" id="prEmail" placeholder="name@email.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div class="col-span-2">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Car they're asking about</label>
+        <input type="text" id="prVehicle" placeholder="e.g. 2024 F-150 Lariat, stock B5678" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div class="col-span-2">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Where they are in the buying process</label>
+        <select id="prStage" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          <option value="new">New</option>
+          <option value="talking">Talking</option>
+          <option value="visit_set">Visit set</option>
+          <option value="came_in">Came in</option>
+          <option value="sold">Sold</option>
+          <option value="not_now">Not now</option>
+        </select>
+      </div>
+      <div class="col-span-2">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Notes</label>
+        <textarea id="prNotes" rows="3" placeholder="e.g. Has a 2014 Civic to trade, wants to come Saturday, asked about the new tires" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
+      </div>
+    </div>
+
+    <p class="text-[11px] text-slate-500">Only the name is required — everything else can be filled in as you learn it.</p>
+
+    <div class="flex gap-2.5 pt-1">
+      <button onclick="saveProspectForm()" class="flex-1 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Save Prospect</button>
+      <button onclick="closeModal('prospectFormModal')" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- 2. Change Price Dialog Modal -->
 <div id="changePriceModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
@@ -1583,6 +1866,40 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
       <button onclick="closeModal('changePriceModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
       <button onclick="saveVehicleNewPrice()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Save Price</button>
+    </div>
+  </div>
+</div>
+
+<!-- 2a2. Complete Vehicle Dialog Modal (Matthew, 2026-10-25: a car
+     missing info Facebook requires — exterior/interior color — gets an
+     "Updates needed" button instead of Post; this editor fixes exactly
+     the missing fields, then the car is postable again) -->
+<div id="completeVehicleModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-sm rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation text-amber-500"></i> <span id="completeVehicleTitle">Updates needed</span>
+      </h3>
+      <button onclick="closeModal('completeVehicleModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <p class="text-[11px] text-slate-500 leading-relaxed">Facebook's listing form requires both colors. Fill in what's missing and this car can post.</p>
+    <div>
+      <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Exterior color <span id="cvExteriorMissing" class="hidden text-amber-600 normal-case font-bold">— missing</span></label>
+      <input type="text" id="inputVehicleExterior" list="fbColorHints" placeholder="e.g. Crystal Black Pearl" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+    </div>
+    <div>
+      <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Interior color <span id="cvInteriorMissing" class="hidden text-amber-600 normal-case font-bold">— missing</span></label>
+      <input type="text" id="inputVehicleInterior" list="fbColorHints" placeholder="e.g. Black" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+    </div>
+    <datalist id="fbColorHints">
+      <option value="Black"></option><option value="Gray"></option><option value="Charcoal"></option>
+      <option value="White"></option><option value="Silver"></option><option value="Red"></option>
+      <option value="Blue"></option><option value="Beige"></option><option value="Tan"></option>
+      <option value="Brown"></option><option value="Green"></option><option value="Orange"></option>
+    </datalist>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+      <button onclick="closeModal('completeVehicleModal')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
+      <button onclick="saveVehicleColors()" class="px-4 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Save &amp; make postable</button>
     </div>
   </div>
 </div>
@@ -2282,6 +2599,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <div id="queueBulkBar" style="display:none" class="items-center justify-between gap-2">
       <span class="text-xs text-slate-500">Tick items to remove just those — or clear the whole queue.</span>
       <div class="flex items-center gap-2 shrink-0">
+        <button id="queueRetryFailedBtn" onclick="retryAllFailedQueueItems()" class="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg cursor-pointer" style="display:none">Retry Failed</button>
         <button id="queueRemoveSelectedBtn" onclick="removeSelectedQueueItems()" class="text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" disabled>Remove Selected</button>
         <button onclick="removeAllQueueItems()" class="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg cursor-pointer">Remove All</button>
       </div>
@@ -2808,6 +3126,8 @@ document.addEventListener("click", function (e) {
     if (car) openVehicleDetailsModal(car);
   } else if (action === "enqueue") {
     enqueueMarketplaceCar(vin);
+  } else if (action === "complete-vehicle") {
+    openCompleteVehicleModal(vin);
   } else if (action === "change-price") {
     const car = rawInventory.find(c => c.vin === vin);
     openChangePriceModal(vin, car ? (car.price || 0) : 0);
@@ -2826,6 +3146,8 @@ document.addEventListener("click", function (e) {
     }, vin);
   } else if (action === "queue-remove") {
     removeQueueItem(el.dataset.id);
+  } else if (action === "queue-retry") {
+    retryQueueItem(el.dataset.id);
   } else if (action === "queue-select") {
     const qid = el.dataset.id;
     if (selectedQueueIds.has(qid)) selectedQueueIds.delete(qid);
@@ -3537,6 +3859,7 @@ async function fetchLiveInventory(isManual) {
 
     applyFilters();
     checkWishlistMatches(); // Customer Wishlist: flag new matches (badge + toast)
+    refreshProspectsBadge(); // Prospects: sidebar count of New-stage prospects
   } catch (err) {
     console.error("Fetch error:", err);
     tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
@@ -3847,7 +4170,7 @@ if (filterMileageRange) {
     if (activePillFilter === 'ACTIVE' && isSold(car)) return false;
     if (activePillFilter === 'POSTED' && !car.marketplace_posted_at) return false;
     if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
-    if (needsPriceOnly && hasPrice(car)) return false;
+    if (needsAttentionOnly && !carNeedsAttention(car)) return false;
 
     return carMatchesInventorySearch(car, query);
   });
@@ -3882,15 +4205,17 @@ renderTableRows(filtered);
 syncInventorySelectionUI();
 updateClearFiltersVisibility();
 updateMobileFilterBadge();
-// NO-PRICE RULE: keep the amber alert chip honest after every render.
+// NEEDS-ATTENTION CHIP: keep the amber alert chip honest after every
+// render — it counts every unsold car that can't post yet (no price OR
+// a missing required color); clicking it filters to exactly those cars.
 const npChip = document.getElementById("needsPriceChip");
 if (npChip) {
-  const npCount = rawInventory.filter(c => !isSold(c) && !hasPrice(c)).length;
+  const npCount = rawInventory.filter(c => !isSold(c) && carNeedsAttention(c)).length;
   document.getElementById("needsPriceCount").innerText = npCount;
   npChip.style.display = npCount > 0 ? "inline-flex" : "none";
-  npChip.classList.toggle("ring-2", needsPriceOnly);
-  npChip.classList.toggle("ring-amber-800", needsPriceOnly);
-  npChip.classList.toggle("bg-amber-700", needsPriceOnly);
+  npChip.classList.toggle("ring-2", needsAttentionOnly);
+  npChip.classList.toggle("ring-amber-800", needsAttentionOnly);
+  npChip.classList.toggle("bg-amber-700", needsAttentionOnly);
 }
 }
 // Button Audit: list/grid view toggle. Only ONE view is rendered at a
@@ -4086,6 +4411,42 @@ function hasPrice(car) {
   return !!(car && car.price && Number(car.price) > 0);
 }
 
+// POSTING GAPS (Matthew, 2026-10-25): Facebook's vehicle form requires
+// an exterior AND an interior color — a car missing either one dies at
+// the Publish step (the 2026-10-25 HR-V: interior color blank in the
+// data, post failed after a full fill). So the gaps move to where they
+// can be fixed: the inventory list shows both colors on every car,
+// missing ones flagged; an incomplete car's Post button becomes
+// "Updates needed", which opens an editor for exactly what's missing;
+// saving flips the car back to postable. "Standard" in the data means
+// "unknown" (the filler's own convention) and counts as missing. The
+// filler's last-resort color default stays as a safety net, but a real
+// color typed here always beats a guessed one on the listing.
+function colorMissingValue(v) {
+  const s = String(v || "").trim().toLowerCase();
+  return !s || s === "standard";
+}
+function postingGaps(car) {
+  const gaps = [];
+  if (!car) return gaps;
+  if (colorMissingValue(car.color)) gaps.push({ key: "color", label: "Exterior color" });
+  if (colorMissingValue(car.interior_color)) gaps.push({ key: "interior_color", label: "Interior color" });
+  return gaps;
+}
+// One "needs attention" bucket (Matthew, 2026-10-25): the amber pills-bar
+// chip counts and filters BOTH fixable blockers — no price, or a missing
+// color — so there's a single worklist of cars that can't post yet.
+// Each row still shows its own specific fix button.
+function carNeedsAttention(car) {
+  return !!car && (!hasPrice(car) || postingGaps(car).length > 0);
+}
+function carColorsHtml(car) {
+  const part = (label, val) => colorMissingValue(val)
+    ? `<span class="text-amber-600 font-bold">${label}: missing</span>`
+    : `<span>${label}: ${escapeHtml(val)}</span>`;
+  return `<div class="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">${part("Ext", car.color)}<span class="text-slate-300">•</span>${part("Int", car.interior_color)}</div>`;
+}
+
 // MODEL/MAKE DISPLAY (2026-10-23): older scrapes stored some models
 // truncated or mis-cased ("Cr", "Rav4", "Rx", make "Gmc"). The scraper
 // parser is fixed and the stored rows are being backfilled from their
@@ -4134,9 +4495,9 @@ function noPriceButton(car, vinAttr) {
   return `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">⚠ Price needed — tap to add</button>`;
 }
 
-let needsPriceOnly = false;
-function toggleNeedsPriceOnly() {
-  needsPriceOnly = !needsPriceOnly;
+let needsAttentionOnly = false;
+function toggleNeedsAttentionOnly() {
+  needsAttentionOnly = !needsAttentionOnly;
   applyFilters();
 }
 
@@ -4195,6 +4556,11 @@ function gridCardHtml(car) {
            <i class="fa-solid fa-tag text-[10px]"></i>
            <span>Add price to post</span>
          </button>`
+      : postingGaps(car).length
+      ? `<button data-action="complete-vehicle" data-vin="${vinAttr}" class="flex-1 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
+           <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
+           <span>Updates needed</span>
+         </button>`
       : `<button data-action="enqueue" data-vin="${vinAttr}" class="flex-1 px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
            <i class="fa-solid fa-paper-plane text-[10px]"></i>
            <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
@@ -4215,6 +4581,7 @@ function gridCardHtml(car) {
           <strong class="text-sm font-bold text-slate-950 block leading-tight">${escapeHtml(car.year || '')} ${escapeHtml(displayMakeText(car.make) || '')} ${escapeHtml(displayModelText(car.model) || '')}</strong>
         </div>
         <div class="text-[11px] text-slate-500 mt-1">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')} &bull; VIN: ${escapeHtml(car.vin || 'N/A')}</div>
+        ${carColorsHtml(car)}
         ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(displayLocation(car.location_name))}</span></div>` : ''}
         <div class="flex items-baseline gap-2.5 pt-2">
           ${hasPrice(car)
@@ -4326,6 +4693,8 @@ ${car.location_name ? `
   <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 inline-block mt-1">
     New arrival
   </span>
+
+  ${carColorsHtml(car)}
 </div>
 
   </div>
@@ -4406,6 +4775,11 @@ ${car.location_name ? `
             ? `<button data-action="change-price" data-vin="${vinAttr}" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs inline-flex items-center gap-2 cursor-pointer shadow-sm transition">
                  <i class="fa-solid fa-tag text-[10px]"></i>
                  <span>Add price to post</span>
+               </button>`
+            : postingGaps(car).length
+            ? `<button data-action="complete-vehicle" data-vin="${vinAttr}" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs inline-flex items-center gap-2 cursor-pointer shadow-sm transition">
+                 <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
+                 <span>Updates needed</span>
                </button>`
             : `<button data-action="enqueue" data-vin="${vinAttr}" class="px-4 py-2 rounded-xl ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer">
                  <i class="fa-solid fa-paper-plane text-[10px]"></i>
@@ -4755,6 +5129,52 @@ function openChangePriceModal(vin, currentPrice) {
   document.getElementById("changePriceModal").classList.remove("hidden");
 }
 
+// COMPLETE VEHICLE (Matthew, 2026-10-25): the "Updates needed"
+// editor. Prefills both color fields with what the car HAS, flags the
+// missing ones, and on save writes BOTH fields back (trimmed; a field
+// left blank stays missing and the car stays gated). Mirrors the
+// change-price save: DB write, local row update, re-render.
+let completeVehicleVin = null;
+function openCompleteVehicleModal(vin) {
+  const car = rawInventory.find(c => c.vin === vin);
+  if (!car) return;
+  completeVehicleVin = vin;
+  document.getElementById("completeVehicleTitle").innerText =
+    `Updates needed — ${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'}`;
+  document.getElementById("inputVehicleExterior").value = colorMissingValue(car.color) ? "" : car.color;
+  document.getElementById("inputVehicleInterior").value = colorMissingValue(car.interior_color) ? "" : car.interior_color;
+  document.getElementById("cvExteriorMissing").classList.toggle("hidden", !colorMissingValue(car.color));
+  document.getElementById("cvInteriorMissing").classList.toggle("hidden", !colorMissingValue(car.interior_color));
+  document.getElementById("completeVehicleModal").classList.remove("hidden");
+}
+
+async function saveVehicleColors() {
+  if (!currentUser || !completeVehicleVin) return;
+  const ext = document.getElementById("inputVehicleExterior").value.trim();
+  const int = document.getElementById("inputVehicleInterior").value.trim();
+  if (colorMissingValue(ext) || colorMissingValue(int)) {
+    alert("Both colors are needed before this car can post.\n\nExterior: " + (colorMissingValue(ext) ? "still missing" : "✓") + "\nInterior: " + (colorMissingValue(int) ? "still missing" : "✓"));
+    return;
+  }
+  try {
+    const { error } = await supabaseClient
+      .from("scraped_inventory")
+      .update({ color: ext, interior_color: int })
+      .eq("vin", completeVehicleVin)
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+
+    const car = rawInventory.find(c => c.vin === completeVehicleVin);
+    if (car) { car.color = ext; car.interior_color = int; }
+
+    closeModal("completeVehicleModal");
+    applyFilters();
+    alert("✓ Colors saved — this car is ready to post!");
+  } catch (err) {
+    alert("Could not save colors: " + err.message);
+  }
+}
+
 async function saveVehicleNewPrice() {
   if (!currentUser || !targetPriceVin) return;
   const newPrice = parseInt(document.getElementById("inputNewVehiclePrice").value);
@@ -5058,6 +5478,47 @@ function syncQueueBulkBar() {
             ? `Remove Selected (${selectedQueueIds.size})`
             : "Remove Selected";
     }
+    const retryBtn = document.getElementById("queueRetryFailedBtn");
+    if (retryBtn) {
+        const failedCount = postingQueue.filter(i => i.status === "failed").length;
+        retryBtn.style.display = failedCount ? "" : "none";
+        retryBtn.innerText = failedCount > 1 ? `Retry Failed (${failedCount})` : "Retry Failed";
+    }
+}
+// Retry (Matthew, 2026-10-25): a failed job goes back to pending so
+// the helper claims it again — for after the thing that failed it has
+// been fixed. The .eq("status","failed") guard means a retry can
+// never resurrect a job that's already running or done.
+async function retryQueueItem(id) {
+    if (!id || !currentUser) return;
+    try {
+        const { error } = await supabaseClient
+            .from("auto_posting_queue")
+            .update({ status: "pending", error_message: null, executed_at: null })
+            .eq("id", id)
+            .eq("user_id", currentUser.id)
+            .eq("status", "failed");
+        if (error) throw error;
+        await loadPostingQueue();
+    } catch (err) {
+        console.error(err);
+        alert("Could not retry that item — please try again.");
+    }
+}
+async function retryAllFailedQueueItems() {
+    if (!currentUser) return;
+    try {
+        const { error } = await supabaseClient
+            .from("auto_posting_queue")
+            .update({ status: "pending", error_message: null, executed_at: null })
+            .eq("user_id", currentUser.id)
+            .eq("status", "failed");
+        if (error) throw error;
+        await loadPostingQueue();
+    } catch (err) {
+        console.error(err);
+        alert("Could not retry the failed items — please try again.");
+    }
 }
 async function removeQueueItemsByIds(ids, confirmText) {
     if (!ids.length) return;
@@ -5169,6 +5630,7 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 // jobs are exempt: they remove a listing, photos are irrelevant.
 const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && !!car && !hasRealPhoto(car);
 const blockedNoPrice = item.status === "pending" && item.action !== "delete" && !!car && hasRealPhoto(car) && !hasPrice(car);
+const blockedInfo = item.status === "pending" && item.action !== "delete" && !!car && hasRealPhoto(car) && hasPrice(car) && postingGaps(car).length > 0;
 // Phase B: a DELETE job (e.g. a sold car's listing removal) must read as
 // a removal at every stage — pending = queued, processing = in flight,
 // completed = removed — never as a generic post "Pending".
@@ -5176,6 +5638,8 @@ const statusChip = blockedNoPhoto
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No photos — won't post</span>`
     : blockedNoPrice
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No price — won't post</span>`
+    : blockedInfo
+    ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 Missing info — won't post</span>`
     : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
 
     return `
@@ -5226,6 +5690,14 @@ const statusChip = blockedNoPhoto
                         Remove
 
                     </button>
+
+                    ${item.status === "failed" ? `<button
+                        data-action="queue-retry" data-id="${escapeHtml(item.id)}"
+                        class="text-xs text-blue-600 hover:text-blue-700 font-semibold">
+
+                        Retry
+
+                    </button>` : ``}
 
                 </div>
 
@@ -5355,11 +5827,13 @@ document.addEventListener("visibilitychange", function () {
     const skippedSold = selectedVehicles.filter(car => isSold(car)).length;
     const skippedNoPhoto = selectedVehicles.filter(car => !isSold(car) && !hasRealPhoto(car)).length;
     const skippedNoPrice = selectedVehicles.filter(car => !isSold(car) && hasRealPhoto(car) && !hasPrice(car)).length;
-    const vehiclesToQueue = selectedVehicles.filter(car => !isSold(car) && hasRealPhoto(car) && hasPrice(car));
+    const skippedIncomplete = selectedVehicles.filter(car => !isSold(car) && hasRealPhoto(car) && hasPrice(car) && postingGaps(car).length > 0).length;
+    const vehiclesToQueue = selectedVehicles.filter(car => !isSold(car) && hasRealPhoto(car) && hasPrice(car) && !postingGaps(car).length);
     const skipNote = [
         skippedSold ? `${skippedSold} vehicle(s) were skipped — sold. Sold vehicles are never posted.` : "",
         skippedNoPhoto ? `${skippedNoPhoto} vehicle(s) were skipped — no photos. Vehicles without real photos are never posted.` : "",
-        skippedNoPrice ? `${skippedNoPrice} vehicle(s) were skipped — no price. Add the price on the car's row first (tap "Price needed").` : ""
+        skippedNoPrice ? `${skippedNoPrice} vehicle(s) were skipped — no price. Add the price on the car's row first (tap "Price needed").` : "",
+        skippedIncomplete ? `${skippedIncomplete} vehicle(s) were skipped — missing info (a color Facebook requires). Tap "Updates needed" on the car's row to fill it in.` : ""
     ].filter(Boolean).join("\n\n");
     if (!vehiclesToQueue.length) {
         alert(`Nothing was queued:\n\n${skipNote}`);
@@ -5486,6 +5960,12 @@ async function enqueueMarketplaceCar(vin) {
   }
   if (carForQueue && !hasPrice(carForQueue)) {
     alert("That vehicle has no price yet, so it can't be posted.\n\nAdd the price first — tap \"Price needed\" on the car's row and type it in.");
+    return;
+  }
+  if (carForQueue && postingGaps(carForQueue).length) {
+    // Missing a color Facebook requires — open the editor instead of
+    // queueing a post that would die at the Publish step.
+    openCompleteVehicleModal(vin);
     return;
   }
   try {
@@ -5943,6 +6423,12 @@ function showGetStartedPage() {
     const wp = document.getElementById("wishlistPage");
     if (wp) wp.classList.add("hidden");
 
+    const pp0 = document.getElementById("prospectsPage");
+    if (pp0) pp0.classList.add("hidden");
+
+    const cp0 = document.getElementById("closerPage");
+    if (cp0) cp0.classList.add("hidden");
+
     const ep = document.getElementById("extensionPage");
     if (ep) ep.classList.add("hidden");
 
@@ -5973,6 +6459,12 @@ function showInventoryPage(navKey) {
     const wp = document.getElementById("wishlistPage");
     if (wp) wp.classList.add("hidden");
 
+    const pp1 = document.getElementById("prospectsPage");
+    if (pp1) pp1.classList.add("hidden");
+
+    const cp1 = document.getElementById("closerPage");
+    if (cp1) cp1.classList.add("hidden");
+
     const ep2 = document.getElementById("extensionPage");
     if (ep2) ep2.classList.add("hidden");
 
@@ -5989,7 +6481,7 @@ function showInventoryPage(navKey) {
    {type:"AUTOLAUNCH_EXT_PING"} on the window; bridge.js (the
    extension's content script on this origin) forwards it to the
    worker as chrome.runtime {type:"AUTOLAUNCH_PING"} and posts the
-   worker's reply back as {type:"AUTOLAUNCH_EXT_PONG", hasToken}.
+   worker's reply back as {type:"AUTOLAUNCH_EXT_PONG", hasToken, version}.
    The worker answers hasToken from the session token it actually
    holds in chrome.storage.local (autolaunch_access_token — the same
    token the login handoff stores). No pong within ~1.5s means no
@@ -5999,7 +6491,25 @@ function showInventoryPage(navKey) {
 let extPingTimer = null;
 let extPongListener = null;
 
-function renderExtStatus(state) {
+// The newest helper build. Bump this together with the extension's
+// manifest version: the setup page compares the installed helper's
+// self-reported version against it and calls out an out-of-date helper
+// instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
+// happily reported "ready" before the helper could report a version).
+const EXPECTED_EXT_VERSION = "2.1.41";
+function extVersionParts(v) {
+    return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
+}
+function extVersionAtLeast(installed, wanted) {
+    const a = extVersionParts(installed), b = extVersionParts(wanted);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const x = a[i] || 0, y = b[i] || 0;
+        if (x !== y) return x > y;
+    }
+    return true;
+}
+
+function renderExtStatus(state, info) {
     const dot = document.getElementById("extStatusDot");
     const title = document.getElementById("extStatusTitle");
     const detail = document.getElementById("extStatusDetail");
@@ -6008,7 +6518,12 @@ function renderExtStatus(state) {
     if (state === "ready") {
         dot.className = base + "bg-emerald-500";
         title.innerText = "Helper ready \u2713";
-        detail.innerText = "The helper is installed and holds your signed-in AutoLaunch session. Queued Marketplace posts can be claimed \u2014 keep Chrome open and stay signed in to Facebook in Chrome.";
+        detail.innerText = "The helper is installed (v" + (info && info.installed ? info.installed : EXPECTED_EXT_VERSION) + ", up to date) and holds your signed-in AutoLaunch session. Queued Marketplace posts can be claimed \u2014 keep Chrome open and stay signed in to Facebook in Chrome.";
+    } else if (state === "stale") {
+        dot.className = base + "bg-amber-500";
+        title.innerText = "Helper installed \u2014 update available";
+        const have = info && info.installed ? "v" + info.installed : "an older build that can't report its version";
+        detail.innerText = "You have " + have + "; the current helper is v" + EXPECTED_EXT_VERSION + ". It still works, but you're missing the latest fixes. To update: download the fresh app files (step 1 below), replace the old extension folder, then on chrome://extensions click the reload arrow on the AutoLaunch Vehicle Assistant card \u2014 and hard-refresh this tab (Ctrl+Shift+R).";
     } else if (state === "waiting") {
         dot.className = base + "bg-amber-500";
         title.innerText = "Helper installed \u2014 waiting for sign-in";
@@ -6038,7 +6553,14 @@ function checkExtensionStatus() {
         const data = event.data;
         if (!data || data.type !== "AUTOLAUNCH_EXT_PONG") return;
         clearExtPing();
-        renderExtStatus(data.hasToken ? "ready" : "waiting");
+        if (!data.hasToken) { renderExtStatus("waiting"); return; }
+        // Helpers older than v2.1.24 don't report a version at all —
+        // that silence is itself the out-of-date signal.
+        if (!data.version || !extVersionAtLeast(data.version, EXPECTED_EXT_VERSION)) {
+            renderExtStatus("stale", { installed: data.version || null, expected: EXPECTED_EXT_VERSION });
+        } else {
+            renderExtStatus("ready", { installed: data.version });
+        }
     };
     window.addEventListener("message", extPongListener);
     extPingTimer = setTimeout(function () {
@@ -6059,6 +6581,10 @@ function showExtensionPage() {
     document.getElementById("getStartedPage").classList.add("hidden");
     const wp = document.getElementById("wishlistPage");
     if (wp) wp.classList.add("hidden");
+    const pp2 = document.getElementById("prospectsPage");
+    if (pp2) pp2.classList.add("hidden");
+    const cp2 = document.getElementById("closerPage");
+    if (cp2) cp2.classList.add("hidden");
     document.getElementById("extensionPage").classList.remove("hidden");
     checkExtensionStatus();
     syncQueuePoller();
@@ -6326,6 +6852,10 @@ async function showWishlistPage() {
   document.getElementById("getStartedPage").classList.add("hidden");
   const ep3 = document.getElementById("extensionPage");
   if (ep3) ep3.classList.add("hidden");
+  const pp3 = document.getElementById("prospectsPage");
+  if (pp3) pp3.classList.add("hidden");
+  const cp3 = document.getElementById("closerPage");
+  if (cp3) cp3.classList.add("hidden");
   document.getElementById("wishlistPage").classList.remove("hidden");
   await loadWishlist();
   const fresh = computeFreshMatches();
@@ -6475,6 +7005,785 @@ async function saveWishlistForm() {
   } catch (err) {
     alert("Could not save that wishlist entry: " + (err.message || err));
   }
+}
+
+/* =====================================================================
+   Prospects (Matthew's spec, 2026-10-25 — deliberately NOT a CRM)
+   A tiny tracker for people who reached out about a car: name,
+   city/state, email, notes, and where they are in the buying process.
+   Storage mirrors the Wishlist: Supabase table `prospects` when it
+   exists (supabase/migrations_draft/ai_closer_migration_APPLIED_2026-10-25.sql),
+   otherwise a localStorage fallback with an honest notice.
+   Phase 1 is manual capture; the AI Closer (AI_CLOSER.md) auto-creates
+   prospects from Marketplace chats in a later phase.
+   ===================================================================== */
+const PROSPECTS_TABLE = "prospects";
+const PROSPECT_STAGES = [
+  { key: "new",       label: "New",       pill: "bg-blue-50 text-blue-700 border-blue-200" },
+  { key: "talking",   label: "Talking",   pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  { key: "visit_set", label: "Visit set", pill: "bg-purple-50 text-purple-700 border-purple-200" },
+  { key: "came_in",   label: "Came in",   pill: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+  { key: "sold",      label: "Sold",      pill: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  { key: "not_now",   label: "Not now",   pill: "bg-slate-100 text-slate-500 border-slate-200" }
+];
+function prospectStage(key) {
+  return PROSPECT_STAGES.find(s => s.key === key) || PROSPECT_STAGES[0];
+}
+let prospects = [];
+let prospectChats = {}; // prospect_id -> {count, latest, direction} from closer_messages
+let prospectOutbound = {}; // prospect_id -> latest outbound reply {status, body, created_at}
+let prospectMessages = {}; // prospect_id -> chronological captured messages (conversation view)
+const expandedThreadIds = new Set(); // prospect ids whose conversation panel is open
+let prospectsStorageMode = "server"; // flips to "local" if the table is missing
+let editingProspectId = null;
+let prospectsStageFilter = "all";
+
+function prospectsLocalKey() { return "autolaunch_prospects_" + (currentUser ? currentUser.id : "anon"); }
+function loadLocalProspects() {
+  try { return JSON.parse(localStorage.getItem(prospectsLocalKey())) || []; }
+  catch (e) { return []; }
+}
+function saveLocalProspects() {
+  try { localStorage.setItem(prospectsLocalKey(), JSON.stringify(prospects)); }
+  catch (e) { console.warn("Could not persist local prospects:", e); }
+}
+
+async function loadProspects() {
+  if (!currentUser) { prospects = []; return; }
+  if (prospectsStorageMode === "local") { prospects = loadLocalProspects(); return; }
+  try {
+    const { data, error } = await supabaseClient
+      .from(PROSPECTS_TABLE)
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .order("updated_at", { ascending: false });
+    if (error) throw error;
+    prospects = data || [];
+    // Captured chats (Luca Phase 2): count + latest line per prospect.
+    // Non-fatal — a missing messages table just means no chat lines.
+    try {
+      const { data: msgs } = await supabaseClient
+        .from("closer_messages")
+        .select("id, prospect_id, body, direction, origin, status, created_at")
+        .eq("user_id", currentUser.id)
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      prospectChats = {};
+      prospectOutbound = {};
+      prospectMessages = {};
+      (msgs || []).forEach(m => {
+        if (!m.prospect_id) return;
+        const slot = prospectChats[m.prospect_id] || (prospectChats[m.prospect_id] = { count: 0, latest: "", direction: "in" });
+        slot.count++;
+        if (!slot.latest) { slot.latest = m.body || ""; slot.direction = m.direction || "in"; }
+        // Rows are newest-first: the first statused row per prospect is
+        // its latest outbound reply state.
+        if (m.status && !prospectOutbound[m.prospect_id]) {
+          prospectOutbound[m.prospect_id] = { status: m.status, body: m.body || "", created_at: m.created_at };
+        }
+        (prospectMessages[m.prospect_id] = prospectMessages[m.prospect_id] || []).push(m);
+      });
+      // Conversation view reads oldest -> newest.
+      Object.values(prospectMessages).forEach(list => list.reverse());
+    } catch (e) { prospectChats = {}; }
+  } catch (err) {
+    if (isMissingTableError(err)) prospectsStorageMode = "local";
+    else console.warn("Prospects load failed:", err);
+    prospects = loadLocalProspects();
+  }
+}
+
+async function persistProspect(payload, id) {
+  if (prospectsStorageMode !== "local" && currentUser) {
+    try {
+      if (id && !String(id).startsWith("local-")) {
+        const { error } = await supabaseClient.from(PROSPECTS_TABLE)
+          .update({ ...payload, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", currentUser.id);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabaseClient.from(PROSPECTS_TABLE)
+        .insert({ ...payload, user_id: currentUser.id });
+      if (error) throw error;
+      return;
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
+      prospectsStorageMode = "local"; // fall through to the local save below
+    }
+  }
+  if (id) {
+    const idx = prospects.findIndex(x => String(x.id) === String(id));
+    if (idx >= 0) prospects[idx] = { ...prospects[idx], ...payload, updated_at: new Date().toISOString() };
+    else prospects.unshift({ id: "local-" + Date.now(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...payload });
+  } else {
+    prospects.unshift({ id: "local-" + Date.now(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...payload });
+  }
+  saveLocalProspects();
+}
+
+async function deleteProspect(id) {
+  const entry = prospects.find(x => String(x.id) === String(id));
+  if (!entry) return;
+  if (!confirm(`Remove ${entry.name || "this prospect"}? This can't be undone.`)) return;
+  if (prospectsStorageMode !== "local" && !String(id).startsWith("local-")) {
+    const { error } = await supabaseClient.from(PROSPECTS_TABLE)
+      .delete().eq("id", id).eq("user_id", currentUser.id);
+    if (error && !isMissingTableError(error)) { alert("Could not delete that prospect: " + error.message); return; }
+    if (error) prospectsStorageMode = "local";
+  }
+  prospects = prospects.filter(x => String(x.id) !== String(id));
+  if (prospectsStorageMode === "local") saveLocalProspects();
+  renderProspects();
+}
+
+async function setProspectStage(id, stage) {
+  const entry = prospects.find(x => String(x.id) === String(id));
+  if (!entry || entry.stage === stage) return;
+  entry.stage = stage;
+  try {
+    await persistProspect({ stage }, id);
+    await loadProspects();
+  } catch (err) {
+    console.warn("Stage save failed:", err);
+  }
+  renderProspects();
+}
+
+function updateProspectsBadge() {
+  const b = document.getElementById("prospectsNewBadge");
+  if (!b) return;
+  const n = prospects.filter(p => (p.stage || "new") === "new").length;
+  b.innerText = n;
+  b.classList.toggle("hidden", !n);
+}
+async function refreshProspectsBadge() {
+  if (!currentUser) return;
+  await loadProspects();
+  updateProspectsBadge();
+}
+
+async function showProspectsPage() {
+  setActiveNav("prospects");
+  document.querySelector("main").classList.add("hidden");
+  document.getElementById("getStartedPage").classList.add("hidden");
+  const wp = document.getElementById("wishlistPage");
+  if (wp) wp.classList.add("hidden");
+  const ep = document.getElementById("extensionPage");
+  if (ep) ep.classList.add("hidden");
+  const cp4 = document.getElementById("closerPage");
+  if (cp4) cp4.classList.add("hidden");
+  document.getElementById("prospectsPage").classList.remove("hidden");
+  await loadProspects();
+  renderProspects();
+  syncQueuePoller();
+}
+
+function renderProspects() {
+  const list = document.getElementById("prospectsList");
+  if (!list) return;
+  const notice = document.getElementById("prospectsStorageNotice");
+  if (notice) notice.classList.toggle("hidden", prospectsStorageMode !== "local");
+  updateProspectsBadge();
+
+  const pills = document.getElementById("prospectsStagePills");
+  if (pills) {
+    const counts = {};
+    prospects.forEach(p => { const k = p.stage || "new"; counts[k] = (counts[k] || 0) + 1; });
+    const pillBtn = (key, label, n) => `<button onclick="setProspectsStageFilter('${key}')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border cursor-pointer transition ${prospectsStageFilter === key ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}">${label} <span class="font-mono">${n}</span></button>`;
+    pills.innerHTML = pillBtn("all", "All", prospects.length) +
+      PROSPECT_STAGES.map(s => pillBtn(s.key, s.label, counts[s.key] || 0)).join("");
+  }
+
+  const visible = prospectsStageFilter === "all"
+    ? prospects
+    : prospects.filter(p => (p.stage || "new") === prospectsStageFilter);
+
+  if (!prospects.length) {
+    list.innerHTML = `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-10 text-center space-y-3">
+      <i class="fa-solid fa-user-plus text-3xl text-emerald-300"></i>
+      <p class="text-sm font-bold text-slate-900">No prospects yet</p>
+      <p class="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">When someone reaches out about a car, put them here — name, where they're from, and where they are in the buying process. Soon the AI Closer will add them for you.</p>
+      <button onclick="openProspectForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Add your first Prospect</button>
+    </div>`;
+    return;
+  }
+  if (!visible.length) {
+    list.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">No prospects at this stage right now.</p>`;
+    return;
+  }
+
+  list.innerHTML = visible.map(p => {
+    const stage = prospectStage(p.stage || "new");
+    const where = [p.city, p.state].filter(Boolean).map(x => escapeHtml(x)).join(", ");
+    const contact = [where, p.email ? escapeHtml(p.email) : ""].filter(Boolean).join(" • ");
+    const options = PROSPECT_STAGES.map(s =>
+      `<option value="${s.key}" ${s.key === (p.stage || "new") ? "selected" : ""}>${s.label}</option>`).join("");
+    return `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div class="min-w-0">
+          <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+            ${escapeHtml(p.name || "Prospect")}
+            <span class="px-2 py-0.5 rounded-full ${stage.pill} border text-[10px] font-bold">${stage.label}</span>
+          </h3>
+          ${contact ? `<p class="text-xs text-slate-500 mt-0.5">${contact}</p>` : ""}
+          ${p.vehicle_label ? `<p class="text-xs text-slate-600 mt-1"><span class="font-semibold text-slate-900">Asking about:</span> ${escapeHtml(p.vehicle_label)}</p>` : ""}
+          ${p.notes ? `<p class="text-xs text-slate-500 mt-0.5 italic">"${escapeHtml(p.notes)}"</p>` : ""}
+          ${prospectChats[p.id] ? `<p id="lucaChatLine-${escapeHtml(String(p.id))}" class="text-xs text-slate-500 mt-0.5">💬 ${prospectChats[p.id].count} captured · last: “${escapeHtml(String(prospectChats[p.id].latest || "").slice(0, 90))}”</p>` : ""}
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <select data-prospect-stage="${escapeHtml(String(p.id))}" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-600">${options}</select>
+          <button data-prospect-action="edit" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer">Edit</button>
+          <button data-prospect-action="delete" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold cursor-pointer">Delete</button>
+        </div>
+      </div>
+      ${prospectChats[p.id] ? `<div class="mt-3 pt-3 border-t border-slate-100">
+        <button data-prospect-action="draft" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm">🌙 Draft reply with Luca</button>
+        <div id="lucaDraft-${escapeHtml(String(p.id))}"></div>
+        <button data-prospect-action="toggle-thread" data-prospect-id="${escapeHtml(String(p.id))}" class="ml-2 px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">💬 View conversation (${prospectChats[p.id].count}) ▾</button>
+        <div id="lucaThread-${escapeHtml(String(p.id))}" class="hidden mt-3 rounded-2xl bg-slate-50 border border-slate-200 p-3 max-h-96 overflow-y-auto">${threadBubblesHtml(p)}</div>
+        ${p.thread_ref ? `<div class="mt-2.5 flex items-start gap-2">
+          <textarea id="lucaReplyText-${escapeHtml(String(p.id))}" rows="2" placeholder="Type your reply — AutoLaunch sends it through Messenger for you…" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
+          <button data-prospect-action="reply" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm shrink-0">Send reply</button>
+        </div>
+        <div id="lucaReplyStatus-${escapeHtml(String(p.id))}">${outboundPillHtml(prospectOutbound[p.id])}</div>
+        <p class="mt-1 text-[11px] text-slate-400">Delivery needs the helper running with a Messenger tab open — same hub rule as posting.</p>` : ""}
+      </div>` : ""}
+    </div>`;
+  }).join("");
+  // Reopen conversation panels that were expanded before this render
+  // (soft refresh / filter changes re-render the list).
+  expandedThreadIds.forEach(id => {
+    const panel = document.getElementById("lucaThread-" + id);
+    if (!panel) return;
+    panel.classList.remove("hidden");
+    const btn = document.querySelector(`[data-prospect-action="toggle-thread"][data-prospect-id="${id}"]`);
+    if (btn) btn.innerHTML = "💬 Hide conversation ▴";
+    panel.scrollTop = panel.scrollHeight;
+  });
+}
+
+function setProspectsStageFilter(key) {
+  prospectsStageFilter = key;
+  renderProspects();
+}
+
+document.addEventListener("click", function (e) {
+  const el = e.target && e.target.closest ? e.target.closest("[data-prospect-action]") : null;
+  if (!el) return;
+  const id = el.getAttribute("data-prospect-id");
+  const act = el.getAttribute("data-prospect-action");
+  if (act === "edit") openProspectForm(id);
+  else if (act === "delete") deleteProspect(id);
+  else if (act === "draft") draftLucaReply(id, el);
+  else if (act === "copy-draft") copyLucaDraft(id, el);
+  else if (act === "reply") sendLucaReply(id, el);
+  else if (act === "toggle-thread") toggleThread(id, el);
+  else if (act === "copy-msg") copyProspectMsg(el.getAttribute("data-msg-id"), el);
+});
+
+// CONVERSATION VIEW (Matthew's ask, 2026-10-25): expand a prospect to
+// read the whole captured thread as chat bubbles — buyer left, you
+// right, Luca's drafts tagged — with every message individually
+// copyable (button + selectable text) for pasting anywhere.
+function threadBubblesHtml(p) {
+  const all = prospectMessages[p.id] || [];
+  const list = all.slice(-100);
+  if (!list.length) return `<p class="text-xs text-slate-400">No messages captured yet.</p>`;
+  const tags = { queued: "⏳ queued", sending: "📤 sending", sent: "✓ sent", failed: "⚠ failed" };
+  const rows = list.map(m => {
+    const out = m.direction === "out";
+    const ai = m.origin === "ai";
+    const when = m.created_at ? new Date(m.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+    const bubbleCls = ai
+      ? "bg-violet-50 border-violet-200 text-slate-800"
+      : out
+        ? "bg-blue-600 border-blue-600 text-white"
+        : "bg-white border-slate-200 text-slate-800";
+    const who = ai ? "🌙 Luca draft" : out ? "You" : (p.name || "Buyer");
+    const statusTag = m.status && tags[m.status] ? ` · <span class="font-bold">${tags[m.status]}</span>` : "";
+    return `<div class="flex ${out ? "justify-end" : "justify-start"} mb-2">
+      <div class="max-w-[85%]">
+        <div class="px-3 py-2 rounded-2xl border ${bubbleCls} text-[13px] leading-snug select-text whitespace-pre-wrap break-words">${escapeHtml(String(m.body || ""))}</div>
+        <div class="mt-0.5 flex items-center gap-2 ${out ? "justify-end" : ""} text-[10px] text-slate-400">
+          <span>${escapeHtml(who)} · ${escapeHtml(when)}${statusTag}</span>
+          <button data-prospect-action="copy-msg" data-msg-id="${escapeHtml(String(m.id))}" class="font-bold text-blue-600 cursor-pointer">Copy</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+  return (all.length > 100 ? `<p class="text-[11px] text-slate-400 mb-2">Showing the latest 100 messages.</p>` : "") + rows;
+}
+
+function toggleThread(id, btn) {
+  const panel = document.getElementById("lucaThread-" + id);
+  if (!panel) return;
+  const opening = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden");
+  if (opening) expandedThreadIds.add(String(id)); else expandedThreadIds.delete(String(id));
+  const count = (prospectMessages[id] || []).length;
+  btn.innerHTML = opening ? "💬 Hide conversation ▴" : `💬 View conversation (${count}) ▾`;
+  if (opening) panel.scrollTop = panel.scrollHeight;
+}
+
+function copyProspectMsg(msgId, btn) {
+  let body = "";
+  Object.values(prospectMessages).forEach(list => list.forEach(m => {
+    if (String(m.id) === String(msgId)) body = m.body || "";
+  }));
+  if (!body) return;
+  const done = () => { const o = btn.innerHTML; btn.innerHTML = "Copied ✓"; setTimeout(() => { btn.innerHTML = o; }, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(body).then(done).catch(done);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = body;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* best effort */ }
+    ta.remove();
+    done();
+  }
+}
+
+// SOFT REALTIME (2026-10-25): while the Prospects page is on screen,
+// re-read the chat data every ~8 seconds and patch the DOM in place —
+// new buyer lines, counts, open conversation panels and delivery
+// pills update WITHOUT a full re-render, so a half-typed reply or an
+// open thread is never wiped. Only a changed prospect SET (a brand
+// new prospect) triggers a full render, with reply drafts preserved.
+let prospectsSoftBusy = false;
+async function refreshProspectsSoft() {
+  if (prospectsSoftBusy || document.hidden) return;
+  const list = document.getElementById("prospectsList");
+  if (!list || list.getClientRects().length === 0) return; // Prospects not on screen
+  prospectsSoftBusy = true;
+  try {
+    const beforeIds = prospects.map(p => String(p.id)).join(",");
+    const drafts = {};
+    document.querySelectorAll('[id^="lucaReplyText-"]').forEach(ta => { if (ta.value) drafts[ta.id] = ta.value; });
+    await loadProspects();
+    const afterIds = prospects.map(p => String(p.id)).join(",");
+    if (beforeIds !== afterIds) {
+      renderProspects();
+      Object.entries(drafts).forEach(([tid, v]) => { const ta = document.getElementById(tid); if (ta) ta.value = v; });
+      return;
+    }
+    prospects.forEach(p => {
+      const chat = prospectChats[p.id];
+      const line = document.getElementById("lucaChatLine-" + p.id);
+      if (line && chat) line.innerHTML = `💬 ${chat.count} captured · last: “${escapeHtml(String(chat.latest || "").slice(0, 90))}”`;
+      const panel = document.getElementById("lucaThread-" + p.id);
+      if (panel && !panel.classList.contains("hidden")) {
+        const nearBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 80;
+        panel.innerHTML = threadBubblesHtml(p);
+        if (nearBottom) panel.scrollTop = panel.scrollHeight;
+      } else if (panel) {
+        const btn = document.querySelector(`[data-prospect-action="toggle-thread"][data-prospect-id="${p.id}"]`);
+        if (btn && chat) btn.innerHTML = `💬 View conversation (${chat.count}) ▾`;
+      }
+      const pill = document.getElementById("lucaReplyStatus-" + p.id);
+      if (pill) pill.innerHTML = outboundPillHtml(prospectOutbound[p.id]);
+    });
+  } catch (e) { /* next tick retries */ } finally {
+    prospectsSoftBusy = false;
+  }
+}
+// The 8-second driver asks the HELPER to sync first (event-driven —
+// a background tab's timers are throttled to ~1/min, which was the
+// inbound lag Matthew measured), then repaints when the helper
+// confirms. If no confirmation arrives in 4s, repaint anyway from
+// whatever is already stored.
+let lucaSyncReqSeq = 0;
+let lucaSyncFallbackTimer = null;
+window.addEventListener("message", (event) => {
+  if (event.origin !== window.location.origin) return;
+  const d = event.data;
+  if (d && d.type === "AUTOLAUNCH_EXT_SYNC_PONG") {
+    if (lucaSyncFallbackTimer) { clearTimeout(lucaSyncFallbackTimer); lucaSyncFallbackTimer = null; }
+    setTimeout(() => refreshProspectsSoft(), 600);
+  }
+});
+setInterval(() => {
+  if (document.hidden) return;
+  const list = document.getElementById("prospectsList");
+  if (!list || list.getClientRects().length === 0) return;
+  try { window.postMessage({ type: "AUTOLAUNCH_EXT_SYNC_REQUEST", reqId: ++lucaSyncReqSeq }, "*"); } catch (e) { /* repaint fallback below */ }
+  if (lucaSyncFallbackTimer) clearTimeout(lucaSyncFallbackTimer);
+  lucaSyncFallbackTimer = setTimeout(() => refreshProspectsSoft(), 4000);
+}, 5000);
+
+// OUTBOUND REPLIES (Prospects inbox step 2, 2026-10-25): the rep types
+// in AutoLaunch; the row lands in closer_messages with status "queued";
+// the helper (with a Messenger tab open) claims it, delivers it into
+// the thread, verifies it appears, and flips the status to sent/failed.
+// The pill is the rep's receipt — queued is a promise, sent is proof.
+function outboundPillHtml(o) {
+  if (!o || !o.status) return "";
+  const map = {
+    queued: ["⏳ Queued — the helper will deliver it to Messenger", "bg-slate-100 text-slate-600 border-slate-200"],
+    sending: ["📤 Sending through Messenger…", "bg-blue-50 text-blue-700 border-blue-200"],
+    sent: ["✓ Sent through Messenger", "bg-emerald-50 text-emerald-700 border-emerald-200"],
+    failed: ["⚠ Couldn't deliver — open Messenger and check the chat", "bg-rose-50 text-rose-700 border-rose-200"],
+  };
+  const hit = map[o.status];
+  if (!hit) return "";
+  return `<span class="inline-block mt-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold ${hit[1]}">${hit[0]}</span>`;
+}
+
+async function sendLucaReply(id, btn) {
+  const ta = document.getElementById("lucaReplyText-" + id);
+  const statusEl = document.getElementById("lucaReplyStatus-" + id);
+  const body = (ta ? ta.value : "").trim();
+  if (!body) { if (ta) ta.focus(); return; }
+  const p = prospects.find(x => String(x.id) === String(id));
+  if (!p || !p.thread_ref || !currentUser) {
+    alert("This prospect has no Messenger thread linked yet — capture the chat first.");
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const { error } = await supabaseClient.from("closer_messages").insert({
+      user_id: currentUser.id,
+      prospect_id: p.id,
+      thread_ref: p.thread_ref,
+      direction: "out",
+      origin: "rep",
+      body,
+      status: "queued",
+    });
+    if (error) throw error;
+    if (ta) ta.value = "";
+    prospectOutbound[id] = { status: "queued", body, created_at: new Date().toISOString() };
+    if (statusEl) statusEl.innerHTML = outboundPillHtml(prospectOutbound[id]);
+    // Realtime fast path (2026-10-25): poke the helper through the
+    // bridge so it claims the reply NOW instead of at its next
+    // 1-minute poll. The alarm stays as the fallback — "time lost
+    // kills deals" (Matthew).
+    try { window.postMessage({ type: "AUTOLAUNCH_EXT_NUDGE_OUTBOUND" }, "*"); } catch (e) { /* alarm fallback */ }
+  } catch (err) {
+    alert("Could not queue that reply: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// LUCA DRAFTING (Phase 2, 2026-10-25): ask the luca-draft Edge Function
+// (Gemini free tier, rep profile + hard floor server-side) for a reply
+// to the captured conversation. Draft mode: the rep copies the draft
+// into Facebook themselves — Luca never sends. The function also saves
+// each draft as an origin:"ai" closer_message for later learning.
+const lucaDrafts = {};
+async function draftLucaReply(id, btn) {
+  const panel = document.getElementById("lucaDraft-" + id);
+  if (!panel) return;
+  const headers = await tiktokFunctionHeaders();
+  if (!headers) { panel.innerHTML = `<p class="mt-2 text-xs text-rose-600 font-semibold">Sign in to AutoLaunch first.</p>`; return; }
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "Luca is thinking…";
+  panel.innerHTML = "";
+  try {
+    const res = await fetch(SUPABASE_URL + "/functions/v1/luca-draft", {
+      method: "POST", headers, body: JSON.stringify({ prospect_id: id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP " + res.status));
+    lucaDrafts[id] = data.draft;
+    panel.innerHTML = `
+      ${data.needs_human ? `<p class="mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">⚠ Luca flagged this one for you personally${data.reason ? " — " + escapeHtml(data.reason) : ""}. The draft below is just a safe holding reply.</p>` : ""}
+      <textarea id="lucaDraftText-${escapeHtml(String(id))}" rows="3" class="mt-2 w-full p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600">${escapeHtml(data.draft)}</textarea>
+      <p class="mt-1 text-[11px] text-slate-400">Edit it right here if you want — when you copy an edited version, Luca keeps both so he learns how you phrase things.</p>
+      <div class="mt-2 flex items-center gap-2 flex-wrap">
+        <button data-prospect-action="copy-draft" data-prospect-id="${escapeHtml(String(id))}" class="px-3 py-1.5 rounded-lg btn-gradient text-white text-[11px] font-bold cursor-pointer">Copy draft</button>
+        <span class="text-[11px] text-slate-400">Paste it into the Facebook chat — in Draft mode, Luca never sends for you.</span>
+      </div>`;
+  } catch (err) {
+    panel.innerHTML = `<p class="mt-2 text-xs text-rose-600 font-semibold">Luca couldn't draft: ${escapeHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+// CORRECTIONS BANK (Phase 3 foundation, 2026-10-25): when the rep
+// edits a draft before copying, save draft -> final to
+// closer_corrections (keyed by thread). Fire-and-forget: a failed save
+// never blocks the copy. The drafting function will read these as
+// few-shot examples so Luca converges on the rep's own phrasing.
+async function recordLucaCorrection(id, draft, final) {
+  try {
+    if (!currentUser || !supabaseClient) return;
+    const p = prospects.find(x => String(x.id) === String(id));
+    await supabaseClient.from("closer_corrections").insert({
+      user_id: currentUser.id,
+      thread_ref: p ? (p.thread_ref || null) : null,
+      draft, final,
+    });
+  } catch (e) { /* learning is best-effort; the copy matters more */ }
+}
+
+function copyLucaDraft(id, btn) {
+  const ta = document.getElementById("lucaDraftText-" + id);
+  const text = (ta ? ta.value : lucaDrafts[id] || "").trim();
+  if (!text) return;
+  const original = lucaDrafts[id] || "";
+  if (original && text !== original) recordLucaCorrection(id, original, text);
+  const done = () => { const o = btn.innerHTML; btn.innerHTML = "Copied ✓"; setTimeout(() => { btn.innerHTML = o; }, 2000); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(done);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* best effort */ }
+    ta.remove();
+    done();
+  }
+}
+document.addEventListener("change", function (e) {
+  const el = e.target && e.target.closest ? e.target.closest("[data-prospect-stage]") : null;
+  if (!el) return;
+  setProspectStage(el.getAttribute("data-prospect-stage"), el.value);
+});
+
+function openProspectForm(entryId) {
+  editingProspectId = entryId || null;
+  const p = entryId ? prospects.find(x => String(x.id) === String(entryId)) : null;
+  const title = document.getElementById("prospectFormTitle");
+  if (title) title.innerHTML = `<i class="fa-solid fa-user-plus text-emerald-600"></i> ${p ? "Edit Prospect" : "Add Prospect"}`;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : v; };
+  set("prName", p ? p.name : "");
+  set("prCity", p ? p.city : "");
+  set("prState", p ? p.state : "");
+  set("prEmail", p ? p.email : "");
+  set("prVehicle", p ? p.vehicle_label : "");
+  set("prStage", p ? (p.stage || "new") : "new");
+  set("prNotes", p ? p.notes : "");
+  document.getElementById("prospectFormModal").classList.remove("hidden");
+}
+
+async function saveProspectForm() {
+  const name = document.getElementById("prName").value.trim();
+  if (!name) { alert("Please add the prospect's name — that's the one required field."); return; }
+  const payload = {
+    name,
+    city: document.getElementById("prCity").value.trim() || null,
+    state: document.getElementById("prState").value.trim() || null,
+    email: document.getElementById("prEmail").value.trim() || null,
+    vehicle_label: document.getElementById("prVehicle").value.trim() || null,
+    stage: document.getElementById("prStage").value || "new",
+    notes: document.getElementById("prNotes").value.trim() || null,
+    source: "manual"
+  };
+  try {
+    await persistProspect(payload, editingProspectId);
+    closeModal('prospectFormModal');
+    await loadProspects();
+    renderProspects();
+  } catch (err) {
+    alert("Could not save that prospect: " + (err.message || err));
+  }
+}
+
+/* =====================================================================
+   Luca · AI Closer — profile screen (spec: AI_CLOSER.md)
+   The rep's profile: name, work schedule, credit-app link, tone,
+   mode, standing instructions. Stored in `closer_profiles`
+   (mode + profile jsonb) when the table exists, else localStorage.
+   Chat capture / drafting arrive in Phase 2; this screen is what
+   Luca will work from.
+   ===================================================================== */
+const CLOSER_TABLE = "closer_profiles";
+const CLOSER_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+let closerRecord = { mode: "draft", profile: {} };
+let closerStorageMode = "server"; // flips to "local" if the table is missing
+
+function closerLocalKey() { return "autolaunch_closer_" + (currentUser ? currentUser.id : "anon"); }
+function loadLocalCloser() {
+  try { return JSON.parse(localStorage.getItem(closerLocalKey())) || { mode: "draft", profile: {} }; }
+  catch (e) { return { mode: "draft", profile: {} }; }
+}
+function saveLocalCloser() {
+  try { localStorage.setItem(closerLocalKey(), JSON.stringify(closerRecord)); }
+  catch (e) { console.warn("Could not persist local closer profile:", e); }
+}
+
+async function loadCloserProfile() {
+  if (!currentUser) { closerRecord = { mode: "draft", profile: {} }; return; }
+  if (closerStorageMode === "local") { closerRecord = loadLocalCloser(); return; }
+  try {
+    const { data, error } = await supabaseClient
+      .from(CLOSER_TABLE)
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) closerRecord = { mode: data.mode || "draft", profile: data.profile || {} };
+  } catch (err) {
+    if (isMissingTableError(err)) closerStorageMode = "local";
+    else console.warn("Closer profile load failed:", err);
+    closerRecord = loadLocalCloser();
+  }
+}
+
+async function persistCloserProfile() {
+  if (closerStorageMode !== "local" && currentUser) {
+    try {
+      const { error } = await supabaseClient.from(CLOSER_TABLE)
+        .upsert({ user_id: currentUser.id, mode: closerRecord.mode, profile: closerRecord.profile, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+      if (error) throw error;
+      return;
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
+      closerStorageMode = "local";
+    }
+  }
+  saveLocalCloser();
+}
+
+function clEffectiveSchedule(p) {
+  // Per-day schedule {day: {on, start, end}} — the current format; the
+  // same week repeats all year (Matthew, 2026-10-25). Older profiles
+  // stored one range (work_days + work_start/work_end): expand it so a
+  // rep who saved before per-day hours keeps those hours on every
+  // work day until they adjust a day.
+  const sched = {};
+  const legacyDays = Array.isArray(p.work_days) ? p.work_days : ["mon", "tue", "wed", "thu", "fri", "sat"];
+  CLOSER_DAYS.forEach(d => {
+    const e = (p.schedule && p.schedule[d]) || null;
+    if (e) sched[d] = { on: !!e.on, start: e.start || "09:00", end: e.end || "19:00" };
+    else sched[d] = { on: legacyDays.includes(d), start: p.work_start || "09:00", end: p.work_end || "19:00" };
+  });
+  return sched;
+}
+
+function clEffectiveStoreSchedule(p) {
+  // Store hours live apart from the rep's own hours (Matthew,
+  // 2026-10-25): a day can be a store-open day the rep is off, and a
+  // closed day is a day Luca must never offer. Default until the rep
+  // sets them: Mon–Sat 09:00–20:00, Sunday closed.
+  const sched = {};
+  CLOSER_DAYS.forEach(d => {
+    const e = (p.store_schedule && p.store_schedule[d]) || null;
+    if (e) sched[d] = { open: !!e.open, start: e.start || "09:00", end: e.end || "20:00" };
+    else sched[d] = { open: d !== "sun", start: "09:00", end: "20:00" };
+  });
+  return sched;
+}
+
+function clSyncStoreRow(day) {
+  const cb = document.getElementById("clStoreDay-" + day);
+  const open = !!(cb && cb.checked);
+  ["clStoreStart-", "clStoreEnd-"].forEach(pre => {
+    const el = document.getElementById(pre + day);
+    if (el) { el.disabled = !open; el.style.opacity = open ? "1" : "0.4"; }
+  });
+  const badge = document.getElementById("clStoreClosed-" + day);
+  if (badge) badge.classList.toggle("hidden", open);
+}
+
+function clSyncDayRow(day) {
+  const cb = document.getElementById("clDay-" + day);
+  const on = !!(cb && cb.checked);
+  ["clStart-", "clEnd-"].forEach(pre => {
+    const el = document.getElementById(pre + day);
+    if (el) { el.disabled = !on; el.style.opacity = on ? "1" : "0.4"; }
+  });
+}
+
+function fillCloserForm() {
+  const p = closerRecord.profile || {};
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : v; };
+  set("clRepName", p.rep_name || "");
+  set("clCreditUrl", p.credit_app_url || "");
+  set("clTone", p.tone || "casual_short");
+  set("clInstructions", p.instructions || "");
+  const modeEl = document.getElementById("clMode");
+  if (modeEl) modeEl.value = closerRecord.mode === "auto" ? "draft" : (closerRecord.mode || "draft");
+  const sched = clEffectiveSchedule(p);
+  CLOSER_DAYS.forEach(d => {
+    const cb = document.getElementById("clDay-" + d);
+    if (cb) cb.checked = sched[d].on;
+    set("clStart-" + d, sched[d].start);
+    set("clEnd-" + d, sched[d].end);
+    clSyncDayRow(d);
+  });
+  const storeSched = clEffectiveStoreSchedule(p);
+  CLOSER_DAYS.forEach(d => {
+    const cb = document.getElementById("clStoreDay-" + d);
+    if (cb) cb.checked = storeSched[d].open;
+    set("clStoreStart-" + d, storeSched[d].start);
+    set("clStoreEnd-" + d, storeSched[d].end);
+    clSyncStoreRow(d);
+  });
+  const notice = document.getElementById("closerStorageNotice");
+  if (notice) notice.classList.toggle("hidden", closerStorageMode !== "local");
+}
+
+async function saveCloserProfileForm() {
+  const schedule = {};
+  const days = [];
+  CLOSER_DAYS.forEach(d => {
+    const cb = document.getElementById("clDay-" + d);
+    const on = !!(cb && cb.checked);
+    const s = document.getElementById("clStart-" + d);
+    const e = document.getElementById("clEnd-" + d);
+    schedule[d] = { on: on, start: (s && s.value) || "09:00", end: (e && e.value) || "19:00" };
+    if (on) days.push(d);
+  });
+  const storeSchedule = {};
+  CLOSER_DAYS.forEach(d => {
+    const cb = document.getElementById("clStoreDay-" + d);
+    const s = document.getElementById("clStoreStart-" + d);
+    const e = document.getElementById("clStoreEnd-" + d);
+    storeSchedule[d] = { open: !!(cb && cb.checked), start: (s && s.value) || "09:00", end: (e && e.value) || "20:00" };
+  });
+  const firstOn = days.length ? schedule[days[0]] : null;
+  closerRecord = {
+    mode: (document.getElementById("clMode") || {}).value || "draft",
+    profile: {
+      rep_name: document.getElementById("clRepName").value.trim(),
+      credit_app_url: document.getElementById("clCreditUrl").value.trim(),
+      store_schedule: storeSchedule,
+      schedule: schedule,
+      // Legacy mirrors so anything reading the old single-range shape
+      // keeps working; per-day `schedule` is the source of truth.
+      work_days: days,
+      work_start: firstOn ? firstOn.start : "09:00",
+      work_end: firstOn ? firstOn.end : "19:00",
+      tone: document.getElementById("clTone").value || "casual_short",
+      instructions: document.getElementById("clInstructions").value.trim()
+    }
+  };
+  try {
+    await persistCloserProfile();
+    const note = document.getElementById("closerSavedNote");
+    if (note) {
+      note.classList.remove("hidden");
+      setTimeout(() => note.classList.add("hidden"), 2500);
+    }
+    const notice = document.getElementById("closerStorageNotice");
+    if (notice) notice.classList.toggle("hidden", closerStorageMode !== "local");
+  } catch (err) {
+    alert("Could not save Luca's profile: " + (err.message || err));
+  }
+}
+
+async function showCloserPage() {
+  setActiveNav("closer");
+  document.querySelector("main").classList.add("hidden");
+  document.getElementById("getStartedPage").classList.add("hidden");
+  const wp = document.getElementById("wishlistPage");
+  if (wp) wp.classList.add("hidden");
+  const ep = document.getElementById("extensionPage");
+  if (ep) ep.classList.add("hidden");
+  const pp = document.getElementById("prospectsPage");
+  if (pp) pp.classList.add("hidden");
+  document.getElementById("closerPage").classList.remove("hidden");
+  await loadCloserProfile();
+  fillCloserForm();
+  syncQueuePoller();
 }
 
 function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); renderLocationGroupsSettings(); renderThemePicker(); refreshTikTokStatus(); safeLoadIntroVideos(); }
