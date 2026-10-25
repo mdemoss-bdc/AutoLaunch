@@ -32,7 +32,13 @@ const cors = {
 };
 
 const PROVIDER = "gemini";
-const MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+// Model reality (2026-10-25, learned live by probing this key):
+// gemini-2.x/2.5 are retired for NEW API users ("no longer available to
+// new users" 404s — the /models list still shows them, which fooled
+// the first deploy). gemini-3.8-flash is the flagship but sat in a 503
+// demand spike through every probe. gemini-3.5-flash answered with
+// clean JSON, so it leads; 3.8 and a lite model follow as fallbacks.
+const MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite"];
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -42,35 +48,60 @@ function json(body: unknown, status = 200) {
 }
 
 async function callGemini(apiKey: string, system: string, user: string) {
-  let lastErr = "";
+  const delays = [0, 2000]; // one retry per model for 429/503 spikes
   for (const model of MODELS) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: user }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 400,
-            responseMimeType: "application/json",
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt]) await new Promise(r => setTimeout(r, delays[attempt]));
+      let res: Response;
+      try {
+        res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+            signal: AbortSignal.timeout(45000),
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: system }] },
+              contents: [{ role: "user", parts: [{ text: user }] }],
+              generationConfig: {
+                temperature: 0.7,
+                // Thinking off + a roomy cap: the 3.x flash models are
+                // reasoning models — with thinking on and a 400-token
+                // cap, the JSON got truncated mid-string in probing.
+                maxOutputTokens: 1200,
+                thinkingConfig: { thinkingBudget: 0 },
+                responseMimeType: "application/json",
+              },
+            }),
           },
-        }),
-      },
-    );
-    if (res.status === 404) { lastErr = "model " + model + " not found"; continue; }
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error("Gemini HTTP " + res.status + ": " + t.slice(0, 200));
+        );
+      } catch (e) {
+        continue; // network/timeout — try the next attempt/model
+      }
+      if (res.status === 429 || res.status === 503) continue; // busy — back off and retry
+      if (res.status === 404) break; // model gone — fall to the next one
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error("Gemini HTTP " + res.status + ": " + t.slice(0, 200));
+      }
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "";
+      if (!text) continue;
+      return text;
     }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "";
-    if (!text) throw new Error("Gemini returned an empty draft");
-    return text;
   }
-  throw new Error("No Gemini model available: " + lastErr);
+  throw new Error("Google's free AI is busy right now (demand spike) — give it a minute and try the draft again.");
+}
+
+// Models occasionally wrap or pad the JSON despite responseMimeType;
+// parse strictly first, then extract the first {...} block, then fall
+// back to treating plain prose as the draft (Gemini drafts are prose —
+// a usable reply beats an error).
+function parseDraftText(raw: string) {
+  try { return JSON.parse(raw); } catch { /* try extraction */ }
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (m) { try { return JSON.parse(m[0]); } catch { /* fall through */ } }
+  return { draft: raw.trim(), needs_human: false, reason: "" };
 }
 
 Deno.serve(async (req) => {
@@ -154,7 +185,7 @@ Deno.serve(async (req) => {
   let parsed: any = null;
   try {
     const raw = await callGemini(apiKey, system, userPrompt);
-    parsed = JSON.parse(raw);
+    parsed = parseDraftText(raw);
   } catch (e) {
     return json({ ok: false, error: "Drafting failed: " + (e as Error).message }, 502);
   }
