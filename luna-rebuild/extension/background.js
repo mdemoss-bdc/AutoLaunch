@@ -363,6 +363,63 @@ async function handleCaptureChat(capture) {
   return { prospectName: prospect.name || name, added: fresh.length };
 }
 
+// --- Outbound replies (Prospects inbox step 2, v2.1.32) -------------------
+// The app queues a reply as a closer_messages row (status "queued").
+// This engine claims one at a time, hands it to a Facebook tab via a
+// storage pending-slot (the tab's chat_capture script does the typing
+// and verification), and records the result. No Facebook tab open ->
+// the reply simply stays queued (the hub rule). A delivery in flight
+// for over 3 minutes is marked failed rather than retried blindly —
+// a half-sent state must never resend itself.
+let outboundBusy = false;
+async function checkOutboundReplies() {
+  if (outboundBusy) return;
+  outboundBusy = true;
+  try {
+    const { autolaunch_user_id: userId } = await chrome.storage.local.get(["autolaunch_user_id"]);
+    if (!userId) return;
+    const { luca_pending_delivery: pending } = await chrome.storage.local.get(["luca_pending_delivery"]);
+    if (pending) {
+      if (Date.now() - (pending.at || 0) > 3 * 60 * 1000) {
+        try { await sbPatch(`closer_messages?id=eq.${pending.messageId}&status=eq.sending`, { status: "failed" }); } catch (e) { /* best effort */ }
+        await chrome.storage.local.remove(["luca_pending_delivery"]);
+      }
+      return; // one delivery at a time
+    }
+    const rows = await sbGet(`closer_messages?user_id=eq.${userId}&status=eq.queued&select=id,prospect_id,thread_ref,body&order=created_at.asc&limit=1`);
+    const row = rows && rows[0];
+    if (!row || !row.thread_ref) return;
+    const tabs = await chrome.tabs.query({ url: ["https://www.facebook.com/*"] });
+    if (!tabs.length) return; // no hub tab — stays queued
+    const key = (String(row.thread_ref).match(/\/t\/(\d+)/) || [])[1] || "";
+    const tab = tabs.find(t => key && (t.url || "").includes("/t/" + key))
+      || tabs.find(t => (t.url || "").includes("/messages"))
+      || tabs.find(t => (t.url || "").includes("/marketplace"))
+      || tabs[0];
+    if (!tab || tab.id == null) return;
+    const claimed = await sbPatch(`closer_messages?id=eq.${row.id}&status=eq.queued`, { status: "sending" });
+    if (!claimed || !claimed.length) return; // someone else took it
+    await chrome.storage.local.set({
+      luca_pending_delivery: { messageId: row.id, threadRef: row.thread_ref, body: row.body, tabId: tab.id, at: Date.now() }
+    });
+    if (key && (tab.url || "").includes("/t/" + key)) {
+      chrome.tabs.sendMessage(tab.id, { type: "AUTOLAUNCH_DELIVER_NOW" }, () => { void chrome.runtime.lastError; });
+    } else {
+      await chrome.tabs.update(tab.id, { url: row.thread_ref });
+    }
+  } catch (e) { /* next tick retries */ } finally {
+    outboundBusy = false;
+  }
+}
+
+async function finishOutboundReply(messageId, ok) {
+  const { luca_pending_delivery: pending } = await chrome.storage.local.get(["luca_pending_delivery"]);
+  if (!pending || pending.messageId !== messageId) return;
+  try { await sbPatch(`closer_messages?id=eq.${messageId}`, { status: ok ? "sent" : "failed" }); } catch (e) { /* best effort */ }
+  await chrome.storage.local.remove(["luca_pending_delivery"]);
+  checkOutboundReplies(); // chain the next queued reply, if any
+}
+
 function startOfTodayISO() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -1138,7 +1195,7 @@ chrome.runtime.onStartup.addListener(() => {
   checkQueue();
 });
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === POLL_ALARM) checkQueue();
+  if (alarm.name === POLL_ALARM) { checkQueue(); checkOutboundReplies(); }
 });
 
 // Handshake path 1 (the real one): bridge.js on the AutoLaunch origin.
@@ -1176,6 +1233,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.warn("[AutoLaunch] chat capture failed:", err && err.message ? err.message : err);
         sendResponse({ ok: false });
       }
+    })();
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_REPLY_RESULT" && message.messageId) {
+    // Only a Facebook tab may report a delivery (same discipline as
+    // the job-finish messages). The result flips the queued reply's
+    // status in the database — that status is the rep's receipt.
+    const senderUrl = (sender && sender.tab && sender.tab.url) || "";
+    if (!senderUrl.startsWith("https://www.facebook.com/")) return;
+    (async () => {
+      await finishOutboundReply(message.messageId, !!message.ok);
+      sendResponse({ ok: true });
     })();
     return true;
   }

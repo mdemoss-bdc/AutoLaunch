@@ -279,4 +279,135 @@
   injectButton();
   setTimeout(autoPass, 3500);
   setInterval(autoPass, 45000);
+
+  // ---- OUTBOUND DELIVERY (v2.1.32): the worker claims a queued reply
+  // in the database, parks it in the luca_pending_delivery storage
+  // slot, and points a Facebook tab at the thread. This script does
+  // the typing HERE: CDP insertText (works in background tabs, where
+  // execCommand silently no-ops), Enter to send, then VERIFY the
+  // message actually appears as our bubble before reporting success.
+  // Delivery only ever happens on the thread's own page — never
+  // through a floating popup, whose conversation can't be matched to
+  // the pending thread with certainty (wrong-person risk).
+  var delivering = false;
+  function waitMs(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function waitForValue(fn, timeoutMs, stepMs) {
+    var end = Date.now() + timeoutMs;
+    while (Date.now() < end) {
+      var v = fn();
+      if (v) return v;
+      await waitMs(stepMs || 400);
+    }
+    return null;
+  }
+  function replyCdpRequest(payload) {
+    return new Promise(function (resolve) {
+      try {
+        chrome.runtime.sendMessage(
+          Object.assign({ type: "AUTOLAUNCH_CDP" }, payload),
+          function (resp) {
+            void chrome.runtime.lastError;
+            resolve(resp && typeof resp === "object" ? resp : { ok: false, error: "cdp_no_response" });
+          });
+      } catch (e) { resolve({ ok: false, error: "cdp_send_failed" }); }
+    });
+  }
+  var replyCdpAttached = false;
+  async function replyCdp(action, extra) {
+    var res = await replyCdpRequest(Object.assign({ action: action }, extra || {}));
+    if (action === "attach" && res && res.ok) replyCdpAttached = true;
+    if (action === "detach") replyCdpAttached = false;
+    return res;
+  }
+  function findComposer() {
+    var scopes = [document.querySelector('[role="main"]'), document].filter(Boolean);
+    for (var i = 0; i < scopes.length; i++) {
+      var boxes = scopes[i].querySelectorAll('[role="textbox"]');
+      for (var j = 0; j < boxes.length; j++) {
+        var lab = (boxes[j].getAttribute("aria-label") || "").toLowerCase();
+        if (lab.indexOf("message") !== -1 || lab === "aa") return boxes[j];
+      }
+    }
+    return null;
+  }
+  function normMsg(s) { return String(s || "").trim().replace(/\s+/g, " ").toLowerCase(); }
+
+  async function deliverPending(p) {
+    var result = { ok: false, error: null };
+    try {
+      var composer = await waitForValue(findComposer, 20000, 500);
+      if (!composer) { result.error = "composer_not_found"; return result; }
+      try { composer.focus(); } catch (e) { /* DOM focus is best effort */ }
+      try { composer.click(); } catch (e) { /* same */ }
+      await waitMs(300);
+      var attached = await replyCdp("attach");
+      var inserted = false;
+      if (attached && attached.ok) {
+        var ins = await replyCdp("insertText", { text: p.body });
+        inserted = !!(ins && ins.ok);
+      }
+      if (!inserted) {
+        try { inserted = document.execCommand("insertText", false, p.body); } catch (e) { /* ladder continues */ }
+      }
+      await waitMs(400);
+      var inComposer = normMsg(textOf(composer)).indexOf(normMsg(p.body).slice(0, 40)) !== -1;
+      if (!inComposer && !inserted) { result.error = "insert_failed"; return result; }
+      if (replyCdpAttached) {
+        await replyCdp("key", { key: "Enter", code: "Enter" });
+      } else {
+        var evInit = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
+        composer.dispatchEvent(new KeyboardEvent("keydown", evInit));
+        composer.dispatchEvent(new KeyboardEvent("keypress", evInit));
+        composer.dispatchEvent(new KeyboardEvent("keyup", evInit));
+      }
+      var want = normMsg(p.body);
+      var hit = await waitForValue(function () {
+        return findMessages().some(function (m) {
+          return m.direction === "out" && (normMsg(m.body) === want || normMsg(m.body).indexOf(want.slice(0, 60)) === 0);
+        }) ? true : null;
+      }, 12000, 600);
+      result.ok = !!hit;
+      if (!hit) result.error = "not_verified_in_thread";
+      return result;
+    } finally {
+      if (replyCdpAttached) {
+        try { await replyCdp("detach"); } catch (e) { /* session hygiene best effort */ }
+      }
+    }
+  }
+
+  async function maybeDeliverPending() {
+    if (delivering) return;
+    var store = await chrome.storage.local.get(["luca_pending_delivery", "luca_delivery_claim"]);
+    var p = store && store.luca_pending_delivery;
+    if (!p || !p.messageId || !p.threadRef) return;
+    if (threadKeyOf(window.location.href) !== threadKeyOf(p.threadRef)) return;
+    // Cross-tab claim: another Facebook tab on the same thread must
+    // not deliver twice. Storage claims aren't atomic, but a 30s
+    // claim window makes a double-send a genuine rarity.
+    var claim = store.luca_delivery_claim;
+    if (claim && claim.messageId === p.messageId && Date.now() - (claim.at || 0) < 30000) return;
+    await chrome.storage.local.set({ luca_delivery_claim: { messageId: p.messageId, at: Date.now() } });
+    delivering = true;
+    try {
+      var res = await deliverPending(p);
+      chrome.runtime.sendMessage(
+        { type: "AUTOLAUNCH_REPLY_RESULT", messageId: p.messageId, ok: res.ok, error: res.error || null },
+        function () { void chrome.runtime.lastError; });
+    } catch (e) {
+      try {
+        chrome.runtime.sendMessage(
+          { type: "AUTOLAUNCH_REPLY_RESULT", messageId: p.messageId, ok: false, error: "exception" },
+          function () { void chrome.runtime.lastError; });
+      } catch (e2) { /* worker will time the pending slot out */ }
+    } finally {
+      delivering = false;
+    }
+  }
+
+  chrome.runtime.onMessage.addListener(function (msg) {
+    if (msg && msg.type === "AUTOLAUNCH_DELIVER_NOW") maybeDeliverPending();
+  });
+  setTimeout(maybeDeliverPending, 2500);
+  setInterval(maybeDeliverPending, 20000);
 })();

@@ -6496,7 +6496,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.31";
+const EXPECTED_EXT_VERSION = "2.1.32";
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }
@@ -7031,6 +7031,7 @@ function prospectStage(key) {
 }
 let prospects = [];
 let prospectChats = {}; // prospect_id -> {count, latest, direction} from closer_messages
+let prospectOutbound = {}; // prospect_id -> latest outbound reply {status, body, created_at}
 let prospectsStorageMode = "server"; // flips to "local" if the table is missing
 let editingProspectId = null;
 let prospectsStageFilter = "all";
@@ -7061,16 +7062,22 @@ async function loadProspects() {
     try {
       const { data: msgs } = await supabaseClient
         .from("closer_messages")
-        .select("prospect_id, body, direction, created_at")
+        .select("prospect_id, body, direction, status, created_at")
         .eq("user_id", currentUser.id)
         .order("created_at", { ascending: false })
         .limit(500);
       prospectChats = {};
+      prospectOutbound = {};
       (msgs || []).forEach(m => {
         if (!m.prospect_id) return;
         const slot = prospectChats[m.prospect_id] || (prospectChats[m.prospect_id] = { count: 0, latest: "", direction: "in" });
         slot.count++;
         if (!slot.latest) { slot.latest = m.body || ""; slot.direction = m.direction || "in"; }
+        // Rows are newest-first: the first statused row per prospect is
+        // its latest outbound reply state.
+        if (m.status && !prospectOutbound[m.prospect_id]) {
+          prospectOutbound[m.prospect_id] = { status: m.status, body: m.body || "", created_at: m.created_at };
+        }
       });
     } catch (e) { prospectChats = {}; }
   } catch (err) {
@@ -7226,6 +7233,12 @@ function renderProspects() {
       ${prospectChats[p.id] ? `<div class="mt-3 pt-3 border-t border-slate-100">
         <button data-prospect-action="draft" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm">🌙 Draft reply with Luca</button>
         <div id="lucaDraft-${escapeHtml(String(p.id))}"></div>
+        ${p.thread_ref ? `<div class="mt-2.5 flex items-start gap-2">
+          <textarea id="lucaReplyText-${escapeHtml(String(p.id))}" rows="2" placeholder="Type your reply — AutoLaunch sends it through Messenger for you…" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
+          <button data-prospect-action="reply" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm shrink-0">Send reply</button>
+        </div>
+        <div id="lucaReplyStatus-${escapeHtml(String(p.id))}">${outboundPillHtml(prospectOutbound[p.id])}</div>
+        <p class="mt-1 text-[11px] text-slate-400">Delivery needs the helper running with a Messenger tab open — same hub rule as posting.</p>` : ""}
       </div>` : ""}
     </div>`;
   }).join("");
@@ -7245,7 +7258,58 @@ document.addEventListener("click", function (e) {
   else if (act === "delete") deleteProspect(id);
   else if (act === "draft") draftLucaReply(id, el);
   else if (act === "copy-draft") copyLucaDraft(id, el);
+  else if (act === "reply") sendLucaReply(id, el);
 });
+
+// OUTBOUND REPLIES (Prospects inbox step 2, 2026-10-25): the rep types
+// in AutoLaunch; the row lands in closer_messages with status "queued";
+// the helper (with a Messenger tab open) claims it, delivers it into
+// the thread, verifies it appears, and flips the status to sent/failed.
+// The pill is the rep's receipt — queued is a promise, sent is proof.
+function outboundPillHtml(o) {
+  if (!o || !o.status) return "";
+  const map = {
+    queued: ["⏳ Queued — the helper will deliver it to Messenger", "bg-slate-100 text-slate-600 border-slate-200"],
+    sending: ["📤 Sending through Messenger…", "bg-blue-50 text-blue-700 border-blue-200"],
+    sent: ["✓ Sent through Messenger", "bg-emerald-50 text-emerald-700 border-emerald-200"],
+    failed: ["⚠ Couldn't deliver — open Messenger and check the chat", "bg-rose-50 text-rose-700 border-rose-200"],
+  };
+  const hit = map[o.status];
+  if (!hit) return "";
+  return `<span class="inline-block mt-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold ${hit[1]}">${hit[0]}</span>`;
+}
+
+async function sendLucaReply(id, btn) {
+  const ta = document.getElementById("lucaReplyText-" + id);
+  const statusEl = document.getElementById("lucaReplyStatus-" + id);
+  const body = (ta ? ta.value : "").trim();
+  if (!body) { if (ta) ta.focus(); return; }
+  const p = prospects.find(x => String(x.id) === String(id));
+  if (!p || !p.thread_ref || !currentUser) {
+    alert("This prospect has no Messenger thread linked yet — capture the chat first.");
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const { error } = await supabaseClient.from("closer_messages").insert({
+      user_id: currentUser.id,
+      prospect_id: p.id,
+      thread_ref: p.thread_ref,
+      direction: "out",
+      origin: "rep",
+      body,
+      status: "queued",
+    });
+    if (error) throw error;
+    if (ta) ta.value = "";
+    prospectOutbound[id] = { status: "queued", body, created_at: new Date().toISOString() };
+    if (statusEl) statusEl.innerHTML = outboundPillHtml(prospectOutbound[id]);
+  } catch (err) {
+    alert("Could not queue that reply: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 // LUCA DRAFTING (Phase 2, 2026-10-25): ask the luca-draft Edge Function
 // (Gemini free tier, rep profile + hard floor server-side) for a reply

@@ -160,3 +160,7 @@ improve its models; flipping to a paid key (pennies per draft, out of
 revenue) ends that. The drafting Edge Function is **provider-agnostic**
 — provider + model + key are server config, so the flip is a settings
 change, never a rebuild. If the product flops, total AI spend stays $0.
+
+## Prospects inbox step 2 — reply from Prospects (built 2026-10-25)
+
+The rep types a reply on the prospect's card; the app inserts a closer_messages row (direction out, origin rep, status "queued" — status column added 2026-10-25). The helper polls each minute: claims one row (status -> "sending", guarded), parks it in the luca_pending_delivery storage slot, and points a Facebook tab at the thread — opening it if needed. The tab's capture script types via the proven CDP path (insertText works in background tabs; execCommand is only a fallback), presses Enter, and VERIFIES the message appears as the rep's own bubble before the worker flips the status to "sent" (or "failed"). The card's pill is the receipt: queued / sending / sent / failed. Delivery happens only on the thread's own page — never via a floating popup (its conversation can't be matched to the pending thread with certainty). A delivery in flight >3 min is marked failed, never resent blind.
