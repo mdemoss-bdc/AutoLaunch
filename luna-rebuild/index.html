@@ -1027,7 +1027,63 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
       </div>
 
       <div>
-        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Your work schedule — each day its own hours</label>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Store hours</label>
+        <div class="space-y-2" id="clStoreSchedule">
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-mon" class="hidden" onchange="clSyncStoreRow('mon')">Mon</label>
+            <input type="time" id="clStoreStart-mon" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-mon" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-mon" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-tue" class="hidden" onchange="clSyncStoreRow('tue')">Tue</label>
+            <input type="time" id="clStoreStart-tue" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-tue" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-tue" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-wed" class="hidden" onchange="clSyncStoreRow('wed')">Wed</label>
+            <input type="time" id="clStoreStart-wed" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-wed" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-wed" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-thu" class="hidden" onchange="clSyncStoreRow('thu')">Thu</label>
+            <input type="time" id="clStoreStart-thu" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-thu" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-thu" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-fri" class="hidden" onchange="clSyncStoreRow('fri')">Fri</label>
+            <input type="time" id="clStoreStart-fri" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-fri" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-fri" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-sat" class="hidden" onchange="clSyncStoreRow('sat')">Sat</label>
+            <input type="time" id="clStoreStart-sat" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-sat" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-sat" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clStoreDay-sun" class="hidden" onchange="clSyncStoreRow('sun')">Sun</label>
+            <input type="time" id="clStoreStart-sun" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clStoreEnd-sun" value="20:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span id="clStoreClosed-sun" class="hidden text-[11px] font-black uppercase tracking-wider text-rose-500">Closed</span>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-2">When the store is open. Switch a day off and it's a closed day — Luca never offers a closed day to a prospect.</p>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Your hours — each day its own</label>
         <div class="space-y-2" id="clSchedule">
           <div class="flex items-center gap-2 flex-wrap">
             <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-mon" class="hidden" onchange="clSyncDayRow('mon')">Mon</label>
@@ -1072,7 +1128,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
             <input type="time" id="clEnd-sun" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
           </div>
         </div>
-        <p class="text-[11px] text-slate-400 mt-2">Tap a day off to mark it off. This same week repeats all year — Luca only books visits on days you're in, inside that day's hours, and quotes them as your availability.</p>
+        <p class="text-[11px] text-slate-400 mt-2">Tap a day off for your day off — the store may still be open that day, so Luca offers your next work day instead. This same week repeats all year, and Luca books visits inside your hours on the days you're in.</p>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -7086,6 +7142,31 @@ function clEffectiveSchedule(p) {
   return sched;
 }
 
+function clEffectiveStoreSchedule(p) {
+  // Store hours live apart from the rep's own hours (Matthew,
+  // 2026-10-25): a day can be a store-open day the rep is off, and a
+  // closed day is a day Luca must never offer. Default until the rep
+  // sets them: Mon–Sat 09:00–20:00, Sunday closed.
+  const sched = {};
+  CLOSER_DAYS.forEach(d => {
+    const e = (p.store_schedule && p.store_schedule[d]) || null;
+    if (e) sched[d] = { open: !!e.open, start: e.start || "09:00", end: e.end || "20:00" };
+    else sched[d] = { open: d !== "sun", start: "09:00", end: "20:00" };
+  });
+  return sched;
+}
+
+function clSyncStoreRow(day) {
+  const cb = document.getElementById("clStoreDay-" + day);
+  const open = !!(cb && cb.checked);
+  ["clStoreStart-", "clStoreEnd-"].forEach(pre => {
+    const el = document.getElementById(pre + day);
+    if (el) { el.disabled = !open; el.style.opacity = open ? "1" : "0.4"; }
+  });
+  const badge = document.getElementById("clStoreClosed-" + day);
+  if (badge) badge.classList.toggle("hidden", open);
+}
+
 function clSyncDayRow(day) {
   const cb = document.getElementById("clDay-" + day);
   const on = !!(cb && cb.checked);
@@ -7112,6 +7193,14 @@ function fillCloserForm() {
     set("clEnd-" + d, sched[d].end);
     clSyncDayRow(d);
   });
+  const storeSched = clEffectiveStoreSchedule(p);
+  CLOSER_DAYS.forEach(d => {
+    const cb = document.getElementById("clStoreDay-" + d);
+    if (cb) cb.checked = storeSched[d].open;
+    set("clStoreStart-" + d, storeSched[d].start);
+    set("clStoreEnd-" + d, storeSched[d].end);
+    clSyncStoreRow(d);
+  });
   const notice = document.getElementById("closerStorageNotice");
   if (notice) notice.classList.toggle("hidden", closerStorageMode !== "local");
 }
@@ -7127,12 +7216,20 @@ async function saveCloserProfileForm() {
     schedule[d] = { on: on, start: (s && s.value) || "09:00", end: (e && e.value) || "19:00" };
     if (on) days.push(d);
   });
+  const storeSchedule = {};
+  CLOSER_DAYS.forEach(d => {
+    const cb = document.getElementById("clStoreDay-" + d);
+    const s = document.getElementById("clStoreStart-" + d);
+    const e = document.getElementById("clStoreEnd-" + d);
+    storeSchedule[d] = { open: !!(cb && cb.checked), start: (s && s.value) || "09:00", end: (e && e.value) || "20:00" };
+  });
   const firstOn = days.length ? schedule[days[0]] : null;
   closerRecord = {
     mode: (document.getElementById("clMode") || {}).value || "draft",
     profile: {
       rep_name: document.getElementById("clRepName").value.trim(),
       credit_app_url: document.getElementById("clCreditUrl").value.trim(),
+      store_schedule: storeSchedule,
       schedule: schedule,
       // Legacy mirrors so anything reading the old single-range shape
       // keeps working; per-day `schedule` is the source of truth.

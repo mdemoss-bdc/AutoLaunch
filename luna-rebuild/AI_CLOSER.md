@@ -19,14 +19,18 @@ assistant" note; otherwise Luca writes as the rep, per the rep's profile.
 Stored in `closer_profiles.profile` (jsonb):
 
 - **Your name** — who Luca is assisting / signing as.
-- **Work schedule** — PER-DAY hours (Matthew, 2026-10-25: each weekday
-  differs; the same week repeats all year — no date/season logic). Stored
-  as `profile.schedule = {mon: {on, start, end}, ...}`; `work_days` and
-  `work_start/work_end` are kept as legacy mirrors. Luca only books
-  visits on days the rep is in, inside that day's hours, quotes the
-  rep's real availability ("I'm in Saturday 9–7"), and treats off-hours
-  differently (capture + draft, or auto-reply per mode — never promises
-  the rep is in when they're not).
+- **Work schedule** — TWO layers (Matthew, 2026-10-25): **store hours**
+  (`profile.store_schedule = {mon: {open, start, end}, ...}` — a day
+  switched off is a CLOSED day; default Mon–Sat 9–20:00, Sun closed) and
+  **personal hours** (`profile.schedule = {mon: {on, start, end}, ...}`
+  — the rep's own days/hours; per-day because each weekday differs; the
+  same week repeats all year — no date/season logic). `work_days` and
+  `work_start/work_end` are kept as legacy mirrors of the personal
+  layer. Luca's rules: never offer a store-closed day; on a store-open
+  day the rep is off, offer the rep's next work day; book inside the
+  rep's hours and quote real availability ("I'm in Saturday 9–7");
+  off-hours get capture + draft or auto-reply per mode — never promise
+  the rep is in when they're not.
 - **Credit-app link** — the store's online credit application URL. When a
   prospect wants to apply, Luca sends this link. Sending the link is a
   hand-off, not a financing discussion: the no-APR / no-approval-promise
