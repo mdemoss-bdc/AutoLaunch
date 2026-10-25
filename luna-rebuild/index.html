@@ -1027,21 +1027,52 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
       </div>
 
       <div>
-        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Your work schedule</label>
-        <div class="flex items-center gap-1.5 flex-wrap" id="clDays">
-          <label class="px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-mon" class="hidden">Mon</label>
-          <label class="px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-tue" class="hidden">Tue</label>
-          <label class="px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-wed" class="hidden">Wed</label>
-          <label class="px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-thu" class="hidden">Thu</label>
-          <label class="px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-fri" class="hidden">Fri</label>
-          <label class="px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-sat" class="hidden">Sat</label>
-          <label class="px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-sun" class="hidden">Sun</label>
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Your work schedule — each day its own hours</label>
+        <div class="space-y-2" id="clSchedule">
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-mon" class="hidden" onchange="clSyncDayRow('mon')">Mon</label>
+            <input type="time" id="clStart-mon" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-mon" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-tue" class="hidden" onchange="clSyncDayRow('tue')">Tue</label>
+            <input type="time" id="clStart-tue" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-tue" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-wed" class="hidden" onchange="clSyncDayRow('wed')">Wed</label>
+            <input type="time" id="clStart-wed" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-wed" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-thu" class="hidden" onchange="clSyncDayRow('thu')">Thu</label>
+            <input type="time" id="clStart-thu" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-thu" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-fri" class="hidden" onchange="clSyncDayRow('fri')">Fri</label>
+            <input type="time" id="clStart-fri" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-fri" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-sat" class="hidden" onchange="clSyncDayRow('sat')">Sat</label>
+            <input type="time" id="clStart-sat" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-sat" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="w-16 text-center px-3 py-1.5 rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 cursor-pointer has-[:checked]:bg-slate-900 has-[:checked]:text-white has-[:checked]:border-slate-900"><input type="checkbox" id="clDay-sun" class="hidden" onchange="clSyncDayRow('sun')">Sun</label>
+            <input type="time" id="clStart-sun" value="09:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <span class="text-[11px] font-bold text-slate-400">to</span>
+            <input type="time" id="clEnd-sun" value="19:00" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+          </div>
         </div>
-        <div class="flex items-center gap-3 mt-3 flex-wrap">
-          <label class="text-[11px] font-bold text-slate-500">FROM <input type="time" id="clStart" value="09:00" class="ml-1 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></label>
-          <label class="text-[11px] font-bold text-slate-500">TO <input type="time" id="clEnd" value="19:00" class="ml-1 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></label>
-        </div>
-        <p class="text-[11px] text-slate-400 mt-1.5">Luca only books visits on your work days, and quotes these hours as your availability.</p>
+        <p class="text-[11px] text-slate-400 mt-2">Tap a day off to mark it off. This same week repeats all year — Luca only books visits on days you're in, inside that day's hours, and quotes them as your availability.</p>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -7039,39 +7070,75 @@ async function persistCloserProfile() {
   saveLocalCloser();
 }
 
+function clEffectiveSchedule(p) {
+  // Per-day schedule {day: {on, start, end}} — the current format; the
+  // same week repeats all year (Matthew, 2026-10-25). Older profiles
+  // stored one range (work_days + work_start/work_end): expand it so a
+  // rep who saved before per-day hours keeps those hours on every
+  // work day until they adjust a day.
+  const sched = {};
+  const legacyDays = Array.isArray(p.work_days) ? p.work_days : ["mon", "tue", "wed", "thu", "fri", "sat"];
+  CLOSER_DAYS.forEach(d => {
+    const e = (p.schedule && p.schedule[d]) || null;
+    if (e) sched[d] = { on: !!e.on, start: e.start || "09:00", end: e.end || "19:00" };
+    else sched[d] = { on: legacyDays.includes(d), start: p.work_start || "09:00", end: p.work_end || "19:00" };
+  });
+  return sched;
+}
+
+function clSyncDayRow(day) {
+  const cb = document.getElementById("clDay-" + day);
+  const on = !!(cb && cb.checked);
+  ["clStart-", "clEnd-"].forEach(pre => {
+    const el = document.getElementById(pre + day);
+    if (el) { el.disabled = !on; el.style.opacity = on ? "1" : "0.4"; }
+  });
+}
+
 function fillCloserForm() {
   const p = closerRecord.profile || {};
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : v; };
   set("clRepName", p.rep_name || "");
   set("clCreditUrl", p.credit_app_url || "");
-  set("clStart", p.work_start || "09:00");
-  set("clEnd", p.work_end || "19:00");
   set("clTone", p.tone || "casual_short");
   set("clInstructions", p.instructions || "");
   const modeEl = document.getElementById("clMode");
   if (modeEl) modeEl.value = closerRecord.mode === "auto" ? "draft" : (closerRecord.mode || "draft");
-  const days = Array.isArray(p.work_days) ? p.work_days : ["mon", "tue", "wed", "thu", "fri", "sat"];
+  const sched = clEffectiveSchedule(p);
   CLOSER_DAYS.forEach(d => {
-    const el = document.getElementById("clDay-" + d);
-    if (el) el.checked = days.includes(d);
+    const cb = document.getElementById("clDay-" + d);
+    if (cb) cb.checked = sched[d].on;
+    set("clStart-" + d, sched[d].start);
+    set("clEnd-" + d, sched[d].end);
+    clSyncDayRow(d);
   });
   const notice = document.getElementById("closerStorageNotice");
   if (notice) notice.classList.toggle("hidden", closerStorageMode !== "local");
 }
 
 async function saveCloserProfileForm() {
-  const days = CLOSER_DAYS.filter(d => {
-    const el = document.getElementById("clDay-" + d);
-    return el && el.checked;
+  const schedule = {};
+  const days = [];
+  CLOSER_DAYS.forEach(d => {
+    const cb = document.getElementById("clDay-" + d);
+    const on = !!(cb && cb.checked);
+    const s = document.getElementById("clStart-" + d);
+    const e = document.getElementById("clEnd-" + d);
+    schedule[d] = { on: on, start: (s && s.value) || "09:00", end: (e && e.value) || "19:00" };
+    if (on) days.push(d);
   });
+  const firstOn = days.length ? schedule[days[0]] : null;
   closerRecord = {
     mode: (document.getElementById("clMode") || {}).value || "draft",
     profile: {
       rep_name: document.getElementById("clRepName").value.trim(),
       credit_app_url: document.getElementById("clCreditUrl").value.trim(),
+      schedule: schedule,
+      // Legacy mirrors so anything reading the old single-range shape
+      // keeps working; per-day `schedule` is the source of truth.
       work_days: days,
-      work_start: document.getElementById("clStart").value || "09:00",
-      work_end: document.getElementById("clEnd").value || "19:00",
+      work_start: firstOn ? firstOn.start : "09:00",
+      work_end: firstOn ? firstOn.end : "19:00",
       tone: document.getElementById("clTone").value || "casual_short",
       instructions: document.getElementById("clInstructions").value.trim()
     }

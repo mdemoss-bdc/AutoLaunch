@@ -19,10 +19,14 @@ assistant" note; otherwise Luca writes as the rep, per the rep's profile.
 Stored in `closer_profiles.profile` (jsonb):
 
 - **Your name** — who Luca is assisting / signing as.
-- **Work schedule** — work days + start/end times. Luca only books visits
-  on work days, quotes the rep's real availability ("I'm in Saturday
-  9–7"), and treats off-hours differently (capture + draft, or auto-reply
-  per mode — never promises the rep is in when they're not).
+- **Work schedule** — PER-DAY hours (Matthew, 2026-10-25: each weekday
+  differs; the same week repeats all year — no date/season logic). Stored
+  as `profile.schedule = {mon: {on, start, end}, ...}`; `work_days` and
+  `work_start/work_end` are kept as legacy mirrors. Luca only books
+  visits on days the rep is in, inside that day's hours, quotes the
+  rep's real availability ("I'm in Saturday 9–7"), and treats off-hours
+  differently (capture + draft, or auto-reply per mode — never promises
+  the rep is in when they're not).
 - **Credit-app link** — the store's online credit application URL. When a
   prospect wants to apply, Luca sends this link. Sending the link is a
   hand-off, not a financing discussion: the no-APR / no-approval-promise
