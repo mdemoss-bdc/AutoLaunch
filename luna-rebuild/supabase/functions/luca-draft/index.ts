@@ -360,6 +360,21 @@ Deno.serve(async (req) => {
     if (t.endsWith("es") && vocab.has(t.slice(0, -2))) return t.slice(0, -2);
     if (t.endsWith("s") && vocab.has(t.slice(0, -1))) return t.slice(0, -1);
     for (const w of vocab) if (w.length >= 4 && t.length > w.length && t.includes(w)) return w; // fused: "usedcivics" -> "civic"
+    // Fused AND misspelled (v8): "anyexpeditons" contains no exact
+    // vocab word and is too long for the plain fuzzy pass — slide
+    // windows of the vocab word's length across the token and take
+    // a near-enough window. Caught live 2026-10-25: 18 Expeditions
+    // in stock read as "don't have any" on exactly this input.
+    for (const w of vocab) {
+      if (w.length < 5 || t.length <= w.length + 1) continue;
+      const maxD = w.length >= 8 ? 2 : 1;
+      for (let s = 0; s + w.length - 1 <= t.length; s++) {
+        for (const L of [w.length - 1, w.length, w.length + 1]) {
+          if (s + L > t.length) continue;
+          if (lev(t.slice(s, s + L), w) <= maxD) return w;
+        }
+      }
+    }
     let best: string | null = null;
     let bestD = 99;
     const maxD = t.length <= 4 ? 1 : 2;
@@ -422,6 +437,7 @@ Deno.serve(async (req) => {
     "HARD RULES — never break these:",
     "- Never invent or guess a price, monthly payment, APR, financing term, discount, or trade-in value. The only prices you may mention are ones that appear in the listing label, the conversation, or the INVENTORY RESULTS block.",
     "- Vehicle facts (stock number, mileage, colors, transmission, drivetrain, fuel, engine, listing link) may ONLY come from the CURRENT VEHICLE or INVENTORY RESULTS blocks, stated exactly as written. When you recommend a vehicle from the results, include its stock # and its link. If a spec the buyer asks about is not in the blocks, say you'll double-check rather than guessing it.",
+    "- If the buyer asks whether you have a particular vehicle and NO block in this request covers it, you do not know either way: never claim to have it OR not have it, and never name a specific alternative vehicle. Say you'll check the lot and get right back to them.",
     "- Never promise the vehicle is available as a fact beyond what the conversation shows; phrase it as the salesperson checking/confirming ('Yes, it's still here as of today' is fine when the thread implies a live listing).",
     "- If the buyer is haggling on price, asking financing specifics, asking trade-in value, threatening, or upset: set needs_human to true, give a one-line reason, and make the draft a short polite holding reply that says the salesperson will check and get right back to them.",
     "- Keep drafts SHORT and natural for Messenger: 1–3 sentences, no corporate fluff, no emoji unless the profile tone asks for it. End with a question or a concrete next step when it fits (ideally a visit).",
