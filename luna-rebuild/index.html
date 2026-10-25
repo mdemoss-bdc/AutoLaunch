@@ -6208,7 +6208,25 @@ function showInventoryPage(navKey) {
 let extPingTimer = null;
 let extPongListener = null;
 
-function renderExtStatus(state) {
+// The newest helper build. Bump this together with the extension's
+// manifest version: the setup page compares the installed helper's
+// self-reported version against it and calls out an out-of-date helper
+// instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
+// happily reported "ready" before the helper could report a version).
+const EXPECTED_EXT_VERSION = "2.1.24";
+function extVersionParts(v) {
+    return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
+}
+function extVersionAtLeast(installed, wanted) {
+    const a = extVersionParts(installed), b = extVersionParts(wanted);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const x = a[i] || 0, y = b[i] || 0;
+        if (x !== y) return x > y;
+    }
+    return true;
+}
+
+function renderExtStatus(state, info) {
     const dot = document.getElementById("extStatusDot");
     const title = document.getElementById("extStatusTitle");
     const detail = document.getElementById("extStatusDetail");
@@ -6217,7 +6235,12 @@ function renderExtStatus(state) {
     if (state === "ready") {
         dot.className = base + "bg-emerald-500";
         title.innerText = "Helper ready \u2713";
-        detail.innerText = "The helper is installed and holds your signed-in AutoLaunch session. Queued Marketplace posts can be claimed \u2014 keep Chrome open and stay signed in to Facebook in Chrome.";
+        detail.innerText = "The helper is installed (v" + (info && info.installed ? info.installed : EXPECTED_EXT_VERSION) + ", up to date) and holds your signed-in AutoLaunch session. Queued Marketplace posts can be claimed \u2014 keep Chrome open and stay signed in to Facebook in Chrome.";
+    } else if (state === "stale") {
+        dot.className = base + "bg-amber-500";
+        title.innerText = "Helper installed \u2014 update available";
+        const have = info && info.installed ? "v" + info.installed : "an older build that can't report its version";
+        detail.innerText = "You have " + have + "; the current helper is v" + EXPECTED_EXT_VERSION + ". It still works, but you're missing the latest fixes. To update: download the fresh app files (step 1 below), replace the old extension folder, then on chrome://extensions click the reload arrow on the AutoLaunch Vehicle Assistant card \u2014 and hard-refresh this tab (Ctrl+Shift+R).";
     } else if (state === "waiting") {
         dot.className = base + "bg-amber-500";
         title.innerText = "Helper installed \u2014 waiting for sign-in";
