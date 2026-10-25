@@ -7032,6 +7032,7 @@ function prospectStage(key) {
 let prospects = [];
 let prospectChats = {}; // prospect_id -> {count, latest, direction} from closer_messages
 let prospectOutbound = {}; // prospect_id -> latest outbound reply {status, body, created_at}
+let prospectMessages = {}; // prospect_id -> chronological captured messages (conversation view)
 let prospectsStorageMode = "server"; // flips to "local" if the table is missing
 let editingProspectId = null;
 let prospectsStageFilter = "all";
@@ -7062,12 +7063,13 @@ async function loadProspects() {
     try {
       const { data: msgs } = await supabaseClient
         .from("closer_messages")
-        .select("prospect_id, body, direction, status, created_at")
+        .select("id, prospect_id, body, direction, origin, status, created_at")
         .eq("user_id", currentUser.id)
         .order("created_at", { ascending: false })
-        .limit(500);
+        .limit(1000);
       prospectChats = {};
       prospectOutbound = {};
+      prospectMessages = {};
       (msgs || []).forEach(m => {
         if (!m.prospect_id) return;
         const slot = prospectChats[m.prospect_id] || (prospectChats[m.prospect_id] = { count: 0, latest: "", direction: "in" });
@@ -7078,7 +7080,10 @@ async function loadProspects() {
         if (m.status && !prospectOutbound[m.prospect_id]) {
           prospectOutbound[m.prospect_id] = { status: m.status, body: m.body || "", created_at: m.created_at };
         }
+        (prospectMessages[m.prospect_id] = prospectMessages[m.prospect_id] || []).push(m);
       });
+      // Conversation view reads oldest -> newest.
+      Object.values(prospectMessages).forEach(list => list.reverse());
     } catch (e) { prospectChats = {}; }
   } catch (err) {
     if (isMissingTableError(err)) prospectsStorageMode = "local";
@@ -7233,6 +7238,8 @@ function renderProspects() {
       ${prospectChats[p.id] ? `<div class="mt-3 pt-3 border-t border-slate-100">
         <button data-prospect-action="draft" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm">🌙 Draft reply with Luca</button>
         <div id="lucaDraft-${escapeHtml(String(p.id))}"></div>
+        <button data-prospect-action="toggle-thread" data-prospect-id="${escapeHtml(String(p.id))}" class="ml-2 px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">💬 View conversation (${prospectChats[p.id].count}) ▾</button>
+        <div id="lucaThread-${escapeHtml(String(p.id))}" class="hidden mt-3 rounded-2xl bg-slate-50 border border-slate-200 p-3 max-h-96 overflow-y-auto">${threadBubblesHtml(p)}</div>
         ${p.thread_ref ? `<div class="mt-2.5 flex items-start gap-2">
           <textarea id="lucaReplyText-${escapeHtml(String(p.id))}" rows="2" placeholder="Type your reply — AutoLaunch sends it through Messenger for you…" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"></textarea>
           <button data-prospect-action="reply" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm shrink-0">Send reply</button>
@@ -7259,7 +7266,72 @@ document.addEventListener("click", function (e) {
   else if (act === "draft") draftLucaReply(id, el);
   else if (act === "copy-draft") copyLucaDraft(id, el);
   else if (act === "reply") sendLucaReply(id, el);
+  else if (act === "toggle-thread") toggleThread(id, el);
+  else if (act === "copy-msg") copyProspectMsg(el.getAttribute("data-msg-id"), el);
 });
+
+// CONVERSATION VIEW (Matthew's ask, 2026-10-25): expand a prospect to
+// read the whole captured thread as chat bubbles — buyer left, you
+// right, Luca's drafts tagged — with every message individually
+// copyable (button + selectable text) for pasting anywhere.
+function threadBubblesHtml(p) {
+  const all = prospectMessages[p.id] || [];
+  const list = all.slice(-100);
+  if (!list.length) return `<p class="text-xs text-slate-400">No messages captured yet.</p>`;
+  const tags = { queued: "⏳ queued", sending: "📤 sending", sent: "✓ sent", failed: "⚠ failed" };
+  const rows = list.map(m => {
+    const out = m.direction === "out";
+    const ai = m.origin === "ai";
+    const when = m.created_at ? new Date(m.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+    const bubbleCls = ai
+      ? "bg-violet-50 border-violet-200 text-slate-800"
+      : out
+        ? "bg-blue-600 border-blue-600 text-white"
+        : "bg-white border-slate-200 text-slate-800";
+    const who = ai ? "🌙 Luca draft" : out ? "You" : (p.name || "Buyer");
+    const statusTag = m.status && tags[m.status] ? ` · <span class="font-bold">${tags[m.status]}</span>` : "";
+    return `<div class="flex ${out ? "justify-end" : "justify-start"} mb-2">
+      <div class="max-w-[85%]">
+        <div class="px-3 py-2 rounded-2xl border ${bubbleCls} text-[13px] leading-snug select-text whitespace-pre-wrap break-words">${escapeHtml(String(m.body || ""))}</div>
+        <div class="mt-0.5 flex items-center gap-2 ${out ? "justify-end" : ""} text-[10px] text-slate-400">
+          <span>${escapeHtml(who)} · ${escapeHtml(when)}${statusTag}</span>
+          <button data-prospect-action="copy-msg" data-msg-id="${escapeHtml(String(m.id))}" class="font-bold text-blue-600 cursor-pointer">Copy</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+  return (all.length > 100 ? `<p class="text-[11px] text-slate-400 mb-2">Showing the latest 100 messages.</p>` : "") + rows;
+}
+
+function toggleThread(id, btn) {
+  const panel = document.getElementById("lucaThread-" + id);
+  if (!panel) return;
+  const opening = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden");
+  const count = (prospectMessages[id] || []).length;
+  btn.innerHTML = opening ? "💬 Hide conversation ▴" : `💬 View conversation (${count}) ▾`;
+  if (opening) panel.scrollTop = panel.scrollHeight;
+}
+
+function copyProspectMsg(msgId, btn) {
+  let body = "";
+  Object.values(prospectMessages).forEach(list => list.forEach(m => {
+    if (String(m.id) === String(msgId)) body = m.body || "";
+  }));
+  if (!body) return;
+  const done = () => { const o = btn.innerHTML; btn.innerHTML = "Copied ✓"; setTimeout(() => { btn.innerHTML = o; }, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(body).then(done).catch(done);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = body;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* best effort */ }
+    ta.remove();
+    done();
+  }
+}
 
 // OUTBOUND REPLIES (Prospects inbox step 2, 2026-10-25): the rep types
 // in AutoLaunch; the row lands in closer_messages with status "queued";
