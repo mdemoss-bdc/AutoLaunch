@@ -7084,6 +7084,9 @@ async function loadProspects() {
         const slot = prospectChats[m.prospect_id] || (prospectChats[m.prospect_id] = { count: 0, latest: "", direction: "in" });
         slot.count++;
         if (!slot.latest) { slot.latest = m.body || ""; slot.direction = m.direction || "in"; }
+        // Newest-first rows: the first INBOUND row seen per prospect
+        // is its latest buyer message — drives the attention badge.
+        if (m.direction === "in" && !slot.lastInboundAt) slot.lastInboundAt = m.created_at;
         // Rows are newest-first: the first statused row per prospect is
         // its latest outbound reply state.
         if (m.status && !prospectOutbound[m.prospect_id]) {
@@ -7157,10 +7160,31 @@ async function setProspectStage(id, stage) {
   renderProspects();
 }
 
+// ATTENTION-ONLY BADGE (Matthew's ask, 2026-10-25): the sidebar
+// number used to count every New-stage prospect, so it sat at "1"
+// forever and meant nothing. Now it counts only prospects with an
+// update he hasn't seen: a buyer message captured since his last
+// visit to this page, or a brand-new Marketplace prospect Luca
+// captured for him. Opening Prospects marks everything seen.
+function prospectsSeenKey() { return "autolaunch_prospects_seen_" + (currentUser ? currentUser.id : "anon"); }
+function getProspectsSeenAt() {
+  try { return Number(localStorage.getItem(prospectsSeenKey()) || 0); } catch (e) { return 0; }
+}
+function markProspectsSeen() {
+  try { localStorage.setItem(prospectsSeenKey(), String(Date.now())); } catch (e) { /* badge may re-flag */ }
+  updateProspectsBadge();
+}
+function prospectNeedsAttention(p, seenAt) {
+  const chat = prospectChats[p.id];
+  if (chat && chat.lastInboundAt && Date.parse(chat.lastInboundAt) > seenAt) return true;
+  if (p.source === "marketplace" && p.created_at && Date.parse(p.created_at) > seenAt) return true;
+  return false;
+}
 function updateProspectsBadge() {
   const b = document.getElementById("prospectsNewBadge");
   if (!b) return;
-  const n = prospects.filter(p => (p.stage || "new") === "new").length;
+  const seenAt = getProspectsSeenAt();
+  const n = prospects.filter(p => prospectNeedsAttention(p, seenAt)).length;
   b.innerText = n;
   b.classList.toggle("hidden", !n);
 }
@@ -7183,6 +7207,7 @@ async function showProspectsPage() {
   document.getElementById("prospectsPage").classList.remove("hidden");
   await loadProspects();
   renderProspects();
+  markProspectsSeen(); // he's looking at them now — badge clears
   syncQueuePoller();
 }
 
@@ -7420,6 +7445,9 @@ async function refreshProspectsSoft() {
       const pill = document.getElementById("lucaReplyStatus-" + p.id);
       if (pill) pill.innerHTML = outboundPillHtml(prospectOutbound[p.id]);
     });
+    // He's on the page watching updates land — count them as seen so
+    // the sidebar badge doesn't light up for what's on his screen.
+    markProspectsSeen();
   } catch (e) { /* next tick retries */ } finally {
     prospectsSoftBusy = false;
   }
