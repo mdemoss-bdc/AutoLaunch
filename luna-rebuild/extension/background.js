@@ -1371,6 +1371,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "AUTOLAUNCH_NUDGE_OUTBOUND") {
+    // Only the bridge on the AutoLaunch origin may nudge (same sender
+    // discipline as the login handoff). Runs the outbound claim
+    // immediately — the 1-minute alarm stays as the safety net.
+    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    if (!fromApp) return;
+    checkOutboundReplies();
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (message.type === "AUTOLAUNCH_FETCH_PHOTO") {
     // Only the Facebook content script may use the relay (it is the one
     // CORS-blocked from dealer photo servers), and only real URLs — the

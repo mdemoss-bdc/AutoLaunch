@@ -6496,7 +6496,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.36";
+const EXPECTED_EXT_VERSION = "2.1.37";
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }
@@ -7033,6 +7033,7 @@ let prospects = [];
 let prospectChats = {}; // prospect_id -> {count, latest, direction} from closer_messages
 let prospectOutbound = {}; // prospect_id -> latest outbound reply {status, body, created_at}
 let prospectMessages = {}; // prospect_id -> chronological captured messages (conversation view)
+const expandedThreadIds = new Set(); // prospect ids whose conversation panel is open
 let prospectsStorageMode = "server"; // flips to "local" if the table is missing
 let editingProspectId = null;
 let prospectsStageFilter = "all";
@@ -7227,7 +7228,7 @@ function renderProspects() {
           ${contact ? `<p class="text-xs text-slate-500 mt-0.5">${contact}</p>` : ""}
           ${p.vehicle_label ? `<p class="text-xs text-slate-600 mt-1"><span class="font-semibold text-slate-900">Asking about:</span> ${escapeHtml(p.vehicle_label)}</p>` : ""}
           ${p.notes ? `<p class="text-xs text-slate-500 mt-0.5 italic">"${escapeHtml(p.notes)}"</p>` : ""}
-          ${prospectChats[p.id] ? `<p class="text-xs text-slate-500 mt-0.5">💬 ${prospectChats[p.id].count} captured · last: “${escapeHtml(String(prospectChats[p.id].latest || "").slice(0, 90))}”</p>` : ""}
+          ${prospectChats[p.id] ? `<p id="lucaChatLine-${escapeHtml(String(p.id))}" class="text-xs text-slate-500 mt-0.5">💬 ${prospectChats[p.id].count} captured · last: “${escapeHtml(String(prospectChats[p.id].latest || "").slice(0, 90))}”</p>` : ""}
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
           <select data-prospect-stage="${escapeHtml(String(p.id))}" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-600">${options}</select>
@@ -7249,6 +7250,16 @@ function renderProspects() {
       </div>` : ""}
     </div>`;
   }).join("");
+  // Reopen conversation panels that were expanded before this render
+  // (soft refresh / filter changes re-render the list).
+  expandedThreadIds.forEach(id => {
+    const panel = document.getElementById("lucaThread-" + id);
+    if (!panel) return;
+    panel.classList.remove("hidden");
+    const btn = document.querySelector(`[data-prospect-action="toggle-thread"][data-prospect-id="${id}"]`);
+    if (btn) btn.innerHTML = "💬 Hide conversation ▴";
+    panel.scrollTop = panel.scrollHeight;
+  });
 }
 
 function setProspectsStageFilter(key) {
@@ -7308,6 +7319,7 @@ function toggleThread(id, btn) {
   if (!panel) return;
   const opening = panel.classList.contains("hidden");
   panel.classList.toggle("hidden");
+  if (opening) expandedThreadIds.add(String(id)); else expandedThreadIds.delete(String(id));
   const count = (prospectMessages[id] || []).length;
   btn.innerHTML = opening ? "💬 Hide conversation ▴" : `💬 View conversation (${count}) ▾`;
   if (opening) panel.scrollTop = panel.scrollHeight;
@@ -7332,6 +7344,51 @@ function copyProspectMsg(msgId, btn) {
     done();
   }
 }
+
+// SOFT REALTIME (2026-10-25): while the Prospects page is on screen,
+// re-read the chat data every ~8 seconds and patch the DOM in place —
+// new buyer lines, counts, open conversation panels and delivery
+// pills update WITHOUT a full re-render, so a half-typed reply or an
+// open thread is never wiped. Only a changed prospect SET (a brand
+// new prospect) triggers a full render, with reply drafts preserved.
+let prospectsSoftBusy = false;
+async function refreshProspectsSoft() {
+  if (prospectsSoftBusy || document.hidden) return;
+  const list = document.getElementById("prospectsList");
+  if (!list || list.offsetParent === null) return; // Prospects not on screen
+  prospectsSoftBusy = true;
+  try {
+    const beforeIds = prospects.map(p => String(p.id)).join(",");
+    const drafts = {};
+    document.querySelectorAll('[id^="lucaReplyText-"]').forEach(ta => { if (ta.value) drafts[ta.id] = ta.value; });
+    await loadProspects();
+    const afterIds = prospects.map(p => String(p.id)).join(",");
+    if (beforeIds !== afterIds) {
+      renderProspects();
+      Object.entries(drafts).forEach(([tid, v]) => { const ta = document.getElementById(tid); if (ta) ta.value = v; });
+      return;
+    }
+    prospects.forEach(p => {
+      const chat = prospectChats[p.id];
+      const line = document.getElementById("lucaChatLine-" + p.id);
+      if (line && chat) line.innerHTML = `💬 ${chat.count} captured · last: “${escapeHtml(String(chat.latest || "").slice(0, 90))}”`;
+      const panel = document.getElementById("lucaThread-" + p.id);
+      if (panel && !panel.classList.contains("hidden")) {
+        const nearBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 80;
+        panel.innerHTML = threadBubblesHtml(p);
+        if (nearBottom) panel.scrollTop = panel.scrollHeight;
+      } else if (panel) {
+        const btn = document.querySelector(`[data-prospect-action="toggle-thread"][data-prospect-id="${p.id}"]`);
+        if (btn && chat) btn.innerHTML = `💬 View conversation (${chat.count}) ▾`;
+      }
+      const pill = document.getElementById("lucaReplyStatus-" + p.id);
+      if (pill) pill.innerHTML = outboundPillHtml(prospectOutbound[p.id]);
+    });
+  } catch (e) { /* next tick retries */ } finally {
+    prospectsSoftBusy = false;
+  }
+}
+setInterval(refreshProspectsSoft, 8000);
 
 // OUTBOUND REPLIES (Prospects inbox step 2, 2026-10-25): the rep types
 // in AutoLaunch; the row lands in closer_messages with status "queued";
@@ -7376,6 +7433,11 @@ async function sendLucaReply(id, btn) {
     if (ta) ta.value = "";
     prospectOutbound[id] = { status: "queued", body, created_at: new Date().toISOString() };
     if (statusEl) statusEl.innerHTML = outboundPillHtml(prospectOutbound[id]);
+    // Realtime fast path (2026-10-25): poke the helper through the
+    // bridge so it claims the reply NOW instead of at its next
+    // 1-minute poll. The alarm stays as the fallback — "time lost
+    // kills deals" (Matthew).
+    try { window.postMessage({ type: "AUTOLAUNCH_EXT_NUDGE_OUTBOUND" }, "*"); } catch (e) { /* alarm fallback */ }
   } catch (err) {
     alert("Could not queue that reply: " + err.message);
   } finally {

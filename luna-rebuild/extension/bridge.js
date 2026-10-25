@@ -60,6 +60,19 @@
       return;
     }
 
+    if (data.type === "AUTOLAUNCH_EXT_NUDGE_OUTBOUND") {
+      // Realtime fast path (2026-10-25): the app just queued a reply —
+      // tell the worker to claim it now instead of at its next 1-minute
+      // poll. Fire-and-forget; the alarm remains the fallback.
+      try {
+        chrome.runtime.sendMessage(
+          { type: "AUTOLAUNCH_NUDGE_OUTBOUND" },
+          () => void chrome.runtime.lastError
+        );
+      } catch (e) { /* worker unreachable — alarm fallback covers it */ }
+      return;
+    }
+
     if (data.type !== "AUTOLAUNCH_EXT_LOGIN" || !data.userId) return;
 
     try {

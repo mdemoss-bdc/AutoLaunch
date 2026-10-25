@@ -350,10 +350,10 @@
       if (observedTimer) return;
       observedTimer = setTimeout(function () {
         observedTimer = null;
-        if (Date.now() - lastObservedPass < 12000) return;
+        if (Date.now() - lastObservedPass < 6000) return;
         lastObservedPass = Date.now();
         autoPass();
-      }, 5000);
+      }, 2000);
     });
     listObserver.observe(document.documentElement, { childList: true, subtree: true });
   } catch (e) { /* the 45s timer still covers it */ }
