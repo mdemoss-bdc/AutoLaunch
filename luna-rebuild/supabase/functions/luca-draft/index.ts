@@ -144,6 +144,62 @@ Deno.serve(async (req) => {
     .from("closer_profiles").select("*").eq("user_id", user.id).maybeSingle();
   const profile = (profileRow && (profileRow as any).profile) || {};
 
+  // ---- Voice learning (2026-10-25, Matthew's ask): Luca learns how
+  // a rep talks from the replies they ALREADY send — no draft-editing
+  // required. Auto-capture saves every rep reply (origin 'rep'), so
+  // buyer -> rep pairs from the rep's OTHER threads become voice
+  // examples in the prompt below. Effective from the first captured
+  // conversation; sharper with every chat. Per-user by construction
+  // (RLS + this user filter) — voices never mix between reps.
+  type VRow = { prospect_id: string; direction: string; origin: string; body: string; status: string | null; created_at: string };
+  const junkBody = (b: string) => !b || b.length < 3 || b.length > 400 || /\.(csv|txt|pdf|jpe?g|png|zip)$/i.test(b.trim());
+  const { data: voiceRows } = await supabase
+    .from("closer_messages")
+    .select("prospect_id, direction, origin, body, created_at, status")
+    .eq("user_id", user.id)
+    .neq("prospect_id", prospectId)
+    .order("created_at", { ascending: false })
+    .limit(150);
+  const byProspect = new Map<string, VRow[]>();
+  for (const r of (voiceRows || []) as VRow[]) {
+    if (!r.prospect_id) continue;
+    if (!byProspect.has(r.prospect_id)) byProspect.set(r.prospect_id, []);
+    byProspect.get(r.prospect_id)!.push(r);
+  }
+  const allPairs: { buyer: string; rep: string; at: string }[] = [];
+  for (const rows of byProspect.values()) {
+    const chrono = rows.slice().reverse(); // oldest first within the thread
+    for (let i = 0; i < chrono.length; i++) {
+      if (chrono[i].direction !== "in" || junkBody(String(chrono[i].body))) continue;
+      for (let j = i + 1; j < chrono.length; j++) {
+        if (chrono[j].direction === "in") break;
+        const r = chrono[j];
+        if (r.direction === "out" && r.origin === "rep" && r.status !== "failed" && !junkBody(String(r.body))) {
+          allPairs.push({ buyer: String(chrono[i].body).slice(0, 300), rep: String(r.body).slice(0, 300), at: String(r.created_at || "") });
+          break;
+        }
+      }
+    }
+  }
+  allPairs.sort((a, b) => (a.at < b.at ? 1 : -1)); // most recent first
+  const seenRep = new Set<string>();
+  const voicePairs = allPairs.filter(p => {
+    const k = p.rep.toLowerCase();
+    if (seenRep.has(k)) return false;
+    seenRep.add(k);
+    return true;
+  }).slice(0, 10);
+
+  // Corrections (draft -> what the rep actually sent) remain the
+  // strongest signal when they exist — the rep explicitly fixed Luca.
+  const { data: corrRows } = await supabase
+    .from("closer_corrections")
+    .select("draft, final")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(8);
+  const corrPairs = (corrRows || []).filter((c: any) => c.draft && c.final && c.draft !== c.final);
+
   const now = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York", weekday: "long", hour: "numeric", minute: "2-digit",
     month: "long", day: "numeric",
@@ -164,6 +220,7 @@ Deno.serve(async (req) => {
     "- If the buyer is haggling on price, asking financing specifics, asking trade-in value, threatening, or upset: set needs_human to true, give a one-line reason, and make the draft a short polite holding reply that says the salesperson will check and get right back to them.",
     "- Keep drafts SHORT and natural for Messenger: 1–3 sentences, no corporate fluff, no emoji unless the profile tone asks for it. End with a question or a concrete next step when it fits (ideally a visit).",
     "- Follow the salesperson's standing instructions in the profile above everything except these hard rules.",
+    "- When the request includes the salesperson's real past replies or corrections, they are the authority on voice: copy their greetings, sentence length, wording habits, and how they offer times and close. Their real phrasing beats generic sales-speak.",
     "",
     'Reply with ONLY a JSON object: {"draft": string, "needs_human": boolean, "reason": string}',
   ].join("\n");
@@ -171,6 +228,17 @@ Deno.serve(async (req) => {
   const transcript = thread
     .map((m: any) => (m.direction === "in" ? "BUYER: " : m.origin === "ai" ? "REP (Luca draft): " : "REP: ") + m.body)
     .join("\n");
+  const voiceBlock = voicePairs.length ? [
+    "",
+    "HOW THIS SALESPERSON ACTUALLY WRITES — real exchanges from their own chats (other buyers). Draft in this voice:",
+    ...voicePairs.map(p => "BUYER: " + p.buyer + "\nSALESPERSON SENT: " + p.rep),
+  ] : [];
+  const corrBlock = corrPairs.length ? [
+    "",
+    "CORRECTIONS — Luca's earlier drafts vs what this salesperson actually sent. Their version wins; do not repeat phrasing they removed:",
+    ...corrPairs.map((c: any) => "LUCA WROTE: " + String(c.draft).slice(0, 300) + "\nSALESPERSON SENT: " + String(c.final).slice(0, 300)),
+  ] : [];
+
   const userPrompt = [
     "Listing the buyer is asking about: " + (prospect.vehicle_label || "(unknown)"),
     "Buyer name: " + (prospect.name || "(unknown)"),
@@ -178,6 +246,8 @@ Deno.serve(async (req) => {
     "",
     "Conversation so far (oldest first):",
     transcript,
+    ...voiceBlock,
+    ...corrBlock,
     "",
     "Write the salesperson's next reply.",
   ].filter(Boolean).join("\n");
