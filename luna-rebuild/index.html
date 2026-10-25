@@ -1616,8 +1616,8 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
     <button onclick="setPillFilter('POSTED')" id="pillPosted" class="px-3.5 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-semibold cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap">
       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Posted <span id="pillPostedCount">0</span>
     </button>
-    <button onclick="toggleNeedsPriceOnly()" id="needsPriceChip" style="display:none" class="px-3.5 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm cursor-pointer items-center gap-1.5 shrink-0 whitespace-nowrap">
-      <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> <span id="needsPriceCount">0</span> need a price
+    <button onclick="toggleNeedsAttentionOnly()" id="needsPriceChip" style="display:none" class="px-3.5 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm cursor-pointer items-center gap-1.5 shrink-0 whitespace-nowrap">
+      <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> <span id="needsPriceCount">0</span> need attention
     </button>
   </div>
 
@@ -4170,7 +4170,7 @@ if (filterMileageRange) {
     if (activePillFilter === 'ACTIVE' && isSold(car)) return false;
     if (activePillFilter === 'POSTED' && !car.marketplace_posted_at) return false;
     if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
-    if (needsPriceOnly && hasPrice(car)) return false;
+    if (needsAttentionOnly && !carNeedsAttention(car)) return false;
 
     return carMatchesInventorySearch(car, query);
   });
@@ -4205,15 +4205,17 @@ renderTableRows(filtered);
 syncInventorySelectionUI();
 updateClearFiltersVisibility();
 updateMobileFilterBadge();
-// NO-PRICE RULE: keep the amber alert chip honest after every render.
+// NEEDS-ATTENTION CHIP: keep the amber alert chip honest after every
+// render — it counts every unsold car that can't post yet (no price OR
+// a missing required color); clicking it filters to exactly those cars.
 const npChip = document.getElementById("needsPriceChip");
 if (npChip) {
-  const npCount = rawInventory.filter(c => !isSold(c) && !hasPrice(c)).length;
+  const npCount = rawInventory.filter(c => !isSold(c) && carNeedsAttention(c)).length;
   document.getElementById("needsPriceCount").innerText = npCount;
   npChip.style.display = npCount > 0 ? "inline-flex" : "none";
-  npChip.classList.toggle("ring-2", needsPriceOnly);
-  npChip.classList.toggle("ring-amber-800", needsPriceOnly);
-  npChip.classList.toggle("bg-amber-700", needsPriceOnly);
+  npChip.classList.toggle("ring-2", needsAttentionOnly);
+  npChip.classList.toggle("ring-amber-800", needsAttentionOnly);
+  npChip.classList.toggle("bg-amber-700", needsAttentionOnly);
 }
 }
 // Button Audit: list/grid view toggle. Only ONE view is rendered at a
@@ -4431,6 +4433,13 @@ function postingGaps(car) {
   if (colorMissingValue(car.interior_color)) gaps.push({ key: "interior_color", label: "Interior color" });
   return gaps;
 }
+// One "needs attention" bucket (Matthew, 2026-10-25): the amber pills-bar
+// chip counts and filters BOTH fixable blockers — no price, or a missing
+// color — so there's a single worklist of cars that can't post yet.
+// Each row still shows its own specific fix button.
+function carNeedsAttention(car) {
+  return !!car && (!hasPrice(car) || postingGaps(car).length > 0);
+}
 function carColorsHtml(car) {
   const part = (label, val) => colorMissingValue(val)
     ? `<span class="text-amber-600 font-bold">${label}: missing</span>`
@@ -4486,9 +4495,9 @@ function noPriceButton(car, vinAttr) {
   return `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">⚠ Price needed — tap to add</button>`;
 }
 
-let needsPriceOnly = false;
-function toggleNeedsPriceOnly() {
-  needsPriceOnly = !needsPriceOnly;
+let needsAttentionOnly = false;
+function toggleNeedsAttentionOnly() {
+  needsAttentionOnly = !needsAttentionOnly;
   applyFilters();
 }
 
