@@ -93,6 +93,27 @@ async function callGemini(apiKey: string, system: string, user: string) {
   throw new Error("Google's free AI is busy right now (demand spike) — give it a minute and try the draft again.");
 }
 
+// Levenshtein distance — small, dependency-free (vocab matching, v7).
+function lev(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// Per-user make/model vocabulary cache (10 min, warm instances): the
+// lot's own words are the dictionary buyer text is matched against.
+const vocabCache = new Map<string, { at: number; words: Set<string> }>();
+const TERM_ALIAS: Record<string, string> = { chevy: "chevrolet", vw: "volkswagen" };
+
 // Models occasionally wrap or pad the JSON despite responseMimeType;
 // parse strictly first, then extract the first {...} block, then fall
 // back to treating plain prose as the draft (Gemini drafts are prose —
@@ -302,22 +323,56 @@ Deno.serve(async (req) => {
   const buyerRaw = thread.filter((m: any) => m.direction === "in").slice(-3)
     .map((m: any) => String(m.body || "")).join(" ");
   const buyerText = buyerRaw.toLowerCase();
-  // Capitalized words in the buyer's own text are usually the vehicle
-  // names (Jetta, Civics) — search those FIRST. v5 searched in
-  // sentence order and the token cap cut "civics" off entirely,
-  // so a stocked model read as "not in stock" (caught in E2E test).
-  const capWords = new Set((buyerRaw.match(/\b[A-Z][a-z0-9]+(?:-[A-Za-z0-9]+)?/g) || []).map(w => w.toLowerCase()));
   const rawTokens = (buyerText.match(/[a-z0-9]+(?:-[a-z0-9]+)?/g) || [])
-    .filter(t => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t))
-    .sort((a, b) => (capWords.has(a) ? 0 : 1) - (capWords.has(b) ? 0 : 1));
-  // Singularize too: buyers type "civics"/"trucks", inventory says
-  // "Civic"/"Truck" — an ILIKE contains-match misses the plural.
-  const tokens = Array.from(new Set(rawTokens.flatMap(t => {
-    const forms = [t];
-    if (t.endsWith("es") && t.length > 4) forms.push(t.slice(0, -2));
-    if (t.endsWith("s") && t.length > 3) forms.push(t.slice(0, -1));
-    return forms;
-  }))).slice(0, 10);
+    .filter(t => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
+
+  // ---- Vocabulary-first matching (v7, Matthew's ask): buyers
+  // misspell and skip punctuation ("colorodo", "usedcivics", "jeat",
+  // no apostrophes). Searching with the buyer's RAW words failed
+  // twice in testing — filler words flooded the query cap and the
+  // vehicle word never got searched ("civics" in v5, "colorados" in
+  // v6), so stocked cars read as not-in-stock. Now the buyer's words
+  // are matched against the lot's REAL make/model vocabulary first
+  // (exact / alias / singular / fused-word / edit-distance), and the
+  // inventory is searched ONLY with confirmed vehicle words, spelled
+  // the inventory's way. Filler can never flood anything again.
+  let vocab = new Set<string>();
+  try {
+    const cached = vocabCache.get(user.id);
+    if (cached && Date.now() - cached.at < 600000) {
+      vocab = cached.words;
+    } else {
+      const { data: vrows } = await supabase
+        .from("scraped_inventory").select("make, model").eq("is_active", true).limit(4000);
+      for (const r of vrows || []) {
+        for (const s of [String((r as any).make || ""), String((r as any).model || "")]) {
+          for (const w of s.toLowerCase().split(/[^a-z0-9]+/)) if (w.length >= 3) vocab.add(w);
+        }
+      }
+      if (vocab.size) vocabCache.set(user.id, { at: Date.now(), words: vocab });
+    }
+  } catch { /* fail-open: resolveTerm falls back to the raw word */ }
+  const resolveTerm = (t: string): string | null => {
+    if (!vocab.size) return t; // no vocabulary available — old behavior
+    if (vocab.has(t)) return t;
+    const alias = TERM_ALIAS[t];
+    if (alias && vocab.has(alias)) return alias;
+    if (t.endsWith("es") && vocab.has(t.slice(0, -2))) return t.slice(0, -2);
+    if (t.endsWith("s") && vocab.has(t.slice(0, -1))) return t.slice(0, -1);
+    for (const w of vocab) if (w.length >= 4 && t.length > w.length && t.includes(w)) return w; // fused: "usedcivics" -> "civic"
+    let best: string | null = null;
+    let bestD = 99;
+    const maxD = t.length <= 4 ? 1 : 2;
+    for (const w of vocab) {
+      if (Math.abs(w.length - t.length) > maxD) continue;
+      const d = lev(t, w);
+      if (d < bestD) { bestD = d; best = w; }
+    }
+    return bestD <= maxD ? best : null;
+  };
+  const tokens = Array.from(new Set(
+    rawTokens.map(resolveTerm).filter((x): x is string => !!x),
+  )).slice(0, 6);
   let invMatches: any[] = [];
   {
     const seenKey = new Set<string>();
