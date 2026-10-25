@@ -689,6 +689,12 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
         </div>
         <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-600 text-[10px] font-mono font-bold text-white">0</span>
       </a>
+      <a href="#" onclick="triggerLiveLotCrawl(event); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-rotate w-4 text-blue-600 text-xs"></i>
+          <span>Sync Inventory</span>
+        </div>
+      </a>
     </div>
 
     <!-- FOOTER TOOLS -->
@@ -1359,15 +1365,6 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 
     <span class="text-xs text-blue-600 font-semibold cursor-pointer" onclick="openGuide('inventory')">How inventory works</span>
     <span class="text-xs text-blue-600 font-semibold cursor-pointer" onclick="openGuide('locations')">Location groups</span>
-
-    <button
-        onclick="triggerLiveLotCrawl(event)"
-        class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
-
-        <i class="fa-solid fa-rotate text-[10px]"></i>
-        <span>Refresh Inventory</span>
-
-    </button>
 
     <button
         onclick="openSettingsModal()"
@@ -6036,6 +6033,14 @@ async function triggerLiveLotCrawl(event) {
     const btn =
         event.currentTarget;
 
+    // The Sync Inventory control now lives in the sidebar (Matthew,
+    // 2026-10-25) — any element can drive this handler: it snapshots
+    // and restores the element's own content, and ignores repeat
+    // clicks while a sync is being queued.
+    if (btn.dataset.syncing === "1") return;
+    btn.dataset.syncing = "1";
+    const originalHTML = btn.innerHTML;
+
     btn.disabled = true;
     btn.classList.add("opacity-60");
 
@@ -6094,9 +6099,9 @@ async function triggerLiveLotCrawl(event) {
 
         btn.disabled = false;
         btn.classList.remove("opacity-60");
+        delete btn.dataset.syncing;
 
-        btn.innerHTML =
-            '<i class="fa-solid fa-rotate"></i><span>Refresh Inventory</span>';
+        btn.innerHTML = originalHTML;
 
     }
 
@@ -8947,7 +8952,7 @@ const GUIDES = {
       "Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels."
     ],
     notes: [
-      "Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you press Refresh Inventory.",
+      "Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.",
       "Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.",
       "Every auto-posted car counts against your daily posting limit, same as cars you queue by hand.",
       "A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website."
@@ -9050,7 +9055,7 @@ const GUIDES = {
     icon: "fa-solid fa-car",
     iconClasses: "bg-indigo-50 text-indigo-600 border-indigo-200",
     modal: null,
-    what: "Every vehicle AutoLaunch knows about, synced from your dealership website. Sync runs automatically overnight, and the Refresh Inventory button pulls a fresh copy on demand. This list is the single source of truth for posting — and for Luca's answers.",
+    what: "Every vehicle AutoLaunch knows about, synced from your dealership website. Sync runs automatically overnight, and Sync Inventory in the left panel pulls a fresh copy on demand. This list is the single source of truth for posting — and for Luca's answers.",
     steps: [
       "Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.",
       "Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.",
