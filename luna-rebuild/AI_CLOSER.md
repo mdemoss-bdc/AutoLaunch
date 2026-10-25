@@ -7,6 +7,30 @@ Matthew's call after the Owini comparison: NO CRM. Two small things instead:
    wants: self-learning, and directed by the rep talking to it, not a fixed
    vendor script (that is the deliberate contrast with Owini's Closer).
 
+## Name: Luca
+
+The closer is named **Luca** (Matthew, 2026-10-25: "something that sounds
+like you — like your son"). Luna → Luca; Luca means "light". Buyer-facing
+copy introduces Luca only if the rep turns on the optional "I use an
+assistant" note; otherwise Luca writes as the rep, per the rep's profile.
+
+## The rep's profile (fields on the Luca screen — Matthew, 2026-10-25)
+
+Stored in `closer_profiles.profile` (jsonb):
+
+- **Your name** — who Luca is assisting / signing as.
+- **Work schedule** — work days + start/end times. Luca only books visits
+  on work days, quotes the rep's real availability ("I'm in Saturday
+  9–7"), and treats off-hours differently (capture + draft, or auto-reply
+  per mode — never promises the rep is in when they're not).
+- **Credit-app link** — the store's online credit application URL. When a
+  prospect wants to apply, Luca sends this link. Sending the link is a
+  hand-off, not a financing discussion: the no-APR / no-approval-promise
+  floor still applies.
+- **Tone** — starter voice (casual & short / friendly & detailed /
+  professional), refined later by the corrections bank.
+- **Standing instructions** — free text from the rep (see Talk to it).
+
 ## Invariants
 
 - Prospects/Closer problems must NEVER affect posting (fail-open, same rule
