@@ -1081,6 +1081,7 @@ async function finishJobFailed(queueId, reason, diags) {
   const errorMessage =
     ((typeof reason === "string" && reason.startsWith("fields_unfilled")) ||
      reason === "publish_unverified" ||
+     reason === "publish_button_not_found" ||
      (job && job.action === "delete"))
       ? compactDiagError(diags)
       : null;
