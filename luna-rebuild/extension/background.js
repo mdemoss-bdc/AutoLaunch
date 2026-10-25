@@ -438,7 +438,7 @@ async function checkOutboundReplies() {
     const { luca_pending_delivery: pending } = await chrome.storage.local.get(["luca_pending_delivery"]);
     if (pending) {
       if (Date.now() - (pending.at || 0) > 3 * 60 * 1000) {
-        try { await sbPatch(`closer_messages?id=eq.${pending.messageId}&status=eq.sending`, { status: "failed" }); } catch (e) { /* best effort */ }
+        try { await sbPatch(`closer_messages?id=eq.${pending.messageId}&status=eq.sending`, { status: "failed", delivery_error: "timeout_no_result" }); } catch (e) { /* best effort */ }
         await chrome.storage.local.remove(["luca_pending_delivery"]);
       }
       return; // one delivery at a time
@@ -492,10 +492,15 @@ async function checkOutboundReplies() {
   }
 }
 
-async function finishOutboundReply(messageId, ok) {
+async function finishOutboundReply(messageId, ok, error) {
   const { luca_pending_delivery: pending } = await chrome.storage.local.get(["luca_pending_delivery"]);
   if (!pending || pending.messageId !== messageId) return;
-  try { await sbPatch(`closer_messages?id=eq.${messageId}`, { status: ok ? "sent" : "failed" }); } catch (e) { /* best effort */ }
+  try {
+    await sbPatch(`closer_messages?id=eq.${messageId}`, {
+      status: ok ? "sent" : "failed",
+      delivery_error: ok ? null : String(error || "unknown").slice(0, 200)
+    });
+  } catch (e) { /* best effort */ }
   await chrome.storage.local.remove(["luca_pending_delivery"]);
   checkOutboundReplies(); // chain the next queued reply, if any
 }
@@ -1334,7 +1339,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const senderUrl = (sender && sender.tab && sender.tab.url) || "";
     if (!senderUrl.startsWith("https://www.facebook.com/")) return;
     (async () => {
-      await finishOutboundReply(message.messageId, !!message.ok);
+      await finishOutboundReply(message.messageId, !!message.ok, message.error || null);
       sendResponse({ ok: true });
     })();
     return true;

@@ -411,6 +411,15 @@
         var lab = (boxes[j].getAttribute("aria-label") || "").toLowerCase();
         if (lab.indexOf("message") !== -1 || lab === "aa") return boxes[j];
       }
+      // Fallback (v2.1.36): label wording varies by surface — the
+      // thread composer is the LAST visible contenteditable textbox
+      // on the page (search boxes above it are plain inputs, never
+      // contenteditable).
+      var editables = [];
+      for (var k = 0; k < boxes.length; k++) {
+        if (boxes[k].getAttribute("contenteditable") === "true" && boxes[k].offsetParent !== null) editables.push(boxes[k]);
+      }
+      if (editables.length) return editables[editables.length - 1];
     }
     return null;
   }
