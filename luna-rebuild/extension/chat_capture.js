@@ -53,6 +53,17 @@
   }
 
   function findBuyerName() {
+    // Best hook (v2.1.29, from Matthew's live capture): Facebook labels
+    // the thread container "Conversation titled <Name> · <Listing>" —
+    // the name is the part before the first "·".
+    try {
+      var titled = document.querySelector('[aria-label^="Conversation titled "]');
+      if (titled) {
+        var t = (titled.getAttribute("aria-label") || "").replace(/^Conversation titled\s*/, "");
+        var nm = t.split("·")[0].trim();
+        if (nm && nm.length >= 2 && nm.length <= 60) return nm;
+      }
+    } catch (e) { /* fall through to the heading scan */ }
     // Thread header usually carries the buyer's name in a heading.
     var main = document.querySelector('[role="main"]');
     var scopes = [findChatPopup(), main, document].filter(Boolean);
@@ -69,12 +80,23 @@
     return "";
   }
 
+  // The thread-header listing link's subtree includes its action
+  // buttons, so the raw text arrives as "$23,220 - 2026 Volkswagen
+  // Jetta View buyer More options" (Matthew's live capture, 2026-10-25).
+  // Cut at the first chrome token and drop a leading "Marketplace".
+  function cleanListingLabel(label) {
+    var s = String(label || "").trim();
+    s = s.split(/\s+(?:View buyer|More options)\b/)[0];
+    s = s.replace(/^Marketplace\s+(?=\$)/, "");
+    return s.trim();
+  }
+
   function findListing() {
     // Marketplace threads link the listing; the first item link in the
     // thread pane is the car this chat is about.
     var links = document.querySelectorAll('a[href*="/marketplace/item/"]');
     for (var i = 0; i < links.length; i++) {
-      var label = textOf(links[i]) || (links[i].getAttribute("aria-label") || "").trim();
+      var label = cleanListingLabel(textOf(links[i]) || (links[i].getAttribute("aria-label") || "").trim());
       var href = links[i].href || "";
       if (label && label.length >= 4) return { vehicleText: label.slice(0, 140), itemUrl: href };
       if (href) return { vehicleText: "", itemUrl: href };
@@ -98,8 +120,13 @@
     for (var i = 0; i < nodes.length; i++) {
       var t = textOf(nodes[i]);
       if (!t || t.length < 1 || t.length > 1000) continue;
-      // Skip UI chrome that also uses dir="auto".
+      // Skip UI chrome that also uses dir="auto". The second pattern
+      // set is Matthew's live thread (2026-10-25): header card labels,
+      // group-system lines, and pane furniture that are NOT messages.
       if (/^(Seen|Delivered|Sent|Type a message|Aa|Search|Active now|You're friends on Facebook|You're both on Facebook)/.test(t)) continue;
+      if (/^(View buyer|More options|Privacy & support|Messages|Send a quick response|Marketplace)$/.test(t)) continue;
+      if (/^Conversation titled /.test(t)) continue;
+      if (/ created this group$/.test(t)) continue;
       var r = nodes[i].getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       var key = t + "|" + (r.left > paneMid ? "R" : "L");
