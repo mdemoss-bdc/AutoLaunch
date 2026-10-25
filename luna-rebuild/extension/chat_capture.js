@@ -476,6 +476,27 @@
   }
   function normMsg(s) { return String(s || "").trim().replace(/\s+/g, " ").toLowerCase(); }
 
+  function findSendButton(composer) {
+    // The composer's Send control (paper-plane arrow) is a real
+    // clickable button near the textbox. Walk up from the composer,
+    // searching each wider container; "send"-labeled only, and the
+    // like button ("Send a like") is deliberately excluded.
+    var node = composer;
+    for (var depth = 0; depth < 7 && node; depth++) {
+      node = node.parentElement;
+      if (!node || !node.querySelectorAll) continue;
+      var cands = node.querySelectorAll('[role="button"], button');
+      for (var i = 0; i < cands.length; i++) {
+        var lab = (cands[i].getAttribute("aria-label") || "").trim().toLowerCase();
+        if (lab.indexOf("send") === 0 && lab.indexOf("like") === -1) {
+          var r = cands[i].getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) return cands[i];
+        }
+      }
+    }
+    return null;
+  }
+
   async function deliverPending(p) {
     var result = { ok: false, error: null };
     try {
@@ -496,7 +517,8 @@
       await waitMs(400);
       var inComposer = normMsg(textOf(composer)).indexOf(normMsg(p.body).slice(0, 40)) !== -1;
       if (!inComposer && !inserted) { result.error = "insert_failed"; return result; }
-      if (replyCdpAttached) {
+      var attachedOk = !!(attached && attached.ok);
+      if (attachedOk) {
         await replyCdp("key", { key: "Enter", code: "Enter" });
       } else {
         var evInit = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
@@ -504,14 +526,31 @@
         composer.dispatchEvent(new KeyboardEvent("keypress", evInit));
         composer.dispatchEvent(new KeyboardEvent("keyup", evInit));
       }
+      await waitMs(700);
+      // Send-button fallback (v2.1.41): when the CDP key path isn't
+      // available, the synthetic Enter is ignored by Messenger's
+      // current composer and the text sits in the box unsent (seen
+      // live 2026-10-25: "i didnt say anything" typed but never
+      // sent). The composer's own Send button is a real control —
+      // click it whenever the text is still sitting there.
+      if (normMsg(textOf(composer)).indexOf(normMsg(p.body).slice(0, 40)) !== -1) {
+        var sendBtn = findSendButton(composer);
+        if (sendBtn) { try { sendBtn.click(); } catch (e) { /* the verify below decides */ } }
+      }
       var want = normMsg(p.body);
+      var sendAt = Date.now();
       var hit = await waitForValue(function () {
-        return findMessages().some(function (m) {
+        var inThread = findMessages().some(function (m) {
           return m.direction === "out" && (normMsg(m.body) === want || normMsg(m.body).indexOf(want.slice(0, 60)) === 0);
-        }) ? true : null;
+        });
+        if (inThread) return true;
+        // Composer emptied = Facebook accepted the send, even when
+        // the bubble scrape lags in a background tab.
+        if (Date.now() - sendAt > 1500 && normMsg(textOf(composer)) === "") return true;
+        return null;
       }, 12000, 600);
       result.ok = !!hit;
-      if (!hit) result.error = "not_verified_in_thread";
+      if (!hit) result.error = "not_verified_in_thread" + (attachedOk ? "" : "_nocdp");
       return result;
     } finally {
       if (replyCdpAttached) {

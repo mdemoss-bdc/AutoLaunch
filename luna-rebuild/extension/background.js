@@ -385,10 +385,19 @@ async function handleCaptureChat(capture) {
     // full body (same direction, longer) starts with its text.
     const partialIds = existing.filter(e => {
       const core = String(e.body || "").replace(/[…]+$/, "").replace(/\.\.\.$/, "");
-      if (core.length < 20) return false;
-      return fresh.some(f => f.direction === e.direction
+      if (core.length >= 20 && fresh.some(f => f.direction === e.direction
         && String(f.body).length > core.length
-        && String(f.body).indexOf(core.slice(0, 40)) === 0);
+        && String(f.body).indexOf(core.slice(0, 40)) === 0)) return true;
+      // Composite rows (v2.1.41): a list-row snippet sometimes fuses
+      // the listing label + sender name onto the message ("2026
+      // Volkswagen Jetta Matthew: Hahahah shush"). When a fresh full
+      // body matches the existing row's TAIL with a real prefix in
+      // front of it, the fused row is the same message — drop it.
+      const eBody = String(e.body || "");
+      return fresh.some(f => f.direction === e.direction
+        && String(f.body).length >= 3
+        && eBody.length > String(f.body).length + 8
+        && eBody.endsWith(String(f.body)));
     }).map(e => e.id).filter(Boolean);
     if (partialIds.length) {
       try { await sbDelete(`closer_messages?id=in.(${partialIds.join(",")})`); } catch (e) { /* cosmetic */ }
