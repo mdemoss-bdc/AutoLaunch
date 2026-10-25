@@ -2297,6 +2297,11 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
 
           </div>
 
+          <button type="button" onclick="openAutoPostModal()" class="mt-4 w-full py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-bold text-xs cursor-pointer">
+            Choose locations &amp; conditions →
+          </button>
+          <p id="settingsAutoPostFilterSummary" class="text-[11px] text-slate-500 mt-2"></p>
+
         </div>
 
         <!-- FULL AUTO POSTING (extension v2.1.4) -->
@@ -9261,6 +9266,12 @@ function renderRibbonStatuses() {
       const locTxt = !locs.length ? "every location" : locs.length === 1 ? locs[0] : locs.length + " locations";
       apLbl.innerText = "On — " + (conds ? conds + " · " : "All conditions · ") + locTxt;
     }
+  }
+  const apSum = document.getElementById("settingsAutoPostFilterSummary");
+  if (apSum) {
+    const conds = (autoPostFilter.conditions || []).join(" + ");
+    const locs = autoPostFilter.locations || [];
+    apSum.innerText = "Posting: " + (conds || "all conditions") + " · " + (!locs.length ? "every location" : locs.join(", "));
   }
 
   const rpLbl = document.getElementById("repostFrequencyLabel");
