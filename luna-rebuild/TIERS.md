@@ -165,7 +165,7 @@ the month** the subscription starts, and users can **cancel in-app**.
 
 | Value | Meaning | App behavior |
 |---|---|---|
-| `NULL` | Not yet decided (new signup) — or a row predating billing | App calls `trial-start` once on load; resolved server-side |
+| `NULL` | Not yet decided (new signup) — or a row predating billing | Pre-cutoff account: app calls `trial-start` once on load, resolved server-side. Post-cutoff signup: the **signup choice gate** (below) — nothing is called or written until the user picks trial or plan |
 | `trialing` | In the 5-day trial (`trial_ends_at` is the clock) | Trial mode (below) until the window passes, then the purchase gate |
 | `trial_blocked` | This network's trial was already used by another account | Purchase gate immediately, no trial |
 | `active` | Paid subscription — or a grandfathered account | Normal tier behavior (`plan_tier` decides features) |
@@ -178,7 +178,9 @@ and `trial-start` maps any account created before 2026-10-26 to
 
 ### The trial (trial-start Edge Function)
 
-Called by the app on sign-in when `billing_status` is NULL.
+Called by the app on sign-in when `billing_status` is NULL —
+automatically for pre-cutoff accounts; for post-cutoff signups only
+when they pick the trial on the signup choice gate (below).
 Idempotent — a decided account gets its status back unchanged.
 
 1. Account created before 2026-10-26 → `active` (grandfathered).
@@ -200,17 +202,56 @@ person signing up from the same store network gets "a trial was
 already used from this network" instead of a trial. That's the
 anti-abuse tradeoff Matthew chose; the gate copy says it plainly.
 
-Two legacy wrinkles, both harmless because the state machine reads
-`billing_status` only: the DB still defaults `plan_tier` to `'trial'`
-on fresh rows (resolves to `automate`, but a trialing/blocked account
-never reaches tier features), and `trial_started_at` /
-`trial_ends_at` carry legacy defaults (`now()` / `now() + 30 days`)
-that a fresh row shows until `trial-start` writes the real 5-day
-window. Note the Supabase gateway decides which IP the function
+Two legacy wrinkles. The first is harmless because the state
+machine reads `billing_status` only: the DB still defaults
+`plan_tier` to `'trial'` on fresh rows (resolves to `automate`, but
+a trialing/blocked account never reaches tier features, and a
+purchase writes the real tier explicitly via the webhook). The
+second was a trap and was fixed the same day (choice gate, below):
+`trial_ends_at` carried a legacy default of `now() + 30 days`, so a
+fresh row *displayed* a 30-day window until `trial-start` overwrote
+it with the real one. Its default is now `now() + '5 days'`
+(record: `supabase/migrations_draft/trial_default_5day_APPLIED_2026-10-26.sql`),
+so even an undecided row shows the true 5-day shape; `trial-start`
+still writes the authoritative window when it decides. Note the
+Supabase gateway decides which IP the function
 sees — from Luna's sandbox that's a rotating egress pool, which is
 why the E2E's block case arrived via a shared egress IP rather than a
 spoofed header; for a real browser the first `x-forwarded-for` entry
 is the user's public IP, which is what the lock is designed around.
+
+### Signup choice gate (added 2026-10-26)
+
+Matthew's follow-up call: a new signup should **choose** — start the
+5-day free trial, or pick a membership level right away — instead of
+the trial starting silently on first load.
+
+- **Who sees it:** a signed-in, non-owner account created on/after
+  2026-10-26T00:00:00Z whose `billing_status` is still NULL (the pure
+  `needsSignupChoice` decision in the app). Pre-cutoff NULL accounts
+  never see it — they keep the automatic `trial-start` call, which
+  grandfathers them to `active`. Owners never see it.
+- **What it is:** a non-dismissible full-screen overlay
+  (`#signupChoiceOverlay`, in `MODAL_CLOSE_DENY`, same styling as the
+  purchase gate, sign-out link included). Path one: **Start my 5-day
+  free trial** — plain copy (pull inventory, queue 1 car per day, no
+  card needed; when the trial ends you pick a plan) — runs the same
+  `trial-start` call the automatic flow used to make, then
+  re-resolves: `trialing` closes the gate into trial mode (banner +
+  days left); `trial_blocked` hands over to the purchase gate's
+  blocked explanation with only the plan cards; `active` closes the
+  gate. A failed call leaves the status NULL and the gate up, with a
+  retry note. Path two: **Choose a plan now** — the same Post $75 /
+  Group $100 cards and `startCheckout` behavior as the purchase gate
+  (until Stripe keys land, Buy shows the honest "Checkout opens as
+  soon as billing is switched on" interim message).
+- **Nothing is written until a choice is made.** Refreshing or
+  closing leaves `billing_status` NULL, and the gate returns on the
+  next load. Behind the gate the app resolves exactly as before
+  (NULL reads as full under the tier rules) but is unreachable — the
+  overlay covers it — which is the intended behavior.
+- Trial mode after choosing the trial is unchanged (banner, 1/day
+  cap on both insert paths, feature notices).
 
 ### Trial mode in the app
 
@@ -301,6 +342,28 @@ including a trial user's one posted car if it sells). Server-side
   → `active` via the grandfather branch. Checkout → 503
   `billing_not_configured` (both plans), bogus plan → 400, portal →
   503, webhook unconfigured → 503, no-JWT calls → 401.
+
+### Verification — choice gate + 5-day default (2026-10-26)
+
+- DB: `information_schema` shows the `trial_ends_at` default as
+  `(now() + '5 days'::interval)`; a disposable user with a bare
+  `finishSetup`-shaped row read back an exact 5-day window and was
+  deleted after; the 5 real accounts and both `active` settings
+  rows verified untouched, and the mosescars test row still NULL
+  (its trial was not started for it).
+- Node harness over the edited app: **127/127** — the original
+  11-state billing matrix, trial feature set, and paid-tier behavior
+  unchanged (the three pre-existing pure functions are byte-identical
+  to the pre-change file); a 13-case decision matrix for
+  `needsSignupChoice`; and DOM-stub flows over the real extracted
+  gate code: post-cutoff NULL shows the gate with both plan cards
+  and invokes nothing; trial pick → `trialing` closes the gate with
+  the banner at 5 days left; trial pick → `trial_blocked` hands over
+  to the purchase gate with only the cards; a failed `trial-start`
+  call leaves the status NULL and the gate up with a retry note;
+  pre-cutoff NULL and owners never see the gate; Buy Post/Group
+  invoke `billing-checkout` with the right plan and a 503 shows the
+  interim message.
 
 ### What remains to take real money
 

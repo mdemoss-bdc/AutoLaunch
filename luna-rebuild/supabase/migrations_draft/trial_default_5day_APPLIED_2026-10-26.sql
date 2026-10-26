@@ -1,0 +1,40 @@
+-- trial_default_5day — APPLIED to Phantom (tdsipiltwajwhzgjsupx) on 2026-10-26.
+--
+-- Why: user_settings.trial_ends_at carried a legacy column default of
+-- (now() + '30 days'), so any settings row created before trial-start
+-- decided (e.g. by the app's finishSetup) DISPLAYED a 30-day trial
+-- window. Access never read it while billing_status was NULL and
+-- trial-start always overwrote both fields with the true 5-day window
+-- when stamping 'trialing' — but the displayed window was a trap.
+-- Matthew's direction (2026-10-26): the 5-day length must be airtight.
+--
+-- The statement that was executed (single statement, then a schema
+-- reload for PostgREST):
+--
+--   ALTER TABLE public.user_settings
+--     ALTER COLUMN trial_ends_at SET DEFAULT (now() + '5 days'::interval);
+--   NOTIFY pgrst, 'reload schema';
+--
+-- Verified after applying (information_schema.columns):
+--   trial_started_at  default  now()
+--   trial_ends_at     default  (now() + '5 days'::interval)
+--   plan_tier         default  'trial'::text            (unchanged, see below)
+--   billing_status    default  NULL                     (unchanged)
+--
+-- Behavioral proof (same day): a disposable auth user + a bare
+-- user_settings row carrying exactly finishSetup's columns (relying on
+-- the defaults for both trial columns) read back
+-- trial_ends_at - trial_started_at = exactly 5 days.
+-- The disposable user and row were deleted afterwards; the 5 real
+-- accounts and all pre-existing settings rows were verified untouched.
+-- Note: column defaults only apply to NEW rows — an existing
+-- undecided row keeps whatever window it was created with until
+-- trial-start writes the authoritative one.
+--
+-- plan_tier's default was deliberately LEFT as 'trial'. Consumers:
+-- resolveTier() maps legacy 'trial' to 'automate' by design (no
+-- current user loses access), finishSetup writes 'post' explicitly,
+-- trial-start's upsert decides via billing_status (which gates
+-- everything), and the purchase webhook writes plan_tier explicitly.
+-- No consumer is harmed by the legacy default; changing it would
+-- alter grandfather outcomes beyond this fix's scope.
