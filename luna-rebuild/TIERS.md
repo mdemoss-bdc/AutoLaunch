@@ -626,9 +626,13 @@ layers were added on top, all rebuild-side plus trial-start v4:
 
 Claim discipline in trial-start v4: all checks run before any claim
 is written, so a blocked account consumes nothing; a claim held by a
-different account returns `trial_blocked` with `decided` of
-`ip_already_claimed` / `ext_already_claimed` /
-`email_already_claimed`. Grandfathered accounts claim nothing, as
+different account returns `trial_blocked`. Blocked users see only a
+generic eligibility message ("This account isn't eligible for a free
+trial") everywhere in the app, and the API returns the single generic
+`decided: "not_eligible"` regardless of which claim fired — which
+defense caught them (network, helper install, or email) is never
+disclosed client-side; the specific kind appears only in the
+function's server-side log. Grandfathered accounts claim nothing, as
 before, and every missing input (IP, ext id, salt) skips only its own
 claim (fail-open). The IP hash formula is unchanged from v1 so live
 claims keep matching. DDL record:

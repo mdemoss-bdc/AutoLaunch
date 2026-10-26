@@ -4478,8 +4478,8 @@ function applyPurchaseGate() {
     const head = document.getElementById("purchaseGateHeadline");
     const sub = document.getElementById("purchaseGateSub");
     if (access.gateKind === "blocked") {
-      if (head) head.innerText = "A trial was already used from this network";
-      if (sub) sub.innerText = "Free trials are limited to one per network, so a new one can't start from here. Pick a plan to start using AutoLaunch:";
+      if (head) head.innerText = "This account isn't eligible for a free trial";
+      if (sub) sub.innerText = "Pick a plan to start using AutoLaunch:";
     } else {
       if (head) head.innerText = "Your 5-day trial has ended";
       if (sub) sub.innerText = "Pick a plan to keep posting:";
@@ -4531,7 +4531,7 @@ function renderBillingPanel() {
     status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
     detail = "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
   } else if (access.mode === "gate") {
-    status = access.gateKind === "blocked" ? "A free trial was already used from this network." : "Your free trial has ended.";
+    status = access.gateKind === "blocked" ? "This account isn't eligible for a free trial." : "Your free trial has ended.";
     detail = "Pick a plan below to keep using AutoLaunch.";
   } else {
     status = "Subscription active.";
@@ -4845,7 +4845,7 @@ function openAccountModal() {
       (trialEndsDisplayMs() ? " · ends " + fmtBillingDate(trialEndsDisplayMs()) : "") + ".";
   } else if (access.mode === "gate") {
     billing = access.gateKind === "blocked"
-      ? "A free trial was already used from this network."
+      ? "This account isn't eligible for a free trial."
       : "Your free trial has ended — pick a plan in Settings → Plan to continue.";
   } else {
     billing = currentBilling.periodEnd

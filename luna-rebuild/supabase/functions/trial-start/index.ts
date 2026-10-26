@@ -277,17 +277,18 @@ Deno.serve(async (req) => {
           { onConflict: "user_id" },
         );
       if (error) return json({ ok: false, error: "settings_write_failed" }, 500);
-      const blocked: Record<string, unknown> = {
+      // Client-facing copy is deliberately generic: WHICH claim
+      // fired stays server-side only, so the response can't be used
+      // to probe the trial defenses. Diagnostics: kind in the log.
+      console.log("trial blocked", { kind: plan.kind, user_id: userId });
+      return json({
         ok: true,
         status: "trial_blocked",
         trial_started_at: null,
         trial_ends_at: null,
         current_period_end: null,
-        decided: plan.kind + "_already_claimed",
-      };
-      blocked[plan.kind + "_claim"] = "blocked_other_user";
-      blocked[plan.kind + "_hash_prefix"] = plan.hash.slice(0, 8);
-      return json(blocked);
+        decided: "not_eligible",
+      });
     }
     if (owner === userId) plan.status = "already_claimed_same_user";
   }
