@@ -2,14 +2,18 @@ name: AutoLaunch Scraper Runner
 
 on:
   schedule:
-    # Runs automatically every night at 06:00 UTC (2:00 AM EDT)
-    - cron: '0 6 * * *'
+    # Runs automatically every 6 hours at :17 past the hour UTC (2:17 AM, 8:17 AM, 2:17 PM, 8:17 PM EDT)
+    - cron: '17 */6 * * *'
   workflow_dispatch:
     inputs:
       user_id:
         description: 'User UUID to crawl for'
         required: true
         default: '40a95557-504a-460f-a891-462bb2b4f25c'
+
+concurrency:
+  group: autolaunch-scraper
+  cancel-in-progress: false
 
 jobs:
   scrape:
