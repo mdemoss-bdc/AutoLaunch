@@ -2418,7 +2418,13 @@
     // lot tag. Fail-open both ways: preference off, or no stock
     // number on the car, and the line simply isn't there — the
     // description stays byte-identical to before this change.
-    const stock = car.stock_num != null ? String(car.stock_num).trim() : "";
+    // v2.1.44: the value may arrive as stock_num (queue-row stamp,
+    // or the worker's inventory fallback — see background note 21)
+    // or as the inventory row's own stock_number; first usable
+    // value wins.
+    const stockRaw = (car.stock_num != null && String(car.stock_num).trim())
+      ? car.stock_num : car.stock_number;
+    const stock = stockRaw != null ? String(stockRaw).trim() : "";
     let desc = (
       `${title}\n` +
       `Price: $${(car.price || 0).toLocaleString()}\n` +

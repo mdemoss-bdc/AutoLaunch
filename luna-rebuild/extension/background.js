@@ -240,6 +240,18 @@
 //     Marketplace description (Matthew's request, 2026-10-26).
 //     Fail-open both ways: the preference off, or a car with no
 //     stock number, leaves the description exactly as it was.
+// 21. STOCK FALLBACK FROM INVENTORY (v2.1.44): 2.1.43 read the
+//     stock number off the QUEUE row (stock_num) — but the app's
+//     single-car enqueue never stamped it, so a hand-queued car's
+//     queue row carried NULL and its listing shipped with no
+//     Stock # line even though scraped_inventory knew the number
+//     (proven live 2026-10-26: the Yukon VT60164B posted with the
+//     dealership block but no stock line). The claim path already
+//     holds the inventory row it fetched by VIN: jobCarWithStock
+//     now stamps the payload car's stock_num from the queue row
+//     first, then the inventory row's stock_number, so the content
+//     script always sees the best-known value. Fail-open: no
+//     stock anywhere still means no line, exactly as before.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -620,6 +632,22 @@ async function lastPostedAt(userId) {
   }
 }
 
+// Stock number for the job payload (v2.1.44, header note 21): the
+// queue row's stamped stock_num wins; when it is empty/null/
+// whitespace, fall back to the inventory row's stock_number (the
+// row checkQueue already fetched by the job's VIN). Returns the
+// car row unchanged when it already carries a usable stock_num
+// or when no source has one — the description then simply omits
+// the Stock # line, exactly as before this fix.
+function jobCarWithStock(carRow, queueItem) {
+  if (!carRow) return carRow;
+  const usable = v => (v != null && String(v).trim()) ? String(v).trim() : "";
+  if (usable(carRow.stock_num)) return carRow;
+  const stock = usable(queueItem && queueItem.stock_num) || usable(carRow.stock_number);
+  if (!stock) return carRow;
+  return Object.assign({}, carRow, { stock_num: stock });
+}
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const jitter = (min, max) => sleep(min + Math.random() * (max - min));
 
@@ -878,7 +906,7 @@ async function checkQueue() {
       current_posting_job: {
         queueId: item.id,
         userId,
-        car: carRow,
+        car: jobCarWithStock(carRow, item),
         action: isDelete ? "delete" : "post",
         fullAuto: settings.fullAuto,
         dealershipName: settings.dealershipName,

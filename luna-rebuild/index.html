@@ -99,6 +99,26 @@ body {
   transform: scale(0.97);
 }
 
+/* AI gradient (2026-10-26, Matthew's ask): the listing-copy ✨
+   button wears the violet -> fuchsia -> amber AI gradient so the
+   one AI action in the inventory row reads as AI at a glance.
+   background-image (not background-color) so the dark theme's
+   surface repaints, which key off utility classes, never mute it. */
+.ai-gradient-btn {
+  background-image: linear-gradient(135deg, #7c3aed 0%, #c026d3 52%, #f59e0b 125%);
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 2px 10px rgba(168, 85, 247, 0.45);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ai-gradient-btn:hover {
+  filter: brightness(1.12);
+  color: #ffffff !important;
+}
+.ai-gradient-btn:active {
+  transform: scale(0.96);
+}
+
 .table-row-vibrant:hover {
   background-color: #f8fafc !important;
 }
@@ -1791,8 +1811,8 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
     <i class="fa-solid fa-gauge w-4 text-slate-400"></i>
     <span>Change miles</span>
   </button>
-  <button onclick="handleDropdownAction('listing_copy')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
-    <i class="fa-solid fa-wand-magic-sparkles w-4 text-slate-400"></i>
+  <button onclick="handleDropdownAction('listing_copy')" class="ai-gradient-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition cursor-pointer text-left font-bold">
+    <i class="fa-solid fa-wand-magic-sparkles w-4"></i>
     <span>✨ Listing copy (AI)</span>
   </button>
   <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
@@ -5591,7 +5611,7 @@ function gridCardHtml(car) {
       </div>
       <div class="px-4 pb-4 pt-1 flex items-center gap-2">
         ${actions}
-        <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+        <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="ai-gradient-btn w-8 h-8 shrink-0 rounded-xl flex items-center justify-center cursor-pointer">
           <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
         </button>
         <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
@@ -5788,7 +5808,7 @@ ${car.location_name ? `
                  <span>${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</span>
                </button>`
           }
-          <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+          <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="ai-gradient-btn w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer">
             <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
           </button>
           <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
@@ -6866,7 +6886,7 @@ vehiclesToQueue.forEach(car => {
             year: car.year,
             make: car.make,
             model: car.model,
-            stock_num: car.stock_num || car.stock_number,
+            stock_num: queueStockNum(car),
             status: "pending",
             target_channel: channel,
             created_at: new Date().toISOString()
@@ -6951,6 +6971,21 @@ async function removeQueueItem(id) {
 
 }
   
+// Queue rows stamp the stock number from the inventory record at
+// insert time (2026-10-26 fix): the helper reads the queue row's
+// stock_num for the listing's Stock # line, and the single-car
+// enqueue used to stamp nothing but the VIN — the row went in
+// NULL and the posted listing silently lost its stock line even
+// though inventory knew the number. First usable spelling wins
+// (rows have carried both stock_num and stock_number).
+function queueStockNum(car) {
+  if (!car) return null;
+  const raw = (car.stock_num != null && String(car.stock_num).trim())
+    ? car.stock_num : car.stock_number;
+  const s = raw != null ? String(raw).trim() : "";
+  return s ? s : null;
+}
+
 async function enqueueMarketplaceCar(vin) {
   if (!currentUser) return;
   // NO-PHOTO RULE + SOLD RULE (Phase B): never queue a sold car, or a
@@ -6984,6 +7019,10 @@ async function enqueueMarketplaceCar(vin) {
     const rows = channels.map(channel => ({
       user_id: currentUser.id,
       vin: vin,
+      year: carForQueue ? (carForQueue.year ?? null) : null,
+      make: carForQueue ? (carForQueue.make || null) : null,
+      model: carForQueue ? (carForQueue.model || null) : null,
+      stock_num: queueStockNum(carForQueue),
       target_channel: channel,
       status: 'pending'
     }));
@@ -7538,7 +7577,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.43";
+const EXPECTED_EXT_VERSION = "2.1.44";
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }
@@ -8113,6 +8152,12 @@ async function loadProspects() {
       prospectMessages = {};
       (msgs || []).forEach(m => {
         if (!m.prospect_id) return;
+        (prospectMessages[m.prospect_id] = prospectMessages[m.prospect_id] || []).push(m);
+        // Counts, the "last:" snippet and the outbound pill describe
+        // the REAL conversation only — Luca's unsent draft rows
+        // (origin 'ai') are stored above but never counted or
+        // quoted (2026-10-26, Matthew's ask).
+        if (!isRealChatMessage(m)) return;
         const slot = prospectChats[m.prospect_id] || (prospectChats[m.prospect_id] = { count: 0, latest: "", direction: "in" });
         slot.count++;
         if (!slot.latest) { slot.latest = m.body || ""; slot.direction = m.direction || "in"; }
@@ -8124,7 +8169,6 @@ async function loadProspects() {
         if (m.status && !prospectOutbound[m.prospect_id]) {
           prospectOutbound[m.prospect_id] = { status: m.status, body: m.body || "", created_at: m.created_at };
         }
-        (prospectMessages[m.prospect_id] = prospectMessages[m.prospect_id] || []).push(m);
       });
       // Conversation view reads oldest -> newest.
       Object.values(prospectMessages).forEach(list => list.reverse());
@@ -8416,11 +8460,19 @@ async function openTradeDetail(id) {
     (a.vin ? " · VIN " + a.vin : " · No VIN provided");
 
   const answers = a.answers || {};
+  // Shape tolerance: the public form writes an OBJECT keyed
+  // q1..q10 (each {question, answer, note}) plus _ack/_disclaimer;
+  // an array in question order, or boolean answers, render the
+  // same instead of silently blanking the packet.
+  const answerFor = (i) => {
+    const r = Array.isArray(answers) ? answers[i] : answers["q" + (i + 1)];
+    return (r && typeof r === "object") ? r : {};
+  };
   const answersHtml = TRADE_QUESTIONS.map((q, i) => {
-    const r = answers["q" + (i + 1)] || {};
-    const ans = r.answer === "yes"
+    const r = answerFor(i);
+    const ans = (r.answer === "yes" || r.answer === true)
       ? '<span class="px-2 py-0.5 rounded-full bg-slate-900 text-white text-[10px] font-extrabold">YES</span>'
-      : r.answer === "no"
+      : (r.answer === "no" || r.answer === false)
         ? '<span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-extrabold">NO</span>'
         : '<span class="text-slate-400 text-xs">—</span>';
     const note = r.note ? `<p class="text-xs text-slate-500 mt-1">“${escapeHtml(r.note)}”</p>` : "";
@@ -8652,25 +8704,36 @@ document.addEventListener("click", function (e) {
   else if (act === "copy-msg") copyProspectMsg(el.getAttribute("data-msg-id"), el);
 });
 
+// REAL-MESSAGE RULE (Matthew's ask, 2026-10-26): Luca's drafts are
+// saved as closer_messages rows (direction 'out', origin 'ai') so
+// luca-draft can learn from them — but an UNSENT draft is not part
+// of the conversation, and rendering it as a chat bubble made it
+// look like a message the buyer had already received. The chat
+// flow, the card counts and the "last:" snippet all speak only
+// about real exchanged messages: inbound rows, plus outbound rows
+// the rep actually sent (origin 'rep'). Draft rows stay stored —
+// the draft box and the send-pairing read them elsewhere.
+function isRealChatMessage(m) {
+  return !!m && m.origin !== "ai";
+}
+
 // CONVERSATION VIEW (Matthew's ask, 2026-10-25): expand a prospect to
 // read the whole captured thread as chat bubbles — buyer left, you
-// right, Luca's drafts tagged — with every message individually
-// copyable (button + selectable text) for pasting anywhere.
+// right — with every message individually copyable (button +
+// selectable text) for pasting anywhere. Since 2026-10-26 the view
+// shows real exchanged messages only (see isRealChatMessage).
 function threadBubblesHtml(p) {
-  const all = prospectMessages[p.id] || [];
+  const all = (prospectMessages[p.id] || []).filter(isRealChatMessage);
   const list = all.slice(-100);
   if (!list.length) return `<p class="text-xs text-slate-400">No messages captured yet.</p>`;
   const tags = { queued: "⏳ queued", sending: "📤 sending", sent: "✓ sent", failed: "⚠ failed" };
   const rows = list.map(m => {
     const out = m.direction === "out";
-    const ai = m.origin === "ai";
     const when = m.created_at ? new Date(m.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
-    const bubbleCls = ai
-      ? "bg-violet-50 border-violet-200 text-slate-800"
-      : out
+    const bubbleCls = out
         ? "bg-blue-600 border-blue-600 text-white"
         : "bg-white border-slate-200 text-slate-800";
-    const who = ai ? "🌙 Luca draft" : out ? "You" : (p.name || "Buyer");
+    const who = out ? "You" : (p.name || "Buyer");
     const statusTag = m.status && tags[m.status] ? ` · <span class="font-bold">${tags[m.status]}</span>` : "";
     return `<div class="flex ${out ? "justify-end" : "justify-start"} mb-2">
       <div class="max-w-[85%]">
@@ -8691,7 +8754,7 @@ function toggleThread(id, btn) {
   const opening = wrap.classList.contains("hidden");
   wrap.classList.toggle("hidden");
   if (opening) expandedThreadIds.add(String(id)); else expandedThreadIds.delete(String(id));
-  const count = (prospectMessages[id] || []).length;
+  const count = (prospectMessages[id] || []).filter(isRealChatMessage).length;
   if (btn) btn.innerHTML = opening ? "💬 Hide conversation ▴" : `💬 View conversation (${count}) ▾`;
   if (opening) {
     const panel = document.getElementById("lucaThread-" + id);
@@ -8708,7 +8771,7 @@ function closeThread(id) {
   if (wrap) wrap.classList.add("hidden");
   expandedThreadIds.delete(String(id));
   const btn = document.querySelector(`[data-prospect-action="toggle-thread"][data-prospect-id="${id}"]`);
-  const count = (prospectMessages[id] || []).length;
+  const count = (prospectMessages[id] || []).filter(isRealChatMessage).length;
   if (btn) btn.innerHTML = `💬 View conversation (${count}) ▾`;
   const card = document.querySelector(`[data-prospect-card="${id}"]`);
   if (card) card.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -10330,6 +10393,18 @@ function updateClearFiltersVisibility() {
 function closeModal(id) {
   document.getElementById(id).classList.add("hidden");
   if (id === "queueModal") syncQueuePoller();
+}
+
+// The missing twin of closeModal (2026-10-26 fix): openTradeDetail
+// has always ended with openModal("tradeDetailModal"), but no
+// openModal ever existed — every other modal unhides itself inline.
+// Clicking "Review packet" flipped the status to 'reviewed', built
+// the whole packet, then threw on this call, so nothing ever
+// opened. Defined here, null-safe, so the trade packet (and any
+// future caller) opens like every other modal.
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove("hidden");
 }
 
 // Modal close paths (mobile UX): modals used to close ONLY via their
