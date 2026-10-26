@@ -3698,6 +3698,15 @@ const TIER_FEATURES = {
   teams: "group"           // future team/org features — nothing calls this yet
 };
 
+// Daily queue caps by tier (Matthew, 2026-10-26): Post is the manual
+// plan — its accounts queue at most 5 cars per day, ON TOP OF the
+// user's own Safe posting limit (whichever is lower binds). Automate
+// and Group carry no tier cap (null): only the user's own limit
+// applies. The trial's 1-per-day rule is separate, stricter, and
+// decided by billing state, not by this map (see
+// effectiveDailyPostAllowance in the pure access block).
+const TIER_DAILY_POST_CAP = { post: 5, automate: null, group: null };
+
 const FEATURE_LABELS = {
   autopost: "Auto-post new arrivals",
   auto_repost: "Auto delete & repost",
@@ -3921,6 +3930,26 @@ function trialQueueAllowed(usedToday) {
   return usedToday < 1; // the trial queues at most 1 car per day
 }
 
+// The daily queue allowance actually in force, as one number (999
+// keeps its "unlimited" meaning wherever the user's own limit is the
+// only cap):
+//   trialing            -> 1 (the trial rule; strictest, wins outright)
+//   owner (not preview) -> the user's own limit, untouched (hard rule)
+//   tier with a cap     -> min(own limit, tier cap); an unlimited own
+//                          limit (999 / unset) collapses to the cap
+//   tier without a cap  -> the user's own limit
+// isOwner is the EXEMPTION flag, not the raw account check: the caller
+// passes false while an owner tier/billing preview is active, so
+// previewing Post shows the cap exactly as a Post customer gets it.
+function effectiveDailyPostAllowance(tier, userLimit, billingStatus, isOwner) {
+  if (billingStatus === "trialing") return 1;
+  if (isOwner) return userLimit;
+  const cap = TIER_DAILY_POST_CAP[tier];
+  if (cap === null || cap === undefined) return userLimit;
+  if (!userLimit || userLimit >= 999) return cap;
+  return Math.min(userLimit, cap);
+}
+
 const BILLING_GRANDFATHER_CUTOFF_MS = Date.parse("2026-10-26T00:00:00Z");
 
 // Signup choice gate decision (pure): true only for an account that
@@ -4069,6 +4098,52 @@ async function trialQueueGate(carCount) {
   if (!trialQueueAllowed(used)) { showTrialNotice("queue"); return false; }
   if ((carCount || 1) > 1) { showTrialNotice("queue_multi"); return false; }
   return true;
+}
+
+// ---- Post plan daily cap ----------------------------------------------
+// The pure rule fed with live state. The owner exemption is passed
+// only when NO owner preview (tier or billing) is active — a preview
+// must show the cap exactly as the previewed customer gets it. Trial
+// mode is expressed as billingStatus "trialing" so the same function
+// yields the trial's 1 (the counter shows it too); the trial's own
+// gate above still does the trial's enforcing.
+function currentDailyPostAllowance() {
+  const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
+  const previewing = isOwner && (!!ownerTestTier || !!ownerBillingPreview);
+  return effectiveDailyPostAllowance(
+    effectiveTier(),
+    userDailyPostLimit,
+    billingMode() === "trial" ? "trialing" : currentBilling.status,
+    isOwner && !previewing
+  );
+}
+
+// Gate run before every post-queue insert, directly after the trial
+// gate: the Post plan's 5-per-day cap. Counted with the trial cap's
+// own query (getTrialQueueUsedToday — UTC day, non-failed, deletes
+// excluded) so there is exactly one cap-counting method. Fires only
+// when the PLAN cap is the binding limit: if the user's own safety
+// limit is at or below the cap, checkDailyLimit speaks instead (its
+// "raise your limit" advice is the truthful one there). Like the
+// trial gate it is all-or-nothing — nothing is partially queued.
+async function postPlanQueueGate(carCount) {
+  if (billingMode() !== "full") return true;
+  const cap = TIER_DAILY_POST_CAP[effectiveTier()];
+  if (cap === null || cap === undefined) return true;
+  if (currentDailyPostAllowance() !== cap) return true; // own limit (or owner) binds, not the plan
+  const used = await getTrialQueueUsedToday();
+  if (used + (carCount || 1) > cap) { showPostCapNotice(); return false; }
+  return true;
+}
+
+function showPostCapNotice() {
+  const cap = TIER_DAILY_POST_CAP[effectiveTier()] || 5;
+  const title = document.getElementById("planGateTitle");
+  const body = document.getElementById("planGateBody");
+  if (title) title.innerText = "Post plan daily limit";
+  if (body) body.innerText = "You've reached the Post plan's limit of " + cap + " queued posts per day. The Automate plan lifts this cap — your own daily posting limit still applies there. You can queue more cars tomorrow, or switch plans in Settings.";
+  const modal = document.getElementById("planGateModal");
+  if (modal) modal.classList.remove("hidden");
 }
 
 // ---- Trial notice ----------------------------------------------------
@@ -7023,6 +7098,7 @@ if (!rows.length) {
 
         const marketplaceRows = rows.filter(r => r.target_channel === "marketplace").length;
         if (!(await trialQueueGate(new Set(rows.map(r => r.vin)).size))) return;
+        if (!(await postPlanQueueGate(new Set(rows.map(r => r.vin)).size))) return;
         if (!(await checkDailyLimit(marketplaceRows))) return;
 
         const { error } = await supabaseClient
@@ -7129,6 +7205,7 @@ async function enqueueMarketplaceCar(vin) {
   }
   try {
     if (!(await trialQueueGate(1))) return;
+    if (!(await postPlanQueueGate(1))) return;
     if (!(await checkDailyLimit(1))) return;
 
     // Phase 6 fan-out: one queue row per enabled channel. The extension
@@ -11202,7 +11279,7 @@ async function checkDailyLimit(adding) {
   const limit = userDailyPostLimit;
   if (!limit || limit >= 999) return true; // 999 = Unlimited (existing convention)
   const used = await getDailyPostUsage();
-  updateSafetyCounterUI(used, limit);
+  updateSafetyCounterUI(used, currentDailyPostAllowance());
   if (used + adding > limit) {
     alert(
       `Daily posting limit reached: ${used} of ${limit} used today.\n\n` +
@@ -11232,7 +11309,7 @@ function updateSafetyCounterUI(used, limit) {
 async function refreshSafetyCounter() {
   if (!currentUser) return;
   const used = await getDailyPostUsage();
-  updateSafetyCounterUI(used, userDailyPostLimit);
+  updateSafetyCounterUI(used, currentDailyPostAllowance());
   updateMobileHeaderSummary();
 }
 function toggleSelectAllCars(master) {

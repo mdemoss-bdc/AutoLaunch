@@ -12,7 +12,7 @@ dormant — it activates the moment the Stripe secrets are set.
 
 | Tier key | Name | What it includes |
 |---|---|---|
-| `post` | **Post** | The manual core: inventory workspace, post queue, manual Marketplace posting, listing-copy ✨ |
+| `post` | **Post** | The manual core: inventory workspace, post queue, manual Marketplace posting, listing-copy ✨ — manual only (no automation features), and capped at **5 queued posts per day** (see "Daily queue cap" below) |
 | `automate` | **Post + Automate** | Everything in Post, plus: auto-post new arrivals, auto delete & repost, extra channels (TikTok / Instagram / Facebook Page), Luca + Prospects, Customer Wishlist, Trade Appraisals, intro videos |
 | `group` | **Group** | Everything in Post + Automate, plus team features (accounts/organizations) — those don't exist yet, so today `group` behaves like `automate` plus the reserved `teams` feature flag |
 
@@ -54,6 +54,61 @@ tiers, change that one map — every gate reads from it. Ranks:
   existing user loses a feature. Note the database column default is
   still `'trial'` (shared with the live app); a settings row created
   outside onboarding resolves through the same legacy rule.
+
+### Daily queue cap (Post plan — added 2026-10-26)
+
+Matthew's rule: **Post is manual-posting only, capped at 5 vehicles
+queued per day.** Automate and Group have no tier cap. The single
+source of truth is the `TIER_DAILY_POST_CAP` map in `index.html`
+(`{ post: 5, automate: null, group: null }`), and the pure function
+`effectiveDailyPostAllowance(tier, userLimit, billingStatus,
+isOwner)` (in the PURE ACCESS LOGIC block) resolves what an account
+may queue today:
+
+- **trialing → 1** (the trial rule — strictest, wins outright; the
+  trial's own gate and counting are unchanged).
+- **owner (not previewing) → their own `daily_post_limit`**,
+  untouched, per the hard rule below. The caller passes the
+  exemption flag OFF while any owner preview (tier or billing) is
+  active, so previewing Post shows the cap exactly as a Post
+  customer gets it.
+- **Post → `min(daily_post_limit, 5)`**; an unlimited own limit
+  (999/unset) collapses to 5.
+- **Automate / Group → their own `daily_post_limit`** as before
+  (999 stays unlimited).
+
+Enforcement sits at the two post-queue insert paths, in the same
+place as the trial cap: single-car `enqueueMarketplaceCar` and the
+bulk queue both run `trialQueueGate` → **`postPlanQueueGate`** →
+`checkDailyLimit` (the user's own safety limit) → insert. The plan
+gate counts with the trial cap's own query
+(`getTrialQueueUsedToday` — UTC day, non-failed rows, delete rows
+excluded; no second counting method was created) and is
+all-or-nothing like the trial gate: a bulk selection that would pass
+the cap queues nothing and shows the notice. The gate fires **only
+when the plan cap is the binding limit** — a Post user whose own
+safety limit is at or below 5 is governed by that limit, and
+`checkDailyLimit`'s "raise your limit" message is the truthful one
+for them; when the plan binds, the notice (the `planGateModal`,
+same plain style as the other plan notices, no prices) says:
+"You've reached the Post plan's limit of 5 queued posts per day.
+The Automate plan lifts this cap — your own daily posting limit
+still applies there. You can queue more cars tomorrow, or switch
+plans in Settings."
+
+The **safety counter shows the effective allowance** as its
+denominator everywhere (`refreshSafetyCounter` and `checkDailyLimit`
+both render `currentDailyPostAllowance()`): a Post user with a
+personal limit of 10 sees "N of 5 today"; with a personal limit of
+3, "N of 3 today"; during the trial the counter reads against 1.
+The ribbon label, the Safety modal counter, and the mobile header
+summary (which mirrors the ribbon label) all agree.
+
+Scope note: this caps **queueing from the app**, which is the only
+posting a Post account can do — auto-posting is an Automate feature
+the tier gates already deny, so there is no scraper-side hole for
+this rule. (Server-side enforcement in general remains the phase-2
+item listed at the bottom.)
 
 ### Owner exemption (hard rule)
 
@@ -364,6 +419,29 @@ including a trial user's one posted car if it sells). Server-side
   pre-cutoff NULL and owners never see the gate; Buy Post/Group
   invoke `billing-checkout` with the right plan and a 503 shows the
   interim message.
+
+### Verification — Post daily cap (2026-10-26)
+
+- Node harness over the edited app: **76/76** — the full
+  `effectiveDailyPostAllowance` matrix (owner × every tier → own
+  limit; trialing → 1; Post × limits 3/5/10/999/0/null → min with 5;
+  Automate/Group → own limit, 999 stays 999; owner-preview-Post →
+  5); the three pre-existing pure functions plus
+  `getTrialQueueUsedToday`, `trialQueueGate`, `showTrialNotice`,
+  `getDailyPostUsage`, and `updateSafetyCounterUI` byte-identical to
+  the pre-change file (`checkDailyLimit` identical except its
+  counter-display line); DOM/Supabase-stub flows over the real
+  extracted gates: Post at 4 used queues the 5th, at 5 used the 6th
+  is stopped with the plan notice (no prices in the copy); bulk
+  stops at the allowance (3+2 in, 3+3 out); failed and delete rows
+  don't consume the cap; a Post user with a personal limit of 3 gets
+  silence from the plan gate (their own limit speaks); the trial
+  path is untouched (plan gate steps aside, trial gate still blocks
+  at 1, trial counter allowance = 1); owners are uncapped until
+  they preview Post, which caps them at 5; call-site wiring asserts
+  trial → plan → own-limit → insert order at both insert paths with
+  exactly two plan-gate call sites; and a full-file parse of the
+  inline script.
 
 ### What remains to take real money
 
