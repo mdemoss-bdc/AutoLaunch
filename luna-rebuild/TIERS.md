@@ -623,6 +623,25 @@ layers were added on top, all rebuild-side plus trial-start v4:
    exact-domain or subdomain-of. No real provider (gmail, yahoo,
    outlook, icloud, proton, …) and no dealership-plausible domain is
    or may be listed; sign-in is never blocked.
+4. **First-use binding** (added 2026-10-26, trial-start v5). Claims
+   bind at grant AND at first helper use. The grant-time checks
+   above can't see a helper that isn't there: a trial minted on a
+   phone (fresh email, carrier IP, no helper) starts unbound to the
+   PC where its posts actually happen. So whenever a `trialing`
+   account calls trial-start — the app does this on every load for
+   signed-in non-owner trialing accounts, attaching the install id
+   when a helper answers — the server re-checks the EXT and EMAIL
+   claims before returning the state: a claim held by a different
+   account flips this account to `trial_blocked` (same generic
+   `not_eligible` response), a claim held by this account passes,
+   and an unclaimed claim is recorded for this account. A second
+   phone trial therefore dies on first contact with a helper that
+   already served another trial. IP is NOT re-checked or claimed on
+   this path: roaming laptops and shared dealership IPs would
+   false-positive legitimate users — IP stays a grant-time gate
+   only. Accounts in any other state (`active`, `expired`, already
+   blocked) are never re-checked, so a paying customer can never be
+   claim-blocked.
 
 Claim discipline in trial-start v4: all checks run before any claim
 is written, so a blocked account consumes nothing; a claim held by a

@@ -4,8 +4,10 @@
 // defenses").
 //
 // Called by the app on sign-in when an account has no billing status
-// yet. Idempotent: an account whose user_settings.billing_status is
-// already set gets it back unchanged.
+// yet, and on load while an account is trialing (the first-use
+// re-check, rule 2b). Idempotent: an account whose
+// user_settings.billing_status is already set gets it back unchanged,
+// except that a trialing account is claim-re-checked first.
 //
 // Rules, in order:
 //   1. Accounts created before the trial system existed
@@ -35,6 +37,19 @@
 //      account is 'trial_blocked' — no trial, and no new claims are
 //      written for it. Otherwise all available claims are recorded
 //      for this account (same-account repeats are idempotent).
+//   2b. FIRST-USE RE-CHECK: an account already 'trialing' is
+//      re-checked on every call (the app calls on load while
+//      trialing). A trial minted on a phone carries no helper
+//      binding, so the EXT and EMAIL claims are checked again here:
+//      one held by a DIFFERENT account flips this account to
+//      'trial_blocked' (same generic 'not_eligible' response); an
+//      unclaimed one is recorded for this account, binding the
+//      trial to the first helper it is actually used with. IP is
+//      NOT re-checked or claimed on this path — roaming and shared
+//      dealership IPs make post-grant IP enforcement a
+//      false-positive machine; IP stays a grant-time gate only.
+//      Accounts in any other state are never re-checked or flipped:
+//      a paying customer cannot be claim-blocked.
 //   3. On pass, the account gets billing_status = 'trialing' with a
 //      trial window of now .. now + 5 days.
 //   4. FAIL-OPEN: a missing IP, a missing/invalid ext id, or a
@@ -158,6 +173,82 @@ async function claimOwner(
   return data && typeof data.user_id === "string" ? data.user_id : null;
 }
 
+// FIRST-USE RE-CHECK for an account already 'trialing' (rule 2b in
+// the header). Checks the EXT (when a valid install id was passed)
+// and EMAIL claims only — IP is grant-time only. Returns a Response
+// when the account must be flipped to 'trial_blocked' (or on a write
+// error), or null when the account may keep its trialing state.
+// A claim held by THIS account is fine; an unclaimed claim is
+// recorded for this account, which is what binds a phone-minted
+// trial to the first helper it is used with. Fail-open like the
+// grant path: a missing salt skips the whole re-check.
+async function firstUseRecheck(
+  svc: any,
+  userId: string,
+  email: unknown,
+  extInstallId: string,
+): Promise<Response | null> {
+  const salt = Deno.env.get("TRIAL_IP_SALT") || "";
+  if (!salt) return null;
+
+  type RecheckPlan = { kind: "ext" | "email"; table: string; keyColumn: string; hash: string };
+  const plans: RecheckPlan[] = [];
+  if (extInstallId) {
+    plans.push({
+      kind: "ext", table: "trial_ext_claims", keyColumn: "ext_hash",
+      hash: await sha256Hex(salt + ":ext:" + extInstallId),
+    });
+  }
+  const normalizedEmail = normalizeEmailForClaim(
+    typeof email === "string" ? email : "",
+  );
+  if (normalizedEmail) {
+    plans.push({
+      kind: "email", table: "trial_email_claims", keyColumn: "email_hash",
+      hash: await sha256Hex(salt + ":email:" + normalizedEmail),
+    });
+  }
+
+  // Check phase — all checks before any write, same discipline as
+  // the grant path: a conflicting claim flips the account and binds
+  // nothing new.
+  const toBind: RecheckPlan[] = [];
+  for (const plan of plans) {
+    const owner = await claimOwner(svc, plan.table, plan.keyColumn, plan.hash);
+    if (owner && owner !== userId) {
+      const { error } = await svc
+        .from("user_settings")
+        .update({ billing_status: "trial_blocked" })
+        .eq("user_id", userId);
+      if (error) return json({ ok: false, error: "settings_write_failed" }, 500);
+      // Same generic-disclosure rule as the grant path: WHICH claim
+      // fired stays server-side only.
+      console.log("trial blocked", { kind: plan.kind, user_id: userId, via: "first_use" });
+      return json({
+        ok: true,
+        status: "trial_blocked",
+        trial_started_at: null,
+        trial_ends_at: null,
+        current_period_end: null,
+        decided: "not_eligible",
+      });
+    }
+    if (!owner) toBind.push(plan);
+  }
+
+  // Bind phase: record every claim this account doesn't already hold.
+  for (const plan of toBind) {
+    const insert: Record<string, unknown> = { user_id: userId };
+    insert[plan.keyColumn] = plan.hash;
+    const { error: claimErr } = await svc.from(plan.table).insert(insert);
+    // Duplicate key = a concurrent call from the same account won.
+    if (claimErr && !/duplicate|conflict/i.test(claimErr.message || "")) {
+      return json({ ok: false, error: "claim_write_failed" }, 500);
+    }
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ ok: false, error: "POST only" }, 405);
@@ -167,13 +258,37 @@ Deno.serve(async (req) => {
   const userId = user.id as string;
   const svc = serviceClient();
 
-  // Current billing state — idempotent return if already decided.
+  // Optional helper install id from the request body. Anything that
+  // isn't a non-empty string of <= 64 chars is treated as absent.
+  // Parsed up front: the first-use re-check below needs it too.
+  let extInstallId = "";
+  try {
+    const body = await req.json();
+    const raw = body && typeof body === "object" ? (body as any).ext_install_id : null;
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (trimmed.length >= 1 && trimmed.length <= 64) extInstallId = trimmed;
+    }
+  } catch {
+    /* no/invalid body — ext claim simply skipped */
+  }
+
+  // Current billing state — idempotent return if already decided,
+  // EXCEPT 'trialing': a running trial is re-checked first (rule
+  // 2b) so a phone-minted trial binds to — or is blocked by — the
+  // claims of the account/helper it is first used with. Every other
+  // decided state returns untouched: a paying customer is never
+  // re-checked and can never be claim-flipped.
   const { data: row } = await svc
     .from("user_settings")
     .select("billing_status, trial_started_at, trial_ends_at, current_period_end")
     .eq("user_id", userId)
     .maybeSingle();
   if (row && row.billing_status) {
+    if (row.billing_status === "trialing") {
+      const blocked = await firstUseRecheck(svc, userId, user.email, extInstallId);
+      if (blocked) return blocked;
+    }
     return json({
       ok: true,
       status: row.billing_status,
@@ -201,19 +316,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Optional helper install id from the request body. Anything that
-  // isn't a non-empty string of <= 64 chars is treated as absent.
-  let extInstallId = "";
-  try {
-    const body = await req.json();
-    const raw = body && typeof body === "object" ? (body as any).ext_install_id : null;
-    if (typeof raw === "string") {
-      const trimmed = raw.trim();
-      if (trimmed.length >= 1 && trimmed.length <= 64) extInstallId = trimmed;
-    }
-  } catch {
-    /* no/invalid body — ext claim simply skipped */
-  }
+  // (ext_install_id was parsed before the billing-state read above.)
 
   // ---- Claims -------------------------------------------------------
   // All three checks run BEFORE any claim is written, so a blocked

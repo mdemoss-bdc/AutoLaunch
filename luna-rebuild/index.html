@@ -4145,12 +4145,15 @@ function requestExtInstallId(timeoutMs) {
 }
 
 // Ask trial-start to decide this account's billing status (first
-// sign-in after signup). Idempotent server-side; fail-open here — if
-// the call fails, the status stays null (full access under tier rules)
-// for this session and the next load tries again. Both trial-grant
-// paths (the signup choice gate's chooseStartTrial and the legacy
+// sign-in after signup) or to re-check a running trial's claims
+// against this device (first-use binding, from loadUserStoreSettings
+// while the account is trialing). Idempotent server-side; fail-open
+// here — if the call fails, the status stays as loaded (null keeps
+// full access under tier rules; trialing keeps the trial) for this
+// session and the next load tries again. Both trial-grant paths
+// (the signup choice gate's chooseStartTrial and the legacy
 // auto-grant on sign-in) funnel through here, so the helper install
-// id rides along on both.
+// id rides along on all of them.
 let billingEnsureInFlight = false;
 async function ensureBillingStatus() {
   if (billingEnsureInFlight || !currentUser) return;
@@ -4976,7 +4979,9 @@ async function loadUserStoreSettings() {
     // shipped were backfilled to 'active') — ask it once, then apply.
     // Post-cutoff signups are the exception: they choose trial vs
     // plan on the signup choice gate first, so for them nothing is
-    // asked until they pick.
+    // asked until they pick. A 'trialing' status is asked again on
+    // every load — that call is the first-use binding re-check (see
+    // the branch below).
     currentBilling = {
       status: data && data.billing_status !== undefined ? data.billing_status : null,
       trialStartedAt: data ? (data.trial_started_at || null) : null,
@@ -4984,8 +4989,19 @@ async function loadUserStoreSettings() {
       periodEnd: data ? (data.current_period_end || null) : null,
       hasStripeCustomer: !!(data && data.stripe_customer_id)
     };
-    if (currentUser && !isOwnerUser(currentUser.id) && currentBilling.status === null) {
-      if (signupChoiceApplies()) {
+    if (currentUser && !isOwnerUser(currentUser.id) &&
+        (currentBilling.status === null || currentBilling.status === "trialing")) {
+      if (currentBilling.status === "trialing") {
+        // FIRST-USE BINDING: a trial granted on a phone (no helper)
+        // was never bound to the helper where its posts actually
+        // happen. Ask trial-start to re-check this running trial's
+        // claims against THIS device (ensureBillingStatus attaches
+        // the helper install id when one answers, fail-open when
+        // none does). If the re-check flips the account to
+        // trial_blocked, applyBillingUI just below lands it on the
+        // purchase gate with the generic eligibility copy.
+        await ensureBillingStatus();
+      } else if (signupChoiceApplies()) {
         // Post-cutoff signup: do NOT auto-call trial-start. The
         // signup choice gate (applied just below) is the trigger.
       } else {
