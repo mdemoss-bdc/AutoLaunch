@@ -1494,10 +1494,10 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
       </div>
 
       <div class="flex items-center border border-slate-300 rounded-xl bg-white p-0.5 shadow-sm">
-        <button id="viewBtnList" onclick="setViewMode('list')" title="List view" class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs cursor-pointer">
+        <button id="viewBtnList" onclick="setViewMode('list')" title="List view" class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs cursor-pointer">
           <i class="fa-solid fa-list"></i>
         </button>
-        <button id="viewBtnGrid" onclick="setViewMode('grid')" title="Grid view" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs cursor-pointer">
+        <button id="viewBtnGrid" onclick="setViewMode('grid')" title="Grid view" class="w-9 h-9 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs cursor-pointer">
           <i class="fa-solid fa-table-cells-large"></i>
         </button>
       </div>
@@ -4246,8 +4246,8 @@ function setViewMode(mode, savePref) {
   if (savePref !== false) {
     try { localStorage.setItem("al_inv_view", inventoryViewMode); } catch (e) {}
   }
-  const on = "w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs cursor-pointer";
-  const off = "w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs cursor-pointer";
+  const on = "w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs cursor-pointer";
+  const off = "w-9 h-9 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs cursor-pointer";
   const listBtn = document.getElementById("viewBtnList");
   const gridBtn = document.getElementById("viewBtnGrid");
   if (listBtn) listBtn.className = inventoryViewMode === "list" ? on : off;
@@ -5709,7 +5709,7 @@ const statusChip = blockedNoPhoto
 
                     <button
                         data-action="queue-remove" data-id="${escapeHtml(item.id)}"
-                        class="text-xs text-red-600 hover:text-red-700 font-semibold">
+                        class="text-xs text-red-600 hover:text-red-700 font-semibold px-3 py-2 -my-1">
 
                         Remove
 
@@ -5717,7 +5717,7 @@ const statusChip = blockedNoPhoto
 
                     ${item.status === "failed" ? `<button
                         data-action="queue-retry" data-id="${escapeHtml(item.id)}"
-                        class="text-xs text-blue-600 hover:text-blue-700 font-semibold">
+                        class="text-xs text-blue-600 hover:text-blue-700 font-semibold px-3 py-2 -my-1">
 
                         Retry
 
@@ -9009,6 +9009,32 @@ function closeModal(id) {
   document.getElementById(id).classList.add("hidden");
   if (id === "queueModal") syncQueuePoller();
 }
+
+// Modal close paths (mobile UX): modals used to close ONLY via their
+// ~18px ✕ button — rough one-handed on a phone. Escape now closes the
+// topmost open modal, and tapping the dimmed backdrop (the overlay
+// element itself, never the card inside it) closes it too. Both route
+// through closeModal — the exact call the ✕ makes — so per-modal close
+// behavior (queue poller sync, etc.) is unchanged. authOverlay is
+// excluded: it is the sign-in gate, not a dismissible modal.
+const MODAL_CLOSE_DENY = new Set(["authOverlay"]);
+function topmostOpenModal() {
+  const open = [...document.querySelectorAll("div.fixed.inset-0[id]")]
+    .filter(el => !el.classList.contains("hidden") && !MODAL_CLOSE_DENY.has(el.id));
+  return open.length ? open[open.length - 1] : null;
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const top = topmostOpenModal();
+  if (top) closeModal(top.id);
+});
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (!t || !t.classList || !t.id || MODAL_CLOSE_DENY.has(t.id)) return;
+  if (t.classList.contains("fixed") && t.classList.contains("inset-0") && !t.classList.contains("hidden")) {
+    closeModal(t.id);
+  }
+});
 // ==============================================================================
 // ====================== PHASE 4: SETTINGS THAT WORK ===========================
 // ==============================================================================
