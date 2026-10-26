@@ -26,6 +26,16 @@
 // worker cannot be reached at all, no pong is posted — the page's own
 // ~1.5s timeout is what reports "not installed", so a dead bridge never
 // masquerades as an installed-but-waiting helper.
+//
+// v2.1.45: it also carries the trial-abuse install-id request. The page
+// posts {type:"AUTOLAUNCH_EXT_INSTALL_ID_REQUEST", reqId}; the bridge
+// forwards it to the worker as {type:"AUTOLAUNCH_GET_INSTALL_ID"} and
+// posts the answer back as {type:"AUTOLAUNCH_EXT_INSTALL_ID", reqId,
+// installId}. This listener only ever runs on the AutoLaunch app
+// origin (the manifest scopes bridge.js to it) and only answers its
+// own window — the id is never exposed to any other site. If the
+// worker cannot be reached, nothing is posted and the page's own
+// timeout resolves the request as "no helper" (fail-open).
 (function () {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
@@ -56,6 +66,34 @@
       } catch (e) {
         // Extension context invalidated (e.g. extension was reloaded).
         // No pong: the page reports the helper as not reachable.
+      }
+      return;
+    }
+
+    if (data.type === "AUTOLAUNCH_EXT_INSTALL_ID_REQUEST") {
+      // Trial-abuse install id (v2.1.45): forward the page's request to
+      // the worker and post its answer back to the page. See the header
+      // note — no answer goes out at all if the worker is unreachable.
+      try {
+        chrome.runtime.sendMessage(
+          { type: "AUTOLAUNCH_GET_INSTALL_ID" },
+          (response) => {
+            if (chrome.runtime.lastError) return;
+            try {
+              window.postMessage(
+                {
+                  type: "AUTOLAUNCH_EXT_INSTALL_ID",
+                  reqId: data.reqId || null,
+                  installId: (response && response.installId) || null
+                },
+                window.location.origin
+              );
+            } catch (e) { /* page is gone — nothing to answer */ }
+          }
+        );
+      } catch (e) {
+        // Extension context invalidated — no reply; the page's own
+        // timeout treats it as "no helper" and the trial fails open.
       }
       return;
     }

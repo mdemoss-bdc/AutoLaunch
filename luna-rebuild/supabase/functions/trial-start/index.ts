@@ -1,6 +1,7 @@
 // =====================================================================
-// trial-start — AutoLaunch 5-day trial + one-trial-per-IP lock
-// (2026-10-26, see TIERS.md "Trial + Billing").
+// trial-start — AutoLaunch 5-day trial + one-trial-per-claim locks
+// (2026-10-26, see TIERS.md "Trial + Billing" and "Trial abuse
+// defenses").
 //
 // Called by the app on sign-in when an account has no billing status
 // yet. Idempotent: an account whose user_settings.billing_status is
@@ -9,22 +10,41 @@
 // Rules, in order:
 //   1. Accounts created before the trial system existed
 //      (auth created_at < 2026-10-26T00:00:00Z) are grandfathered:
-//      billing_status = 'active', no trial, no IP claim.
-//   2. Otherwise the caller's IP (x-forwarded-for first entry, else
-//      cf-connecting-ip) is salted + SHA-256 hashed (TRIAL_IP_SALT
-//      secret; the raw IP is never stored or logged). One trial per
-//      IP: if trial_ip_claims already holds the hash for a DIFFERENT
-//      account, this account is 'trial_blocked' — no trial.
-//   3. Otherwise the claim is recorded and the account gets
-//      billing_status = 'trialing', trial window = now .. now + 5 days.
-//   4. FAIL-OPEN: if no IP header is present (or the salt secret is
-//      missing), the trial is granted WITHOUT a claim — a missing
-//      header must never lock out a legitimate user.
+//      billing_status = 'active', no trial, no claims of any kind.
+//   2. Otherwise up to THREE independent one-trial claims are checked
+//      (each is a salted SHA-256, TRIAL_IP_SALT; raw values are never
+//      stored or logged):
+//        IP    — the caller's IP (x-forwarded-for first entry, else
+//                cf-connecting-ip) in trial_ip_claims. The hash
+//                formula (salt + ":" + ip) is the v1 original, kept
+//                byte-identical so claims written before v4 keep
+//                matching.
+//        EXT   — the helper's per-install id (v2.45+; the app passes
+//                ext_install_id in the body when the helper answered)
+//                in trial_ext_claims, hashed as salt + ":ext:" + id.
+//        EMAIL — the account's normalized email (from the verified
+//                JWT) in trial_email_claims, hashed as
+//                salt + ":email:" + normalized. Normalization:
+//                lowercase + trim; gmail.com / googlemail.com strip
+//                dots AND +tag from the local part and fold to
+//                gmail.com (same inbox by Google's own rules);
+//                outlook.com / hotmail.com / live.com / msn.com strip
+//                the +tag only; every other domain is used exactly as
+//                written. Letters and digits are never altered.
+//      If ANY claim is already held by a DIFFERENT account, this
+//      account is 'trial_blocked' — no trial, and no new claims are
+//      written for it. Otherwise all available claims are recorded
+//      for this account (same-account repeats are idempotent).
+//   3. On pass, the account gets billing_status = 'trialing' with a
+//      trial window of now .. now + 5 days.
+//   4. FAIL-OPEN: a missing IP, a missing/invalid ext id, or a
+//      missing salt secret skips that claim only — missing data must
+//      never lock out a legitimate user.
 //
 // verify_jwt=false at the platform level; the caller's JWT is verified
 // manually (same pattern as tiktok-auth / listing-copy). All writes go
-// through the service role — trial_ip_claims has RLS on with no
-// policies, so browsers can't read or write it at all.
+// through the service role — the claims tables have RLS on with no
+// policies, so browsers can't read or write them at all.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -91,6 +111,53 @@ function clientIp(req: Request): string {
   return (req.headers.get("cf-connecting-ip") || "").trim();
 }
 
+// [normalizer:start]
+// Normalize an account email for the one-trial-per-inbox claim.
+// Returns "local@domain" or null when the address is unusable.
+// gmail/googlemail: dots and +tag are not part of the inbox identity
+// (Google's own rule — both spellings deliver to one mailbox, and the
+// dotted variant cannot be registered by anyone else). Outlook family:
+// only the +tag is an alias. All other domains: exactly as written —
+// dots there can be genuinely different people. Letters and digits
+// are NEVER altered on any domain.
+function normalizeEmailForClaim(email: string): string | null {
+  const cleaned = (email || "").trim().toLowerCase();
+  const at = cleaned.lastIndexOf("@");
+  if (at < 1 || at === cleaned.length - 1) return null;
+  let local: string = cleaned.slice(0, at);
+  let domain: string = cleaned.slice(at + 1);
+  if (domain === "googlemail.com") domain = "gmail.com";
+  if (domain === "gmail.com") {
+    const plus = local.indexOf("+");
+    if (plus >= 0) local = local.slice(0, plus);
+    local = local.split(".").join("");
+  } else if (
+    domain === "outlook.com" || domain === "hotmail.com" ||
+    domain === "live.com" || domain === "msn.com"
+  ) {
+    const plus = local.indexOf("+");
+    if (plus >= 0) local = local.slice(0, plus);
+  }
+  if (!local || !domain) return null;
+  return local + "@" + domain;
+}
+// [normalizer:end]
+
+// Read an existing claim row's owner, or null when unclaimed.
+async function claimOwner(
+  svc: any,
+  table: string,
+  keyColumn: string,
+  hash: string,
+): Promise<string | null> {
+  const { data } = await svc
+    .from(table)
+    .select("user_id")
+    .eq(keyColumn, hash)
+    .maybeSingle();
+  return data && typeof data.user_id === "string" ? data.user_id : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ ok: false, error: "POST only" }, 405);
@@ -117,7 +184,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Grandfather: account predates the trial system.
+  // Grandfather: account predates the trial system. Claims nothing.
   const createdAt = Date.parse(user.created_at || "");
   if (Number.isFinite(createdAt) && createdAt < GRANDFATHER_CUTOFF) {
     const { error } = await svc
@@ -134,56 +201,113 @@ Deno.serve(async (req) => {
     });
   }
 
-  // IP claim check.
+  // Optional helper install id from the request body. Anything that
+  // isn't a non-empty string of <= 64 chars is treated as absent.
+  let extInstallId = "";
+  try {
+    const body = await req.json();
+    const raw = body && typeof body === "object" ? (body as any).ext_install_id : null;
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (trimmed.length >= 1 && trimmed.length <= 64) extInstallId = trimmed;
+    }
+  } catch {
+    /* no/invalid body — ext claim simply skipped */
+  }
+
+  // ---- Claims -------------------------------------------------------
+  // All three checks run BEFORE any claim is written, so a blocked
+  // account consumes nothing. A claim held by a different account
+  // blocks; a claim held by this account is an idempotent repeat.
+  const salt = Deno.env.get("TRIAL_IP_SALT") || "";
   const ip = clientIp(req);
-  let ipClaim = "skipped_no_ip";
-  let ipHashPrefix: string | null = null;
-  if (ip) {
-    const salt = Deno.env.get("TRIAL_IP_SALT") || "";
-    if (!salt) {
-      ipClaim = "skipped_no_salt"; // fail-open: never lock out over config
+
+  type ClaimPlan = {
+    kind: "ip" | "ext" | "email";
+    table: string;
+    keyColumn: string;
+    hash: string;
+    status: string; // outcome label reported on grant
+  };
+  const plans: ClaimPlan[] = [];
+  let ipClaimStatus = "skipped_no_ip";
+  let extClaimStatus = extInstallId ? "skipped_no_salt" : "skipped_no_ext_id";
+  let emailClaimStatus = "skipped_no_salt";
+
+  if (!salt) {
+    ipClaimStatus = ip ? "skipped_no_salt" : "skipped_no_ip";
+  } else {
+    if (ip) {
+      plans.push({
+        kind: "ip", table: "trial_ip_claims", keyColumn: "ip_hash",
+        hash: await sha256Hex(salt + ":" + ip), status: "claimed",
+      });
+    }
+    if (extInstallId) {
+      plans.push({
+        kind: "ext", table: "trial_ext_claims", keyColumn: "ext_hash",
+        hash: await sha256Hex(salt + ":ext:" + extInstallId), status: "claimed",
+      });
+    }
+    const normalizedEmail = normalizeEmailForClaim(
+      typeof user.email === "string" ? user.email : "",
+    );
+    if (normalizedEmail) {
+      plans.push({
+        kind: "email", table: "trial_email_claims", keyColumn: "email_hash",
+        hash: await sha256Hex(salt + ":email:" + normalizedEmail), status: "claimed",
+      });
     } else {
-      const ipHash = await sha256Hex(salt + ":" + ip);
-      ipHashPrefix = ipHash.slice(0, 8);
-      const { data: claim } = await svc
-        .from("trial_ip_claims")
-        .select("user_id")
-        .eq("ip_hash", ipHash)
-        .maybeSingle();
-      if (claim && claim.user_id !== userId) {
-        const { error } = await svc
-          .from("user_settings")
-          .upsert(
-            { user_id: userId, billing_status: "trial_blocked" },
-            { onConflict: "user_id" },
-          );
-        if (error) return json({ ok: false, error: "settings_write_failed" }, 500);
-        return json({
-          ok: true,
-          status: "trial_blocked",
-          trial_started_at: null,
-          trial_ends_at: null,
-          current_period_end: null,
-          decided: "ip_already_claimed",
-          ip_claim: "blocked_other_user",
-          ip_hash_prefix: ipHashPrefix,
-        });
-      }
-      if (!claim) {
-        const { error: claimErr } = await svc
-          .from("trial_ip_claims")
-          .insert({ ip_hash: ipHash, user_id: userId });
-        // A duplicate-key error just means a concurrent call from the
-        // same account won the race — not a failure.
-        if (claimErr && !/duplicate|conflict/i.test(claimErr.message || "")) {
-          return json({ ok: false, error: "claim_write_failed" }, 500);
-        }
-        ipClaim = "claimed";
-      } else {
-        ipClaim = "already_claimed_same_user";
-      }
+      emailClaimStatus = "skipped_no_email";
     }
   }
+
+  const ipPlan = plans.find((p) => p.kind === "ip") || null;
+  const extPlan = plans.find((p) => p.kind === "ext") || null;
+  const emailPlan = plans.find((p) => p.kind === "email") || null;
+
+  // Check phase (order: IP, ext, email — first conflict wins).
+  for (const plan of plans) {
+    const owner = await claimOwner(svc, plan.table, plan.keyColumn, plan.hash);
+    if (owner && owner !== userId) {
+      const { error } = await svc
+        .from("user_settings")
+        .upsert(
+          { user_id: userId, billing_status: "trial_blocked" },
+          { onConflict: "user_id" },
+        );
+      if (error) return json({ ok: false, error: "settings_write_failed" }, 500);
+      const blocked: Record<string, unknown> = {
+        ok: true,
+        status: "trial_blocked",
+        trial_started_at: null,
+        trial_ends_at: null,
+        current_period_end: null,
+        decided: plan.kind + "_already_claimed",
+      };
+      blocked[plan.kind + "_claim"] = "blocked_other_user";
+      blocked[plan.kind + "_hash_prefix"] = plan.hash.slice(0, 8);
+      return json(blocked);
+    }
+    if (owner === userId) plan.status = "already_claimed_same_user";
+  }
+
+  // Write phase: record every claim this account doesn't already hold.
+  for (const plan of plans) {
+    if (plan.status !== "claimed") continue;
+    const insert: Record<string, unknown> = { user_id: userId };
+    insert[plan.keyColumn] = plan.hash;
+    const { error: claimErr } = await svc.from(plan.table).insert(insert);
+    // A duplicate-key error just means a concurrent call from the
+    // same account won the race — not a failure.
+    if (claimErr && !/duplicate|conflict/i.test(claimErr.message || "")) {
+      return json({ ok: false, error: "claim_write_failed" }, 500);
+    }
+  }
+
+  if (ipPlan) ipClaimStatus = ipPlan.status;
+  if (extPlan) extClaimStatus = extPlan.status;
+  if (emailPlan) emailClaimStatus = emailPlan.status;
 
   // Grant the 5-day trial.
   const now = new Date();
@@ -207,7 +331,9 @@ Deno.serve(async (req) => {
     trial_ends_at: ends.toISOString(),
     current_period_end: null,
     decided: "trial_granted",
-    ip_claim: ipClaim,
-    ip_hash_prefix: ipHashPrefix,
+    ip_claim: ipClaimStatus,
+    ip_hash_prefix: ipPlan ? ipPlan.hash.slice(0, 8) : null,
+    ext_claim: extClaimStatus,
+    email_claim: emailClaimStatus,
   });
 });

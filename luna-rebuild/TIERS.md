@@ -587,6 +587,59 @@ including a trial user's one posted car if it sells). Server-side
   whose behavior the sequence harness re-verifies directly.
   Full-file inline-script parse clean.
 
+### Trial abuse defenses (added 2026-10-26)
+
+The original lock was one trial per IP (`trial_ip_claims`). Three
+layers were added on top, all rebuild-side plus trial-start v4:
+
+1. **Helper install claim** (`trial_ext_claims`). Helper v2.1.45
+   generates one random UUID per install (`al_install_id` in
+   `chrome.storage.local`, created lazily, stable across restarts and
+   updates; wiped by uninstall or a fresh Chrome profile — accepted,
+   it is a fence, not a fingerprint). When a trial starts, the app
+   asks the helper through the bridge (`AUTOLAUNCH_EXT_INSTALL_ID_
+   REQUEST` → `AUTOLAUNCH_GET_INSTALL_ID`, app origins only) with an
+   ~800 ms timeout and passes `ext_install_id` to trial-start —
+   **fail-open**: no helper or no answer, the trial proceeds on the
+   other claims alone. The server stores only the salted SHA-256
+   (`salt + ":ext:" + id`). Most people never reinstall the helper,
+   so a fresh email on the same install still can't mint a trial.
+2. **Account-email claim** (`trial_email_claims`). trial-start
+   hashes the verified-JWT email after normalization and claims it
+   the same way. Normalization is deliberately narrow: lowercase +
+   trim; gmail.com / googlemail.com strip dots AND `+tag` from the
+   local part and fold to gmail.com (provably one inbox by Google's
+   own rules — the dotted variant can't belong to anyone else);
+   outlook.com / hotmail.com / live.com / msn.com strip the `+tag`
+   only (dots there can be different people); every other domain is
+   used exactly as written. Letters and digits are never altered
+   anywhere (`matthewdemoss1@…` is a different claim from
+   `matthewdemoss@…`).
+3. **Disposable-domain block at sign-up** (app-side). A curated
+   `DISPOSABLE_EMAIL_DOMAINS` list (~37 throwaway providers —
+   mailinator, guerrillamail, yopmail, 10minutemail, …) is refused on
+   the sign-up submit path with "That email service isn't accepted
+   for sign-up — please use a regular email address." Matching is
+   exact-domain or subdomain-of. No real provider (gmail, yahoo,
+   outlook, icloud, proton, …) and no dealership-plausible domain is
+   or may be listed; sign-in is never blocked.
+
+Claim discipline in trial-start v4: all checks run before any claim
+is written, so a blocked account consumes nothing; a claim held by a
+different account returns `trial_blocked` with `decided` of
+`ip_already_claimed` / `ext_already_claimed` /
+`email_already_claimed`. Grandfathered accounts claim nothing, as
+before, and every missing input (IP, ext id, salt) skips only its own
+claim (fail-open). The IP hash formula is unchanged from v1 so live
+claims keep matching. DDL record:
+`supabase/migrations_draft/trial_claims_hardening_APPLIED_2026-10-26.sql`.
+
+**In reserve (Matthew's call, NOT built): requiring a card to start
+a trial.** It is the only layer that binds a trial to a distinct
+payer; it is held back because it also suppresses legitimate
+sign-ups. Flip it on only if abuse actually shows up despite the
+three layers above.
+
 ### What remains to take real money
 
 1. ~~Connect Stripe~~ — done 2026-10-26 (account activated; products

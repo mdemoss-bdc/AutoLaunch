@@ -4109,16 +4109,57 @@ function fmtBillingDate(ms) {
   return new Date(ms).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
+// Trial-abuse hardening (2026-10-26): ask the helper for its
+// per-install id (helper v2.1.45+) so trial-start can bind a claim to
+// the install as well as the IP. Same bridge pattern as the setup
+// page's PING/PONG: post AUTOLAUNCH_EXT_INSTALL_ID_REQUEST with a
+// request id, await the matching AUTOLAUNCH_EXT_INSTALL_ID answer.
+// FAIL-OPEN by design: no helper installed, no answer inside the
+// timeout, or any error resolves to null and the trial proceeds
+// exactly as before — a missing helper must never block a trial.
+function requestExtInstallId(timeoutMs) {
+  return new Promise(function (resolve) {
+    let settled = false;
+    const reqId = "extid-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+    const finish = function (value) {
+      if (settled) return;
+      settled = true;
+      try { window.removeEventListener("message", onMsg); } catch (e) { /* ignore */ }
+      resolve(value);
+    };
+    const onMsg = function (event) {
+      if (event.source !== window) return;
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== "AUTOLAUNCH_EXT_INSTALL_ID" || data.reqId !== reqId) return;
+      finish(typeof data.installId === "string" && data.installId ? data.installId : null);
+    };
+    window.addEventListener("message", onMsg);
+    setTimeout(function () { finish(null); }, timeoutMs || 800);
+    try {
+      window.postMessage({ type: "AUTOLAUNCH_EXT_INSTALL_ID_REQUEST", reqId: reqId }, "*");
+    } catch (e) {
+      finish(null);
+    }
+  });
+}
+
 // Ask trial-start to decide this account's billing status (first
 // sign-in after signup). Idempotent server-side; fail-open here — if
 // the call fails, the status stays null (full access under tier rules)
-// for this session and the next load tries again.
+// for this session and the next load tries again. Both trial-grant
+// paths (the signup choice gate's chooseStartTrial and the legacy
+// auto-grant on sign-in) funnel through here, so the helper install
+// id rides along on both.
 let billingEnsureInFlight = false;
 async function ensureBillingStatus() {
   if (billingEnsureInFlight || !currentUser) return;
   billingEnsureInFlight = true;
   try {
-    const { data, error } = await supabaseClient.functions.invoke("trial-start", { body: {} });
+    const extInstallId = await requestExtInstallId(800);
+    const body = {};
+    if (extInstallId) body.ext_install_id = extInstallId;
+    const { data, error } = await supabaseClient.functions.invoke("trial-start", { body: body });
     if (!error && data && data.status) {
       currentBilling.status = data.status;
       if (data.trial_started_at) currentBilling.trialStartedAt = data.trial_started_at;
@@ -4653,6 +4694,44 @@ function togglePasswordVisibility(inputId, iconId) {
   }
 }
 
+// Disposable-email block for sign-up (trial-abuse hardening,
+// 2026-10-26). Throwaway inboxes exist to burn free trials, so a
+// curated set of well-known disposable providers is refused at
+// sign-up with a plain message. Matching is exact-domain OR a
+// subdomain of a listed domain (x.mailinator.com is as disposable as
+// mailinator.com). This list deliberately NEVER includes a real
+// mailbox provider (gmail, yahoo, outlook, icloud, proton, ...) or
+// any domain a dealership could plausibly use — sign-in is never
+// blocked, only sign-up, and only for these throwaway services.
+const DISPOSABLE_EMAIL_DOMAINS = [
+  "mailinator.com", "guerrillamail.com", "guerrillamailblock.com",
+  "sharklasers.com", "10minutemail.com", "temp-mail.org",
+  "tempmail.com", "yopmail.com", "trashmail.com", "getnada.com",
+  "dispostable.com", "fakeinbox.com", "maildrop.cc",
+  "throwawaymail.com", "mohmal.com", "spam4.me", "discard.email",
+  "mailnesia.com", "mintemail.com", "mytemp.email", "tempail.com",
+  "burnermail.io", "mailcatch.com", "guerrillamail.net",
+  "guerrillamail.org", "guerrillamail.de", "yopmail.fr",
+  "cool.fr.nf", "jetable.fr.nf", "nospam.ze.tc", "nomail.xl.cx",
+  "mega.zik.dj", "speed.1s.fr", "courriel.fr.nf", "moncourrier.fr.nf",
+  "monemail.fr.nf", "monmail.fr.nf"
+];
+
+function emailDomainOf(email) {
+  const cleaned = String(email || "").trim().toLowerCase();
+  const at = cleaned.lastIndexOf("@");
+  if (at < 1 || at === cleaned.length - 1) return "";
+  return cleaned.slice(at + 1);
+}
+
+function isDisposableEmail(email) {
+  const domain = emailDomainOf(email);
+  if (!domain) return false;
+  return DISPOSABLE_EMAIL_DOMAINS.some(function (listed) {
+    return domain === listed || domain.endsWith("." + listed);
+  });
+}
+
 async function handleAuthSubmit(e) {
   e.preventDefault();
   const errBox = document.getElementById("authErrorMsg");
@@ -4665,6 +4744,14 @@ async function handleAuthSubmit(e) {
 
   try {
     if (authMode === "signup") {
+      if (isDisposableEmail(email)) {
+        errBox.innerText = "That email service isn't accepted for sign-up \u2014 please use a regular email address.";
+        errBox.classList.remove("hidden", "text-emerald-600", "text-amber-600");
+        errBox.classList.add("text-rose-600");
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Register";
+        return;
+      }
       submitBtn.innerText = "Registering...";
       const { data, error } = await supabaseClient.auth.signUp({
         email,
@@ -7964,7 +8051,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.44";
+const EXPECTED_EXT_VERSION = "2.1.45";
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }

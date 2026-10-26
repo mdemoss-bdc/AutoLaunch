@@ -271,6 +271,31 @@ async function storedAccessToken() {
   return token || null;
 }
 
+// Trial-abuse install identifier (v2.1.45). ONE random UUID per helper
+// install, kept in chrome.storage.local under al_install_id: created
+// lazily on first request, then stable across restarts, updates, and
+// site-data clears. It identifies the INSTALL, never a person or an
+// account — uninstall/reinstall or a fresh Chrome profile starts over,
+// which is accepted: this is a fence against casual trial farming,
+// not a device fingerprint. The only reader is the
+// AUTOLAUNCH_GET_INSTALL_ID bridge answer below, which goes solely to
+// the AutoLaunch app origin; the app sends it to trial-start when a
+// trial begins, and the server stores only a salted hash of it.
+async function getOrCreateInstallId() {
+  const { al_install_id: existing } =
+    await chrome.storage.local.get(["al_install_id"]);
+  if (existing) return existing;
+  let id = null;
+  try { id = crypto.randomUUID(); } catch (e) { /* fall through */ }
+  if (!id) {
+    id = "al-" + Date.now().toString(36) + "-" +
+      Math.random().toString(36).slice(2, 10) +
+      Math.random().toString(36).slice(2, 10);
+  }
+  await chrome.storage.local.set({ al_install_id: id });
+  return id;
+}
+
 async function sbHeaders(extra) {
   const token = await storedAccessToken();
   return Object.assign({
@@ -1437,6 +1462,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       let version = null;
       try { version = chrome.runtime.getManifest().version || null; } catch (e) { /* keep null */ }
       sendResponse({ hasToken: !!token, version });
+    })();
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_GET_INSTALL_ID") {
+    // Trial-abuse install id (v2.1.45): only the bridge on the
+    // AutoLaunch origin may ask — same sender discipline as the ping
+    // above. The answer is the install UUID itself (never a user id,
+    // never the session token).
+    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    if (!fromApp) return;
+    (async () => {
+      const installId = await getOrCreateInstallId();
+      sendResponse({ installId });
     })();
     return true;
   }
