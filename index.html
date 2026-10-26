@@ -957,7 +957,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
     <div class="flex items-start justify-between gap-4 flex-wrap">
       <div>
         <h1 class="text-3xl font-black text-slate-900">Prospects</h1>
-        <p class="text-slate-500 mt-1">Everyone who reached out about a car — and where they are in the buying process. Not a CRM. Just the list, kept current. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('prospects')">How Prospects works →</span></p>
+        <p class="text-slate-500 mt-1">Everyone who reached out about a car — and where they are in the buying process. Not a CRM. Just the list, kept current. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('prospects')">How Prospects works →</span> <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('messages')">Get your messages flowing →</span></p>
       </div>
       <button onclick="openProspectForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
         <i class="fa-solid fa-plus text-[10px]"></i>
@@ -987,7 +987,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
 
     <div>
       <h1 class="text-3xl font-black text-slate-900">Luca <span class="text-slate-400 font-bold text-xl">· AI Assistant</span></h1>
-      <p class="text-slate-500 mt-1">Luca answers your buyer chats the way <em>you</em> would. He learns from your corrections, follows the instructions you give him, and hands the chat back the moment it needs a human. Set him up below. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('luca')">How Luca works →</span></p>
+      <p class="text-slate-500 mt-1">Luca answers your buyer chats the way <em>you</em> would. He learns from your corrections, follows the instructions you give him, and hands the chat back the moment it needs a human. Set him up below. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('luca')">How Luca works →</span> <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('messages')">Get your messages flowing →</span></p>
     </div>
 
     <div class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-900 leading-relaxed">
@@ -9082,6 +9082,30 @@ const GUIDES = {
       "The sidebar number is an attention light, not a headcount: it only shows for updates you haven't seen — a new buyer message or a brand-new captured prospect — and clears when you open Prospects.",
       "Replying from a card needs the helper hub running (PC awake, Chrome open, Messenger tab open) — same rule as posting.",
       "Prospects are yours alone: chats are never shared between accounts."
+    ]
+  },
+  messages: {
+    title: "Get your messages flowing",
+    icon: "fa-solid fa-comments",
+    iconClasses: "bg-cyan-50 text-cyan-600 border-cyan-200",
+    modal: null,
+    what: "When a buyer messages you about a vehicle on Marketplace, the chat shows up in Prospects on its own — a brand-new buyer gets a card created for them, no clicking, nothing to open. The helper does it by reading your Messenger inbox from your hub computer, so the setup below is what makes it work.",
+    steps: [
+      "Leave your hub computer AWAKE (a locked screen is fine), with Chrome open and the helper extension installed and current.",
+      "Keep a tab open on the FULL Messenger page — facebook.com/messages — signed in to Facebook. The small chat pane on the regular Facebook page is not enough: the helper reads your inbox from the full page.",
+      "In Chrome settings, exempt facebook.com from Memory Saver, so that tab never gets frozen.",
+      "For a chat that did NOT start on Marketplace, open it on Facebook and click the floating '🌙 Capture chat for Luca' button — the helper puts it on the Messenger page (and on the small chat popup on listing pages) while a chat is open. One click pulls that chat into Prospects.",
+      "Read and reply right from the prospect's card in AutoLaunch — the helper delivers your reply into the Facebook thread for you."
+    ],
+    notes: [
+      "Only Marketplace chats flow in by themselves. Plain Messenger chats are never auto-imported — that's what the Capture button is for.",
+      "The Capture button lives on Facebook, added by the helper — it is not inside AutoLaunch, so don't hunt for it here.",
+      "Messages not showing up? First check the helper: open chrome://extensions, find AutoLaunch Vehicle Assistant, and make sure it's installed and current.",
+      "Still nothing? Refresh the Facebook tab — a tab that was open before the helper was installed or updated can't hear it.",
+      "Only the little chat pane open? Open facebook.com/messages in its own tab and leave it there.",
+      "If the PC was asleep or off, nothing is lost: messages sync in on their own once it's awake again.",
+      "Signed out of Facebook? Sign back in — the helper can't read an inbox it can't see.",
+      "Luca drafts replies on the prospect card, in your voice. He never sends: you read every draft, edit if you like, and you press send."
     ]
   },
   luca: {
