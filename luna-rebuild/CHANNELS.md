@@ -32,6 +32,7 @@ backoff, never in a burst.
 Status: Phase 2/3 of GAMEPLAN.md.
 
 ## Channel 2 — Instagram (official API — true server-side auto-post)
+**Prep status (2026-10-26): plumbing drafted, NOT live — see `INSTAGRAM.md` for the full checklist. `instagram-auth` / `instagram-post` function drafts + the `instagram_connections` migration wait on Meta business verification (bank letter), then App Review for `instagram_business_content_publish`.**
 How: Instagram Content Publishing API, from Matthew's Meta app.
 User does: ONE Connect click + Meta login, and the Instagram account must
 be a Professional (Business/Creator) account — onboarding must check this
