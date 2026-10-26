@@ -2189,7 +2189,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #eli
           <div class="flex items-center justify-between mb-5">
             <div>
               <p class="text-sm font-semibold text-slate-800">Attach an intro video to my posts</p>
-              <p class="text-xs text-slate-500">Off by default. Your choice saves right away.</p>
+              <p class="text-xs text-slate-500">Off by default. Your choice saves right away. Not live on any channel yet — uploading now means you're ready the day it lands.</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="chkIntroVideoEnabled" onchange="toggleIntroEnabled(this)" class="sr-only peer">
@@ -3892,6 +3892,7 @@ async function fetchLiveInventory(isManual) {
         .select("*")
         .eq("user_id", currentUser.id)
         .order("price", { ascending: true })
+        .order("vin", { ascending: true })
         .range(from, from + step - 1);
 
       if (error) throw error;
@@ -4080,11 +4081,15 @@ function normalizeInventorySearchText(value) {
 function normalizeInventoryIdentifier(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
+let inventorySearchTimer = null;
 function handleInventorySearch() {
   const input = document.getElementById("searchInput");
   const clearBtn = document.getElementById("clearSearchBtn");
   if (clearBtn) clearBtn.classList.toggle("hidden", !(input && input.value));
-  applyFilters();
+  // Debounced: filtering re-renders the whole list, so don't pay it per
+  // keystroke — 150 ms after the last key is soon enough to feel instant.
+  if (inventorySearchTimer) clearTimeout(inventorySearchTimer);
+  inventorySearchTimer = setTimeout(applyFilters, 150);
 }
 function clearInventorySearch() {
   const input = document.getElementById("searchInput");
@@ -4131,24 +4136,18 @@ function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
   const sort = document.getElementById("sortSelect").value;
 
-  let filtered = rawInventory.filter(car => {
-const filterLocation =
-    document.getElementById("filterLocation")?.value || "";
-const filterYear =
-    document.getElementById("filterYear")?.value || "";
-const filterMake =
-    document.getElementById("filterMake")?.value || "";
-const filterModel =
-    document.getElementById("filterModel")?.value || "";
-const filterCondition =
-    document.getElementById("filterCondition")?.value || "";
-const filterColor =
-    document.getElementById("filterColor")?.value || "";
-const filterPriceRange =
-    document.getElementById("filterPriceRange")?.value || "";
-const filterMileageRange =
-    document.getElementById("filterMileageRange")?.value || "";
+  // Filter values are read ONCE here — they used to be re-read inside the
+  // per-car callback below (8 DOM lookups × every car × every keystroke).
+  const filterLocation = document.getElementById("filterLocation")?.value || "";
+  const filterYear = document.getElementById("filterYear")?.value || "";
+  const filterMake = document.getElementById("filterMake")?.value || "";
+  const filterModel = document.getElementById("filterModel")?.value || "";
+  const filterCondition = document.getElementById("filterCondition")?.value || "";
+  const filterColor = document.getElementById("filterColor")?.value || "";
+  const filterPriceRange = document.getElementById("filterPriceRange")?.value || "";
+  const filterMileageRange = document.getElementById("filterMileageRange")?.value || "";
 
+  let filtered = rawInventory.filter(car => {
     if (
         filterLocation &&
         displayLocation(car.location_name) !== filterLocation
@@ -4252,7 +4251,10 @@ if (filterMileageRange) {
     if (sort === "miles_desc") return ((b.mileage || 0) - (a.mileage || 0)) || byMake(a, b);
     if (sort === "status_asc" || sort === "status_desc") {
       // Status groups: 0 Not posted, 1 Queued, 2 Posted, 3 Sold.
-      const rank = (c) => isSold(c) ? 3 : c.marketplace_posted_at ? 2 : (postingQueue.some(i => i.vin === c.vin && i.status === "pending") ? 1 : 0);
+      // Queued VINs are collected once — the comparator used to rescan
+      // postingQueue for every comparison (O(n log n × queue) per sort).
+      const queuedVins = new Set(postingQueue.filter(i => i.status === "pending").map(i => i.vin));
+      const rank = (c) => isSold(c) ? 3 : c.marketplace_posted_at ? 2 : (queuedVins.has(c.vin) ? 1 : 0);
       const d = rank(a) - rank(b);
       return (sort === "status_asc" ? d : -d) || byMake(a, b);
     }
@@ -5984,10 +5986,9 @@ if (!rows.length) {
 }
 async function removeQueueItem(id) {
 
-    if (!confirm(
-        "Remove this vehicle from the queue?"
-    )) return;
-
+    // No confirm on a single row: removing a pending/failed item posts
+    // nothing and is undone by tapping Post again. The sweeping actions
+    // (Remove Selected / Remove All) still confirm.
     try {
 
         const { error } = await supabaseClient
@@ -7139,12 +7140,22 @@ async function loadProspects() {
     // Captured chats (Luca Phase 2): count + latest line per prospect.
     // Non-fatal — a missing messages table just means no chat lines.
     try {
-      const { data: msgs } = await supabaseClient
-        .from("closer_messages")
-        .select("id, prospect_id, body, direction, origin, status, created_at")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: false })
-        .limit(1000);
+      // PostgREST caps a response at 1,000 rows: the old .limit(1000)
+      // silently dropped older threads from chat counts, the
+      // conversation view and the attention badge once a rep passed
+      // 1,000 captured messages. Paginate newest-first until a short
+      // page (10-page safety stop so a corrupt loop can't spin).
+      const msgs = [];
+      for (let msgFrom = 0; msgFrom < 10000; msgFrom += 1000) {
+        const { data: msgPage } = await supabaseClient
+          .from("closer_messages")
+          .select("id, prospect_id, body, direction, origin, status, created_at")
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: false })
+          .range(msgFrom, msgFrom + 999);
+        msgs.push(...(msgPage || []));
+        if (!msgPage || msgPage.length < 1000) break;
+      }
       prospectChats = {};
       prospectOutbound = {};
       prospectMessages = {};
@@ -8095,12 +8106,23 @@ async function fillHomeLocationOptions() {
   if (!sel || clHomeLocFilled) return;
   clHomeLocFilled = true;
   try {
-    const { data } = await supabaseClient
-      .from("scraped_inventory")
-      .select("location_name")
-      .eq("is_active", true)
-      .not("location_name", "is", null)
-      .limit(4000);
+    // PostgREST silently caps any single response at 1,000 rows, so the
+    // old .limit(4000) only ever saw the first 1,000 active cars — a
+    // rooftop whose cars sit beyond that window never appeared in this
+    // list. Paginate until a short page (same pattern as the inventory
+    // fetch and the scraper's auto-post pass).
+    const data = [];
+    for (let locFrom = 0; ; locFrom += 1000) {
+      const { data: locPage, error: locError } = await supabaseClient
+        .from("scraped_inventory")
+        .select("location_name")
+        .eq("is_active", true)
+        .not("location_name", "is", null)
+        .range(locFrom, locFrom + 999);
+      if (locError) throw locError;
+      data.push(...(locPage || []));
+      if (!locPage || locPage.length < 1000) break;
+    }
     // Show the same DISPLAY locations the Inventory filter shows:
     // raw rooftops the user combined in Settings -> Location Groups
     // collapse to the group name, so picking a group makes every
@@ -9489,10 +9511,11 @@ const GUIDES = {
     steps: [
       "Open Settings → Dealership → My Intro Videos and upload (up to 6 clips, each under 50 MB and 90 seconds — under 30 seconds works best).",
       "Pick whether channels use one selected clip or rotate randomly.",
-      "Flip the master toggle on when you're ready for clips to be used.",
+      "Flip the master toggle on so you're ready the day channels start using clips.",
       "Keep it simple: name, store, and one line about how you work. Buyers decide in the first three seconds."
     ],
     notes: [
+      "Not live yet: no channel attaches clips today. Uploading now means your clip is ready the moment channel support lands.",
       "Intro videos never affect Marketplace posting — if a clip has any problem, posting carries on without it.",
       "Clips are stored on your account only."
     ]
