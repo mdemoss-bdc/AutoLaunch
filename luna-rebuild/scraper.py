@@ -31,7 +31,6 @@ from supabase import create_client
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or "https://tdsipiltwajwhzgjsupx.supabase.co"
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w"
-USER_ID = os.environ.get("USER_ID")
 
 db = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -57,18 +56,6 @@ except ValueError:
 # Manual Actions runs with no pending job keep honoring the env input
 # exactly as before (0 = the full refill Matthew runs by hand).
 TEST_SYNC_LIMIT = 15
-
-def get_user_configuration(uid: str):
-    if not uid:
-        print("[!] No USER_ID passed to scraper.")
-        return {}
-    try:
-        res = db.table("user_settings").select("*").eq("user_id", uid).execute()
-        if res.data and len(res.data) > 0:
-            return res.data[0]
-    except Exception as e:
-        print(f"[!] Warning reading user_settings: {e}")
-    return {}
 
 def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
     if page_num == 1:
@@ -824,6 +811,21 @@ def _money_int(raw) -> int:
     return v if 1000 <= v <= 350000 else None
 
 
+def _mileage_int(raw) -> int:
+    """Parse an odometer value to int or None. Wider band than prices:
+    a new car can legitimately show a few hundred miles (the VDP spec
+    block once stored NULL for a 442-mile car because _money_int's
+    price floor of 1,000 discarded it), and a high-mile trade can pass
+    350k. Range sanity only: 0..2,000,000."""
+    if raw is None:
+        return None
+    try:
+        v = int(float(str(raw).replace(",", "").strip()))
+    except (TypeError, ValueError):
+        return None
+    return v if 0 <= v <= 2000000 else None
+
+
 def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     """Extract gallery photos, advertised final price, and spec colors from a
     DealerOn VDP's raw HTML. Returns a dict; missing pieces stay None/[]."""
@@ -930,7 +932,7 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
             if odo is not None and out["mileage"] is None:
                 if isinstance(odo, dict):
                     odo = odo.get("value")
-                mv = _money_int(odo)
+                mv = _mileage_int(odo)
                 if mv is not None:
                     out["mileage"] = mv
 
@@ -1326,9 +1328,15 @@ def _usable_photo_count(car: dict) -> int:
             return
         if "/static/" in u:
             return
-        if u.endswith("assets/no-photo.png"):
+        # Normalize for counting: the same photo served at several
+        # sizes differs only in the query string (?width=800 vs
+        # ?width=1200) and must count ONCE, and a placeholder URL
+        # carrying a query string ("no-photo.png?width=...") must
+        # still be recognized as the placeholder.
+        path = u.split("?", 1)[0].split("#", 1)[0]
+        if path.endswith("assets/no-photo.png"):
             return
-        urls.add(u)
+        urls.add(path)
 
     add(car.get("image_url"))
     for key in ("photos", "custom_photo_urls"):
@@ -1409,6 +1417,13 @@ def _auto_post_filtered(uid: str) -> int:
         if not isinstance(conditions, list):
             conditions = []
         allowed_locations = _auto_post_allowed_locations(s)
+        # Compare locations case/whitespace-insensitively on BOTH sides:
+        # a stored display name or a scraped lot name drifting by a
+        # trailing space or capital would otherwise fail the whole
+        # filter closed, silently, for every car at that lot.
+        allowed_norm = None
+        if allowed_locations is not None:
+            allowed_norm = {str(n).strip().lower() for n in allowed_locations}
         try:
             limit = int(s.get("daily_post_limit"))
         except Exception:
@@ -1420,7 +1435,6 @@ def _auto_post_filtered(uid: str) -> int:
         # today that are not already counted. (UTC day boundary; the
         # app/extension count from local midnight — a pacing cap does
         # not need to agree to the minute.)
-        from datetime import datetime, timezone
         start_iso = datetime.now(timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0
         ).isoformat()
@@ -1455,13 +1469,26 @@ def _auto_post_filtered(uid: str) -> int:
             return 0
 
         # A VIN already holding a live post job never gets a second.
-        live = (
-            db.table("auto_posting_queue")
-            .select("vin, target_channel")
-            .eq("user_id", uid)
-            .in_("status", ["pending", "processing"])
-            .execute()
-        ).data or []
+        # Paginated like the candidate scan below: past 1,000 live
+        # rows the silent PostgREST cap would hide older live jobs
+        # and the pass could double-queue their cars.
+        live = []
+        _loff = 0
+        while True:
+            _lpage = (
+                db.table("auto_posting_queue")
+                .select("vin, target_channel")
+                .eq("user_id", uid)
+                .in_("status", ["pending", "processing"])
+                .order("vin")
+                .order("target_channel")
+                .range(_loff, _loff + 999)
+                .execute()
+            ).data or []
+            live.extend(_lpage)
+            if len(_lpage) < 1000:
+                break
+            _loff += 1000
         live_keys = {
             (r.get("vin"), r.get("target_channel") or "marketplace")
             for r in live if r.get("vin")
@@ -1521,9 +1548,9 @@ def _auto_post_filtered(uid: str) -> int:
         for car in inv:
             if allowance is not None and cars_queued >= allowance:
                 break
-            if (car.get("status") or "").lower() == "sold":
+            if (car.get("status") or "").strip().lower() == "sold":
                 continue
-            if allowed_locations is not None and (car.get("location_name") or "") not in allowed_locations:
+            if allowed_norm is not None and (car.get("location_name") or "").strip().lower() not in allowed_norm:
                 continue
             if not _condition_matches(car.get("condition") or "", conditions):
                 continue
@@ -1562,7 +1589,13 @@ def _auto_post_filtered(uid: str) -> int:
         if not queue_rows:
             print(f"[*] Auto-post for user {uid[:8]}: no unposted cars match the filter right now.")
             return 0
-        db.table("auto_posting_queue").insert(queue_rows).execute()
+        # Insert in chunks: one giant all-or-nothing request for an
+        # unlimited user could fail on payload size and queue nothing
+        # at all. A failed chunk still surfaces via the outer warning;
+        # chunks already inserted are protected from re-queueing next
+        # run by the live-job guard above.
+        for _ci in range(0, len(queue_rows), 200):
+            db.table("auto_posting_queue").insert(queue_rows[_ci:_ci + 200]).execute()
         print(
             f"[✓] Auto-post for user {uid[:8]}: queued {cars_queued} car(s) "
             f"across {len(channels)} channel(s) "
@@ -1601,6 +1634,7 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
                 .select("vin, marketplace_posted_at, year, make, model, price, stock_number")
                 .eq("user_id", uid)
                 .eq("is_active", True)
+                .order("vin")
                 .range(offset, offset + page_size - 1)
                 .execute()
             )
