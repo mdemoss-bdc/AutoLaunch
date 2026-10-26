@@ -1467,22 +1467,35 @@ def _auto_post_filtered(uid: str) -> int:
             for r in live if r.get("vin")
         }
 
-        # NOTE (2026-10-25, post-mortem): the first live run of this
-        # pass printed "no unposted cars match" while 60 cars matched
-        # every filter — the unposted test must use the client's own
-        # is_() method, not the generic filter() call, and the pass
-        # now logs its raw candidate count so a silent empty result
-        # can never hide again.
-        inv = (
-            db.table("scraped_inventory")
-            .select("vin, year, make, model, price, condition, color, interior_color, status, location_name, stock_number, image_url, photos, custom_photo_urls, first_seen")
-            .eq("user_id", uid)
-            .eq("is_active", True)
-            .is_("marketplace_posted_at", "null")
-            .order("first_seen", desc=True)
-            .limit(4000)
-            .execute()
-        ).data or []
+        # NOTE (2026-10-25, post-mortem): the first two live runs of
+        # this pass queued NOTHING while 60 cars matched every filter.
+        # Root cause: PostgREST silently caps a response at 1,000
+        # rows, so a single .limit(4000) query only ever saw the
+        # NEWEST 1,000 unposted cars — and every qualifying car is
+        # older backlog beyond that window (verified: 0 of the 60
+        # matches fall inside it). The pass therefore PAGINATES with
+        # .range() — the same pattern the stale pass uses — until a
+        # short page comes back, and orders by vin as a tiebreaker so
+        # pages can't shuffle tied first_seen rows across boundaries.
+        inv = []
+        _page_size = 1000
+        _offset = 0
+        while True:
+            _page = (
+                db.table("scraped_inventory")
+                .select("vin, year, make, model, price, condition, color, interior_color, status, location_name, stock_number, image_url, photos, custom_photo_urls, first_seen")
+                .eq("user_id", uid)
+                .eq("is_active", True)
+                .is_("marketplace_posted_at", "null")
+                .order("first_seen", desc=True)
+                .order("vin")
+                .range(_offset, _offset + _page_size - 1)
+                .execute()
+            ).data or []
+            inv.extend(_page)
+            if len(_page) < _page_size:
+                break
+            _offset += _page_size
         print(
             f"[*] Auto-post for user {uid[:8]}: filter locations="
             f"{'all' if allowed_locations is None else sorted(allowed_locations)}, "
