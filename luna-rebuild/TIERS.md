@@ -81,9 +81,10 @@ Enforcement sits at the two post-queue insert paths, in the same
 place as the trial cap: single-car `enqueueMarketplaceCar` and the
 bulk queue both run `trialQueueGate` → **`postPlanQueueGate`** →
 `checkDailyLimit` (the user's own safety limit) → insert. The plan
-gate counts with the trial cap's own query
-(`getTrialQueueUsedToday` — UTC day, non-failed rows, delete rows
-excluded; no second counting method was created) and is
+gate counts with the shared cap counter
+(`getTrialQueueUsedToday` — distinct VINs across today's non-failed,
+non-delete queue rows UNION today's posted cars; see the counting
+paragraph under "Trial mode in the app") and is
 all-or-nothing like the trial gate: a bulk selection that would pass
 the cap queues nothing and shows the notice. The gate fires **only
 when the plan cap is the binding limit** — a Post user whose own
@@ -369,9 +370,20 @@ the trial starting silently on first load.
 
 - Inventory + Sync work normally. Every post-queue insert path
   (single Post button and bulk queue) first runs `trialQueueGate()`:
-  posts queued today (UTC day, non-failed — the `getDailyPostUsage`
-  counting semantics) must be **< 1**, and a bulk selection of more
-  than one car is refused with the trial notice. *Delete* rows
+  posts used today must be **< 1**, and a bulk selection of more
+  than one car is refused with the trial notice. "Used today" is
+  counted by `getTrialQueueUsedToday()` (UTC day) as **distinct
+  VINs in the union of today's non-failed, non-delete queue rows
+  and today's posted cars** (`scraped_inventory.marketplace_posted_at`
+  at or after UTC midnight). The posted-cars half is load-bearing:
+  the helper deletes a queue row when its job completes, so a
+  queue-rows-only count resets the allowance the moment a car posts
+  — the leak Matthew caught live on 2026-10-26, fixed the same day.
+  A car queued and posted the same day counts once (same VIN in
+  both sets during the overlap); a failed post (row 'failed', no
+  posted_at) consumes nothing. The Post plan gate counts with this
+  same function — there is still exactly one cap-counting method.
+  *Delete* rows
   (sold/exited removals) don't consume the trial post and aren't
   gated — a trial user can always clean up their one live listing.
 - All `TIER_FEATURES` features **and listing copy** answer with the
@@ -521,6 +533,42 @@ including a trial user's one posted car if it sells). Server-side
   with the trial card leading during the trial.
 - Regression: the billing harness (**69/69**) and the Post-cap
   harness (**76/76**) pass unchanged against the edited file.
+  Full-file inline-script parse clean.
+
+### Verification — cap counting leak fix (2026-10-26)
+
+- The leak: `getTrialQueueUsedToday` counted live queue rows only,
+  and the helper deletes a queue row when its job completes — so the
+  trial's 1/day and Post's 5/day both reset the moment a car posted
+  (proven live: Matthew's posted trial Sentra row existed at 17:37
+  EDT with status 'posted', was gone by 17:49, and a refresh let a
+  second car queue). Fixed by counting distinct VINs across today's
+  queue rows UNION today's posted cars (`marketplace_posted_at`),
+  the same durable source `getDailyPostUsage` already used for the
+  safety counter — which is why the counter honestly read "1 of 1"
+  while the gate leaked. `checkDailyLimit` / `getDailyPostUsage`
+  needed no change: their usage count was already the posted-aware
+  union (only their day boundary differs — local midnight vs the
+  gates' UTC day — which predates this fix and is unchanged).
+- Node harness (`~/workspace/capfix-work/harness.mjs`): sequence
+  tests over the real extracted counter and both real gates —
+  queue car A (count 1) → A posts, its posted_at lands and its
+  queue row is deleted (count still 1) → the trial gate blocks
+  car B, and the Post gate counts A toward the 5 (four more queue,
+  the sixth is refused with the plan notice); a failed post
+  consumes nothing and the next queue is allowed; delete rows are
+  ignored; N distinct cars count N; the same VIN queued twice —
+  including once per channel — counts once; yesterday's post does
+  not count; a car queued yesterday and posted today does. Every
+  neighboring function (`trialQueueGate`, `postPlanQueueGate`,
+  `currentDailyPostAllowance`, `checkDailyLimit`,
+  `getDailyPostUsage`, `showTrialNotice`, the pure access block)
+  is byte-identical to the parent build — the counter is the only
+  change. Regression: plan-details harness **201/201**, billing
+  harness **69/69**; the Post-cap harness passes 75/76, the single
+  non-pass being its byte-identity assertion on
+  `getTrialQueueUsedToday` itself — the function this fix rewrites —
+  whose behavior the sequence harness re-verifies directly.
   Full-file inline-script parse clean.
 
 ### What remains to take real money

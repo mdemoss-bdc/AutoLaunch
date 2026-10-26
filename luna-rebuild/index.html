@@ -4167,26 +4167,56 @@ async function chooseStartTrial() {
 }
 
 // ---- Trial queue cap -------------------------------------------------
-// Posts queued today (UTC day), counting the same way getDailyPostUsage
-// counts — rows that aren't failed. Delete rows (sold/exited removals)
-// never consume the trial's one post: gating them would trap the one
-// car a trial user is allowed to have live.
+// Posts used today (UTC day) — the ONE counting method behind both
+// the trial gate and the Post plan gate. A "use" is a distinct VIN in
+// the union of:
+//   (a) today's queue rows that aren't failed and aren't deletes, and
+//   (b) cars whose marketplace_posted_at is today (from inventory).
+// (b) is what keeps the caps honest after a post succeeds: the helper
+// DELETES a queue row once its job completes, so counting queue rows
+// alone reset the allowance the moment a car posted — Matthew caught
+// exactly that leak live on 2026-10-26 (his trial car posted, its row
+// vanished, and a refresh let a second car queue the same day). A car
+// queued and posted the same day sits in both sets briefly and
+// counts once. A failed post consumes nothing: its row is 'failed'
+// and it never earns a posted_at. Delete rows (sold/exited removals)
+// never consume a post: gating them would trap the one car a trial
+// user is allowed to have live. (A queue row with no VIN can't be
+// deduped, so it counts singly — every real insert stamps a VIN, so
+// that is only a conservative fallback.)
 async function getTrialQueueUsedToday() {
   if (!currentUser) return 0;
   const now = new Date();
   const startISO = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+  const vins = new Set();
+  let unidentified = 0;
   try {
     const { data, error } = await supabaseClient
       .from("auto_posting_queue")
-      .select("id, status, action")
+      .select("vin, status, action")
       .eq("user_id", currentUser.id)
       .gte("created_at", startISO);
     if (error) throw error;
-    return (data || []).filter(r => r.status !== "failed" && r.action !== "delete").length;
+    (data || []).forEach(r => {
+      if (r.status === "failed" || r.action === "delete") return;
+      if (r.vin) vins.add(r.vin); else unidentified++;
+    });
   } catch (err) {
     console.error("Trial queue count failed:", err);
     return 0;
   }
+  try {
+    const { data, error } = await supabaseClient
+      .from("scraped_inventory")
+      .select("vin, marketplace_posted_at")
+      .eq("user_id", currentUser.id)
+      .gte("marketplace_posted_at", startISO);
+    if (!error) (data || []).forEach(r => { if (r.vin) vins.add(r.vin); });
+  } catch (err) {
+    // Posted-side read failed: the queue count above still stands.
+    console.error("Trial posted count failed:", err);
+  }
+  return vins.size + unidentified;
 }
 
 // Gate run before every post-queue insert: true = go ahead.
