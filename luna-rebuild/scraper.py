@@ -1467,16 +1467,29 @@ def _auto_post_filtered(uid: str) -> int:
             for r in live if r.get("vin")
         }
 
+        # NOTE (2026-10-25, post-mortem): the first live run of this
+        # pass printed "no unposted cars match" while 60 cars matched
+        # every filter — the unposted test must use the client's own
+        # is_() method, not the generic filter() call, and the pass
+        # now logs its raw candidate count so a silent empty result
+        # can never hide again.
         inv = (
             db.table("scraped_inventory")
             .select("vin, year, make, model, price, condition, color, interior_color, status, location_name, stock_number, image_url, photos, custom_photo_urls, first_seen")
             .eq("user_id", uid)
             .eq("is_active", True)
-            .filter("marketplace_posted_at", "is", "null")
+            .is_("marketplace_posted_at", "null")
             .order("first_seen", desc=True)
             .limit(4000)
             .execute()
         ).data or []
+        print(
+            f"[*] Auto-post for user {uid[:8]}: filter locations="
+            f"{'all' if allowed_locations is None else sorted(allowed_locations)}, "
+            f"conditions={conditions or 'all'}, photos>={min_photos}, "
+            f"allowance={allowance if allowance is not None else 'unlimited'}, "
+            f"unposted active cars in inventory={len(inv)}."
+        )
 
         channels = ["marketplace"]
         if s.get("channel_instagram_enabled") is True:
