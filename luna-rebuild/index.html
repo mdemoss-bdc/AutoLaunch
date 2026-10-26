@@ -2211,6 +2211,10 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
             Appearance
           </button>
 
+          <button data-settings-tab="plan" onclick="switchSettingsTab('plan')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
+            Plans
+          </button>
+
         </div>
 
       </div>
@@ -2375,60 +2379,6 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
           <p class="text-xs text-slate-400 mt-2">
             This ID identifies your account for inventory syncs and support. If support ever asks who you are in the system, this is the number to give them.
           </p>
-
-        </div>
-
-        <!-- PLAN CARD -->
-
-        <div id="planCard" class="glass-card rounded-2xl p-6">
-
-          <h3 class="font-bold text-lg mb-2">
-            Plan
-          </h3>
-
-          <p class="text-sm text-slate-500 mb-4">
-            Your account is on the <span id="planCurrentTierName" class="font-bold text-slate-800">—</span> plan.
-          </p>
-
-          <div id="planTierList" class="space-y-3"></div>
-
-          <!-- BILLING: status line, buy cards, subscription manager -->
-          <div id="planBillingBlock" class="mt-5 pt-4 border-t border-slate-200">
-            <p id="planBillingStatus" class="text-sm font-semibold text-slate-700"></p>
-            <p id="planBillingDetail" class="text-xs text-slate-400 mt-1"></p>
-            <div id="purchaseCards" class="grid sm:grid-cols-2 gap-3 mt-4"></div>
-            <div id="manageSubWrap" class="hidden mt-4">
-              <button id="btnManageSubscription" onclick="openBillingPortal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm cursor-pointer">Manage or cancel subscription</button>
-              <p class="text-xs text-slate-400 mt-2">Cancelling keeps your access until the end of the paid month.</p>
-            </div>
-            <p id="planBillingMsg" class="text-xs font-medium mt-3 hidden"></p>
-          </div>
-
-          <div id="ownerTierTools" class="hidden mt-5 pt-4 border-t border-slate-200">
-            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-              Owner testing — preview plan gates as
-            </label>
-            <select id="ownerTierSelect" onchange="setOwnTierForTesting(this.value)" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white">
-              <option value="">Owner — full access</option>
-              <option value="post">Post</option>
-              <option value="automate">Post + Automate</option>
-              <option value="group">Group</option>
-            </select>
-            <p class="text-xs text-slate-400 mt-2">
-              Owner accounts always keep full access. This preview only changes which gates you see on this device, so you can test them — it doesn't change your account.
-            </p>
-            <label class="block text-xs font-bold text-slate-500 uppercase mb-2 mt-5">
-              Owner testing — preview billing state as
-            </label>
-            <select id="ownerBillingSelect" onchange="setOwnerBillingPreview(this.value)" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white">
-              <option value="">Real billing status</option>
-              <option value="trial">Free trial</option>
-              <option value="expired">Trial ended — purchase gate</option>
-            </select>
-            <p class="text-xs text-slate-400 mt-2">
-              Preview only, on this device — it never changes your account or your billing.
-            </p>
-          </div>
 
         </div>
 
@@ -2791,6 +2741,64 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
         </div>
 
       </div><!-- /settingsPanelAppearance -->
+
+      <div id="settingsPanelPlan" class="space-y-6 hidden">
+
+        <!-- PLAN CARD -->
+
+        <div id="planCard" class="glass-card rounded-2xl p-6">
+
+          <h3 class="font-bold text-lg mb-2">
+            Plan
+          </h3>
+
+          <p class="text-sm text-slate-500 mb-4">
+            Your account is on the <span id="planCurrentTierName" class="font-bold text-slate-800">—</span> plan.
+          </p>
+
+          <div id="planTierList" class="space-y-3"></div>
+
+          <!-- BILLING: status line, buy cards, subscription manager -->
+          <div id="planBillingBlock" class="mt-5 pt-4 border-t border-slate-200">
+            <p id="planBillingStatus" class="text-sm font-semibold text-slate-700"></p>
+            <p id="planBillingDetail" class="text-xs text-slate-400 mt-1"></p>
+            <div id="purchaseCards" class="grid sm:grid-cols-2 gap-3 mt-4"></div>
+            <div id="manageSubWrap" class="hidden mt-4">
+              <button id="btnManageSubscription" onclick="openBillingPortal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm cursor-pointer">Manage or cancel subscription</button>
+              <p class="text-xs text-slate-400 mt-2">Cancelling keeps your access until the end of the paid month.</p>
+            </div>
+            <p id="planBillingMsg" class="text-xs font-medium mt-3 hidden"></p>
+          </div>
+
+          <div id="ownerTierTools" class="hidden mt-5 pt-4 border-t border-slate-200">
+            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+              Owner testing — preview plan gates as
+            </label>
+            <select id="ownerTierSelect" onchange="setOwnTierForTesting(this.value)" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white">
+              <option value="">Owner — full access</option>
+              <option value="post">Post</option>
+              <option value="automate">Post + Automate</option>
+              <option value="group">Group</option>
+            </select>
+            <p class="text-xs text-slate-400 mt-2">
+              Owner accounts always keep full access. This preview only changes which gates you see on this device, so you can test them — it doesn't change your account.
+            </p>
+            <label class="block text-xs font-bold text-slate-500 uppercase mb-2 mt-5">
+              Owner testing — preview billing state as
+            </label>
+            <select id="ownerBillingSelect" onchange="setOwnerBillingPreview(this.value)" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white">
+              <option value="">Real billing status</option>
+              <option value="trial">Free trial</option>
+              <option value="expired">Trial ended — purchase gate</option>
+            </select>
+            <p class="text-xs text-slate-400 mt-2">
+              Preview only, on this device — it never changes your account or your billing.
+            </p>
+          </div>
+
+        </div>
+
+      </div><!-- /settingsPanelPlan -->
 
         <!-- SAVE -->
 
@@ -4300,10 +4308,11 @@ function trialNoticeViewPlans() {
   openPlanPurchase();
 }
 
-// "View plans" everywhere lands on Settings → Plan (the purchase
+// "View plans" everywhere lands on Settings → Plans tab (the purchase
 // screen): the two buy cards live there as well as on the gate.
 function openPlanPurchase() {
   openSettingsModal();
+  switchSettingsTab("plan");
   setTimeout(function () {
     const card = document.getElementById("planCard");
     if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -9925,7 +9934,7 @@ async function copyUserId() {
 }
 // Luna: Settings left-menu tabs (Dealership / Facebook / Automation / AI Settings)
 function switchSettingsTab(tab) {
-  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", tiktok: "settingsPanelTiktok", automation: "settingsPanelAutomation", ai: "settingsPanelAi", appearance: "settingsPanelAppearance" };
+  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", tiktok: "settingsPanelTiktok", automation: "settingsPanelAutomation", ai: "settingsPanelAi", appearance: "settingsPanelAppearance", plan: "settingsPanelPlan" };
   Object.entries(panels).forEach(([key, id]) => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("hidden", key !== tab);

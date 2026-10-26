@@ -155,7 +155,7 @@ value in bold):
   checklist, so a brand-new user compares all three options row by
   row before choosing.
 - **Purchase gate** — the same buy cards.
-- **Settings → Plan** — the same buy cards in the billing block, and
+- **Settings → Plans tab** — the same buy cards in the billing block, and
   the tier list (`renderPlanPanel`) now renders each plan's card
   from `PLAN_DETAILS` with the same checklist HTML; during the trial
   the trial card leads the list marked "Your plan".
@@ -173,7 +173,7 @@ Automate carries no price and renders no Buy card anywhere.
 Matthew's account (`40a95557-504a-460f-a891-462bb2b4f25c`) and
 Jourdan's account (`9cdba37e-ac31-464d-92b9-0745772fbf00`) are in the
 `OWNER_USER_IDS` constant and **always pass every gate**, regardless of
-their stored `plan_tier`. Settings → Plan shows owners an extra
+their stored `plan_tier`. The Settings → Plans tab shows owners an extra
 "preview the app as" select so they can test the gates; the preview is
 a **per-device localStorage override only** (`autolaunch_owner_test_tier`)
 — it never writes to the database, so the exemption itself can never be
@@ -404,13 +404,13 @@ new arrivals, auto delete & repost, TikTok / Instagram / Facebook
 Page channels, Luca AI Assistant + Prospects, Customer Wishlist,
 Trade Appraisals, intro videos.") — "Renews monthly on the day you
 subscribe. Cancel anytime in Settings.", and a sign-out link. The
-same two cards render in Settings → Plan (the "View plans" target),
+same two cards render in the Settings → Plans tab (the "View plans" target),
 which also shows the billing status, trial end date, current period
 end, and — for accounts with a Stripe customer on file — the
 **Manage or cancel subscription** button with the copy "Cancelling
 keeps your access until the end of the paid month."
 
-Owners get two extra preview states in Settings → Plan (`trial`,
+Owners get two extra preview states in the Settings → Plans tab (`trial`,
 `expired`), stored in localStorage (`autolaunch_owner_billing_preview`)
 exactly like the tier preview — never written to the account.
 
@@ -527,7 +527,7 @@ including a trial user's one posted car if it sells). Server-side
   cap rows read exactly "1 per day" / "5 per day" (=
   `TIER_DAILY_POST_CAP.post`) / the no-plan-cap text; Pay excluded
   on Post, add-on-noted on Automate, included on Group; prices
-  $75/$100 in config; and rendering sameness — the Settings → Plan
+  $75/$100 in config; and rendering sameness — the Settings → Plans tab
   HTML embeds `planFeaturesHtml(plan)` byte-for-byte for the same
   plan the gates render, in both the active and trialing states,
   with the trial card leading during the trial.
