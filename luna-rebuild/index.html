@@ -704,11 +704,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
       <p class="text-sm text-slate-500">Pick one to continue — you can switch to a plan any time in Settings.</p>
     </div>
     <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 mb-3">
-      <div class="flex items-baseline justify-between mb-1">
-        <p class="text-sm font-bold text-slate-800">5-day free trial</p>
-        <p class="text-sm font-extrabold text-slate-900">Free</p>
-      </div>
-      <p class="text-xs text-slate-500 leading-relaxed">Pull inventory and queue 1 car per day — no card needed. When the trial ends, pick a plan to keep posting.</p>
+      <div id="signupChoiceTrialCard"></div>
       <button id="signupChoiceTrialBtn" onclick="chooseStartTrial()" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Start my 5-day free trial</button>
     </div>
     <p class="text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 my-3">or choose a plan now</p>
@@ -3707,6 +3703,127 @@ const TIER_FEATURES = {
 // effectiveDailyPostAllowance in the pure access block).
 const TIER_DAILY_POST_CAP = { post: 5, automate: null, group: null };
 
+// ==== PLAN DETAILS — the ONE source of truth for what each plan ====
+// gives (Matthew, 2026-10-26: when someone is picking between the
+// free trial, the 1st tier and the 2nd tier, they must know EXACTLY
+// what each one gives them — no vague card copy). Every surface that
+// describes a plan renders from this config and nothing else: the
+// signup choice gate's trial card, the buy cards on the choice gate /
+// purchase gate / Settings -> Plan, and the Settings -> Plan tier
+// list. The feature rows mirror TIER_FEATURES — a capability is
+// included exactly when the plan's tier meets its minimum tier — and
+// the "Queued posts per day" row is a VALUE mirroring
+// TIER_DAILY_POST_CAP plus the trial's 1-per-day rule. Automate is
+// described here for the Plan panel only: the gates SELL Post and
+// Group (Matthew's spec), so Automate carries no price and no card.
+const PLAN_DETAILS = {
+  trial: {
+    name: "5-day free trial",
+    priceLabel: "Free",
+    price: null,
+    tagline: "The basics, free for 5 days.",
+    note: "No card needed. When the trial ends, pick a plan to keep posting.",
+    features: [
+      { label: "Inventory sync & workspace", included: true },
+      { label: "Manual Marketplace posting", included: true },
+      { label: "Queued posts per day", value: "1 per day" },
+      { label: "AI listing copy", included: false },
+      { label: "Auto-post new arrivals", included: false },
+      { label: "Auto delete & repost", included: false },
+      { label: "TikTok, Instagram & Facebook Page posting", included: false },
+      { label: "Luca AI Assistant + Prospects", included: false },
+      { label: "Customer Wishlist", included: false },
+      { label: "Trade Appraisals", included: false },
+      { label: "Intro videos", included: false },
+      { label: "AutoLaunch Pay", included: false },
+      { label: "Teams & multiple users", included: false }
+    ]
+  },
+  post: {
+    name: "Post",
+    priceLabel: "$75/mo",
+    price: 75,
+    tagline: "For one salesperson posting by hand.",
+    features: [
+      { label: "Inventory sync & workspace", included: true },
+      { label: "Manual Marketplace posting", included: true },
+      { label: "Queued posts per day", value: "5 per day" },
+      { label: "AI listing copy", included: true },
+      { label: "Auto-post new arrivals", included: false },
+      { label: "Auto delete & repost", included: false },
+      { label: "TikTok, Instagram & Facebook Page posting", included: false },
+      { label: "Luca AI Assistant + Prospects", included: false },
+      { label: "Customer Wishlist", included: false },
+      { label: "Trade Appraisals", included: false },
+      { label: "Intro videos", included: false },
+      { label: "AutoLaunch Pay", included: false },
+      { label: "Teams & multiple users", included: false }
+    ]
+  },
+  automate: {
+    name: "Post + Automate",
+    priceLabel: null,
+    price: null,
+    tagline: "Everything in Post, plus all the automation.",
+    features: [
+      { label: "Inventory sync & workspace", included: true },
+      { label: "Manual Marketplace posting", included: true },
+      { label: "Queued posts per day", value: "No plan cap — your own safety limit" },
+      { label: "AI listing copy", included: true },
+      { label: "Auto-post new arrivals", included: true },
+      { label: "Auto delete & repost", included: true },
+      { label: "TikTok, Instagram & Facebook Page posting", included: true },
+      { label: "Luca AI Assistant + Prospects", included: true },
+      { label: "Customer Wishlist", included: true },
+      { label: "Trade Appraisals", included: true },
+      { label: "Intro videos", included: true },
+      { label: "AutoLaunch Pay", included: false, note: "available as an add-on" },
+      { label: "Teams & multiple users", included: false }
+    ]
+  },
+  group: {
+    name: "Group",
+    priceLabel: "$100/mo",
+    price: 100,
+    tagline: "Everything in Post + Automate, for stores and teams.",
+    features: [
+      { label: "Inventory sync & workspace", included: true },
+      { label: "Manual Marketplace posting", included: true },
+      { label: "Queued posts per day", value: "No plan cap — your own safety limit" },
+      { label: "AI listing copy", included: true },
+      { label: "Auto-post new arrivals", included: true },
+      { label: "Auto delete & repost", included: true },
+      { label: "TikTok, Instagram & Facebook Page posting", included: true },
+      { label: "Luca AI Assistant + Prospects", included: true },
+      { label: "Customer Wishlist", included: true },
+      { label: "Trade Appraisals", included: true },
+      { label: "Intro videos", included: true },
+      { label: "AutoLaunch Pay", included: true },
+      { label: "Teams & multiple users", included: true }
+    ]
+  }
+};
+
+// The shared checklist renderer: every plan surface uses this exact
+// HTML for a plan's feature list, so the gates and Settings -> Plan
+// can never show different truths. Included = emerald check; not
+// included = muted dash; the daily-cap row shows its value in bold.
+function planFeaturesHtml(planKey, listClass) {
+  const info = PLAN_DETAILS[planKey];
+  if (!info) return "";
+  const rows = info.features.map(function (f) {
+    const note = f.note ? ' <span class="text-slate-400">(' + f.note + ")</span>" : "";
+    if (typeof f.value === "string") {
+      return '<li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-[10px]"></i><span class="flex-1">' + f.label + '</span><span class="font-bold text-slate-700 whitespace-nowrap">' + f.value + "</span></li>";
+    }
+    if (f.included) {
+      return '<li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-[10px]"></i><span>' + f.label + note + "</span></li>";
+    }
+    return '<li class="flex items-start gap-2 text-slate-400"><i class="fa-solid fa-minus text-slate-300 mt-0.5 text-[10px]"></i><span>' + f.label + note + "</span></li>";
+  }).join("");
+  return '<ul class="text-xs text-slate-600 space-y-1' + (listClass ? " " + listClass : "") + '">' + rows + "</ul>";
+}
+
 const FEATURE_LABELS = {
   autopost: "Auto-post new arrivals",
   auto_repost: "Auto delete & repost",
@@ -3719,23 +3836,8 @@ const FEATURE_LABELS = {
   teams: "Team features"
 };
 
-const TIER_INFO = {
-  post: {
-    name: "Post",
-    blurb: "The manual posting core.",
-    features: ["Inventory workspace", "Post queue", "Manual Marketplace posting", "Listing copy (AI)"]
-  },
-  automate: {
-    name: "Post + Automate",
-    blurb: "Everything in Post, plus the automation.",
-    features: ["Auto-post new arrivals", "Auto delete & repost", "TikTok, Instagram & Facebook Page channels", "Luca · AI Assistant", "Prospects", "Customer Wishlist", "Trade Appraisals", "Intro videos"]
-  },
-  group: {
-    name: "Group",
-    blurb: "Everything in Post + Automate, for stores and teams.",
-    features: ["Team accounts & multiple rooftops (arriving with the Group rollout)"]
-  }
-};
+// TIER_INFO retired 2026-10-26: plan names, taglines and feature
+// lists now live ONLY in PLAN_DETAILS above (one source of truth).
 
 // Tier resolution: stored real tiers pass through. NO value yet (brand-new
 // signup, no settings row) starts on 'post'. Any LEGACY value already in
@@ -3788,8 +3890,8 @@ function requireTier(feature) {
   const label = FEATURE_LABELS[feature] || "This feature";
   const title = document.getElementById("planGateTitle");
   const body = document.getElementById("planGateBody");
-  if (title) title.innerText = "Available on " + TIER_INFO[need].name;
-  if (body) body.innerText = label + " is part of the " + TIER_INFO[need].name + " plan. Your account is on the " + TIER_INFO[effectiveTier()].name + " plan.";
+  if (title) title.innerText = "Available on " + PLAN_DETAILS[need].name;
+  if (body) body.innerText = label + " is part of the " + PLAN_DETAILS[need].name + " plan. Your account is on the " + PLAN_DETAILS[effectiveTier()].name + " plan.";
   const modal = document.getElementById("planGateModal");
   if (modal) modal.classList.remove("hidden");
   return false;
@@ -3801,21 +3903,24 @@ function renderPlanPanel() {
   if (!nameEl || !listEl) return;
   const eff = effectiveTier();
   const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
-  nameEl.innerText = TIER_INFO[eff].name + (isOwner && !ownerTestTier ? " (owner — full access)" : "");
-  listEl.innerHTML = Object.keys(TIER_INFO).map(function (t) {
-    const info = TIER_INFO[t];
-    const isCurrent = t === eff;
-    const on = TIER_RANK[t] <= TIER_RANK[eff];
-    const feats = info.features.map(function (f) {
-      return '<li class="flex items-start gap-2"><i class="fa-solid ' + (on ? "fa-check text-emerald-500" : "fa-lock text-slate-300") + ' mt-0.5 text-[10px]"></i><span>' + f + "</span></li>";
-    }).join("");
+  nameEl.innerText = PLAN_DETAILS[eff].name + (isOwner && !ownerTestTier ? " (owner — full access)" : "");
+  // The tier list renders from PLAN_DETAILS — the same config and
+  // the same checklist renderer as the gates, so what Settings shows
+  // can never drift from what the signup/purchase gates promised.
+  // During the trial (real, or an owner previewing it) the trial
+  // card leads the list as the current plan.
+  const inTrial = billingMode() === "trial";
+  const planKeys = (inTrial ? ["trial"] : []).concat(["post", "automate", "group"]);
+  listEl.innerHTML = planKeys.map(function (t) {
+    const info = PLAN_DETAILS[t];
+    const isCurrent = inTrial ? t === "trial" : t === eff;
     return '<div class="rounded-xl border ' + (isCurrent ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50") + ' p-4">' +
       '<div class="flex items-center justify-between mb-1">' +
       '<p class="text-sm font-bold text-slate-800">' + info.name + "</p>" +
       (isCurrent ? '<span class="text-[10px] font-bold uppercase tracking-wider text-blue-600">Your plan</span>' : "") +
       "</div>" +
-      '<p class="text-xs text-slate-500 mb-2">' + info.blurb + "</p>" +
-      '<ul class="text-xs text-slate-600 space-y-1">' + feats + "</ul></div>";
+      '<p class="text-xs text-slate-500 mb-2">' + info.tagline + "</p>" +
+      planFeaturesHtml(t) + "</div>";
   }).join("");
   const tools = document.getElementById("ownerTierTools");
   if (tools) {
@@ -3864,18 +3969,10 @@ function setOwnTierForTesting(v) {
 // the automatic trial-start resolution (it grandfathers them to
 // 'active'). See needsSignupChoice / applySignupChoiceGate below.
 
-const BILLING_PRICES = { post: 75, group: 100 };
-
-const BILLING_PLAN_COPY = {
-  post: {
-    name: "Post",
-    desc: "For one salesperson posting by hand: inventory workspace, post queue, manual Marketplace posting, listing copy."
-  },
-  group: {
-    name: "Group",
-    desc: "Everything in Post, plus all the automation: auto-post new arrivals, auto delete & repost, TikTok / Instagram / Facebook Page channels, Luca AI Assistant + Prospects, Customer Wishlist, Trade Appraisals, intro videos."
-  }
-};
+// Prices and plan copy live in PLAN_DETAILS (plans section above) —
+// the single source every plan surface renders from. The old
+// BILLING_PRICES / BILLING_PLAN_COPY constants were retired into it
+// on 2026-10-26 so the cards can never drift from Settings -> Plan.
 
 // This account's billing state, filled by loadUserStoreSettings()
 // from user_settings (and by trial-start when it first decides).
@@ -4037,6 +4134,7 @@ function applySignupChoiceGate() {
   const overlay = document.getElementById("signupChoiceOverlay");
   if (!overlay) return;
   if (signupChoiceApplies()) {
+    renderSignupTrialCard();
     renderPurchaseCards("signupChoiceCards", "signupChoiceMsg");
     overlay.classList.remove("hidden");
   } else {
@@ -4187,15 +4285,31 @@ function renderPurchaseCards(containerId, msgId) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.innerHTML = ["post", "group"].map(function (plan) {
-    const info = BILLING_PLAN_COPY[plan];
+    const info = PLAN_DETAILS[plan];
     return '<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col">' +
       '<div class="flex items-baseline justify-between mb-1">' +
       '<p class="text-sm font-bold text-slate-800">' + info.name + '</p>' +
-      '<p class="text-sm font-extrabold text-slate-900">$' + BILLING_PRICES[plan] + '<span class="text-[10px] font-semibold text-slate-400">/mo</span></p></div>' +
-      '<p class="text-xs text-slate-500 leading-relaxed flex-1">' + info.desc + '</p>' +
+      '<p class="text-sm font-extrabold text-slate-900">$' + info.price + '<span class="text-[10px] font-semibold text-slate-400">/mo</span></p></div>' +
+      '<p class="text-xs text-slate-500 leading-relaxed">' + info.tagline + '</p>' +
+      planFeaturesHtml(plan, "mt-3 flex-1") +
       '<p class="text-[11px] text-slate-400 mt-3">Renews monthly on the day you subscribe. Cancel anytime in Settings.</p>' +
-      '<button onclick="startCheckout(\'' + plan + '\', \'' + msgId + '\')" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Buy ' + info.name + ' — $' + BILLING_PRICES[plan] + '/mo</button></div>';
+      '<button onclick="startCheckout(\'' + plan + '\', \'' + msgId + '\')" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Buy ' + info.name + ' — $' + info.price + '/mo</button></div>';
   }).join("");
+}
+
+// The signup choice gate's trial card, rendered from the same
+// PLAN_DETAILS config (checklist included) as the buy cards.
+function renderSignupTrialCard() {
+  const el = document.getElementById("signupChoiceTrialCard");
+  if (!el) return;
+  const info = PLAN_DETAILS.trial;
+  el.innerHTML =
+    '<div class="flex items-baseline justify-between mb-1">' +
+    '<p class="text-sm font-bold text-slate-800">' + info.name + '</p>' +
+    '<p class="text-sm font-extrabold text-slate-900">' + info.priceLabel + "</p></div>" +
+    '<p class="text-xs text-slate-500 leading-relaxed">' + info.tagline + "</p>" +
+    planFeaturesHtml("trial", "mt-2") +
+    (info.note ? '<p class="text-[11px] text-slate-400 mt-2">' + info.note + "</p>" : "");
 }
 
 function showBillingMsg(msgId, text, isError) {
@@ -4557,7 +4671,7 @@ function openAccountModal() {
   const isOwner = isOwnerUser(currentUser.id);
   const eff = effectiveTier();
   const planEl = document.getElementById("accountPlanLine");
-  if (planEl) planEl.innerText = "Plan: " + TIER_INFO[eff].name + (isOwner && !ownerTestTier ? " (owner — full access)" : "");
+  if (planEl) planEl.innerText = "Plan: " + PLAN_DETAILS[eff].name + (isOwner && !ownerTestTier ? " (owner — full access)" : "");
   let billing = "";
   if (isOwner && !ownerBillingPreview) {
     billing = "Owner account — no subscription needed.";

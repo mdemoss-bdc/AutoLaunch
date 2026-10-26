@@ -110,6 +110,63 @@ the tier gates already deny, so there is no scraper-side hole for
 this rule. (Server-side enforcement in general remains the phase-2
 item listed at the bottom.)
 
+### What each plan includes — PLAN_DETAILS (added 2026-10-26)
+
+Matthew's rule: when someone is picking between the free trial, the
+1st tier and the 2nd tier, they must know **exactly** what each one
+gives them — no vague card copy. So plan descriptions now live in
+ONE config in `index.html`: **`PLAN_DETAILS`** (next to
+`TIER_FEATURES`), with an entry per plan (`trial` / `post` /
+`automate` / `group`) holding its display name, price label, one-line
+tagline, and a 13-row feature list of `{ label, included }` entries
+(the daily-cap row carries a `value` instead of a check):
+
+| Row | Trial | Post | Automate | Group |
+|---|---|---|---|---|
+| Inventory sync & workspace | ✓ | ✓ | ✓ | ✓ |
+| Manual Marketplace posting | ✓ | ✓ | ✓ | ✓ |
+| Queued posts per day | **1 per day** | **5 per day** | No plan cap — your own safety limit | No plan cap — your own safety limit |
+| AI listing copy | — | ✓ | ✓ | ✓ |
+| Auto-post new arrivals | — | — | ✓ | ✓ |
+| Auto delete & repost | — | — | ✓ | ✓ |
+| TikTok, Instagram & Facebook Page posting | — | — | ✓ | ✓ |
+| Luca AI Assistant + Prospects | — | — | ✓ | ✓ |
+| Customer Wishlist | — | — | ✓ | ✓ |
+| Trade Appraisals | — | — | ✓ | ✓ |
+| Intro videos | — | — | ✓ | ✓ |
+| AutoLaunch Pay | — | — | — (add-on available) | ✓ |
+| Teams & multiple users | — | — | — | ✓ |
+
+The matrix mirrors the enforcement truth, it doesn't restate it: the
+included flags follow `TIER_FEATURES` (a capability is included
+exactly when the plan's tier meets its minimum tier; the trial's
+column follows `TRIAL_ALLOWED_FEATURES`), and the cap values follow
+`TIER_DAILY_POST_CAP` (Post 5; Automate/Group none) plus the trial's
+1-per-day rule. The trial entry also carries the note line: "No card
+needed. When the trial ends, pick a plan to keep posting."
+
+Every surface renders from this config through the one shared
+renderer, `planFeaturesHtml(planKey)` (emerald ✓ / muted — / the cap
+value in bold):
+
+- **Signup choice gate** — the trial card (`renderSignupTrialCard`)
+  and both buy cards (`renderPurchaseCards`): tagline + full
+  checklist, so a brand-new user compares all three options row by
+  row before choosing.
+- **Purchase gate** — the same buy cards.
+- **Settings → Plan** — the same buy cards in the billing block, and
+  the tier list (`renderPlanPanel`) now renders each plan's card
+  from `PLAN_DETAILS` with the same checklist HTML; during the trial
+  the trial card leads the list marked "Your plan".
+
+Retired into `PLAN_DETAILS` (they were separate hand-written copies
+of the same truth and could drift): `TIER_INFO`, `BILLING_PLAN_COPY`,
+and `BILLING_PRICES`. Plan names in the gate notices
+(`requireTier`) and the account modal read `PLAN_DETAILS` too.
+Automate has a `PLAN_DETAILS` entry for the Plan panel only — the
+gates still sell **Post and Group only** (Matthew's spec), so
+Automate carries no price and renders no Buy card anywhere.
+
 ### Owner exemption (hard rule)
 
 Matthew's account (`40a95557-504a-460f-a891-462bb2b4f25c`) and
@@ -442,6 +499,29 @@ including a trial user's one posted car if it sells). Server-side
   trial → plan → own-limit → insert order at both insert paths with
   exactly two plan-gate call sites; and a full-file parse of the
   inline script.
+
+### Verification — plan details consolidation (2026-10-26)
+
+- Node harness (`~/workspace/plandetails-work/harness.mjs`):
+  **201/201** — Parts 1–3 are the choice-gate regression suite
+  (billing state matrix byte-compared pure functions,
+  `needsSignupChoice` matrix, DOM-stub gate flows incl. Buy →
+  `billing-checkout` with the right plan and the 503 interim
+  message) with only its extraction set updated for the retired
+  constants; Part 4 asserts the plan truth: identical 13-row label
+  sets in identical order across trial/post/automate/group; every
+  `TIER_FEATURES` capability included exactly when the plan's tier
+  meets its minimum (trial column matches `trialFeatureAllowed`);
+  cap rows read exactly "1 per day" / "5 per day" (=
+  `TIER_DAILY_POST_CAP.post`) / the no-plan-cap text; Pay excluded
+  on Post, add-on-noted on Automate, included on Group; prices
+  $75/$100 in config; and rendering sameness — the Settings → Plan
+  HTML embeds `planFeaturesHtml(plan)` byte-for-byte for the same
+  plan the gates render, in both the active and trialing states,
+  with the trial card leading during the trial.
+- Regression: the billing harness (**69/69**) and the Post-cap
+  harness (**76/76**) pass unchanged against the edited file.
+  Full-file inline-script parse clean.
 
 ### What remains to take real money
 
