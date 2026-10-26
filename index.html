@@ -353,6 +353,16 @@ body.dark-shell :is(aside, main) ::-webkit-scrollbar-thumb {
 body.dark-shell .peer:checked ~ .peer-checked\:bg-blue-600 {
   background-color: rgb(var(--btn-rgb));
 }
+/* Toggle switches inside the Phase C surfaces (block further below) need an
+   ID-scoped twin of the rule above: the Phase C remap paints the track's OFF
+   color via :is(#modal…) .bg-slate-200 at specificity (1,2,1), which beats
+   the global peer-checked rule (0,4,1) — so inside those modals/pages the
+   ON track stayed var(--d-track), identical to OFF. This twin is (1,4,1)
+   and restores the accent ON track there. Same value as the global rule:
+   rgb(var(--btn-rgb)) — Midnight default is blue-600 (#2563EB). */
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .peer:checked ~ .peer-checked\:bg-blue-600 {
+  background-color: rgb(var(--btn-rgb));
+}
 /* Solid blue-600 fills: settings-tab + auth-tab active states, segmented
    selected buttons (posting prefs / min-photos), Settings modal primary
    buttons (Copy ID, Create group), queue badge, sidebar dots, safety
