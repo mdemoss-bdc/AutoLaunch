@@ -1468,7 +1468,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
           Auto delete & repost <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
         <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" id="chkRibbonRepost" checked onchange="toggleRibbonSetting('auto_repost')" class="sr-only peer">
+          <input type="checkbox" id="chkRibbonRepost" onchange="toggleRibbonSetting('auto_repost')" class="sr-only peer">
           <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
@@ -1487,7 +1487,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
           Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
         </span>
         <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" id="chkRibbonPhotoCrop" checked onchange="toggleRibbonSetting('auto_crop')" class="sr-only peer">
+          <input type="checkbox" id="chkRibbonPhotoCrop" onchange="toggleRibbonSetting('auto_crop')" class="sr-only peer">
           <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
@@ -2826,7 +2826,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
           <div class="flex items-center justify-between">
             <span class="font-bold text-slate-900">Auto-crop</span>
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="chkAutoCrop" checked class="sr-only peer">
+              <input type="checkbox" id="chkAutoCrop" class="sr-only peer">
               <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
@@ -3063,7 +3063,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
               <span class="text-[11px] text-slate-500">Say the car has a clean title</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="prefCleanTitle" checked class="sr-only peer">
+              <input type="checkbox" id="prefCleanTitle" class="sr-only peer">
               <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
@@ -3074,7 +3074,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
               <span class="text-[11px] text-slate-500">Say New or Used in the description</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="prefNewOrUsed" checked class="sr-only peer">
+              <input type="checkbox" id="prefNewOrUsed" class="sr-only peer">
               <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
@@ -3085,7 +3085,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
               <span class="text-[11px] text-slate-500">Include vehicle mileage in title</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="prefMileageTitle" checked class="sr-only peer">
+              <input type="checkbox" id="prefMileageTitle" class="sr-only peer">
               <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
@@ -3096,7 +3096,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
               <span class="text-[11px] text-slate-500">Display full vehicle VIN</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="prefVinDesc" checked class="sr-only peer">
+              <input type="checkbox" id="prefVinDesc" class="sr-only peer">
               <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
@@ -3107,7 +3107,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
               <span class="text-[11px] text-slate-500">Display dealership stock #</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="prefStockNum" checked class="sr-only peer">
+              <input type="checkbox" id="prefStockNum" class="sr-only peer">
               <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
@@ -3124,7 +3124,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
             <p class="text-[11px] text-slate-500">What buyers read under the photos.</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" id="prefAiDescToggle" checked class="sr-only peer">
+            <input type="checkbox" id="prefAiDescToggle" class="sr-only peer">
             <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
           </label>
         </div>
@@ -3968,7 +3968,7 @@ updateLastSyncDisplay();
         const settingsAutoPost = document.getElementById("chkSettingsAutoPost");
         if (settingsAutoPost) settingsAutoPost.checked = !!data.auto_post_enabled;
       }
-      if (data.enable_auto_repost !== undefined && data.enable_auto_repost !== null) {
+      if (data.enable_auto_repost !== undefined) {
         const ribbonRepost = document.getElementById("chkRibbonRepost");
         if (ribbonRepost) ribbonRepost.checked = !!data.enable_auto_repost;
       }
@@ -4055,6 +4055,21 @@ updateLastSyncDisplay();
 
       // Every ribbon status line renders from the state just applied —
       // one render, no per-field label writes scattered through this load.
+      renderRibbonStatuses();
+    } else {
+      // No settings row yet (brand-new account): a switch's state must
+      // come from a saved setting, never from markup defaults, so every
+      // automation / preference switch starts OFF. (Auto-delete on exit
+      // is the one deliberate exception — default-ON by design in the app
+      // and the nightly scraper; its switch follows the
+      // autoDeleteOnExitEnabled variable and is not reset here.)
+      ["chkRibbonRepost", "chkRibbonPhotoCrop", "chkAutoCrop",
+       "prefCleanTitle", "prefNewOrUsed", "prefMileageTitle",
+       "prefVinDesc", "prefStockNum", "prefAiDescToggle"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.checked = false;
+      });
+      syncRibbonMasterCheckbox();
       renderRibbonStatuses();
     }
   } catch (e) {}
