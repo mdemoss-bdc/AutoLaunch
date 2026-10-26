@@ -390,7 +390,7 @@ body.dark-shell div.fixed.inset-0 :is(input, select, textarea):focus {
 /* ---- Phase C rollout: modals, auth, dropdown, Get Started, Wishlist -------
    The surfaces below are body-level siblings of the shell (the overlays,
    #vehicleActionDropdown, #wishlistToast) or top-level pages outside
-   <main> (#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage), so the :is(aside, main) rules
+   <main> (#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal), so the :is(aside, main) rules
    above never reach them. This block re-applies the SAME utility mapping
    keyed to the SAME tokens, scoped to those containers only: light mode
    (no .dark-shell) is untouched, and every value comes from the --d-*
@@ -411,111 +411,111 @@ body.dark-shell #wishlistToast {
   color: var(--d-body);
 }
 /* Surfaces */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-white { background-color: var(--d-field); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-white\/95 { background-color: var(--d-veil); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-50 { background-color: var(--d-deep); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-50\/80 { background-color: var(--d-deep); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-100 { background-color: rgba(148, 163, 184, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-200 { background-color: var(--d-track); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-slate-300 { background-color: var(--d-track); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-blue-50 { background-color: rgba(var(--accent-rgb), 0.14); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-indigo-50 { background-color: rgba(var(--accent-rgb), 0.14); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-amber-50 { background-color: rgba(245, 158, 11, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-pink-50 { background-color: rgba(236, 72, 153, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-purple-50 { background-color: rgba(168, 85, 247, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-cyan-50 { background-color: rgba(6, 182, 212, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .bg-violet-50 { background-color: rgba(139, 92, 246, 0.13); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .glass-card {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-white { background-color: var(--d-field); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-white\/95 { background-color: var(--d-veil); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-slate-50 { background-color: var(--d-deep); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-slate-50\/80 { background-color: var(--d-deep); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-slate-100 { background-color: rgba(148, 163, 184, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-slate-200 { background-color: var(--d-track); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-slate-300 { background-color: var(--d-track); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-blue-50 { background-color: rgba(var(--accent-rgb), 0.14); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-indigo-50 { background-color: rgba(var(--accent-rgb), 0.14); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-amber-50 { background-color: rgba(245, 158, 11, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-pink-50 { background-color: rgba(236, 72, 153, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-purple-50 { background-color: rgba(168, 85, 247, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-cyan-50 { background-color: rgba(6, 182, 212, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .bg-violet-50 { background-color: rgba(139, 92, 246, 0.13); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .glass-card {
   background-color: var(--d-card);
   border-color: var(--d-edge);
   box-shadow: 0 10px 24px rgba(2, 6, 17, 0.45);
   color: var(--d-body);
 }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .glass-card:hover {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .glass-card:hover {
   border-color: rgba(var(--accent-strong-rgb), 0.35);
   box-shadow: 0 14px 30px rgba(2, 6, 17, 0.55);
 }
 /* Text */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-950,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-900 { color: var(--d-h); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-800,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-700 { color: var(--d-body); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-600 { color: var(--d-soft); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-500 { color: var(--d-micro); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-400 { color: var(--d-faint); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-slate-300 { color: var(--d-fainter); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-blue-600 { color: var(--d-link); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-indigo-700 { color: var(--d-link-bright); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-sky-600 { color: var(--d-link-bright); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-purple-600,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-purple-300 { color: rgb(192, 155, 255); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-violet-700,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-violet-500 { color: rgb(167, 139, 250); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-pink-600 { color: rgb(244, 114, 182); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-cyan-600 { color: rgb(56, 189, 248); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-emerald-700,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-emerald-600 { color: rgb(52, 211, 153); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-amber-700,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-amber-800,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-amber-600 { color: rgb(251, 191, 36); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-rose-700,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-rose-600,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .text-red-600 { color: rgb(251, 113, 133); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-slate-950,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-slate-900 { color: var(--d-h); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-slate-800,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-slate-700 { color: var(--d-body); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-slate-600 { color: var(--d-soft); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-slate-500 { color: var(--d-micro); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-slate-400 { color: var(--d-faint); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-slate-300 { color: var(--d-fainter); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-blue-600 { color: var(--d-link); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-indigo-700 { color: var(--d-link-bright); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-sky-600 { color: var(--d-link-bright); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-purple-600,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-purple-300 { color: rgb(192, 155, 255); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-violet-700,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-violet-500 { color: rgb(167, 139, 250); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-pink-600 { color: rgb(244, 114, 182); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-cyan-600 { color: rgb(56, 189, 248); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-emerald-700,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-emerald-600 { color: rgb(52, 211, 153); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-amber-700,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-amber-800,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-amber-600 { color: rgb(251, 191, 36); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-rose-700,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-rose-600,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .text-red-600 { color: rgb(251, 113, 133); }
 /* Borders & dividers */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-slate-200 { border-color: var(--d-edge); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-slate-300 { border-color: var(--d-field-edge); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-slate-100 { border-color: var(--d-line); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-blue-200 { border-color: rgba(var(--accent-rgb), 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-indigo-200 { border-color: rgba(var(--accent-rgb), 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-red-200 { border-color: rgba(244, 63, 94, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-pink-200 { border-color: rgba(236, 72, 153, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-purple-200 { border-color: rgba(168, 85, 247, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-cyan-200 { border-color: rgba(6, 182, 212, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .border-violet-200 { border-color: rgba(139, 92, 246, 0.35); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--d-line); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-slate-200 { border-color: var(--d-edge); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-slate-300 { border-color: var(--d-field-edge); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-slate-100 { border-color: var(--d-line); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-blue-200 { border-color: rgba(var(--accent-rgb), 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-indigo-200 { border-color: rgba(var(--accent-rgb), 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-red-200 { border-color: rgba(244, 63, 94, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-pink-200 { border-color: rgba(236, 72, 153, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-purple-200 { border-color: rgba(168, 85, 247, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-cyan-200 { border-color: rgba(6, 182, 212, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .border-violet-200 { border-color: rgba(139, 92, 246, 0.35); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--d-line); }
 /* Fields: covers classed fields (bg-slate-50 / bg-white above) AND the
    unclassed inputs the Settings panels emit (border-only markup). Native
    checkbox / radio / file / color inputs keep their own painting (the
    global accent-color rule above already themes checkbox + radio). */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]), select, textarea) {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]), select, textarea) {
   background-color: var(--d-field);
   color: var(--d-h);
   border-color: var(--d-field-edge);
 }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) input::placeholder,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) textarea::placeholder { color: var(--d-placeholder); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) select option {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) input::placeholder,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) textarea::placeholder { color: var(--d-placeholder); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) select option {
   background-color: var(--d-field);
   color: var(--d-h);
 }
 /* Hover states */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-slate-50:hover { background-color: rgba(var(--accent-rgb), 0.07); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-slate-100:hover { background-color: rgba(var(--accent-rgb), 0.09); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-slate-200:hover { background-color: rgba(var(--accent-rgb), 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-red-50:hover { background-color: rgba(244, 63, 94, 0.12); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:bg-rose-100:hover { background-color: rgba(244, 63, 94, 0.20); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-slate-900:hover,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-slate-700:hover { color: var(--d-h); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-blue-800:hover { color: var(--d-link-bright); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-rose-600:hover,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-rose-700:hover,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-rose-800:hover,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:text-red-700:hover { color: rgb(251, 113, 133); }
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) .hover\:border-blue-300:hover { border-color: var(--d-edge-strong); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:bg-slate-50:hover { background-color: rgba(var(--accent-rgb), 0.07); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:bg-slate-100:hover { background-color: rgba(var(--accent-rgb), 0.09); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:bg-slate-200:hover { background-color: rgba(var(--accent-rgb), 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:bg-red-50:hover { background-color: rgba(244, 63, 94, 0.12); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:bg-rose-100:hover { background-color: rgba(244, 63, 94, 0.20); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:text-slate-900:hover,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:text-slate-700:hover { color: var(--d-h); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:text-blue-800:hover { color: var(--d-link-bright); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:text-rose-600:hover,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:text-rose-700:hover,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:text-rose-800:hover,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:text-red-700:hover { color: rgb(251, 113, 133); }
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) .hover\:border-blue-300:hover { border-color: var(--d-edge-strong); }
 /* Scrollbars inside the rolled-out surfaces + the two pages themselves */
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) * { scrollbar-width: thin; scrollbar-color: var(--d-track) transparent; }
-body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage)::-webkit-scrollbar,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) ::-webkit-scrollbar { width: 10px; height: 10px; }
-body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage)::-webkit-scrollbar-track,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) ::-webkit-scrollbar-track { background: transparent; }
-body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage)::-webkit-scrollbar-thumb,
-body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage) ::-webkit-scrollbar-thumb {
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) * { scrollbar-width: thin; scrollbar-color: var(--d-track) transparent; }
+body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal)::-webkit-scrollbar,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) ::-webkit-scrollbar { width: 10px; height: 10px; }
+body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal)::-webkit-scrollbar-track,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) ::-webkit-scrollbar-track { background: transparent; }
+body.dark-shell :is(#getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal)::-webkit-scrollbar-thumb,
+body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wishlistFormModal, #prospectFormModal, #changePriceModal, #completeVehicleModal, #listingCopyModal, #changeVinModal, #changeMilesModal, #addFbLinkModal, #vehicleDetailsModal, #autoPostModal, #autoRepostModal, #autoPhotoEditsModal, #postingSafetyModal, #postingPreferencesModal, #vehicleActionDropdown, #wishlistToast, #getStartedPage, #wishlistPage, #prospectsPage, #closerPage, #extensionPage, #tradePage, #tradeDetailModal) ::-webkit-scrollbar-thumb {
   background: var(--d-track);
   border-radius: 8px;
   border: 2px solid transparent;
@@ -640,6 +640,13 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
           <span>Prospects</span>
         </div>
         <span id="prospectsNewBadge" class="hidden px-1.5 py-0.2 rounded-full bg-emerald-500 text-[10px] font-mono font-bold text-white">0</span>
+      </a>
+      <a href="#" data-nav="trade" onclick="showTradePage(); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-handshake w-4 text-amber-600 text-xs"></i>
+          <span>Trade Appraisals</span>
+        </div>
+        <span id="tradeNewBadge" class="hidden px-1.5 py-0.2 rounded-full bg-amber-500 text-[10px] font-mono font-bold text-white">0</span>
       </a>
       <a href="#" data-nav="closer" onclick="showCloserPage(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <i class="fa-solid fa-robot w-4 text-blue-600 text-xs"></i>
@@ -941,6 +948,27 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
 <!-- ============================================================================= -->
 <!-- ============================ PROSPECTS PAGE ================================= -->
 <!-- ============================================================================= -->
+<div id="tradePage" class="hidden flex-1 overflow-y-auto p-8">
+  <div class="max-w-5xl mx-auto space-y-6">
+    <div>
+      <h2 class="text-2xl font-extrabold text-slate-900">Trade Appraisals</h2>
+      <p class="text-slate-500 mt-1">Send a customer your link — they answer 10 condition questions and upload photos of their trade, and the whole packet lands here for the desk. Every appraisal is stamped <span class="font-semibold text-slate-700">Fair</span> condition.</p>
+    </div>
+    <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-link text-blue-600"></i> Your trade-in link</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">Share this with any customer who asks what their car is worth. They'll describe the vehicle, answer the condition questions, and send photos — including the VIN plate and the dash with the engine running. No number is ever shown to the customer; the figure is yours to work.</p>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input id="tradeLinkInput" type="text" readonly class="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-mono text-slate-700" value="Loading your link…">
+        <button onclick="copyTradeLink()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Copy link</button>
+      </div>
+      <p id="tradeLinkStatus" class="text-[11px] text-slate-400"></p>
+    </div>
+    <div id="tradeList" class="space-y-4">
+      <p class="text-sm text-slate-400">Loading trade appraisals…</p>
+    </div>
+  </div>
+</div>
+
 <div id="prospectsPage" class="hidden flex-1 overflow-y-auto p-8">
   <div class="max-w-6xl mx-auto space-y-6">
 
@@ -1697,6 +1725,19 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
 </div>
 
 <!-- 1c. Customer Wishlist: Add/Edit Form Modal -->
+<div id="tradeDetailModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="p-6 border-b border-slate-100 flex items-start justify-between gap-3 sticky top-0 bg-white rounded-t-3xl z-10">
+      <div>
+        <h3 id="tradeDetailTitle" class="text-base font-extrabold text-slate-900">Trade appraisal</h3>
+        <p id="tradeDetailSub" class="text-xs text-slate-500 mt-0.5"></p>
+      </div>
+      <button onclick="closeModal('tradeDetailModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+    <div id="tradeDetailBody" class="p-6 space-y-6"></div>
+  </div>
+</div>
+
 <div id="wishlistFormModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-lg rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900 max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between border-b border-slate-200 pb-3">
@@ -3876,6 +3917,7 @@ async function fetchLiveInventory(isManual) {
     applyFilters();
     checkWishlistMatches(); // Customer Wishlist: flag new matches (badge + toast)
     refreshProspectsBadge(); // Prospects: sidebar count of New-stage prospects
+    refreshTradeBadge(); // Trade Appraisals: sidebar count of unreviewed submissions
   } catch (err) {
     console.error("Fetch error:", err);
     tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
@@ -6249,6 +6291,9 @@ if (completeStep) {
     const ep4 = document.getElementById("extensionPage");
     if (ep4) ep4.classList.add("hidden");
 
+    const tpA = document.getElementById("tradePage");
+    if (tpA) tpA.classList.add("hidden");
+
     document
         .querySelector("main")
         .classList.remove("hidden");
@@ -6463,6 +6508,9 @@ function showGetStartedPage() {
     const ep = document.getElementById("extensionPage");
     if (ep) ep.classList.add("hidden");
 
+    const tpC = document.getElementById("tradePage");
+    if (tpC) tpC.classList.add("hidden");
+
     document.getElementById("getStartedPage")
         .classList.remove("hidden");
 
@@ -6498,6 +6546,9 @@ function showInventoryPage(navKey) {
 
     const ep2 = document.getElementById("extensionPage");
     if (ep2) ep2.classList.add("hidden");
+
+    const tpB = document.getElementById("tradePage");
+    if (tpB) tpB.classList.add("hidden");
 
     document
         .querySelector("main")
@@ -6616,6 +6667,8 @@ function showExtensionPage() {
     if (pp2) pp2.classList.add("hidden");
     const cp2 = document.getElementById("closerPage");
     if (cp2) cp2.classList.add("hidden");
+    const tpD = document.getElementById("tradePage");
+    if (tpD) tpD.classList.add("hidden");
     document.getElementById("extensionPage").classList.remove("hidden");
     checkExtensionStatus();
     syncQueuePoller();
@@ -6870,6 +6923,8 @@ async function showWishlistPage() {
   if (pp3) pp3.classList.add("hidden");
   const cp3 = document.getElementById("closerPage");
   if (cp3) cp3.classList.add("hidden");
+  const tpE = document.getElementById("tradePage");
+  if (tpE) tpE.classList.add("hidden");
   document.getElementById("wishlistPage").classList.remove("hidden");
   await loadWishlist();
   const fresh = computeFreshMatches();
@@ -7210,6 +7265,299 @@ async function refreshProspectsBadge() {
   updateProspectsBadge();
 }
 
+/* =====================================================================
+   TRADE APPRAISALS — customer-facing trade information intake
+   (Matthew's feature, built 2026-10-26, rebuild only). The customer
+   opens the rep's tokenized link (trade.html), answers the 10
+   condition questions, uploads 10–12 photos (VIN plate + running
+   dash shots required), and the packet lands in public.
+   trade_appraisals via the submit_trade_appraisal RPC — which also
+   creates the linked prospect (stage 'talking', source 'manual').
+   Every appraisal is stamped Fair. NO value is ever generated or
+   displayed to the customer: desk_value is the desk's own figure,
+   typed in by hand on the detail view.
+   ===================================================================== */
+const TRADE_TABLE = "trade_appraisals";
+const TRADE_PAGE_URL = "https://mdemoss-bdc.github.io/AutoLaunch/luna-rebuild/trade.html";
+let tradeAppraisals = [];
+let tradeToken = null;
+let tradeDetailId = null;
+
+const TRADE_QUESTIONS = [
+  "Are the tires good?",
+  "Does it pass state inspection?",
+  "Is there any damage to the vehicle that can't be seen in pictures?",
+  "Has the vehicle been smoked in?",
+  "Are there any rips, stains or tears in the seats?",
+  "Are there any warning lights on?",
+  "Is the windshield or any other glass cracked?",
+  "To your knowledge is there anything mechanically wrong with the vehicle?",
+  "Does the transmission shift correctly?",
+  "Are the brakes good or do they need replaced?"
+];
+
+async function showTradePage() {
+  setActiveNav("trade");
+  document.querySelector("main").classList.add("hidden");
+  document.getElementById("getStartedPage").classList.add("hidden");
+  const wpT = document.getElementById("wishlistPage");
+  if (wpT) wpT.classList.add("hidden");
+  const epT = document.getElementById("extensionPage");
+  if (epT) epT.classList.add("hidden");
+  const ppT = document.getElementById("prospectsPage");
+  if (ppT) ppT.classList.add("hidden");
+  const cpT = document.getElementById("closerPage");
+  if (cpT) cpT.classList.add("hidden");
+  document.getElementById("tradePage").classList.remove("hidden");
+  await ensureTradeToken();
+  await loadTradeAppraisals();
+  renderTradeAppraisals();
+  refreshTradeBadge();
+  syncQueuePoller();
+}
+
+async function ensureTradeToken() {
+  const input = document.getElementById("tradeLinkInput");
+  if (!currentUser) { if (input) input.value = "Sign in to get your link."; return; }
+  try {
+    if (!tradeToken) {
+      const { data } = await supabaseClient
+        .from("user_settings")
+        .select("trade_token")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+      if (data && data.trade_token) tradeToken = data.trade_token;
+    }
+    if (!tradeToken) {
+      tradeToken = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())) + "-" + Math.random().toString(36).slice(2, 10);
+      const { error } = await supabaseClient
+        .from("user_settings")
+        .upsert({ user_id: currentUser.id, trade_token: tradeToken }, { onConflict: "user_id" });
+      if (error) throw error;
+    }
+    if (input) input.value = TRADE_PAGE_URL + "?t=" + tradeToken;
+  } catch (e) {
+    console.warn("Trade token setup failed:", e);
+    if (input) input.value = "Your link couldn't be loaded — reopen this page to retry.";
+  }
+}
+
+async function copyTradeLink() {
+  const input = document.getElementById("tradeLinkInput");
+  const status = document.getElementById("tradeLinkStatus");
+  if (!input || !tradeToken) return;
+  const link = TRADE_PAGE_URL + "?t=" + tradeToken;
+  try {
+    await navigator.clipboard.writeText(link);
+    if (status) status.innerText = "Copied — send it to your customer.";
+  } catch (e) {
+    input.select();
+    document.execCommand && document.execCommand("copy");
+    if (status) status.innerText = "Copied — send it to your customer.";
+  }
+}
+
+async function loadTradeAppraisals() {
+  if (!currentUser) { tradeAppraisals = []; return; }
+  try {
+    const { data, error } = await supabaseClient
+      .from(TRADE_TABLE)
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    tradeAppraisals = data || [];
+  } catch (e) {
+    console.warn("Trade appraisals load failed:", e);
+    tradeAppraisals = [];
+  }
+}
+
+async function refreshTradeBadge() {
+  const b = document.getElementById("tradeNewBadge");
+  if (!b || !currentUser) return;
+  try {
+    const { count, error } = await supabaseClient
+      .from(TRADE_TABLE)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", currentUser.id)
+      .eq("status", "new");
+    if (error) throw error;
+    b.innerText = count || 0;
+    b.classList.toggle("hidden", !count);
+  } catch (e) { /* badge is best-effort */ }
+}
+
+function tradeVehicleLine(a) {
+  const veh = [a.year, a.make, a.model, a.trim].filter(Boolean).join(" ");
+  const miles = a.miles ? Number(a.miles).toLocaleString() + " mi" : "";
+  return [veh || "Vehicle not specified", miles].filter(Boolean).join(" · ");
+}
+
+function tradeStatusPill(status) {
+  if (status === "valued") return '<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-extrabold uppercase tracking-wide">Valued</span>';
+  if (status === "reviewed") return '<span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-extrabold uppercase tracking-wide">Reviewed</span>';
+  return '<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-extrabold uppercase tracking-wide">New</span>';
+}
+
+function renderTradeAppraisals() {
+  const list = document.getElementById("tradeList");
+  if (!list) return;
+  if (!tradeAppraisals.length) {
+    list.innerHTML = `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-10 text-center space-y-3">
+      <i class="fa-solid fa-handshake text-3xl text-amber-300"></i>
+      <p class="text-sm font-bold text-slate-900">No trade appraisals yet</p>
+      <p class="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">Copy your link above and send it to the next customer who asks what their car is worth. Their answers and photos land right here — no phone tag, no guessing.</p>
+    </div>`;
+    return;
+  }
+  list.innerHTML = tradeAppraisals.map(a => {
+    const photoCount = Array.isArray(a.photos) ? a.photos.length : 0;
+    const when = a.created_at ? new Date(a.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+    const desk = a.desk_value != null ? `<span class="text-emerald-600 font-bold">Desk figure: $${Number(a.desk_value).toLocaleString()}</span>` : `<span class="text-slate-400">No desk figure yet</span>`;
+    return `<div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-sm font-extrabold text-slate-900">${escapeHtml(a.customer_name || "Trade customer")}</p>
+          ${tradeStatusPill(a.status)}
+          <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-extrabold uppercase tracking-wide">Fair condition</span>
+        </div>
+        <p class="text-xs text-slate-600 mt-1 font-semibold">${escapeHtml(tradeVehicleLine(a))}</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(a.customer_contact || "")} · ${photoCount} photo${photoCount === 1 ? "" : "s"} · ${when}</p>
+      </div>
+      <div class="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
+        <span class="text-xs">${desk}</span>
+        <button onclick="openTradeDetail('${a.id}')" class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Review packet</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function openTradeDetail(id) {
+  const a = tradeAppraisals.find(x => String(x.id) === String(id));
+  if (!a) return;
+  tradeDetailId = a.id;
+  // Opening the packet IS the review: a 'new' submission quietly
+  // becomes 'reviewed' so the sidebar badge reflects what's unseen.
+  if (a.status === "new") {
+    a.status = "reviewed";
+    try {
+      await supabaseClient.from(TRADE_TABLE).update({ status: "reviewed" }).eq("id", a.id).eq("user_id", currentUser.id);
+    } catch (e) { /* non-fatal: the badge recounts on next load */ }
+    renderTradeAppraisals();
+    refreshTradeBadge();
+  }
+  document.getElementById("tradeDetailTitle").innerText = (a.customer_name || "Trade customer") + " — " + tradeVehicleLine(a);
+  document.getElementById("tradeDetailSub").innerText =
+    "Submitted " + (a.created_at ? new Date(a.created_at).toLocaleString() : "") +
+    (a.customer_contact ? " · " + a.customer_contact : "") +
+    (a.vin ? " · VIN " + a.vin : " · No VIN provided");
+
+  const answers = a.answers || {};
+  const answersHtml = TRADE_QUESTIONS.map((q, i) => {
+    const r = answers["q" + (i + 1)] || {};
+    const ans = r.answer === "yes"
+      ? '<span class="px-2 py-0.5 rounded-full bg-slate-900 text-white text-[10px] font-extrabold">YES</span>'
+      : r.answer === "no"
+        ? '<span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-extrabold">NO</span>'
+        : '<span class="text-slate-400 text-xs">—</span>';
+    const note = r.note ? `<p class="text-xs text-slate-500 mt-1">“${escapeHtml(r.note)}”</p>` : "";
+    return `<div class="py-2.5 border-b border-slate-100 last:border-0">
+      <div class="flex items-start justify-between gap-3">
+        <p class="text-xs font-semibold text-slate-700">${i + 1}. ${escapeHtml(q)}</p>${ans}
+      </div>${note}</div>`;
+  }).join("");
+  const ackHtml = answers._ack
+    ? `<p class="text-[11px] text-slate-500 leading-relaxed bg-slate-50 border border-slate-100 rounded-xl p-3">Customer acknowledged: “${escapeHtml(answers._disclaimer || "Appraised in Fair condition; the value can change if anything is omitted or different on inspection.")}”</p>`
+    : "";
+
+  const photos = Array.isArray(a.photos) ? a.photos : [];
+  const kindLabel = { vin: "VIN plate", dash: "Dash — running", gallery: "Photo" };
+  const photosHtml = photos.length
+    ? `<div class="grid grid-cols-3 sm:grid-cols-4 gap-2">${photos.map(p => {
+        const url = typeof p === "string" ? p : (p && p.url) || "";
+        const kind = (p && p.kind) || "gallery";
+        if (!url) return "";
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="relative block rounded-xl overflow-hidden border border-slate-200">
+          <img src="${escapeHtml(url)}" alt="${kindLabel[kind] || "Photo"}" class="w-full h-20 object-cover" loading="lazy">
+          <span class="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-slate-900/70 text-white text-[9px] font-bold uppercase tracking-wide">${kindLabel[kind] || "Photo"}</span>
+        </a>`;
+      }).join("")}</div>`
+    : '<p class="text-xs text-slate-400">No photos were attached to this submission.</p>';
+
+  const prospectHtml = a.prospect_id
+    ? `<p class="text-[11px] text-slate-500">A prospect was created for this customer automatically (stage: Talking). <button onclick="closeModal('tradeDetailModal'); showProspectsPage(); return false;" class="text-blue-600 font-bold cursor-pointer">Open Prospects →</button></p>`
+    : "";
+
+  document.getElementById("tradeDetailBody").innerHTML = `
+    <div>
+      <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-1">Condition answers <span class="normal-case font-semibold text-slate-400">(appraised as Fair)</span></h4>
+      <div>${answersHtml}</div>
+      ${ackHtml}
+    </div>
+    <div>
+      <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Photos (${photos.length})</h4>
+      ${photosHtml}
+    </div>
+    <div class="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3">
+      <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-400">Desk figure</h4>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">Figure ($)</label>
+          <input id="tradeDeskValue" type="number" min="0" step="1" value="${a.desk_value != null ? a.desk_value : ""}" placeholder="e.g. 6500" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">Status</label>
+          <select id="tradeStatusSel" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800">
+            <option value="reviewed" ${a.status === "reviewed" ? "selected" : ""}>Reviewed</option>
+            <option value="valued" ${a.status === "valued" ? "selected" : ""}>Valued</option>
+            <option value="new" ${a.status === "new" ? "selected" : ""}>New</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button onclick="saveTradeDesk()" class="w-full px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Save</button>
+        </div>
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-500 mb-1">Desk notes (internal)</label>
+        <textarea id="tradeDeskNotes" rows="2" placeholder="Anything the desk wants remembered about this trade…" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800">${escapeHtml(a.desk_notes || "")}</textarea>
+      </div>
+      <p id="tradeSaveStatus" class="text-[11px] text-slate-400"></p>
+      ${prospectHtml}
+    </div>`;
+  openModal("tradeDetailModal");
+}
+
+async function saveTradeDesk() {
+  const a = tradeAppraisals.find(x => String(x.id) === String(tradeDetailId));
+  if (!a || !currentUser) return;
+  const statusEl = document.getElementById("tradeSaveStatus");
+  const rawVal = document.getElementById("tradeDeskValue").value;
+  const deskValue = rawVal === "" ? null : Number(rawVal);
+  let status = document.getElementById("tradeStatusSel").value;
+  // A typed figure with no explicit status change means the trade
+  // has been valued — don't make the rep say it twice.
+  if (deskValue != null && status === "new") status = "valued";
+  const notes = document.getElementById("tradeDeskNotes").value;
+  try {
+    const { error } = await supabaseClient
+      .from(TRADE_TABLE)
+      .update({ desk_value: deskValue, desk_notes: notes, status })
+      .eq("id", a.id)
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+    a.desk_value = deskValue;
+    a.desk_notes = notes;
+    a.status = status;
+    if (statusEl) statusEl.innerText = "Saved ✓";
+    renderTradeAppraisals();
+    refreshTradeBadge();
+  } catch (e) {
+    console.warn("Trade desk save failed:", e);
+    if (statusEl) statusEl.innerText = "Save failed — check your connection and try again.";
+  }
+}
+
 async function showProspectsPage() {
   setActiveNav("prospects");
   document.querySelector("main").classList.add("hidden");
@@ -7220,6 +7568,8 @@ async function showProspectsPage() {
   if (ep) ep.classList.add("hidden");
   const cp4 = document.getElementById("closerPage");
   if (cp4) cp4.classList.add("hidden");
+  const tpF = document.getElementById("tradePage");
+  if (tpF) tpF.classList.add("hidden");
   document.getElementById("prospectsPage").classList.remove("hidden");
   await loadProspects();
   renderProspects();
@@ -8184,6 +8534,8 @@ async function showCloserPage() {
   if (ep) ep.classList.add("hidden");
   const pp = document.getElementById("prospectsPage");
   if (pp) pp.classList.add("hidden");
+  const tpG = document.getElementById("tradePage");
+  if (tpG) tpG.classList.add("hidden");
   document.getElementById("closerPage").classList.remove("hidden");
   await loadCloserProfile();
   fillCloserForm();
