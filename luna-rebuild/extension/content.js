@@ -383,6 +383,15 @@
 
   const { queueId, car } = job;
 
+  // Dealership identity for the description's closing block
+  // (v2.1.42): the worker reads user_settings.dealership_name /
+  // dealership_address at claim time and carries both on the job
+  // payload, exactly like fullAuto below. Either may be empty —
+  // buildDescription appends whatever exists and never blocks the
+  // post on a missing identity.
+  const dealershipName = typeof job.dealershipName === "string" ? job.dealershipName.trim() : "";
+  const dealershipAddress = typeof job.dealershipAddress === "string" ? job.dealershipAddress.trim() : "";
+
   // ---- job routing (v2.1.4, header notes 14–15) -----------------------
   // This script is injected on BOTH the create pages and the selling
   // page now. A delete job runs only on the selling page; a post job
@@ -2396,7 +2405,7 @@
   function buildDescription() {
     const title = `${car.year || ""} ${car.make || ""} ${car.model || "Vehicle"} ${car.trim || ""}`.trim();
     const lm = listingMileage();
-    return (
+    let desc = (
       `${title}\n` +
       `Price: $${(car.price || 0).toLocaleString()}\n` +
       (lm.miles != null ? `Mileage: ${lm.miles.toLocaleString()} miles\n` : "") +
@@ -2410,6 +2419,17 @@
         : "") +
       `\nInspected and frontline ready. Message to set up a test drive!`
     );
+    // Dealership closing block (v2.1.42, Matthew's request): the
+    // listing's About text ends with the dealership's name and
+    // address on their own lines, so a buyer reading the post knows
+    // whose car it is and where it sits. Fail-open: append whichever
+    // of name/address the user has saved; when both are empty the
+    // description is exactly what it was before this change.
+    const dealerLines = [dealershipName, dealershipAddress].filter(s => s);
+    if (dealerLines.length) {
+      desc += `\n\n${dealerLines.join("\n")}`;
+    }
+    return desc;
   }
 
   function findDescriptionField() {

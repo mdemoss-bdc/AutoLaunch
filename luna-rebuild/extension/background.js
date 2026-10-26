@@ -208,6 +208,29 @@
 //     test, so v2.1.13 opens EVERY job tab in the background; a
 //     confirm-mode form waits, filled and bannered, until the user
 //     clicks over to review and publish.
+// 19. POST PACING + DEALER BLOCK (v2.1.42): two settings that live in
+//     user_settings — and are promised by the app's UI copy — but
+//     that no code ever read. (a) PACING: the claim cycle runs on a
+//     1-minute alarm and used to claim the next POST the moment the
+//     previous job's slot cleared, so a queued batch drained
+//     back-to-back (proven live 2026-10-26: a post completed at
+//     09:31 EDT and the next car was processing by 09:33, despite
+//     post_delay_minutes = 15). userSettings now also reads
+//     post_delay_minutes, and checkQueue refuses to claim a POST
+//     until that many minutes have passed since the newest
+//     scraped_inventory.marketplace_posted_at stamp — the stamp
+//     applyPosted writes at completion, so the gap anchors on the
+//     COMPLETED post, survives worker restarts, and needs no new
+//     state. Deletes are NOT paced (a removal is not a post, the
+//     same exemption the daily limit uses). An absent/zero delay
+//     means no gate, and a failed last-post lookup fails OPEN (no
+//     hold) — a flaky read must never wedge the queue. (b) DEALER
+//     BLOCK: userSettings also reads dealership_name /
+//     dealership_address, carried on the job payload like fullAuto,
+//     so the content script can close the Marketplace description
+//     with the dealership's name and address (Matthew's request,
+//     2026-10-26). Either may be empty; the description appends
+//     whatever exists and never blocks on a missing identity.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -547,14 +570,42 @@ async function todaysPostCount(userId) {
 
 // One settings fetch per claim cycle (v2.1.4): the daily post
 // limit AND the Full Auto switch both live on user_settings.
+// v2.1.42: the same fetch also carries the post pacing delay
+// (post_delay_minutes) and the dealership identity (name/address)
+// for the description's closing block — see header note 19.
 async function userSettings(userId) {
   const rows = await sbGet(
-    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled`);
+    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address`);
   const row = (rows && rows.length) ? rows[0] : {};
   return {
     limit: typeof row.daily_post_limit === "number" ? row.daily_post_limit : 10,
-    fullAuto: row.full_auto_enabled === true
+    fullAuto: row.full_auto_enabled === true,
+    delayMinutes: (typeof row.post_delay_minutes === "number" && row.post_delay_minutes > 0)
+      ? row.post_delay_minutes : 0,
+    dealershipName: typeof row.dealership_name === "string" ? row.dealership_name.trim() : "",
+    dealershipAddress: typeof row.dealership_address === "string" ? row.dealership_address.trim() : ""
   };
+}
+
+// Newest completed-post stamp for this user (v2.1.42): the pacing
+// gate's anchor. applyPosted stamps scraped_inventory.marketplace_
+// posted_at at the moment a post completes, so the newest non-null
+// value IS the last completed post — no separate state to maintain.
+// Returns epoch ms, or null when the user has never posted or the
+// lookup failed; callers treat null as "no hold" (fail open), so a
+// flaky read can never wedge the queue behind a phantom delay.
+async function lastPostedAt(userId) {
+  try {
+    const rows = await sbGet(
+      `scraped_inventory?user_id=eq.${userId}` +
+      `&marketplace_posted_at=not.is.null` +
+      `&order=marketplace_posted_at.desc&select=marketplace_posted_at&limit=1`
+    );
+    const ts = rows && rows.length ? Date.parse(rows[0].marketplace_posted_at || "") : NaN;
+    return isFinite(ts) ? ts : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -712,12 +763,29 @@ async function checkQueue() {
         console.log(`[AutoLaunch] Daily limit reached (${postedToday}/${settings.limit}). Posts wait; deletes still run.`);
       }
     }
+    // Post pacing (v2.1.42, header note 19): post_delay_minutes is
+    // the minimum gap between a COMPLETED post and claiming the
+    // next POST row. Deletes are exempt, exactly like the daily
+    // limit — pacing spaces posts, never removals. No configured
+    // delay (0) means no gate; a missing last-post stamp (never
+    // posted, or the lookup failed) also means no gate.
+    let pacingHeld = false;
+    if (settings.delayMinutes > 0 && queueItems.some(q => q.action !== "delete")) {
+      const lastPost = await lastPostedAt(userId);
+      if (lastPost !== null) {
+        const sinceMin = (Date.now() - lastPost) / 60000;
+        if (sinceMin < settings.delayMinutes) {
+          pacingHeld = true;
+          console.log(`[AutoLaunch] Post pacing: last post ${Math.floor(sinceMin)} min ago; holding posts ~${Math.ceil(settings.delayMinutes - sinceMin)} more min (delay ${settings.delayMinutes} min). Deletes still run.`);
+        }
+      }
+    }
     let item = null;
     for (const q of queueItems) {
       if (q.action === "delete") { item = q; break; }
-      if (!atLimit) { item = q; break; }
+      if (!atLimit && !pacingHeld) { item = q; break; }
     }
-    if (!item) return; // only posts waiting, and the cap says wait
+    if (!item) return; // only posts waiting, and the cap (or pacing) says wait
     const isDelete = item.action === "delete";
 
     const cars = await sbGet(
@@ -801,6 +869,8 @@ async function checkQueue() {
         car: carRow,
         action: isDelete ? "delete" : "post",
         fullAuto: settings.fullAuto,
+        dealershipName: settings.dealershipName,
+        dealershipAddress: settings.dealershipAddress,
         claimedAt: new Date().toISOString()
       }
     });
