@@ -7593,6 +7593,10 @@ async function sendLucaReply(id, btn) {
     // 1-minute poll. The alarm stays as the fallback — "time lost
     // kills deals" (Matthew).
     try { window.postMessage({ type: "AUTOLAUNCH_EXT_NUDGE_OUTBOUND" }, "*"); } catch (e) { /* alarm fallback */ }
+    // AUTO-LEARN (2026-10-26): if Luca drafted a reply for this buyer
+    // turn, the gap between his draft and what was just sent is the
+    // lesson. Fire-and-forget — it can never block or break a send.
+    learnFromLucaSend(id, body);
   } catch (err) {
     alert("Could not queue that reply: " + err.message);
   } finally {
@@ -7622,10 +7626,13 @@ async function draftLucaReply(id, btn) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP " + res.status));
     lucaDrafts[id] = data.draft;
+    // AUTO-LEARN (2026-10-26): retain this draft against the current
+    // buyer turn so the send that follows can be paired against it.
+    retainLucaPendingDraft(id, data.draft);
     panel.innerHTML = `
       ${data.needs_human ? `<p class="mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">⚠ Luca flagged this one for you personally${data.reason ? " — " + escapeHtml(data.reason) : ""}. The draft below is just a safe holding reply.</p>` : ""}
       <textarea id="lucaDraftText-${escapeHtml(String(id))}" rows="3" class="mt-2 w-full p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600">${escapeHtml(data.draft)}</textarea>
-      <p class="mt-1 text-[11px] text-slate-400">Edit it right here if you want — when you copy an edited version, Luca keeps both so he learns how you phrase things.</p>
+      <p class="mt-1 text-[11px] text-slate-400">Edit it right here if you want — Luca learns from the version you actually send: if you change his words before sending, he keeps both so he learns how you phrase things.</p>
       <div class="mt-2 flex items-center gap-2 flex-wrap">
         <button data-prospect-action="copy-draft" data-prospect-id="${escapeHtml(String(id))}" class="px-3 py-1.5 rounded-lg btn-gradient text-white text-[11px] font-bold cursor-pointer">Copy draft</button>
         <span class="text-[11px] text-slate-400">Paste it into the Facebook chat — in Draft mode, Luca never sends for you.</span>
@@ -7738,21 +7745,178 @@ async function copyListingVariant(key, btn) {
   setTimeout(() => { btn.innerHTML = original; }, 1600);
 }
 
-// CORRECTIONS BANK (Phase 3 foundation, 2026-10-25): when the rep
-// edits a draft before copying, save draft -> final to
-// closer_corrections (keyed by thread). Fire-and-forget: a failed save
-// never blocks the copy. The drafting function will read these as
-// few-shot examples so Luca converges on the rep's own phrasing.
+// =====================================================================
+// LUCA AUTO-LEARN (2026-10-26, Matthew's "make Luca smarter faster"
+// lever #1): the strongest lesson is the gap between Luca's draft and
+// what the rep ACTUALLY sends. When a draft exists for the prospect's
+// current buyer turn and the rep sends from the reply box:
+//   sent == draft (modulo whitespace) -> acceptance: tallied locally,
+//     NO correction row (an identical draft/final pair teaches nothing
+//     — luca-draft v12 filters them out anyway)
+//   sent != draft -> exactly one closer_corrections row (draft ->
+//     final), the shape luca-draft v12 already reads — no function
+//     change needed for the lesson to land on the very next draft
+//   buyer wrote again in between -> the draft is stale; no pair, and
+//     the retained state is dropped so a later send can't pair wrong
+// Fire-and-forget throughout: learning can never block or break a
+// send. Retained drafts persist per user in localStorage so a page
+// reload between drafting and sending doesn't lose the lesson.
+// =====================================================================
+function lucaNormText(s) {
+  return String(s || "").trim().replace(/\s+/g, " ");
+}
+
+// Pure pairing decision: given the retained draft state, the text the
+// rep just sent, and the thread's CURRENT latest inbound-message key,
+// decide what this send teaches Luca. (Harness-tested.)
+function lucaPairDecision(pending, sentBody, latestBuyerKey) {
+  if (!pending || !pending.draft) return { action: "none" };
+  if (pending.buyerKey && latestBuyerKey && String(pending.buyerKey) !== String(latestBuyerKey)) {
+    return { action: "stale" };
+  }
+  const sent = lucaNormText(sentBody);
+  if (!sent) return { action: "none" };
+  if (sent === lucaNormText(pending.draft)) return { action: "accepted" };
+  return { action: "correction", draft: String(pending.draft), final: String(sentBody).trim() };
+}
+
+function lucaCorrectionKey(userId, threadRef, draft, final) {
+  return [userId || "", threadRef || "", String(draft || "").trim(), String(final || "").trim()].join("¦");
+}
+
+let lucaPendingDrafts = null; // prospect_id -> {draft, buyerKey, thread_ref, at}
+function lucaPendingStorageKey() { return "autolaunch_luca_pending_" + (currentUser ? currentUser.id : "anon"); }
+function loadLucaPendingDrafts() {
+  if (lucaPendingDrafts) return lucaPendingDrafts;
+  try { lucaPendingDrafts = JSON.parse(localStorage.getItem(lucaPendingStorageKey()) || "{}") || {}; }
+  catch (e) { lucaPendingDrafts = {}; }
+  // Prune retained drafts older than 7 days — a week-old draft is not
+  // the current buyer turn anymore.
+  const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+  Object.keys(lucaPendingDrafts).forEach(k => {
+    const at = Date.parse((lucaPendingDrafts[k] && lucaPendingDrafts[k].at) || "");
+    if (!at || at < cutoff) delete lucaPendingDrafts[k];
+  });
+  return lucaPendingDrafts;
+}
+function saveLucaPendingDrafts() {
+  try { localStorage.setItem(lucaPendingStorageKey(), JSON.stringify(loadLucaPendingDrafts())); }
+  catch (e) { /* in-memory state still covers this session */ }
+}
+function clearLucaPendingDraft(id) {
+  const all = loadLucaPendingDrafts();
+  if (all[String(id)]) { delete all[String(id)]; saveLucaPendingDrafts(); }
+}
+
+// The buyer turn a draft answers = the thread's latest inbound
+// message. DB first (freshest — the helper may have captured a newer
+// buyer line since the page last loaded); the in-memory thread is the
+// fallback. Returns the message id, or null when unknown.
+async function lucaLatestInboundKey(prospectId) {
+  try {
+    const { data } = await supabaseClient
+      .from("closer_messages")
+      .select("id")
+      .eq("prospect_id", prospectId)
+      .eq("direction", "in")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (data && data.length) return data[0].id;
+  } catch (e) { /* fall through to the in-memory thread */ }
+  const rows = prospectMessages[prospectId] || [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].direction === "in") return rows[i].id || rows[i].created_at || null;
+  }
+  return null;
+}
+
+async function retainLucaPendingDraft(id, draftText) {
+  try {
+    if (!draftText || !currentUser) return;
+    const p = prospects.find(x => String(x.id) === String(id));
+    const buyerKey = await lucaLatestInboundKey(id);
+    loadLucaPendingDrafts()[String(id)] = {
+      draft: String(draftText),
+      buyerKey: buyerKey || null,
+      thread_ref: p ? (p.thread_ref || null) : null,
+      at: new Date().toISOString(),
+    };
+    saveLucaPendingDrafts();
+  } catch (e) { /* retention is best-effort */ }
+}
+
+// Accepted-as-is sends are recorded as a local tally only: no
+// corrections row (identical pairs teach nothing) and no
+// closer_messages write (status values on message rows belong to the
+// delivery machine). The signal is kept — per user, on this device —
+// for future outcome weighting.
+function bumpLucaAcceptTally() {
+  try {
+    const k = "autolaunch_luca_accepts_" + (currentUser ? currentUser.id : "anon");
+    const t = JSON.parse(localStorage.getItem(k) || "{}") || {};
+    t.count = (t.count || 0) + 1;
+    t.last_at = new Date().toISOString();
+    localStorage.setItem(k, JSON.stringify(t));
+  } catch (e) { /* tally is best-effort */ }
+}
+
+// Called by sendLucaReply after the rep's message has been queued.
+// Evaluates the pairing once and consumes the retained draft, so a
+// second send for the same buyer turn can never double-record.
+async function learnFromLucaSend(id, sentBody) {
+  try {
+    const pending = loadLucaPendingDrafts()[String(id)];
+    if (!pending) return;
+    const latestKey = await lucaLatestInboundKey(id);
+    const decision = lucaPairDecision(pending, sentBody, latestKey);
+    if (decision.action === "correction") {
+      await recordLucaCorrection(id, decision.draft, decision.final);
+      clearLucaPendingDraft(id);
+    } else if (decision.action === "accepted") {
+      bumpLucaAcceptTally();
+      clearLucaPendingDraft(id);
+    } else if (decision.action === "stale") {
+      clearLucaPendingDraft(id);
+    }
+    // "none" (empty send — sendLucaReply already guards it) keeps the
+    // retained draft; pairing is re-evaluated on the next send.
+  } catch (e) { /* learning never breaks sending */ }
+}
+
+// CORRECTIONS BANK (Phase 3 foundation, 2026-10-25; dedupe added
+// 2026-10-26): save draft -> final to closer_corrections (keyed by
+// thread). Two writers: copyLucaDraft (edit-then-copy in Draft mode)
+// and learnFromLucaSend (the auto-learn loop above). Fire-and-forget:
+// a failed save never blocks the copy or the send. luca-draft reads
+// these as few-shot examples so Luca converges on the rep's own
+// phrasing. DEDUPE: the same (thread, draft, final) pair is never
+// written twice — session set first, then the DB itself, so reloads
+// and the copy/send paths can't double-record one lesson.
+const lucaRecordedCorrections = new Set();
 async function recordLucaCorrection(id, draft, final) {
   try {
-    if (!currentUser || !supabaseClient) return;
+    if (!currentUser || !supabaseClient) return false;
+    draft = String(draft || "").trim();
+    final = String(final || "").trim();
+    if (!draft || !final || draft === final) return false;
     const p = prospects.find(x => String(x.id) === String(id));
-    await supabaseClient.from("closer_corrections").insert({
+    const threadRef = p ? (p.thread_ref || null) : null;
+    const key = lucaCorrectionKey(currentUser.id, threadRef, draft, final);
+    if (lucaRecordedCorrections.has(key)) return false;
+    let q = supabaseClient.from("closer_corrections").select("id")
+      .eq("user_id", currentUser.id).eq("draft", draft).eq("final", final).limit(1);
+    q = threadRef ? q.eq("thread_ref", threadRef) : q.is("thread_ref", null);
+    const { data: existing } = await q;
+    if (existing && existing.length) { lucaRecordedCorrections.add(key); return false; }
+    const { error } = await supabaseClient.from("closer_corrections").insert({
       user_id: currentUser.id,
-      thread_ref: p ? (p.thread_ref || null) : null,
+      thread_ref: threadRef,
       draft, final,
     });
-  } catch (e) { /* learning is best-effort; the copy matters more */ }
+    if (error) throw error;
+    lucaRecordedCorrections.add(key);
+    return true;
+  } catch (e) { /* learning is best-effort; the copy matters more */ return false; }
 }
 
 function copyLucaDraft(id, btn) {
