@@ -392,6 +392,13 @@
   const dealershipName = typeof job.dealershipName === "string" ? job.dealershipName.trim() : "";
   const dealershipAddress = typeof job.dealershipAddress === "string" ? job.dealershipAddress.trim() : "";
 
+  // Stock-number preference (v2.1.43): the worker reads
+  // user_settings.include_stock at claim time and carries it on the
+  // job payload, exactly like the dealership identity above. On,
+  // buildDescription adds a "Stock #:" line under the VIN; off (or
+  // absent on an older job), the description is unchanged.
+  const includeStock = job.includeStock === true;
+
   // ---- job routing (v2.1.4, header notes 14–15) -----------------------
   // This script is injected on BOTH the create pages and the selling
   // page now. A delete job runs only on the selling page; a post job
@@ -2405,6 +2412,13 @@
   function buildDescription() {
     const title = `${car.year || ""} ${car.make || ""} ${car.model || "Vehicle"} ${car.trim || ""}`.trim();
     const lm = listingMileage();
+    // Stock number (v2.1.43, Matthew's request): with the user's
+    // include_stock preference on, the description names the stock
+    // number directly under the VIN — the pair a buyer reads off the
+    // lot tag. Fail-open both ways: preference off, or no stock
+    // number on the car, and the line simply isn't there — the
+    // description stays byte-identical to before this change.
+    const stock = car.stock_num != null ? String(car.stock_num).trim() : "";
     let desc = (
       `${title}\n` +
       `Price: $${(car.price || 0).toLocaleString()}\n` +
@@ -2412,6 +2426,7 @@
       (car.color && normText(car.color) !== "standard" ? `Exterior: ${car.color}\n` : "") +
       (car.transmission ? `Transmission: ${car.transmission}\n` : "") +
       (car.vin ? `VIN: ${car.vin}\n` : "") +
+      (includeStock && stock ? `Stock #: ${stock}\n` : "") +
       (lm.defaulted
         ? (lm.isNew
           ? `\nBrand new vehicle — the mileage shown is a listing default; actual miles may be less.`

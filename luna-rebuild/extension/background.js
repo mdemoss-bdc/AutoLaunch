@@ -231,6 +231,15 @@
 //     with the dealership's name and address (Matthew's request,
 //     2026-10-26). Either may be empty; the description appends
 //     whatever exists and never blocks on a missing identity.
+// 20. STOCK NUMBER IN DESCRIPTION (v2.1.43): the app's Posting
+//     preferences have always saved an include_stock checkbox to
+//     user_settings, but no code ever read it — the switch changed
+//     nothing. userSettings now also reads include_stock and it
+//     rides the job payload like the dealership identity, so the
+//     content script can put a "Stock #:" line under the VIN in the
+//     Marketplace description (Matthew's request, 2026-10-26).
+//     Fail-open both ways: the preference off, or a car with no
+//     stock number, leaves the description exactly as it was.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -573,9 +582,11 @@ async function todaysPostCount(userId) {
 // v2.1.42: the same fetch also carries the post pacing delay
 // (post_delay_minutes) and the dealership identity (name/address)
 // for the description's closing block — see header note 19.
+// v2.1.43: it also carries include_stock for the description's
+// Stock # line — see header note 20.
 async function userSettings(userId) {
   const rows = await sbGet(
-    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address`);
+    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,include_stock`);
   const row = (rows && rows.length) ? rows[0] : {};
   return {
     limit: typeof row.daily_post_limit === "number" ? row.daily_post_limit : 10,
@@ -583,7 +594,8 @@ async function userSettings(userId) {
     delayMinutes: (typeof row.post_delay_minutes === "number" && row.post_delay_minutes > 0)
       ? row.post_delay_minutes : 0,
     dealershipName: typeof row.dealership_name === "string" ? row.dealership_name.trim() : "",
-    dealershipAddress: typeof row.dealership_address === "string" ? row.dealership_address.trim() : ""
+    dealershipAddress: typeof row.dealership_address === "string" ? row.dealership_address.trim() : "",
+    includeStock: row.include_stock === true
   };
 }
 
@@ -871,6 +883,7 @@ async function checkQueue() {
         fullAuto: settings.fullAuto,
         dealershipName: settings.dealershipName,
         dealershipAddress: settings.dealershipAddress,
+        includeStock: settings.includeStock,
         claimedAt: new Date().toISOString()
       }
     });
