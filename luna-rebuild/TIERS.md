@@ -412,7 +412,23 @@ keeps your access until the end of the paid month."
 
 Owners get two extra preview states in the Settings → Plans tab (`trial`,
 `expired`), stored in localStorage (`autolaunch_owner_billing_preview`)
-exactly like the tier preview — never written to the account.
+exactly like the tier preview — never written to the account. When the
+`expired` preview is showing, the purchase gate itself carries an
+**Exit preview (owner)** button (`clearOwnerPreviews()`): it clears
+both previews (billing + tier, in memory and localStorage) and
+re-applies the normal access UI. That button exists because the
+preview otherwise soft-locked the owner — the gate is
+non-dismissible, the preview survives sign-out and reloads, and
+Settings (the only place to clear it) sits behind the gate.
+`applyPurchaseGate` reveals the button only for an owner with a
+billing preview active; a genuinely expired non-owner never sees it
+and their gate stays locked with sign-out only.
+
+Related layout fix (same pass): the "Queued posts per day" value row
+in `planFeaturesHtml` keeps label and value in separate flex boxes —
+on the narrow two-column gate cards the value now drops to its own
+line instead of interleaving into the label's lines. Wide Settings
+cards are unchanged (label left, value right, one line).
 
 ### Stripe plumbing (functions, all deployed ACTIVE)
 

@@ -671,7 +671,11 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
      MODAL_CLOSE_DENY, so Escape / backdrop taps can't close it).
      Shown when the 5-day trial has ended, or when this network's
      trial was already used by another account. The only ways forward
-     are buying a plan or signing out. -->
+     are buying a plan or signing out. One exception: an owner who is
+     only PREVIEWING the expired state gets an "Exit preview (owner)"
+     button (revealed by applyPurchaseGate) — the preview lives in
+     this device's localStorage and survives sign-out, so without it
+     the gate soft-locked the owner out of Settings. -->
 <div id="purchaseGateOverlay" class="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden overflow-y-auto">
   <div class="glass-card w-full max-w-2xl rounded-2xl p-8 shadow-2xl border border-slate-200 bg-white my-auto">
     <div class="text-center space-y-2 mb-6">
@@ -683,6 +687,9 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
     <p id="purchaseGateMsg" class="text-xs font-medium mt-4 hidden text-center"></p>
     <p class="text-center text-xs text-slate-400 mt-6">
       Wrong account? <button onclick="handleSignOut()" class="text-blue-600 font-semibold cursor-pointer">Sign out</button>
+    </p>
+    <p id="ownerPreviewExitWrap" class="text-center mt-4 hidden">
+      <button onclick="clearOwnerPreviews()" class="border border-slate-300 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 cursor-pointer">Exit preview (owner)</button>
     </p>
   </div>
 </div>
@@ -3815,14 +3822,17 @@ const PLAN_DETAILS = {
 // The shared checklist renderer: every plan surface uses this exact
 // HTML for a plan's feature list, so the gates and Settings -> Plan
 // can never show different truths. Included = emerald check; not
-// included = muted dash; the daily-cap row shows its value in bold.
+// included = muted dash; the daily-cap row shows its value in bold,
+// in its own flex box beside the label — on narrow cards (the
+// two-column gates) the value drops to its own line instead of
+// splitting into the label's lines.
 function planFeaturesHtml(planKey, listClass) {
   const info = PLAN_DETAILS[planKey];
   if (!info) return "";
   const rows = info.features.map(function (f) {
     const note = f.note ? ' <span class="text-slate-400">(' + f.note + ")</span>" : "";
     if (typeof f.value === "string") {
-      return '<li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-[10px]"></i><span class="flex-1">' + f.label + '</span><span class="font-bold text-slate-700 whitespace-nowrap">' + f.value + "</span></li>";
+      return '<li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-[10px]"></i><span class="flex-1 flex flex-wrap items-baseline gap-x-2"><span>' + f.label + '</span><span class="font-bold text-slate-700 ml-auto text-right">' + f.value + "</span></span></li>";
     }
     if (f.included) {
       return '<li class="flex items-start gap-2"><i class="fa-solid fa-check text-emerald-500 mt-0.5 text-[10px]"></i><span>' + f.label + note + "</span></li>";
@@ -4434,8 +4444,16 @@ function applyPurchaseGate() {
       if (sub) sub.innerText = "Pick a plan to keep posting:";
     }
     renderPurchaseCards("purchaseGateCards", "purchaseGateMsg");
+    // Owner escape hatch: revealed ONLY for an owner with a billing
+    // preview active (the only way an owner can be looking at this
+    // gate). A genuinely expired non-owner never sees it — their gate
+    // stays exactly as locked as before, sign-out only.
+    const exitWrap = document.getElementById("ownerPreviewExitWrap");
+    if (exitWrap) exitWrap.classList.toggle("hidden", !(isOwnerUser(currentUser.id) && ownerBillingPreview));
     overlay.classList.remove("hidden");
   } else {
+    const exitWrap = document.getElementById("ownerPreviewExitWrap");
+    if (exitWrap) exitWrap.classList.add("hidden");
     overlay.classList.add("hidden");
   }
 }
@@ -4503,6 +4521,27 @@ function setOwnerBillingPreview(v) {
   try {
     if (ownerBillingPreview) localStorage.setItem("autolaunch_owner_billing_preview", ownerBillingPreview);
     else localStorage.removeItem("autolaunch_owner_billing_preview");
+  } catch (e) {}
+  applyBillingUI();
+  renderPlanPanel();
+}
+
+// Owner-only escape hatch: clear BOTH previews (tier + billing) in
+// memory and on this device, then re-apply the normal access UI. The
+// purchase gate's "Exit preview (owner)" button calls this — without
+// it, an owner previewing the expired gate was soft-locked: the gate
+// is non-dismissible and the billing preview survives sign-out and
+// reloads, so there was no way back to Settings to turn it off.
+// applyPurchaseGate only reveals the button for an owner with a
+// billing preview active, so a genuinely expired customer can never
+// reach this; the owner check here is a second lock on the same door.
+function clearOwnerPreviews() {
+  if (!currentUser || !isOwnerUser(currentUser.id)) return;
+  ownerTestTier = null;
+  ownerBillingPreview = null;
+  try {
+    localStorage.removeItem("autolaunch_owner_test_tier");
+    localStorage.removeItem("autolaunch_owner_billing_preview");
   } catch (e) {}
   applyBillingUI();
   renderPlanPanel();
