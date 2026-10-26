@@ -14,7 +14,7 @@ dormant — it activates the moment the Stripe secrets are set.
 |---|---|---|
 | `post` | **Post** | The manual core: inventory workspace, post queue, manual Marketplace posting, listing-copy ✨ — manual only (no automation features), and capped at **5 queued posts per day** (see "Daily queue cap" below) |
 | `automate` | **Post + Automate** | Everything in Post, plus: auto-post new arrivals, auto delete & repost, extra channels (TikTok / Instagram / Facebook Page), Luca + Prospects, Customer Wishlist, Trade Appraisals, intro videos |
-| `group` | **Group** | Everything in Post + Automate, plus team features (accounts/organizations) — those don't exist yet, so today `group` behaves like `automate` plus the reserved `teams` feature flag |
+| `group` | **Group** | Everything in Post + Automate. (Until 2026-10-26 this tier also promised AutoLaunch Pay and team features — both were cut/moved the same day, see the Pay cut note and "Dealership accounts — Phase 1" below; feature-wise `group` now matches `automate`, and the store/team product is the dealership plans.) |
 
 The single source of truth in the app is the `TIER_FEATURES` object in
 `index.html` (feature key → minimum tier). To move a feature between
@@ -113,13 +113,24 @@ item listed at the bottom.)
 
 ### What each plan includes — PLAN_DETAILS (added 2026-10-26)
 
+**AutoLaunch Pay is CUT (Matthew, 2026-10-26):** every dealership
+runs a different pay plan, so Pay leaves the product entirely —
+Matthew keeps the tracker for personal use only. The "AutoLaunch
+Pay" row and the "Teams & multiple users" row were removed from
+every plan in `PLAN_DETAILS` the same day (13 rows → 11), along with
+Automate's "available as an add-on" note and Group's tagline
+promise of teams; no user-visible "AutoLaunch Pay" string remains
+in the app. Teams are now the separate dealership plans (see
+"Dealership accounts — Phase 1"). Prices are unchanged (Post $75,
+Group $100); the Stripe products were not touched in this pass.
+
 Matthew's rule: when someone is picking between the free trial, the
 1st tier and the 2nd tier, they must know **exactly** what each one
 gives them — no vague card copy. So plan descriptions now live in
 ONE config in `index.html`: **`PLAN_DETAILS`** (next to
 `TIER_FEATURES`), with an entry per plan (`trial` / `post` /
 `automate` / `group`) holding its display name, price label, one-line
-tagline, and a 13-row feature list of `{ label, included }` entries
+tagline, and an 11-row feature list of `{ label, included }` entries
 (the daily-cap row carries a `value` instead of a check):
 
 | Row | Trial | Post | Automate | Group |
@@ -135,8 +146,6 @@ tagline, and a 13-row feature list of `{ label, included }` entries
 | Customer Wishlist | — | — | ✓ | ✓ |
 | Trade Appraisals | — | — | ✓ | ✓ |
 | Intro videos | — | — | ✓ | ✓ |
-| AutoLaunch Pay | — | — | — (add-on available) | ✓ |
-| Teams & multiple users | — | — | — | ✓ |
 
 The matrix mirrors the enforcement truth, it doesn't restate it: the
 included flags follow `TIER_FEATURES` (a capability is included
@@ -144,7 +153,9 @@ exactly when the plan's tier meets its minimum tier; the trial's
 column follows `TRIAL_ALLOWED_FEATURES`), and the cap values follow
 `TIER_DAILY_POST_CAP` (Post 5; Automate/Group none) plus the trial's
 1-per-day rule. The trial entry also carries the note line: "No card
-needed. When the trial ends, pick a plan to keep posting."
+needed. When the trial ends, pick a plan to keep posting." (The
+reserved `teams` key stays in `TIER_FEATURES` — nothing calls it;
+multi-user access now runs through dealership membership instead.)
 
 Every surface renders from this config through the one shared
 renderer, `planFeaturesHtml(planKey)` (emerald ✓ / muted — / the cap
@@ -680,13 +691,79 @@ three layers above.
 4. Test one real checkout end-to-end (trial user → pay → webhook
    flips to `active` → portal cancel → `expired` at period end).
 
+## Dealership accounts — Phase 1 (built 2026-10-26)
+
+Matthew's dealership product: a store gets ONE dealership account;
+its admin creates member logins up to a seat limit, deletes them
+(seat frees immediately), remakes them, and resets passwords. The
+dealer tiers he sketched: **10 / 20 / 50 / 100 / unlimited users**
+(seat limits; per-tier pricing is a separate decision — nothing
+about Stripe changed in this phase).
+
+- **Model.** `dealership_accounts` (name, `created_by`,
+  `seat_limit` NULL = unlimited, `plan_key` =
+  dealer_10/20/50/100/unlimited, `status` active|inactive) and
+  `dealership_account_members` (`user_id` UNIQUE — one dealership
+  per user in Phase 1; `role` admin|member). The app offers the
+  named seat tiers; the function accepts any positive seat count
+  (the count is the enforced contract — a custom count stores no
+  plan key). The names dodge
+  Phantom's LEGACY `dealerships` table (the scraper's inventory-
+  source table — text ids, 33 live rows — untouched). DDL record:
+  `supabase/migrations_draft/dealerships_APPLIED_2026-10-26.sql`.
+  RLS is on with SELECT-only member policies (own membership, own
+  dealership, own roster, via a SECURITY DEFINER helper so policies
+  never recurse) and **no client write policies** — every write goes
+  through the function below.
+- **The function.** `dealership-admin` (verify_jwt=false + manual
+  JWT, the full CORS header list; deployed ACTIVE): `create_dealership`
+  is OWNER-only (the two `OWNER_USER_IDS`) and makes the caller the
+  first admin member; `list_members`, `create_member`,
+  `delete_member`, `reset_member_password` all require the caller
+  to be an **admin member**, checked server-side on every call.
+  Seat enforcement is server-side (a full roster answers 409
+  `seat_limit_reached` before any auth user is created).
+  `create_member` creates the login via the Auth Admin API with
+  `email_confirm=true` — admin-created accounts skip the
+  verification email — and deletes the just-created login again if
+  the membership insert fails (no orphans). `delete_member` refuses
+  self-deletion; an admin target can only be deleted by the
+  dealership's `created_by` owner.
+- **Covered members.** On load the app resolves the signed-in
+  user's membership first (`currentDealership`). A member of an
+  **active** dealership is covered: `billingAccess()` returns full
+  and `effectiveTier()` returns `group` *before* any billing logic,
+  so covered members never see the signup choice gate, the trial
+  banner, or the purchase gate, and trial-start is never called for
+  them — their own `billing_status` stays NULL and unused. An
+  **inactive** dealership changes nothing: the account falls
+  through to the normal billing path. Settings → Plans shows
+  covered members "Covered by your dealership — &lt;name&gt;. No
+  subscription is needed on this account." with the buy cards
+  hidden (same treatment as the owner line).
+- **The page.** Sidebar "Dealership" (shown to owners, dealership
+  admins, and covered members): owners with no dealership get the
+  create form (name + seat tier); admins get the roster (email,
+  role, joined) with per-member Reset password / Delete and an
+  Add member form (email, starting password, role); plain members
+  get the covered note only. `#dealershipPage` was added to all
+  Phase C selector lists alongside `#tradePage`.
+- **Provisioning (Phase 1 limit).** Dealerships exist because an
+  owner created them — there is no dealer self-serve purchase yet.
+- **Deferred to Phase 2:** dealer-tier Stripe products + checkout
+  (the 10/20/50/100/unlimited ladder as purchasable plans),
+  dealership ownership tagging of app data + reassignment when a
+  member is deleted (today the deleted user's data simply stays in
+  the database under their user id — nothing is destroyed), and
+  member invite emails (Phase 1 admins set a starting password
+  instead).
+
 ## What remains for the real paywall
 
 - Custom SMTP so confirmation/resend email isn't throttled.
 - Server-side enforcement phase 2: tier/trial-aware RLS and/or scraper
   checks, plus changing the `plan_tier` column default away from
   `'trial'`.
-- Team features for `group` (the `teams` feature key is reserved in
-  `TIER_FEATURES`).
+- Dealership accounts Phase 2 (see its section above).
 - Promoting any of this from the rebuild to the live app — a separate,
   explicitly approved step.
