@@ -3129,6 +3129,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <button onclick="removeAllQueueItems()" class="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg cursor-pointer">Remove All</button>
       </div>
     </div>
+    <div id="queueRetryNote" style="display:none" class="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2"></div>
     <div id="queueItemsList" class="space-y-2">
       <p class="text-xs text-slate-400 text-center py-8">Nothing queued yet. Pick a car on the Dashboard and press Post To Facebook — it lines up here, ready to launch.</p>
     </div>
@@ -8684,12 +8685,73 @@ function syncQueueBulkBar() {
         retryBtn.innerText = failedCount > 1 ? `Retry Failed (${failedCount})` : "Retry Failed";
     }
 }
+// Retry feedback (Matthew, 2026-10-27): a retry click flips the row
+// to Pending on screen in the same tick — reps were reading the
+// un-changed Failed row as "the button does nothing" (it bit Matthew
+// himself). The flip is interim feedback only: once the guarded
+// update settles, the queue is re-read through loadPostingQueue()
+// and the SERVER's state is what stays rendered — still failed means
+// the row goes back to Failed and a note appears under the queue
+// bar; processing (the helper already claimed it) renders as such.
+// No alert() any more: the note is the failure surface.
+const retryInFlightIds = new Set();
+let bulkRetryInFlight = false;
+let queueRetryNoteTimer = null;
+function showQueueRetryNote(text) {
+    const note = document.getElementById("queueRetryNote");
+    if (!note) return;
+    note.innerText = text;
+    note.style.display = "";
+    if (queueRetryNoteTimer) clearTimeout(queueRetryNoteTimer);
+    queueRetryNoteTimer = setTimeout(hideQueueRetryNote, 8000);
+}
+function hideQueueRetryNote() {
+    const note = document.getElementById("queueRetryNote");
+    if (note) note.style.display = "none";
+    if (queueRetryNoteTimer) { clearTimeout(queueRetryNoteTimer); queueRetryNoteTimer = null; }
+}
+function queueRowElement(id) {
+    const rows = document.querySelectorAll("[data-queue-row]");
+    for (const row of rows) {
+        if (row.dataset && String(row.dataset.queueRow) === String(id)) return row;
+    }
+    return null;
+}
+// Paint one row as Pending, right now: swap the status chip for the
+// Pending one and take the Retry button out (disabled first, so a
+// second tap landing in the same tick hits a dead control). The
+// flip is mirrored into postingQueue so the modal's own counts —
+// syncQueueBulkBar's failed tally and Retry Failed button — agree
+// with what's painted for the duration of the flight.
+function paintQueueRowPending(id) {
+    const item = postingQueue.find(i => String(i.id) === String(id));
+    if (item && item.status === "failed") item.status = "pending";
+    const row = queueRowElement(id);
+    if (row) {
+        const spans = row.querySelectorAll("span");
+        for (const span of spans) {
+            if (span.className && span.className.indexOf("rounded-full") !== -1) {
+                span.className = "px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold";
+                span.textContent = item && item.action === "delete" ? "🟡 Removal queued" : "🟡 Pending";
+                break;
+            }
+        }
+        const retryBtn = row.querySelector('[data-action="queue-retry"]');
+        if (retryBtn) { retryBtn.disabled = true; retryBtn.remove(); }
+    }
+    syncQueueBulkBar();
+}
 // Retry (Matthew, 2026-10-25): a failed job goes back to pending so
 // the helper claims it again — for after the thing that failed it has
 // been fixed. The .eq("status","failed") guard means a retry can
 // never resurrect a job that's already running or done.
 async function retryQueueItem(id) {
     if (!id || !currentUser) return;
+    if (retryInFlightIds.has(id)) return; // double-click: already on it
+    retryInFlightIds.add(id);
+    hideQueueRetryNote();
+    paintQueueRowPending(id);
+    let updateFailed = false;
     try {
         const { error } = await supabaseClient
             .from("auto_posting_queue")
@@ -8698,14 +8760,30 @@ async function retryQueueItem(id) {
             .eq("user_id", currentUser.id)
             .eq("status", "failed");
         if (error) throw error;
-        await loadPostingQueue();
     } catch (err) {
+        updateFailed = true;
         console.error(err);
-        alert("Could not retry that item — please try again.");
     }
+    // Reconcile with the server's truth: whatever the fresh read says
+    // is what stays on screen (pending, processing, or still failed).
+    await loadPostingQueue();
+    const fresh = postingQueue.find(i => String(i.id) === String(id));
+    if (updateFailed || (fresh && fresh.status === "failed")) {
+        showQueueRetryNote("Couldn't retry that one — refresh and try again.");
+    }
+    retryInFlightIds.delete(id);
 }
 async function retryAllFailedQueueItems() {
     if (!currentUser) return;
+    if (bulkRetryInFlight) return;
+    const failedIds = postingQueue.filter(i => i.status === "failed").map(i => i.id);
+    if (!failedIds.length) return;
+    bulkRetryInFlight = true;
+    const btn = document.getElementById("queueRetryFailedBtn");
+    if (btn) btn.disabled = true;
+    hideQueueRetryNote();
+    failedIds.forEach(id => paintQueueRowPending(id));
+    let updateFailed = false;
     try {
         const { error } = await supabaseClient
             .from("auto_posting_queue")
@@ -8713,11 +8791,20 @@ async function retryAllFailedQueueItems() {
             .eq("user_id", currentUser.id)
             .eq("status", "failed");
         if (error) throw error;
-        await loadPostingQueue();
     } catch (err) {
+        updateFailed = true;
         console.error(err);
-        alert("Could not retry the failed items — please try again.");
     }
+    await loadPostingQueue();
+    const stillFailed = failedIds.some(id => {
+        const fresh = postingQueue.find(i => String(i.id) === String(id));
+        return fresh && fresh.status === "failed";
+    });
+    if (updateFailed || stillFailed) {
+        showQueueRetryNote("Couldn't retry those — refresh and try again.");
+    }
+    if (btn) btn.disabled = false;
+    bulkRetryInFlight = false;
 }
 async function removeQueueItemsByIds(ids, confirmText) {
     if (!ids.length) return;
@@ -8843,7 +8930,7 @@ const statusChip = blockedNoPhoto
 
     return `
 
-        <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+        <div class="p-3 rounded-xl border border-slate-200 bg-slate-50" data-queue-row="${escapeHtml(item.id)}">
 
             <div class="flex items-start justify-between">
 
