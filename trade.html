@@ -113,7 +113,7 @@
 
     <div class="card">
       <h2>Photos</h2>
-      <p>Please upload <strong>10–12 photos</strong> of your vehicle:</p>
+      <p>Please upload <strong>6 or more photos</strong> of your vehicle, plus the required VIN plate and dash photos below (<strong>8–12 photos</strong> in total):</p>
       <ul>
         <li>Outside: front, both sides, and the back</li>
         <li>Inside: front seats, back seats, and the dash</li>
@@ -316,7 +316,7 @@ function isValid() {
     && document.getElementById("fContact").value.trim().length > 3
     && parseInt(document.getElementById("fMiles").value, 10) > 0
     && allAnswered()
-    && photos.vin && photos.dash && photoTotal() >= 10
+    && photos.vin && photos.dash && photos.gallery.length >= 6
     && document.getElementById("ackBox").checked;
 }
 // Plain-words name for the first unmet submit requirement (mirrors
@@ -333,10 +333,10 @@ function firstUnmetReason() {
   }
   if (!photos.vin) return "Add the VIN plate photo to continue";
   if (!photos.dash) return "Add the dash photo (vehicle running) to continue";
-  const total = photoTotal();
-  if (total < 10) {
-    const need = 10 - total;
-    return "Add " + need + " more photo" + (need === 1 ? "" : "s") + " to continue (" + total + " of 10 added)";
+  const galleryCount = photos.gallery.length;
+  if (galleryCount < 6) {
+    const need = 6 - galleryCount;
+    return "Add " + need + " more photo" + (need === 1 ? "" : "s") + " to continue (" + galleryCount + " of 6 added)";
   }
   if (!document.getElementById("ackBox").checked) return "Check the Fair-condition box to continue";
   return "";
@@ -347,8 +347,8 @@ function refresh() {
   renderThumbs("dashThumbs", photos.dash ? [photos.dash] : []);
   const total = photoTotal();
   const pc = document.getElementById("photoCount");
-  pc.textContent = total + " of 10–12 photos added" + (photos.vin ? "" : " · VIN photo still needed") + (photos.dash ? "" : " · dash photo still needed");
-  pc.classList.toggle("done", total >= 10 && photos.vin && photos.dash);
+  pc.textContent = total + " of 8–12 photos added" + (photos.vin ? "" : " · VIN photo still needed") + (photos.dash ? "" : " · dash photo still needed");
+  pc.classList.toggle("done", photos.gallery.length >= 6 && photos.vin && photos.dash);
   const ok = isValid();
   document.getElementById("submitBtn").disabled = !ok;
   const hint = document.getElementById("submitHint");

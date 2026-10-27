@@ -3296,14 +3296,14 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Daily post limit</label>
         <div class="space-y-2">
           <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-blue-600 cursor-pointer shadow-sm">
-            <input type="radio" name="dailyLimitRadio" value="10" checked onchange="toggleCustomLimitInput(false)" class="mt-0.5 text-blue-600">
+            <input type="radio" name="dailyLimitRadio" value="10" checked onchange="toggleCustomLimitInput(false); syncDailyLimitHighlight()" class="mt-0.5 text-blue-600">
             <div>
               <strong class="text-slate-900 block">10 a day — recommended</strong>
               <span class="text-[11px] text-slate-500">The limit we consider safe for Facebook Marketplace.</span>
             </div>
           </label>
           <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <input type="radio" name="dailyLimitRadio" value="custom" onchange="toggleCustomLimitInput(true)" class="mt-0.5 text-blue-600">
+            <input type="radio" name="dailyLimitRadio" value="custom" onchange="toggleCustomLimitInput(true); syncDailyLimitHighlight()" class="mt-0.5 text-blue-600">
             <div class="w-full space-y-2">
               <strong class="text-slate-900 block">Custom limit</strong>
               <span class="text-[11px] text-slate-500 block">More than 10 needs a one-time risk confirmation.</span>
@@ -3311,7 +3311,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             </div>
           </label>
           <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <input type="radio" name="dailyLimitRadio" value="unlimited" onchange="toggleCustomLimitInput(false)" class="mt-0.5 text-blue-600">
+            <input type="radio" name="dailyLimitRadio" value="unlimited" onchange="toggleCustomLimitInput(false); syncDailyLimitHighlight()" class="mt-0.5 text-blue-600">
             <div>
               <strong class="text-slate-900 block">Unlimited</strong>
               <span class="text-[11px] text-slate-500">No daily cap. Highest risk of a Facebook restriction.</span>
@@ -12704,7 +12704,7 @@ function openAutoPhotoEditsModal() {
   // frame baked in when the frame is on).
   refreshPhotoPreview();
 }
-function openPostingSafetyModal() { document.getElementById("postingSafetyModal").classList.remove("hidden"); }
+function openPostingSafetyModal() { syncDailyLimitHighlight(); document.getElementById("postingSafetyModal").classList.remove("hidden"); }
 function openPostingPreferencesModal() { document.getElementById("postingPreferencesModal").classList.remove("hidden"); }
 // Filter bar: reset every bar select to its "All/Any" option and re-render.
 // populateFilterDropdowns() runs after the reset so the Model list rebuilds
@@ -13984,6 +13984,19 @@ function toggleCustomLimitInput(isCustom) {
   if (customInput) customInput.disabled = !isCustom;
 }
 
+// The Daily post limit cards are a radio group: the blue outline must
+// sit on the card whose radio is checked, and only that card — the
+// markup ships it painted on the first card, so every selection change
+// (and every modal open) repaints from the live checked state.
+function syncDailyLimitHighlight() {
+  const on = "flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-blue-600 cursor-pointer shadow-sm";
+  const off = "flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer";
+  document.querySelectorAll('input[name="dailyLimitRadio"]').forEach(radio => {
+    const card = radio.closest("label");
+    if (card) card.className = radio.checked ? on : off;
+  });
+}
+
 function setPostingSpeed(speed) {
   selectedPostingSpeed = speed;
   const btnStd = document.getElementById("speedBtnStandard");
@@ -13992,7 +14005,7 @@ function setPostingSpeed(speed) {
     btnCaut.className = "p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer shadow-sm";
     btnStd.className = "p-3 rounded-xl border border-slate-200 bg-slate-50 text-left transition cursor-pointer";
   } else {
-    btnStd.className = "p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer";
+    btnStd.className = "p-3 rounded-xl border border-blue-600 bg-blue-50 text-left transition cursor-pointer shadow-sm";
     btnCaut.className = "p-3 rounded-xl border border-slate-200 bg-slate-50 text-left transition cursor-pointer";
   }
 }
