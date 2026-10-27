@@ -1477,3 +1477,45 @@ next runs on a **two-lane rule**:
   cleanly rolled back): Luna **notifies Matthew with the diagnosis +
   proposed fix and waits for his explicit authorization**. No
   risk-lane fix ships on Luna's own say-so.
+
+
+## Feature demo videos (added 2026-10-26, rebuild only)
+
+A short clip of a feature in action can play at the top of **three
+surfaces**, so the user sees what the feature does:
+
+1. the **trial notice** (`#trialNoticeModal`, via
+   `showTrialNotice("feature", …)`),
+2. the **plan gate** (`#planGateModal`, via `requireTier`), and
+3. the feature's **"How it works" guide** (`#guideModal`, via
+   `openGuide`) — guides carry an optional `video: "<feature key>"`
+   field in the `GUIDES` map (paired today: autopost, repost,
+   wishlist, prospects, luca, channels, introvideos).
+
+- **One config, one helper**: clip URLs live ONLY in
+  `FEATURE_VIDEOS` in `index.html` (beside `TIER_FEATURES`) — one
+  entry per gated feature key: `autopost`, `auto_repost`,
+  `channels`, `luca`, `prospects`, `wishlist`, `trade`,
+  `intro_videos`. Guides reference the key, never a URL, so one
+  clip serves all three surfaces. All surfaces are driven by the
+  single `showDemoVideo()` / `clearDemoVideo()` pair.
+- **Empty means invisible**: an empty-string entry = no clip yet —
+  the slot stays completely hidden (emptied container) and the
+  surface renders exactly as it did before demo videos existed.
+- **Behavior**: the slot is a 16:9 rounded container with a muted,
+  looping, autoplaying `<video playsinline>`. It is cleared on
+  every close path (all closes route through `closeModal`), when a
+  surface opens for a feature/guide without a clip, and when the
+  Post-cap notice reuses the plan-gate modal — a clip never keeps
+  playing under another modal.
+- **Hosting**: clips live in the **public** Supabase Storage bucket
+  **`feature-videos`** (public read; writes service-role only — no
+  client write policies). Record:
+  `supabase/migrations_draft/feature_videos_bucket_APPLIED_2026-10-26.sql`.
+- **Adding a clip** (no code change beyond the map):
+  1. Record the feature in action — **≤20 seconds**, MP4.
+  2. Upload it to the `feature-videos` bucket named exactly
+     `<feature>.mp4` (e.g. `luca.mp4`).
+  3. Set `FEATURE_VIDEOS.<feature>` to the clip's public URL
+     (`https://tdsipiltwajwhzgjsupx.supabase.co/storage/v1/object/public/feature-videos/<feature>.mp4`)
+     and ship the one-line edit.

@@ -666,6 +666,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <span class="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-lock"></i></span>
       <h3 id="planGateTitle" class="font-extrabold text-lg text-slate-900">Available on Post + Automate</h3>
     </div>
+    <div id="planGateVideoSlot" class="hidden"></div>
     <p id="planGateBody" class="text-sm text-slate-600 leading-relaxed"></p>
     <button onclick="closeModal('planGateModal')" class="w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Got it</button>
   </div>
@@ -683,6 +684,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <span class="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-hourglass-half"></i></span>
       <h3 id="trialNoticeTitle" class="font-extrabold text-lg text-slate-900">Not in the free trial</h3>
     </div>
+    <div id="trialNoticeVideoSlot" class="hidden"></div>
     <p id="trialNoticeBody" class="text-sm text-slate-600 leading-relaxed"></p>
     <button onclick="trialNoticeViewPlans()" class="w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">View plans</button>
     <button onclick="closeModal('trialNoticeModal')" class="w-full py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm cursor-pointer">Got it</button>
@@ -3436,6 +3438,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <button onclick="closeModal('guideModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
 
+    <div id="guideVideoSlot" class="hidden"></div>
+
     <div>
       <h4 class="font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">What it does</h4>
       <p id="guideWhat" class="text-xs text-slate-600 leading-relaxed"></p>
@@ -3866,6 +3870,26 @@ const TIER_FEATURES = {
   teams: "group"           // future team/org features — nothing calls this yet
 };
 
+// Feature demo videos (Matthew, 2026-10-26): a short clip of a
+// gated feature in action — played at the top of the upgrade
+// notices (trial notice + plan gate) and of the feature's
+// "How it works" guide, so the user can SEE what the feature does
+// before buying. Empty string = no clip yet: the
+// slot stays completely hidden and the notice renders exactly as it
+// did before this map existed. Clips live in the public
+// `feature-videos` Supabase Storage bucket as <feature>.mp4 — the
+// how-to is in the "Feature demo videos" section of TIERS.md.
+const FEATURE_VIDEOS = {
+  autopost: "",
+  auto_repost: "",
+  channels: "",
+  luca: "",
+  prospects: "",
+  wishlist: "",
+  trade: "",
+  intro_videos: ""
+};
+
 // Daily queue caps by tier (Matthew, 2026-10-26): Post is the manual
 // plan — its accounts queue at most 5 cars per day, ON TOP OF the
 // user's own Safe posting limit (whichever is lower binds). Automate
@@ -4067,6 +4091,41 @@ function tierAllows(feature) {
   return TIER_RANK[effectiveTier()] >= TIER_RANK[need];
 }
 
+// Demo-video slots — ONE shared implementation for all three
+// surfaces that can show a feature clip: the trial notice, the plan
+// gate, and the "How it works" guides. The slot in each modal is an
+// empty container; these helpers build the <video> inside it from
+// the single markup below, or empty it again, so the surfaces can
+// never drift. Behavior: a FEATURE_VIDEOS clip for the feature fills
+// + shows the slot (muted loop, autoplay, playsinline); no clip →
+// the slot is emptied and hidden, and the surface renders exactly
+// as it did before demo videos existed. Fail-open throughout: a
+// video problem must never break the surface itself.
+function showDemoVideo(slotId, feature) {
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  const url = (typeof FEATURE_VIDEOS !== "undefined" && feature && FEATURE_VIDEOS[feature]) || "";
+  if (!url) { clearDemoVideo(slotId); return; }
+  let vid = slot.querySelector("video");
+  if (!vid) {
+    slot.innerHTML = '<video class="aspect-video w-full rounded-xl bg-slate-900 object-cover" muted loop autoplay playsinline preload="metadata"></video>';
+    vid = slot.querySelector("video");
+  }
+  if (!vid) return;
+  if (vid.getAttribute("src") !== url) vid.setAttribute("src", url);
+  slot.classList.remove("hidden");
+  try { const p = vid.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+}
+
+function clearDemoVideo(slotId) {
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  const vid = slot.querySelector("video");
+  if (vid) { try { vid.pause(); } catch (e) {} }
+  slot.innerHTML = "";
+  slot.classList.add("hidden");
+}
+
 // Gate an entry point: true = proceed; false = the plan notice was shown.
 function requireTier(feature) {
   if (tierAllows(feature)) return true;
@@ -4077,6 +4136,7 @@ function requireTier(feature) {
   const body = document.getElementById("planGateBody");
   if (title) title.innerText = "Available on " + PLAN_DETAILS[need].name;
   if (body) body.innerText = label + " is part of the " + PLAN_DETAILS[need].name + " plan. Your account is on the " + PLAN_DETAILS[effectiveTier()].name + " plan.";
+  showDemoVideo("planGateVideoSlot", feature);
   const modal = document.getElementById("planGateModal");
   if (modal) modal.classList.remove("hidden");
   return false;
@@ -4597,6 +4657,7 @@ function showPostCapNotice() {
   const body = document.getElementById("planGateBody");
   if (title) title.innerText = "Post plan daily limit";
   if (body) body.innerText = "You've reached the Post plan's limit of " + cap + " queued posts per day. The Automate plan lifts this cap — your own daily posting limit still applies there. You can queue more cars tomorrow, or switch plans in Settings.";
+  clearDemoVideo("planGateVideoSlot");
   const modal = document.getElementById("planGateModal");
   if (modal) modal.classList.remove("hidden");
 }
@@ -4618,6 +4679,8 @@ function showTrialNotice(kind, feature) {
       body.innerText = label + " isn't part of the 5-day free trial. During the trial you can pull inventory and queue 1 car per day — everything unlocks on a plan.";
     }
   }
+  if (kind === "feature" && feature) showDemoVideo("trialNoticeVideoSlot", feature);
+  else clearDemoVideo("trialNoticeVideoSlot");
   const modal = document.getElementById("trialNoticeModal");
   if (modal) modal.classList.remove("hidden");
 }
@@ -11978,6 +12041,9 @@ function updateClearFiltersVisibility() {
 function closeModal(id) {
   document.getElementById(id).classList.add("hidden");
   if (id === "queueModal") syncQueuePoller();
+  if (id === "planGateModal") clearDemoVideo("planGateVideoSlot");
+  if (id === "trialNoticeModal") clearDemoVideo("trialNoticeVideoSlot");
+  if (id === "guideModal") clearDemoVideo("guideVideoSlot");
 }
 
 // The missing twin of closeModal (2026-10-26 fix): openTradeDetail
@@ -12232,6 +12298,7 @@ const GUIDES = {
   },
   autopost: {
     title: "Auto-post new arrivals",
+    video: "autopost",
     icon: "fa-solid fa-paper-plane",
     iconClasses: "bg-purple-50 text-purple-600 border-purple-200",
     modal: "autoPostModal",
@@ -12252,6 +12319,7 @@ const GUIDES = {
   },
   repost: {
     title: "Auto delete & repost",
+    video: "auto_repost",
     icon: "fa-solid fa-arrows-rotate",
     iconClasses: "bg-emerald-50 text-emerald-600 border-emerald-200",
     modal: "autoRepostModal",
@@ -12398,6 +12466,7 @@ const GUIDES = {
   },
   wishlist: {
     title: "Customer Wishlist",
+    video: "wishlist",
     icon: "fa-solid fa-heart",
     iconClasses: "bg-pink-50 text-pink-600 border-pink-200",
     modal: null,
@@ -12415,6 +12484,7 @@ const GUIDES = {
   },
   prospects: {
     title: "Prospects",
+    video: "prospects",
     icon: "fa-solid fa-users",
     iconClasses: "bg-emerald-50 text-emerald-600 border-emerald-200",
     modal: null,
@@ -12457,6 +12527,7 @@ const GUIDES = {
   },
   luca: {
     title: "Luca · AI Assistant",
+    video: "luca",
     icon: "fa-solid fa-moon",
     iconClasses: "bg-violet-50 text-violet-600 border-violet-200",
     modal: null,
@@ -12476,6 +12547,7 @@ const GUIDES = {
   },
   channels: {
     title: "Syndication channels (TikTok, Instagram, Facebook Pages)",
+    video: "channels",
     icon: "fa-solid fa-share-nodes",
     iconClasses: "bg-cyan-50 text-cyan-600 border-cyan-200",
     modal: null,
@@ -12493,6 +12565,7 @@ const GUIDES = {
   },
   introvideos: {
     title: "My Intro Videos",
+    video: "intro_videos",
     icon: "fa-solid fa-clapperboard",
     iconClasses: "bg-amber-50 text-amber-600 border-amber-200",
     modal: null,
@@ -12527,6 +12600,7 @@ function openGuide(key) {
   document.getElementById("guideNotes").innerHTML = g.notes.map(s => "<li>" + s + "</li>").join("");
   const openBtn = document.getElementById("guideOpenBtn");
   if (openBtn) openBtn.classList.toggle("hidden", !g.modal);
+  showDemoVideo("guideVideoSlot", g.video || null);
   document.getElementById("guideModal").classList.remove("hidden");
 }
 
