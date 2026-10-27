@@ -55,7 +55,7 @@
 
   <div class="card">
     <h1>Privacy Policy</h1>
-    <p class="updated">Last updated: October 22, 2026</p>
+    <p class="updated">Last updated: October 26, 2026</p>
 
     <p>This policy covers the AutoLaunch web application and the
     AutoLaunch Vehicle Assistant Chrome extension (together,
@@ -75,32 +75,70 @@
       they produce — year, make, model, trim, VIN, stock number,
       price, mileage, colors, and listing photos.</li>
       <li><strong>Posting settings and queue jobs:</strong> your
-      posting preferences (such as daily posting limits, automation
-      choices, and appearance settings), your customer wishlist
-      entries, and the queue of posting/removal jobs you create,
-      including each job's status and any failure reason.</li>
+      posting preferences (such as your daily posting limit, whether
+      Full Auto posting is on, your posting delay, your dealership
+      name and address as shown in your listings, and whether the
+      stock number appears in listing descriptions), your customer
+      wishlist entries, and the queue of posting/removal jobs you
+      create, including each job's status and any failure reason.</li>
       <li><strong>Facebook interaction, locally in your browser:</strong>
       the extension works inside your own signed-in Facebook session in
-      Chrome. It fills in the Marketplace vehicle form, and deletes
+      Chrome, on the AutoLaunch app, Facebook Marketplace (including
+      its inbox and floating chat windows), and Facebook Messenger
+      pages. It fills in the Marketplace vehicle form and deletes
       listings you ask it to remove, using the data from your queue
       job. Your Facebook password is never seen, collected, or stored
       by AutoLaunch — Facebook's own sign-in stays between you and
       Facebook.</li>
+      <li><strong>Your buyer conversations (Prospects and Luca):</strong>
+      the extension reads the visible text of your own Facebook
+      Marketplace inbox and message threads and syncs those messages
+      to your own AutoLaunch account, where they appear in Prospects.
+      Synced content can include the buyer's name, the listing the
+      conversation is about, thread and listing links, message text,
+      whether each message was incoming or outgoing, timestamps, and
+      an inbox preview line. A new Prospect is created automatically
+      only for a Marketplace vehicle conversation; any other chat (for
+      example, a regular Messenger conversation) is synced only when
+      you click the extension's "Capture chat for Luca" button on it.
+      Inbox preview lines are stored only for threads already tied to
+      one of your Prospects. Stored message text is kept to at most
+      2,000 characters per message (500 characters for preview lines),
+      and capturing an open thread takes at most the 30 most recent
+      visible messages.</li>
       <li><strong>Your AutoLaunch session token, in the extension:</strong>
       when you are signed in to AutoLaunch, the app hands your session
       token to the extension so the extension can read and update
-      <em>your own</em> queue. The token is stored only in the
+      <em>your own</em> queue, settings, inventory, Prospects, and
+      synced buyer messages. The token is stored only in the
       extension's local storage on your own computer, is used only as
       the sign-in credential for your AutoLaunch backend requests, and
       is never logged or sent anywhere else.</li>
+      <li><strong>A random helper install identifier:</strong> the
+      extension stores one random identifier on your own computer,
+      created the first time it runs. It identifies the install, not
+      you. When you start a free trial, a hashed form of that
+      identifier is sent to our server and used only to prevent
+      free-trial abuse (one free trial per install). It is not used
+      for tracking or advertising, and it is never shared.</li>
     </ul>
 
     <h2>How the data is used</h2>
     <p>Data is used only to operate AutoLaunch for you: syncing your
     inventory, building and carrying out your posting queue, posting
     and removing your listings on the channels you enable, showing you
-    job status and failure reasons, and keeping your account secure.
-    That is the only purpose.</p>
+    job status and failure reasons, keeping your buyer conversations
+    in Prospects in sync, and keeping your account secure. That is
+    the only purpose.</p>
+
+    <p>Replies work the same way: the extension delivers a reply to
+    one of your conversations only when you have typed it in
+    AutoLaunch or approved a draft there, and it sends it through your
+    own open Facebook tab. AutoLaunch's assistant, Luca, can draft a
+    reply for you, but a draft is never sent on its own — nothing is
+    sent unless you send it. The reply text you queue and whether
+    delivery succeeded or failed (and any error) are recorded with
+    your conversation so you can see them.</p>
 
     <h2>What we never do</h2>
     <ul>
@@ -109,25 +147,41 @@
       theirs.</li>
       <li>We run no third-party analytics or advertising trackers in
       the app or the extension.</li>
-      <li>The extension does not collect your browsing history and does
-      not read pages outside the AutoLaunch app, Facebook Marketplace,
+      <li>The extension does not collect your browsing history. It
+      reads only the AutoLaunch app, Facebook Marketplace and
+      Messenger pages (including Marketplace inbox and chat windows),
       and the vehicle photo locations contained in your own queue
-      jobs.</li>
+      jobs — and on those pages, only your own listings,
+      conversations, and queue data.</li>
     </ul>
+
+    <h2>Support chat (Ask Luna)</h2>
+    <p>When you use the in-app <strong>Ask Luna</strong> support chat,
+    your questions are answered using your message plus diagnostics
+    from your own account — your plan and billing state, recent
+    inventory syncs, and recent posting activity and errors — so Luna
+    can see what went wrong instead of guessing. Your questions, the
+    answers, and any support ticket you send (or that Luna files when
+    something looks broken on our side) are stored with your account
+    so a person can follow up and so we can fix problems. They are
+    never sold or shared, and the assistant can only ever see the
+    account you are signed in with — never anyone else's.</p>
 
     <h2>Where data lives and how it is protected</h2>
     <ul>
-      <li>Account, inventory, settings, and queue data are stored in
-      AutoLaunch's backend database (Supabase), where access is locked
-      per user: each account can only see and modify its own rows.</li>
+      <li>Account, inventory, settings, queue, Prospects, and synced
+      message data are stored in AutoLaunch's backend database
+      (Supabase), where access is locked per user: each account can
+      only see and modify its own rows.</li>
       <li>Platform keys and service secrets are Matthew's (the
       platform operator's), are kept server-side only, and are never
       shipped to the app, the extension, or end users. End users never
       handle API keys.</li>
       <li>Photos for a listing are fetched by the extension from the
-      dealership photo source in your queue job and attached to your
-      listing on Facebook; they are not copied to any AutoLaunch
-      analytics or advertising system.</li>
+      dealership photo source in your queue job — directly, or
+      through AutoLaunch's own photo proxy when a direct fetch is
+      blocked — and attached to your listing on Facebook; they are not
+      copied to any AutoLaunch analytics or advertising system.</li>
     </ul>
 
     <h2>Your choices</h2>
@@ -135,6 +189,11 @@
       <li>You control posting: the extension's Confirm mode is the
       default, and nothing is published until you click Publish (or
       deliberately turn on Full Auto in Settings).</li>
+      <li>You control chat sync: Marketplace conversations sync
+      automatically so Prospects stays current, and any other chat is
+      captured only when you click "Capture chat for Luca." You can
+      delete Prospects and their synced messages in AutoLaunch at any
+      time.</li>
       <li>You can remove a listing at any time from AutoLaunch, sign
       out (which ends the session the extension relies on), uninstall
       the extension, and ask us to delete your account data.</li>
