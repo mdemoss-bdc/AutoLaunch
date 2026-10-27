@@ -305,6 +305,31 @@
 //     creating (skip reason deleted_by_user — terminal, never
 //     retried) and a MANUAL Capture of the same thread removes
 //     the tombstone (explicit undelete).
+// 25. CAPTURE HYGIENE (v2.51): four fixes from Matthew's live
+//     group thread, 2026-10-27. (a) GROUP CHROME: Marketplace
+//     threads are group chats — Facebook's own narration ("…
+//     named the group …", "… changed the group photo."), the
+//     buyer card (participant's full name, ratings lines), the
+//     listing label line and bare sender captions were all
+//     stored as buyer messages; chat_capture.js now patterns
+//     the whole family, not just yesterday's strings. (b)
+//     DIRECTION: the scrape placed bubbles by center-vs-pane-
+//     midpoint, but the pane spans nav + thread + info rail, so
+//     a long rep bubble's center fell on the "buyer" side — the
+//     rep's own delivered reply was re-filed as the buyer's.
+//     The scrape now classifies by edge-hugging against the
+//     bubble column itself and skips what it cannot place; and
+//     handleCaptureChat refuses a long body already stored
+//     under the OPPOSITE direction (same text, other side = the
+//     same message mis-read; short echoes like "Yes" exempt —
+//     both sides really say those). (c) TRANSIENT STATES:
+//     "Sending" / "Delivered" / "Seen" / "Edited" / "You sent"
+//     are delivery furniture, never message bodies, on every
+//     storage path. (d) AUTO-PASS SILENCE: the content script
+//     marked a thread's content hash before the worker
+//     answered, so an errored pass (e.g. not_signed_in during a
+//     session handover) silenced that thread until its text
+//     changed; the hash now survives only a confirmed outcome.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -606,7 +631,35 @@ async function handleCaptureChat(capture) {
 
   const existing = await sbGet(`closer_messages?user_id=eq.${userId}&prospect_id=eq.${prospect.id}&select=id,body,direction&order=created_at.desc&limit=200`);
   const seen = new Set(existing.map(m => m.direction + "|" + m.body));
-  const fresh = (capture.messages || []).filter(m => m && m.body && !seen.has(m.direction + "|" + m.body));
+  // Cross-direction guard (v2.51, header note 25): a scrape that
+  // misplaces a bubble files the SAME body under the opposite
+  // direction, and the direction-keyed dedupe above waves it
+  // through as new — that is how the rep's own delivered reply
+  // ("I'll actually be here until 8 tonight…", already stored
+  // out/rep) was re-filed as the buyer's on Matthew's shared-name
+  // group thread. A long body already stored under the other
+  // direction is the same message mis-read: drop the copy. Short
+  // bodies are exempt — both sides genuinely say "Yes" / "Ok",
+  // and dropping a real echo would lose a real message.
+  const storedDirs = new Map();
+  existing.forEach(m => {
+    const b = norm(m.body);
+    if (!storedDirs.has(b)) storedDirs.set(b, new Set());
+    storedDirs.get(b).add(m.direction);
+  });
+  const fresh = (capture.messages || []).filter(m => {
+    if (!m || !m.body) return false;
+    if (seen.has(m.direction + "|" + m.body)) return false;
+    if (String(m.body).trim().length >= 20) {
+      const dirs = storedDirs.get(norm(m.body));
+      if (dirs) {
+        const mine = m.direction === "out" ? "out" : "in";
+        const other = mine === "out" ? "in" : "out";
+        if (dirs.has(other) && !dirs.has(mine)) return false;
+      }
+    }
+    return true;
+  });
   if (fresh.length) {
     // Sequential created_at stamps (v2.1.40): one bulk insert shares
     // a single transaction timestamp, which scrambled the thread

@@ -138,6 +138,41 @@
     return !!FB_CHROME_LABELS[String(n).trim()];
   }
 
+  // Transient delivery-state labels (v2.51): Messenger paints the
+  // state of the rep's last bubble — "Sending", "Delivered",
+  // "Seen", "Edited" — as its own dir="auto" text under the
+  // bubble, and the scrape stored it as a message (Matthew's live
+  // thread, 2026-10-27: an out/rep row whose body was literally
+  // "Sending"). Whole-text only: a real sentence that STARTS with
+  // one of these words ("Sending the paperwork now") is a message
+  // and must survive. "You sent" is the delivery caption variant.
+  var FB_TRANSIENT_STATES = {
+    "Sending": 1, "Sending...": 1, "Sending…": 1,
+    "Delivered": 1, "Seen": 1, "Edited": 1, "You sent": 1,
+    "Message sent": 1, "Message delivered": 1
+  };
+
+  function isTransientStateText(t) {
+    return !!FB_TRANSIENT_STATES[t];
+  }
+
+  // Group-thread system lines (v2.51): Marketplace conversations
+  // are GROUP threads, and Facebook narrates group events in the
+  // transcript itself — "Matthew DeMoss created this group",
+  // "Matthew named the group Matthew · 2026 Honda CR-V.",
+  // "Matthew changed the group photo." The scrape stored them
+  // as buyer messages (seen live 2026-10-26 and again 2026-10-27,
+  // even after the 2.48/2.50 filters — only the "created this
+  // group" tail was covered). The match is the system-line
+  // grammar — an actor name followed by a group-event verb —
+  // which is how these lines are shaped; a buyer's ordinary
+  // sentence does not take this form.
+  var GROUP_SYSTEM_RE = /^.{1,80}?\s+(?:named the group|changed the group (?:photo|name|image|picture)|created this group|added\s+\S.*\s+to (?:the|this) group|left the group|joined the group|removed\s+\S.*\s+from the group)\b/;
+
+  function isGroupSystemText(t) {
+    return GROUP_SYSTEM_RE.test(t);
+  }
+
   function threadTitleTexts() {
     // The strings this thread's own header shows as its title —
     // "Name · Listing" from the aria-label, the header element's
@@ -156,7 +191,13 @@
     } catch (e) { /* heuristic only */ }
     try {
       var name = findBuyerName();
-      var lt = (findListing().vehicleText || "").replace(/^\$[\d,]+\s*-\s*/, "").trim();
+      var lv = findListing().vehicleText || "";
+      // v2.51: the full listing label itself ("$38,008 - 2026
+      // Honda CR-V") is header/card text — when it shows up as
+      // a dir="auto" node in the pane it is the listing card
+      // talking, not a person, so it joins the title set whole.
+      if (lv) out[lv] = 1;
+      var lt = lv.replace(/^\$[\d,]+\s*-\s*/, "").trim();
       if (name && lt) out[name + " · " + lt] = 1;
     } catch (e) { /* heuristic only */ }
     return out;
@@ -165,6 +206,7 @@
   function isChromeText(t, titles) {
     if (!t) return false;
     if (FB_CHROME_LABELS[t]) return true;
+    if (FB_TRANSIENT_STATES[t]) return true; // v2.51: state labels, every path
     if (titles && titles[t]) return true;
     return false;
   }
@@ -191,6 +233,46 @@
     return false;
   }
 
+  // Direction by EDGE-HUGGING (v2.51): the old rule compared a
+  // bubble's center to the midpoint of [role="main"] — but main
+  // spans the nav, the thread column AND the info rail (and, on
+  // a wide monitor, dead space past the rail), so the "midpoint"
+  // sat well right of the conversation and a LONG rep bubble's
+  // center fell left of it: the rep's own words were filed as
+  // the buyer's (Matthew's live group thread, 2026-10-27, where
+  // both sides also share the display name "Matthew", so no name
+  // check could catch it). Messenger aligns bubbles: the rep's
+  // hug the column's RIGHT edge, the buyer's hug the LEFT edge.
+  // The column bounds come from the candidate bubbles themselves,
+  // so the rail never enters the math. A bubble flush with one
+  // edge is placed by that edge at ANY width (a long rep bubble
+  // still lands flush right); a bubble spanning nearly the whole
+  // column floats, so only its center can speak, inside a tight
+  // dead zone; anything else follows the nearer edge. What
+  // cannot be placed returns null and the caller SKIPS it —
+  // guessing a side is how the rep's words end up in the
+  // buyer's mouth. (A lone visible bubble defines its own
+  // column and is unplaceable by construction; the inbox-list
+  // snippet sync still carries its line for a known prospect.)
+  function bubbleDirection(r, colLeft, colRight, colWidth) {
+    if (!(colWidth > 0)) return null;
+    var leftGap = r.left - colLeft;
+    var rightGap = colRight - (r.left + r.width);
+    if (rightGap <= 0.01 * colWidth && leftGap > rightGap) return "out";
+    if (leftGap <= 0.01 * colWidth && rightGap > leftGap) return "in";
+    if (r.width >= 0.92 * colWidth) {
+      var mid = colLeft + colWidth / 2;
+      var center = r.left + r.width / 2;
+      var dz = 0.01 * colWidth;
+      if (center > mid + dz) return "out";
+      if (center < mid - dz) return "in";
+      return null;
+    }
+    if (rightGap < leftGap) return "out";
+    if (leftGap < rightGap) return "in";
+    return null;
+  }
+
   function findMessages() {
     // Popup first: when the chat is the floating mini-window, scope to
     // it — its own midpoint is what separates buyer (left) from rep
@@ -200,11 +282,26 @@
     // Message text lives in dir="auto" blocks; a bubble is the closest
     // reasonably-sized container around one.
     var nodes = main.querySelectorAll('[dir="auto"]');
-    var pane = main.getBoundingClientRect();
-    var paneMid = pane.left + pane.width / 2;
-    var out = [];
-    var seen = {};
     var titles = threadTitleTexts();
+    // Participant names (v2.51): a node whose WHOLE text is a
+    // participant's name is a sender caption or the info card's
+    // name line, never a message — both were stored live as buyer
+    // "messages" ("Matthew", "Matthew DeMoss"). Names come from
+    // the thread title scrape and from the actor position of the
+    // group system lines themselves, which name every actor in
+    // full ("Matthew DeMoss created this group").
+    var participantNames = {};
+    try {
+      var bn = findBuyerName();
+      if (bn) participantNames[bn] = 1;
+    } catch (e) { /* the caption rule just disarms */ }
+    for (var a = 0; a < nodes.length; a++) {
+      var at = textOf(nodes[a]);
+      if (!at) continue;
+      var am = at.match(/^(.{2,60}?)\s+(?:named the group|changed the group|created this group|added\s|left the group|joined the group|removed\s)/);
+      if (am) participantNames[am[1].trim()] = 1;
+    }
+    var cands = [];
     for (var i = 0; i < nodes.length; i++) {
       var t = textOf(nodes[i]);
       if (!t || t.length < 1 || t.length > 1000) continue;
@@ -218,6 +315,10 @@
       if (/^Conversation titled /.test(t)) continue;
       if (/^Conversation with /.test(t)) continue; // v2.50: half-rendered thread header
       if (/ created this group$/.test(t)) continue;
+      if (isGroupSystemText(t)) continue; // v2.51: group-event narration ("… named the group …", "… changed the group photo.")
+      if (/^\$[\d,]+\s*[-–—]\s*(19|20)\d{2}\s+\S/.test(t) && t.length <= 60) continue; // v2.51: the listing card's label line
+      if (/^Highly rated\b/.test(t) || t === "on Marketplace") continue; // v2.51: buyer-card ratings furniture (split-node form)
+      if (participantNames[t]) continue; // v2.51: sender caption / info-card name line
       if (/mutual friends/.test(t) || /badge on Marketplace/.test(t)) continue;
       // Info-panel guard (v2.1.39): the thread page's right rail
       // (Media, files and links) lives inside [role=main] too — its
@@ -228,15 +329,34 @@
       if (/^\d+(\.\d+)?\s?(KB|MB|GB|B)$/.test(t)) continue;
       if (/Unread message:/.test(t)) continue;
       // Chrome-label filter (v2.1.48): the exact denylist + this
-      // thread's title, and the structural containment rule.
+      // thread's title, and the structural containment rule. The
+      // denylist check now also covers the v2.51 transient states.
       if (isChromeText(t, titles)) continue;
       if (inChromeStructure(nodes[i], t)) continue;
       var r = nodes[i].getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
-      var key = t + "|" + (r.left > paneMid ? "R" : "L");
+      cands.push({ text: t, rect: r });
+    }
+    if (!cands.length) return [];
+    // Direction pass (v2.51): the conversation column is the span
+    // the surviving bubbles themselves occupy — the page pane's
+    // midpoint never enters into it (see bubbleDirection).
+    var colLeft = Infinity, colRight = -Infinity;
+    for (var b = 0; b < cands.length; b++) {
+      if (cands[b].rect.left < colLeft) colLeft = cands[b].rect.left;
+      var rr = cands[b].rect.left + cands[b].rect.width;
+      if (rr > colRight) colRight = rr;
+    }
+    var colWidth = colRight - colLeft;
+    var out = [];
+    var seen = {};
+    for (var k = 0; k < cands.length; k++) {
+      var dir = bubbleDirection(cands[k].rect, colLeft, colRight, colWidth);
+      if (!dir) continue; // unplaceable — skip rather than guess a side
+      var key = cands[k].text + "|" + dir;
       if (seen[key]) continue;
       seen[key] = true;
-      out.push({ direction: r.left + r.width / 2 > paneMid ? "out" : "in", body: t });
+      out.push({ direction: dir, body: cands[k].text });
     }
     // DOM order is chronological; keep the most recent 30.
     return out.slice(-30);
@@ -615,7 +735,26 @@
     // have finished rendering around the very same messages.
     if (h === lastFullHash && !gateRetryDue(threadKeyOf(c.threadUrl || ""))) return null;
     lastFullHash = h;
-    return sendCaptureTracked(c);
+    var sent = sendCaptureTracked(c);
+    // Hash honesty (v2.51): the hash used to stay marked no
+    // matter what the worker answered, so any outcome that
+    // stored NOTHING — a not_signed_in error while the app tab
+    // re-delivered the session, a thrown save, a dead channel —
+    // poisoned the dedupe for the rest of the page session and
+    // the open thread went silent until its text changed
+    // (Matthew's ~10 quiet minutes with a rendered thread open,
+    // 2026-10-27; the manual button, which bypasses the hash,
+    // worked instantly). Only a CONFIRMED outcome keeps the
+    // hash: stored (ok), or a skip the worker decided (render
+    // skips re-ask through the gateSkipped bypass above;
+    // terminal skips must never re-ask). Anything else re-arms.
+    if (sent && sent.then) sent.then(function (resp) {
+      try {
+        var confirmed = !!(resp && (resp.ok || resp.skipped));
+        if (!confirmed && lastFullHash === h) lastFullHash = "";
+      } catch (e) { /* bookkeeping only */ }
+    });
+    return sent;
   }
 
   // App-driven sync (v2.1.38): the AutoLaunch page asks (through the
