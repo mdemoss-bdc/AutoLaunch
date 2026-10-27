@@ -118,10 +118,10 @@ Matthew's rule: inventory freshness is part of what a plan buys —
 
 | Access | Sync window |
 |---|---|
-| Trial (`trialing`) | **1 per 24 hours** |
-| Post (tier 1) | **1 per 18 hours** |
-| Automate | **1 per 12 hours** |
-| Group | **1 per 6 hours** |
+| Trial (`trialing`) | **1 sync per 24 hours** |
+| Post (tier 1) | **1 sync per 18 hours** |
+| Automate | **1 sync per 12 hours** |
+| Group | **1 sync per 6 hours** |
 
 - **Group means ANY Group account** — a solo user who buys Group
   syncs every 6 hours, and a dealership-covered member resolves to
@@ -190,7 +190,7 @@ tagline, and a 12-row feature list of `{ label, included }` entries
 | Inventory sync & workspace | ✓ | ✓ | ✓ | ✓ |
 | Manual Marketplace posting | ✓ | ✓ | ✓ | ✓ |
 | Queued posts per day | **1 per day** | **5 per day** | No plan cap — your own safety limit | No plan cap — your own safety limit |
-| Inventory sync | **1 per 24 hours** | **1 per 18 hours** | **1 per 12 hours** | **1 per 6 hours** |
+| Inventory sync | **1 sync per 24 hours** | **1 sync per 18 hours** | **1 sync per 12 hours** | **1 sync per 6 hours** |
 | AI listing copy | — | ✓ | ✓ | ✓ |
 | Auto-post new arrivals | — | — | ✓ | ✓ |
 | Auto delete & repost | — | — | ✓ | ✓ |
