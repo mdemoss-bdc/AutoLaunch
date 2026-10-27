@@ -124,9 +124,10 @@ Matthew's rule: inventory freshness is part of what a plan buys —
 | Group | **1 sync per 6 hours** |
 
 - **Group means ANY Group account** — a solo user who buys Group
-  syncs every 6 hours, and a dealership-covered member resolves to
-  the same Group cadence. The 6h window is a tier property, not a
-  dealership perk.
+  syncs every 6 hours. Dealership-covered members resolve to their
+  dealership's FLAVOR cadence (Phase 2): Group flavor — and every
+  dealership trial — at 6h; Post flavor at 18h. The window is a
+  tier property, not a dealership perk.
 - The Automate 12h figure is Luna's interpolation between Post (18h)
   and Group (6h); the numbers live in ONE config constant in each
   layer — `SYNC_COOLDOWN_HOURS` in `index.html` and the same-named
@@ -154,7 +155,8 @@ Matthew's rule: inventory freshness is part of what a plan buys —
   the job user's `user_settings` with the app's rules (owners exempt;
   `billing_status = 'trialing'` → 24h; `plan_tier` via `resolveTier`
   leniency, so legacy values land on Automate's 12h; an active
-  dealership membership → Group 6h, read best-effort). A refused job
+  dealership membership → the flavor's cadence, read best-effort;
+  member role only — leaders are never covered). A refused job
   is marked `failed` with `cars_synced` 0 and the crawl is skipped.
   Scheduled runs carry no job row and are **never** guarded — and
   the guard fails open (missing settings row, unreadable timestamp,
@@ -1452,32 +1454,118 @@ nothing more, until a dealer plan activates it.
   Fail-soft: a transient failure keeps the stash and retries next
   load. (Confirming on a different device loses the stash — the
   owner can still provision the store the Phase 1 way.)
-- **`register_dealership` {name}** (dealership-admin, deployed v5).
-  Any signed-in user with NO existing membership: creates the
-  dealership with `status = 'pending'`, `seat_limit` and `plan_key`
-  NULL, and the caller as its admin member. Idempotent — a caller
-  who already belongs to a dealership gets that dealership back
-  unchanged.
-- **'pending' confers nothing.** Coverage still keys on
-  `status = 'active'` only (`dealershipCovered()` is untouched), so
-  a pending admin follows the normal trial / signup-choice / paid
-  path for their own use — the choice gate applies to them exactly
-  as to any individual. Seat powers are refused server-side while
-  pending: `create_member`, `delete_member`, and
-  `reset_member_password` all answer **409 `dealership_not_active`**
-  (`list_members` still works — the roster is just the admin).
-- **Tab + page.** The sidebar Dealership item shows iff the user is
-  an owner OR has any `dealership_account_members` row (any status,
-  any role) — individual accounts never see it. The Dealership page
-  gains a pending view (`dealershipViewMode` → `"pending"`): the
-  dealership name, "Registered — dealership plans activate at
-  launch", a read-only roster (no reset/delete controls, no add
-  form), and seats shown as "—".
-- **Phase 2 activation hook.** Dealer checkout flips the row
-  `pending → active` and sets `seat_limit` / `plan_key` from the
-  purchased tier. Nothing else changes: coverage, the seat guards,
-  and the admin page all key off `status` already, so an activated
-  store simply starts behaving like an owner-provisioned one.
+- **`register_dealership` {name}** (dealership-admin). Any
+  signed-in user with NO existing membership: creates the
+  dealership and the caller as its admin member. Idempotent — a
+  caller who already belongs to a dealership gets that dealership
+  back unchanged. **Phase 2 supersedes the Phase 1.5 'pending'
+  state**: registration now creates a working **trial** dealership
+  (`status = 'trial'`, 2 member seats, `trial_ends_at` = +5 days) —
+  see "Dealership accounts — Phase 2" below. The Phase 1.5 text
+  above this bullet (the register fork itself: segmented control,
+  localStorage stash, consume-on-first-load) is unchanged and
+  still accurate.
+- **Tab + page.** The sidebar Dealership item shows iff the user
+  is an owner OR has any `dealership_account_members` row (any
+  status, any role) — individual accounts never see it.
+
+## Dealership accounts — Phase 2: working trial + tiered seat pricing (built 2026-10-26)
+
+Matthew's locked numbers (2026-10-26, after rejecting a 100-seat
+bracket and deep per-seat discounts): the seat picker runs **1–50
+member seats**. **Dealership Post: 1–9 seats $79/seat/mo, 10–24
+$75, 25–50 $69. Dealership Group: 1–9 $99/seat/mo, 10–24 $95,
+25–50 $89.** Volume pricing — EVERY seat bills at the bracket rate
+for the total count (10 Post seats = 10 × $75 = **$750/mo**; at 50
+seats the discount vs the flat top rate is exactly $500: Post
+$3,450/mo, Group $4,450/mo). The store picks ONE flavor store-wide.
+
+- **THE LEADER RULE (Matthew, 2026-10-26).** The dealership's
+  leader (the `admin` membership) is **free, manage-only, and
+  NEVER counts as a seat**. Seats are membership rows with
+  `role = 'member'` ONLY — everywhere: the `dealership-admin` seat
+  check counts member rows, the app's seats-used line counts
+  member rows, and the Stripe quantity is the member-seat count.
+  The leader login is never product-covered by the dealership and
+  never sees the solo signup-choice or purchase gates; it lands on
+  the Dealership page, product pages show a manage-only notice
+  ("This leader account manages your store's AutoLaunch seats.
+  Product features live on your salespeople's accounts."), and
+  the Dealership page + account Settings stay available.
+  **Management access never expires**: an expired store's leader
+  can still open the page and buy seats.
+- **The trial is real now.** `register_dealership` creates
+  `status = 'trial'`, `seat_limit = 2` (member seats),
+  `trial_ends_at = now + 5 days`, `billing_status = 'trialing'`.
+  During the window the store runs at the **full Group flavor** so
+  it tastes everything; members are covered (below). Member
+  management works during the trial (the Phase 1.5 409
+  `dealership_not_active` refusal now applies only to non-trial,
+  non-active statuses — an expired store refuses adds until it
+  pays). Existing 'pending' rows were migrated to 'trial' by the
+  Phase 2 DDL (record:
+  `supabase/migrations_draft/dealership_phase2_APPLIED_2026-10-26.sql`;
+  new columns `plan_flavor`, `trial_ends_at`, `stripe_customer_id`,
+  `stripe_subscription_id`, `current_period_end`, `billing_status`).
+- **Coverage (members).** `dealershipCovered()` requires
+  `role = 'member'` plus: dealership `active` → covered at the
+  bought flavor (`dealershipFlavorTier()`: Post seats follow Post
+  rules — 5 queued posts/day, 18h sync cadence; Group seats the
+  full kit — no plan cap, 6h cadence); dealership `trial` inside
+  its window → covered at Group. An expired trial or lapsed plan
+  covers nobody — members fall back to their own trial/choice/
+  purchase path. The scraper's cadence backstop mirrors this
+  (member-role only, flavor-driven window).
+- **Dealer checkout.** `billing-checkout` kind `dealership`
+  {dealership_id, flavor, seats 1–50}: the caller must be the
+  dealership's ADMIN member (403 `not_dealer_admin` otherwise);
+  the Stripe customer lives on the dealership row (email = the
+  admin's); quantity = seats on the flavor's single volume-tiered
+  price — **AutoLaunch Dealership Post `prod_VW1BUpVdyuDgcq` /
+  `price_1UUz95A3zjwds4H0dloMTN5d`; AutoLaunch Dealership Group
+  `prod_VW1BbU73frm3Ln` / `price_1UUz9DA3zjwds4H0I542im5p`**
+  (Phantom secrets `STRIPE_PRICE_DEALER_POST` /
+  `STRIPE_PRICE_DEALER_GROUP`). The purchase runs through the same
+  final-sale consent modal as solo plans, recording a
+  `terms_acceptances` row with plan_key `dealer_post` /
+  `dealer_group`. Server-side seat validation caps at 50 so the
+  price's open-ended top tier never serves 51+.
+- **Webhook.** `billing-webhook` routes `metadata.kind =
+  'dealership'` first: checkout completion writes ONLY
+  `dealership_accounts` (status 'active', seat_limit = the
+  subscription quantity, plan_flavor, Stripe ids,
+  current_period_end, billing_status 'active');
+  subscription.updated syncs seats/flavor/period (`past_due` keeps
+  status 'active' with billing_status 'past_due'); deletion sets
+  status + billing_status 'expired'. Dealership invoices NEVER
+  accrue referral bonuses (the kind is not a solo plan kind).
+- **Portal.** `billing-portal` accepts {dealership_id} from the
+  store's admin and opens the portal for the DEALERSHIP's customer
+  (seat/flavor changes, card, cancellation at period end); the
+  solo path is unchanged when the field is absent. **Known gap:**
+  the portal's `subscription_update.products` allowlist cannot be
+  written through the Stripe connector (it silently drops
+  arrays-of-objects inside `features`) — Matthew adds the two
+  dealer products (and confirms the solo set) under Dashboard →
+  Settings → Billing → Customer portal → subscription updates.
+  Until then a store changes seats by cancelling + re-buying, or
+  Matthew adjusts the subscription in the dashboard.
+- **The page (all states).** Trial admin: trial banner (days left,
+  "2 member seats"), roster + add-member to the cap, and the Buy
+  panel (flavor toggle + seat picker 1–50 with live per-seat/total
+  math from `DEALER_PRICE_TIERS`). Active admin: flavor, seats,
+  period end + portal Manage button. Expired admin: restart view
+  with the Buy panel. Members: "Covered by <name>" (+ "(dealership
+  trial)" while trialing); expired members get the ended note.
+  The seats line reads "N of M seats used · your leader account
+  is free and never uses a seat", the roster marks the leader row
+  "Leader · manage-only · not a seat", and the Register blurb
+  says "You get a free leader account to manage the store; seats
+  are only for your salespeople." Settings → Plans names the
+  flavor on the covered line and gives leaders the leader line.
+- **Ask Luna** knows all of the above (prices, trial, leader rule)
+  and the snapshot's dealership cover is members-only, flavor-
+  aware, exactly like the app.
 
 ## What remains for the real paywall
 
@@ -1485,7 +1573,8 @@ nothing more, until a dealer plan activates it.
 - Server-side enforcement phase 2: tier/trial-aware RLS and/or scraper
   checks, plus changing the `plan_tier` column default away from
   `'trial'`.
-- Dealership accounts Phase 2 (see its section above).
+- Portal subscription_update products allowlist for dealer prices
+  (dashboard step — see the Phase 2 section's Known gap).
 - Promoting any of this from the rebuild to the live app — a separate,
   explicitly approved step.
 

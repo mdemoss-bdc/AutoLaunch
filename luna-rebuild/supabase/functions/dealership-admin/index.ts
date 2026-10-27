@@ -1,15 +1,16 @@
 // =====================================================================
-// dealership-admin — AutoLaunch dealership accounts, Phase 1
-// (2026-10-26, see TIERS.md "Dealership accounts — Phase 1").
+// dealership-admin — AutoLaunch dealership accounts, Phases 1–2
+// (2026-10-26, see TIERS.md "Dealership accounts").
 //
 // A dealership account lets one admin manage member logins up to a
-// seat limit. Members of an ACTIVE dealership are "covered" in the
-// app (full access through the dealership; their own billing_status
-// is never used). ALL writes to dealership_accounts /
-// dealership_account_members happen here, through the service role —
-// the tables carry SELECT-only RLS policies for members and no
-// client write policies at all, so every rule below is enforced
-// server-side, never trusted to the caller:
+// seat limit. Members of a COVERED dealership (trial in window, or
+// active) get their access through the dealership; their own
+// billing_status is never used while covered. ALL writes to
+// dealership_accounts / dealership_account_members happen here,
+// through the service role — the tables carry SELECT-only RLS
+// policies for members and no client write policies at all, so
+// every rule below is enforced server-side, never trusted to the
+// caller:
 //
 //   create_dealership {name, seat_limit}
 //     OWNER accounts only (the same two ids hardcoded in the app).
@@ -18,31 +19,37 @@
 //     The caller becomes the dealership's first member (role
 //     'admin'). A caller who already belongs to a dealership gets
 //     409 already_in_a_dealership (Phase 1: one dealership per user).
-//   register_dealership {name}   (Phase 1.5, 2026-10-26)
+//   register_dealership {name}   (Phase 1.5, 2026-10-26; Phase 2
+//   trial semantics the same day)
 //     Self-serve registration from the app's Register page, where a
 //     new account picks Individual vs Dealership. ANY signed-in user
 //     with NO existing membership registers their store: the
-//     dealership row is created with status 'pending', seat_limit
-//     and plan_key NULL, and the caller becomes its admin member.
-//     A PENDING dealership confers nothing — only 'active' confers
-//     coverage, and pending dealerships have no seat powers:
-//     create_member / delete_member / reset_member_password all
-//     refuse with 409 dealership_not_active until a dealer plan
-//     activates the store (Phase 2 checkout flips pending ->
-//     active and sets seat_limit / plan_key). A caller who already
-//     belongs to a dealership gets that dealership back unchanged
-//     (idempotent — the app may call this on more than one load).
+//     dealership row is created with status 'trial', seat_limit 2,
+//     trial_ends_at = created_at + 5 days, billing_status
+//     'trialing', and the caller becomes its admin member. The
+//     trial is a WORKING trial: the store tastes the full Group
+//     flavor with up to 2 seats, and member management is enabled.
+//     (Phase 1.5 created status 'pending' with no powers; the
+//     Phase 2 migration moved pending rows to this trial state and
+//     dealer checkout — billing-checkout kind 'dealership' — is
+//     what flips a trial to 'active' with the bought seat count
+//     and flavor.) A caller who already belongs to a dealership
+//     gets that dealership back unchanged (idempotent — the app
+//     may call this on more than one load).
 //   list_members {dealership_id}
 //     Caller must be an ADMIN member. Returns the roster (email,
 //     role, joined) plus seat usage.
 //   create_member {dealership_id, email, password, role}
-//     Caller must be an admin member. Seat enforcement: when
-//     seat_limit is set and the roster is full -> 409
-//     seat_limit_reached. The auth user is created through the
-//     Admin API with email_confirm=true (admin-created accounts
-//     skip the verification email), then the membership is
-//     inserted; if that insert fails the just-created auth user is
-//     deleted again — no orphans either way.
+//     Caller must be an admin member, and the dealership must be
+//     in a seat-powered state: status 'trial' or 'active' —
+//     anything else (e.g. 'expired') refuses with 409
+//     dealership_not_active. Seat enforcement: when seat_limit is
+//     set and the roster is full -> 409 seat_limit_reached (the
+//     trial cap is seat_limit = 2). The auth user is created
+//     through the Admin API with email_confirm=true (admin-created
+//     accounts skip the verification email), then the membership
+//     is inserted; if that insert fails the just-created auth user
+//     is deleted again — no orphans either way.
 //   delete_member {dealership_id, user_id}
 //     Caller must be an admin member; nobody can delete themselves;
 //     an ADMIN target can only be deleted by the dealership's
@@ -79,6 +86,19 @@ const OWNER_USER_IDS = [
 ];
 
 const SEAT_TIERS = [10, 20, 50, 100];
+
+// Phase 2: the columns every dealership read in this function
+// returns — includes the trial + Stripe state the app renders.
+const DEALER_SELECT =
+  "id, name, created_by, seat_limit, plan_key, status, created_at, plan_flavor, trial_ends_at, stripe_customer_id, stripe_subscription_id, current_period_end, billing_status" as const;
+
+// Seat-powered states (Phase 2): member management (create / delete
+// / reset) is allowed while the dealership is trialing or active.
+// Anything else — an expired dealership above all — refuses with
+// 409 dealership_not_active.
+function seatActionsAllowed(dealer: any): boolean {
+  return !!dealer && (dealer.status === "trial" || dealer.status === "active");
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -117,7 +137,7 @@ async function verifyUser(req: Request): Promise<any | null> {
 async function getDealership(svc: any, dealershipId: string) {
   const { data } = await svc
     .from("dealership_accounts")
-    .select("id, name, created_by, seat_limit, plan_key, status, created_at")
+    .select(DEALER_SELECT)
     .eq("id", dealershipId)
     .maybeSingle();
   return data || null;
@@ -140,11 +160,17 @@ async function requireAdmin(svc: any, dealershipId: string, userId: string) {
   return m && m.role === "admin" ? m : null;
 }
 
+// Seats used = MEMBER rows only (Matthew, 2026-10-26 leader rule):
+// the dealership leader (role 'admin') is manage-only and NEVER
+// counts as a seat — trial cap 2 means 2 salesperson seats, and a
+// paid seat_limit is likewise a member-seat count (mirroring the
+// Stripe quantity the store bought).
 async function memberCount(svc: any, dealershipId: string): Promise<number> {
   const { count } = await svc
     .from("dealership_account_members")
     .select("user_id", { count: "exact", head: true })
-    .eq("dealership_id", dealershipId);
+    .eq("dealership_id", dealershipId)
+    .eq("role", "member");
   return typeof count === "number" ? count : 0;
 }
 
@@ -216,7 +242,7 @@ Deno.serve(async (req) => {
         plan_key: planKeyForSeatLimit(seat.value),
         status: "active",
       })
-      .select("id, name, created_by, seat_limit, plan_key, status, created_at")
+      .select(DEALER_SELECT)
       .single();
     if (dErr || !dealer) {
       return json({ ok: false, error: "dealership_create_failed" }, 500);
@@ -229,14 +255,15 @@ Deno.serve(async (req) => {
       await svc.from("dealership_accounts").delete().eq("id", dealer.id);
       return json({ ok: false, error: "membership_create_failed" }, 500);
     }
-    return json({ ok: true, dealership: dealer, seats_used: 1 });
+    return json({ ok: true, dealership: dealer, seats_used: 0 }); // leader is not a seat
   }
 
   // ------------------------------------------------- register_dealership
-  // Phase 1.5 self-serve registration (Register page, Dealership
-  // choice). Creates a PENDING dealership — no coverage, no seat
-  // powers — with the caller as its admin. Idempotent: a caller who
-  // already belongs to a dealership gets it back unchanged.
+  // Self-serve registration (Register page, Dealership choice).
+  // Phase 2: creates a TRIAL dealership — a working 5-day trial at
+  // the full Group flavor with seat_limit 2 and member management
+  // enabled — with the caller as its admin. Idempotent: a caller
+  // who already belongs to a dealership gets it back unchanged.
   if (action === "register_dealership") {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return json({ ok: false, error: "name_required" }, 400);
@@ -252,16 +279,19 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "dealership_not_found" }, 404);
     }
 
+    const trialEndsAt = new Date(Date.now() + 5 * 86400000).toISOString();
     const { data: dealer, error: dErr } = await svc
       .from("dealership_accounts")
       .insert({
         name,
         created_by: callerId,
-        seat_limit: null,
+        seat_limit: 2,
         plan_key: null,
-        status: "pending",
+        status: "trial",
+        trial_ends_at: trialEndsAt,
+        billing_status: "trialing",
       })
-      .select("id, name, created_by, seat_limit, plan_key, status, created_at")
+      .select(DEALER_SELECT)
       .single();
     if (dErr || !dealer) {
       return json({ ok: false, error: "dealership_create_failed" }, 500);
@@ -274,7 +304,7 @@ Deno.serve(async (req) => {
       await svc.from("dealership_accounts").delete().eq("id", dealer.id);
       return json({ ok: false, error: "membership_create_failed" }, 500);
     }
-    return json({ ok: true, dealership: dealer, seats_used: 1 });
+    return json({ ok: true, dealership: dealer, seats_used: 0 }); // leader is not a seat
   }
 
   // ------------------------------------------------------- list_members
@@ -312,7 +342,8 @@ Deno.serve(async (req) => {
       ok: true,
       dealership: dealer,
       members,
-      seats_used: members.length,
+      // Leader rule: seats_used counts MEMBER rows only.
+      seats_used: members.filter((m) => m.role === "member").length,
       seat_limit: dealer.seat_limit,
     });
   }
@@ -326,7 +357,7 @@ Deno.serve(async (req) => {
     }
     const dealer = await getDealership(svc, dealershipId);
     if (!dealer) return json({ ok: false, error: "dealership_not_found" }, 404);
-    if (dealer.status !== "active") {
+    if (!seatActionsAllowed(dealer)) {
       return json({ ok: false, error: "dealership_not_active" }, 409);
     }
 
@@ -399,7 +430,7 @@ Deno.serve(async (req) => {
     }
     const dealer = await getDealership(svc, dealershipId);
     if (!dealer) return json({ ok: false, error: "dealership_not_found" }, 404);
-    if (dealer.status !== "active") {
+    if (!seatActionsAllowed(dealer)) {
       return json({ ok: false, error: "dealership_not_active" }, 409);
     }
     const target = await getMembership(svc, dealershipId, targetId);
@@ -446,7 +477,7 @@ Deno.serve(async (req) => {
     }
     const dealer = await getDealership(svc, dealershipId);
     if (!dealer) return json({ ok: false, error: "dealership_not_found" }, 404);
-    if (dealer.status !== "active") {
+    if (!seatActionsAllowed(dealer)) {
       return json({ ok: false, error: "dealership_not_active" }, 409);
     }
     const target = await getMembership(svc, dealershipId, targetId);

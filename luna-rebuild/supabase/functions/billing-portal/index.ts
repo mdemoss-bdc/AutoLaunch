@@ -13,6 +13,16 @@
 // { error: "billing_not_configured" }. A signed-in user with no Stripe
 // customer on file (never checked out) → 400 { error: "no_customer" }.
 //
+// DEALERSHIP subscriptions (Phase 2, 2026-10-26): a body of
+// { dealership_id } opens the portal for the DEALERSHIP's own
+// Stripe customer instead — the caller must be an admin member of
+// that dealership (verified server-side), and the customer id comes
+// from the dealership row. This is how a store admin changes seats
+// or flavor and cancels: the account's default portal configuration
+// carries subscription_update products for the solo AND dealer
+// prices. A dealership with no customer yet → 400 no_customer,
+// exactly like the solo path.
+//
 // verify_jwt=false at the platform level; JWT verified manually
 // (tiktok-auth pattern). The customer id is read with the service role.
 // =====================================================================
@@ -77,14 +87,42 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "billing_not_configured" }, 503);
   }
 
+  let body: any = {};
+  try { body = await req.json(); } catch { /* empty body = solo path */ }
+
   const svc = serviceClient();
-  const { data: row } = await svc
-    .from("user_settings")
-    .select("stripe_customer_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const customerId = row?.stripe_customer_id || "";
-  if (!customerId) return json({ ok: false, error: "no_customer" }, 400);
+  let customerId = "";
+  const dealershipId = typeof body?.dealership_id === "string"
+    ? body.dealership_id
+    : "";
+  if (dealershipId) {
+    // Dealership path: admin members manage the STORE's
+    // subscription (seats / flavor / cancel) in the portal.
+    const { data: mem } = await svc
+      .from("dealership_account_members")
+      .select("role")
+      .eq("dealership_id", dealershipId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!mem || mem.role !== "admin") {
+      return json({ ok: false, error: "forbidden" }, 403);
+    }
+    const { data: dealer } = await svc
+      .from("dealership_accounts")
+      .select("stripe_customer_id")
+      .eq("id", dealershipId)
+      .maybeSingle();
+    customerId = dealer?.stripe_customer_id || "";
+    if (!customerId) return json({ ok: false, error: "no_customer" }, 400);
+  } else {
+    const { data: row } = await svc
+      .from("user_settings")
+      .select("stripe_customer_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    customerId = row?.stripe_customer_id || "";
+    if (!customerId) return json({ ok: false, error: "no_customer" }, 400);
+  }
 
   const form = new URLSearchParams({
     "customer": customerId,

@@ -1689,7 +1689,8 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
 # Per-plan inventory sync cadence (Matthew, 2026-10-26): ONE
 # user-requested sync per window — trial 24h, Post 18h, Automate 12h,
 # Group 6h (any Group account; dealership-covered members resolve to
-# the Group cadence exactly like a solo Group buyer). The app gates
+# their dealership's FLAVOR cadence — Group flavor and dealership
+# trials at 6h, Post flavor at 18h, mirroring the app). The app gates
 # the Sync button with the same numbers (SYNC_COOLDOWN_HOURS in
 # index.html — keep the two maps in step); this guard is the backstop
 # for scrape_jobs rows inserted any other way. It applies ONLY to
@@ -1732,11 +1733,13 @@ def _parse_job_ts(value):
 
 
 def _sync_cooldown_hours(uid, settings_row, covered):
-    """Sync window in hours for this account, or None = no cadence."""
+    """Sync window in hours for this account, or None = no cadence.
+    `covered` is the dealership coverage tier from
+    _dealership_covered() ('post'/'group') or None."""
     if uid in OWNER_USER_IDS:
         return None
     if covered:
-        return SYNC_COOLDOWN_HOURS["group"]
+        return SYNC_COOLDOWN_HOURS.get(covered, SYNC_COOLDOWN_HOURS["group"])
     if not settings_row:
         return None  # fail-open: nothing on file to resolve against
     if settings_row.get("billing_status") == "trialing":
@@ -1776,28 +1779,43 @@ def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now)
 
 
 def _dealership_covered(uid):
-    """Best-effort: True when the user belongs to an ACTIVE dealership
-    account (Phase 1 membership tables). Any read problem answers
-    False and the normal billing resolution decides instead."""
+    """Best-effort: the coverage TIER ('post'/'group') when this user
+    is a covered dealership MEMBER, else None (Phase 2). Coverage
+    mirrors the app exactly: an ACTIVE dealership covers at its
+    bought flavor (no flavor on file -> 'group'); a dealership still
+    inside its 5-day trial window covers at 'group'; anything else
+    covers nobody. The dealership LEADER (role 'admin') is NEVER
+    covered — that account is manage-only (Matthew, 2026-10-26), so
+    only role 'member' rows count. Any read problem answers None and
+    the normal billing resolution decides instead."""
     try:
         rows = (
             db.table("dealership_account_members")
-            .select("dealership_id")
+            .select("dealership_id, role")
             .eq("user_id", uid)
             .execute()
         ).data or []
         for r in rows:
+            if r.get("role") != "member":
+                continue
             d = (
                 db.table("dealership_accounts")
-                .select("status")
+                .select("status, plan_flavor, trial_ends_at")
                 .eq("id", r.get("dealership_id"))
                 .execute()
             ).data or []
-            if d and d[0].get("status") == "active":
-                return True
+            if not d:
+                continue
+            status = d[0].get("status")
+            if status == "active":
+                return d[0].get("plan_flavor") or "group"
+            if status == "trial":
+                ends = _parse_job_ts(d[0].get("trial_ends_at"))
+                if ends is not None and datetime.now(timezone.utc) < ends:
+                    return "group"
     except Exception:
         pass
-    return False
+    return None
 
 
 def _apply_sync_cadence_guard(uid, job, settings_row):
