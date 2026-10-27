@@ -267,6 +267,24 @@
 //     matching one of the user's own posted cars. Snippet sync and
 //     updates to known prospects are untouched: the gate decides
 //     CREATION only, and it fails closed.
+// 23. SELF BY IDENTITY + CAPTURE REASONS (v2.1.47): note 22's self
+//     test matched the counterparty's NAME against the rep's —
+//     but Matthew tests Marketplace chats from a second Facebook
+//     account under the same display name ("Matthew DeMoss"), so
+//     the name test blocked his own alt-account buyer threads, and
+//     would block any real buyer who shares his name. The gate now
+//     blocks as self ONLY on a proven Facebook-identity match: the
+//     capture carries canonical identity tokens (buyerFbId /
+//     selfFbId, scraped from profile links and the c_user cookie),
+//     and a name match alone is no signal at all. Same release:
+//     manual Capture stopped failing silently — the worker returns
+//     a short error code (not_signed_in / no_buyer / save_failed)
+//     and the button names the cause ("reload this Facebook tab"
+//     for an orphaned script after a helper update, the bare
+//     "Capture failed" case Matthew hit on 2026-10-26), and a
+//     manual capture with no matched prospect and no resolvable
+//     participant declines as no_buyer instead of filing a
+//     nameless "Marketplace buyer" card.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -388,31 +406,28 @@ async function sbPost(path, body) {
 }
 
 // ---------------------------------------------------------------------
-// AUTO-CREATE GATE (v2.1.46, header note 22). Pure function: given an
-// AUTO capture and the context handleCaptureChat assembled (the rep's
-// own name from their Luca profile, the user's Marketplace-posted
-// cars), decide whether the capture may CREATE a prospect. Manual
-// captures never pass through here, and neither do captures for an
-// already-known prospect (their message sync is not creation).
+// AUTO-CREATE GATE (v2.1.46, header notes 22-23). Pure function:
+// given an AUTO capture and the context handleCaptureChat assembled
+// (the user's Marketplace-posted cars), decide whether the capture
+// may CREATE a prospect. Manual captures never pass through here,
+// and neither do captures for an already-known prospect (their
+// message sync is not creation).
 function autoCreateGate(capture, ctx) {
-  var norm = function (s) {
-    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
-  };
   var name = String((capture && capture.buyerName) || "").trim();
   // Hard rule: an unresolved participant name NEVER auto-creates —
   // the "Marketplace buyer" fallback card is exactly what this kills.
   if (!name) return { create: false, reason: "unresolved_name" };
-  // Self/system threads: the counterparty resolving to the rep
-  // himself (full profile name, or a bare first name matching the
-  // rep's) is the rep talking to Facebook about his own listing —
-  // never a buyer. A real buyer who shares the rep's first name is
-  // one manual Capture away; a junk card is the bug being fixed.
-  var rep = norm(ctx && ctx.repName);
-  if (rep) {
-    if (norm(name) === rep) return { create: false, reason: "self_thread" };
-    if (norm(name) === rep.split(" ")[0]) {
-      return { create: false, reason: "self_thread" };
-    }
+  // Self test BY IDENTITY (v2.1.47, header note 23): block only when
+  // the counterparty's Facebook identity PROVABLY equals the
+  // signed-in account's — canonical tokens ("id:<digits>" /
+  // "vanity:<name>") scraped by chat_capture.js. An id token never
+  // equals a vanity token (unproven = not self), and a display-name
+  // match is no signal at all: a second account under the same name
+  // is a buyer, not the rep himself.
+  var buyerId = String((capture && capture.buyerFbId) || "").trim();
+  var selfId = String((capture && capture.selfFbId) || "").trim();
+  if (buyerId && selfId && buyerId === selfId) {
+    return { create: false, reason: "self_thread" };
   }
   var label = String((capture && capture.vehicleText) || "").trim();
   // Signal 1 — surface: the Marketplace inbox is commerce-only by
@@ -461,7 +476,11 @@ function labelMatchesPostedCar(label, postedCars) {
 // Runs on the rep's own stored session, so RLS keeps every row theirs.
 async function handleCaptureChat(capture) {
   const { autolaunch_user_id: userId } = await chrome.storage.local.get(["autolaunch_user_id"]);
-  if (!userId) throw new Error("no stored user id — open AutoLaunch and sign in first");
+  if (!userId) {
+    const e = new Error("not_signed_in — open AutoLaunch and sign in first");
+    e.code = "not_signed_in";
+    throw e;
+  }
   const norm = (s) => (s || "").trim().toLowerCase();
   const name = (capture.buyerName || "").trim() || "Marketplace buyer";
   const vehicleText = (capture.vehicleText || "").trim();
@@ -486,14 +505,7 @@ async function handleCaptureChat(capture) {
   // adds anything else, and it never passes through the gate. Auto
   // updates to an already-known prospect's thread still flow.
   if (capture.auto && !prospect) {
-    const gateCtx = { repName: "", postedCars: [] };
-    try {
-      const prof = await sbGet(
-        `closer_profiles?user_id=eq.${userId}&select=profile&limit=1`);
-      if (prof && prof.length && prof[0].profile) {
-        gateCtx.repName = prof[0].profile.rep_name || "";
-      }
-    } catch (e) { /* the remaining signals still decide */ }
+    const gateCtx = { postedCars: [] };
     try {
       gateCtx.postedCars = await sbGet(
         `scraped_inventory?user_id=eq.${userId}` +
@@ -503,6 +515,16 @@ async function handleCaptureChat(capture) {
     if (!gate.create) {
       return { prospectName: null, added: 0, skipped: gate.reason };
     }
+  }
+  // Manual Capture, no matched prospect, no resolvable participant
+  // (v2.1.47): decline with a reason the button can name instead of
+  // filing a nameless "Marketplace buyer" card. Auto captures never
+  // reach here (the gate already decided), and a thread-matched
+  // prospect captures fine without a name.
+  if (!capture.auto && !prospect && !String(capture.buyerName || "").trim()) {
+    const e = new Error("no_buyer — no buyer found in this chat");
+    e.code = "no_buyer";
+    throw e;
   }
   if (!prospect) {
     const created = await sbPost("prospects", {
@@ -1592,7 +1614,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(Object.assign({ ok: true }, result));
       } catch (err) {
         console.warn("[AutoLaunch] chat capture failed:", err && err.message ? err.message : err);
-        sendResponse({ ok: false });
+        sendResponse({ ok: false, error: (err && err.code) || "save_failed" });
       }
     })();
     return true;

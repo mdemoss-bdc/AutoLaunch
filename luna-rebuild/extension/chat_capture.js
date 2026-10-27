@@ -170,8 +170,83 @@
     return false;
   }
 
+  // Facebook identity (v2.1.47, worker header note 23): the gate's
+  // self test compares IDENTITIES, never names — the rep tests from
+  // a second account under the same display name, and real buyers
+  // can share his name. Tokens are canonical: "id:<digits>" for
+  // numeric profile ids, "vanity:<lowercased>" otherwise; an id
+  // token never equals a vanity token (unproven = not self).
+  var FB_RESERVED_SEGMENTS = {
+    messages: 1, marketplace: 1, groups: 1, watch: 1, gaming: 1,
+    friends: 1, notifications: 1, settings: 1, help: 1, events: 1,
+    pages: 1, login: 1, sharer: 1, dialog: 1, plugins: 1, people: 1,
+    search: 1, bookmarks: 1, me: 1, home: 1, "profile.php": 1,
+    "photo.php": 1, "permalink.php": 1
+  };
+
+  function fbIdentityFromHref(href) {
+    try {
+      var u = new URL(href);
+      if (!/(^|\.)facebook\.com$/.test(u.hostname)) return "";
+      if (/\/profile\.php$/.test(u.pathname)) {
+        var m = (u.search || "").match(/[?&]id=(\d+)/);
+        return m ? "id:" + m[1] : "";
+      }
+      var seg = (u.pathname || "").split("/").filter(Boolean);
+      if (seg.length === 1 && !FB_RESERVED_SEGMENTS[seg[0].toLowerCase()]) {
+        return "vanity:" + seg[0].toLowerCase();
+      }
+    } catch (e) { /* not a profile link */ }
+    return "";
+  }
+
+  function findSelfFbId() {
+    // c_user is the signed-in account's numeric id, readable by the
+    // page. Fallback: a profile.php link pointing at the account.
+    try {
+      var m = (document.cookie || "").match(/(?:^|;\s*)c_user=(\d+)/);
+      if (m) return "id:" + m[1];
+    } catch (e) { /* fall through */ }
+    try {
+      var links = document.querySelectorAll('a[href*="profile.php?id="]');
+      for (var i = 0; i < links.length; i++) {
+        var id = fbIdentityFromHref(links[i].href || "");
+        if (id) return id;
+      }
+    } catch (e) { /* heuristic only */ }
+    return "";
+  }
+
+  function findBuyerFbId(selfId) {
+    // The counterparty's profile link lives on the thread pane —
+    // the header / buyer card and the info rail, which on group-
+    // flavored Marketplace threads is also where "Chat members"
+    // links render. Take the pane's profile identities in order:
+    // the buyer is the first that isn't provably the signed-in
+    // user; if ALL of them are the signed-in user, the counterparty
+    // IS the user (a true self thread). Tightest scope wins.
+    try {
+      var scopes = [findChatPopup(), document.querySelector('[role="main"]'), document].filter(Boolean);
+      for (var s = 0; s < scopes.length; s++) {
+        var seen = [];
+        var links = scopes[s].querySelectorAll("a[href]");
+        for (var i = 0; i < links.length; i++) {
+          var id = fbIdentityFromHref(links[i].href || "");
+          if (id && seen.indexOf(id) === -1) seen.push(id);
+        }
+        if (!seen.length) continue;
+        for (var j = 0; j < seen.length; j++) {
+          if (!selfId || seen[j] !== selfId) return seen[j];
+        }
+        return selfId;
+      }
+    } catch (e) { /* heuristic only */ }
+    return "";
+  }
+
   function scrape() {
     var listing = findListing();
+    var selfId = findSelfFbId();
     return {
       buyerName: findBuyerName(),
       vehicleText: listing.vehicleText,
@@ -179,8 +254,26 @@
       threadUrl: window.location.href,
       surface: threadSurface(),
       sellerContext: findSellerContext(),
+      selfFbId: selfId,
+      buyerFbId: findBuyerFbId(selfId),
       messages: findMessages()
     };
+  }
+
+  // Capture failure reasons (v2.1.47): a bare "Capture failed" told
+  // the rep nothing. After a helper update, an already-open
+  // Facebook tab runs an ORPHANED script whose sendMessage throws
+  // (context invalidated) — the fix is reloading the tab, and the
+  // label now says so. Worker-declined captures carry its code.
+  function captureFailLabel(lastError, resp) {
+    var msg = (lastError && lastError.message) || "";
+    if (/context invalidated|receiving end does not exist|message port closed/i.test(msg)) {
+      return "Capture failed — reload this Facebook tab";
+    }
+    if (resp && resp.error === "not_signed_in") return "Capture failed — open AutoLaunch & sign in";
+    if (resp && resp.error === "no_buyer") return "Capture failed — no buyer found in this chat";
+    if (resp && resp.error) return "Capture failed — try again in a moment";
+    return "Capture failed — is AutoLaunch signed in?";
   }
 
   function setBtnLabel(btn, label, ok) {
@@ -218,13 +311,13 @@
       try {
         chrome.runtime.sendMessage({ type: "AUTOLAUNCH_CAPTURE_CHAT", capture: capture }, function (resp) {
           if (chrome.runtime.lastError || !resp || !resp.ok) {
-            setBtnLabel(btn, "Capture failed — is AutoLaunch signed in?", false);
+            setBtnLabel(btn, captureFailLabel(chrome.runtime.lastError, resp), false);
             return;
           }
           setBtnLabel(btn, "Captured ✓ " + (resp.added || 0) + " new · " + (resp.prospectName || "prospect"), true);
         });
       } catch (e) {
-        setBtnLabel(btn, "Capture failed", false);
+        setBtnLabel(btn, "Capture failed — reload this Facebook tab", false);
       }
     });
     document.body.appendChild(btn);
@@ -295,6 +388,8 @@
         // commerce-surface evidence; a plain /messages row is not.
         surface: onMarketplaceInbox ? "marketplace_inbox" : "",
         sellerContext: false,
+        selfFbId: findSelfFbId(),
+        buyerFbId: "",
         messages: [],
         stub: true
       });
