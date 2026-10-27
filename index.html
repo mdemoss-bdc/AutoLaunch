@@ -13509,15 +13509,67 @@ async function getDailyPostUsage() {
   return used;
 }
 
+// Status split behind the SAME two reads getDailyPostUsage makes, so the
+// counter label can say what the one number is made of: posted = cars
+// marked posted today (inventory) whose VIN is not on any of today's
+// queue rows; queued = today's pending + processing queue rows; failed =
+// today's failed queue rows. Delete rows are removals, never posts, and
+// are skipped. The aggregate `used` above (the bar and the limit gate)
+// is unchanged — this only explains it.
+async function getDailyPostUsageSplit() {
+  const split = { posted: 0, queued: 0, failed: 0 };
+  if (!currentUser) return split;
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const startISO = start.toISOString();
+  const queueVins = new Set();
+  try {
+    const { data: qRows, error: qErr } = await supabaseClient
+      .from("auto_posting_queue")
+      .select("vin, status, action, created_at")
+      .eq("user_id", currentUser.id)
+      .eq("target_channel", "marketplace")
+      .gte("created_at", startISO);
+    if (qErr) throw qErr;
+    (qRows || []).forEach(r => {
+      if (r.action === "delete") return;
+      if (r.vin) queueVins.add(r.vin);
+      if (r.status === "failed") split.failed++;
+      else if (r.status === "pending" || r.status === "processing") split.queued++;
+      else split.posted++;
+    });
+    const { data: posted, error: pErr } = await supabaseClient
+      .from("scraped_inventory")
+      .select("vin, marketplace_posted_at")
+      .eq("user_id", currentUser.id)
+      .gte("marketplace_posted_at", startISO);
+    if (pErr) throw pErr;
+    (posted || []).forEach(r => { if (r.vin && !queueVins.has(r.vin)) split.posted++; });
+  } catch (err) {
+    console.error("Daily limit usage split failed:", err);
+  }
+  return split;
+}
+
+// "{posted} posted[ · {queued} queued][ · {failed} failed] of {limit} today"
+function formatDailyUsageLabel(split, limit) {
+  const displayCap = (!limit || limit >= 999) ? "Unlimited" : limit;
+  let text = `${split.posted} posted`;
+  if (split.queued > 0) text += ` · ${split.queued} queued`;
+  if (split.failed > 0) text += ` · ${split.failed} failed`;
+  return `${text} of ${displayCap} today`;
+}
+
 // Returns true when `adding` more queue rows stays within today's limit.
 async function checkDailyLimit(adding) {
   const limit = userDailyPostLimit;
   if (!limit || limit >= 999) return true; // 999 = Unlimited (existing convention)
   const used = await getDailyPostUsage();
-  updateSafetyCounterUI(used, currentDailyPostAllowance());
+  const split = await getDailyPostUsageSplit();
+  updateSafetyCounterUI(used, currentDailyPostAllowance(), split);
   if (used + adding > limit) {
     alert(
-      `Daily posting limit reached: ${used} of ${limit} used today.\n\n` +
+      `Daily posting limit reached: ${formatDailyUsageLabel(split, limit)}.\n\n` +
       `Raise the limit under Safe Posting Limits, or queue again tomorrow. ` +
       `Nothing was queued.`
     );
@@ -13526,7 +13578,7 @@ async function checkDailyLimit(adding) {
   return true;
 }
 
-function updateSafetyCounterUI(used, limit) {
+function updateSafetyCounterUI(used, limit, split) {
   const limitLabel = document.getElementById("ribbonSafetyLimitLabel");
   const safetyText = document.getElementById("safetyCounterText");
   const safetyBar = document.getElementById("safetyCounterBar");
@@ -13535,8 +13587,9 @@ function updateSafetyCounterUI(used, limit) {
   const pct = (!limit || limit >= 999)
     ? "5%"
     : `${Math.min(100, Math.max(2, (used / limit) * 100))}%`;
-  if (limitLabel) limitLabel.innerText = `${used} of ${displayCap} today`;
-  if (safetyText) safetyText.innerText = `${used}/${displayCap}`;
+  const label = split ? formatDailyUsageLabel(split, limit) : `${used} of ${displayCap} today`;
+  if (limitLabel) limitLabel.innerText = label;
+  if (safetyText) safetyText.innerText = label;
   if (safetyBar) safetyBar.style.width = pct;
   if (ribbonBar) ribbonBar.style.width = pct;
 }
@@ -13544,7 +13597,8 @@ function updateSafetyCounterUI(used, limit) {
 async function refreshSafetyCounter() {
   if (!currentUser) return;
   const used = await getDailyPostUsage();
-  updateSafetyCounterUI(used, currentDailyPostAllowance());
+  const split = await getDailyPostUsageSplit();
+  updateSafetyCounterUI(used, currentDailyPostAllowance(), split);
   updateMobileHeaderSummary();
 }
 function toggleSelectAllCars(master) {
