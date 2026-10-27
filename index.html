@@ -586,7 +586,40 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 1: AUTHENTICATION MODAL START =============== -->
 <!-- ============================================================================== -->
-<div id="authOverlay" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+<div id="authOverlay" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm overflow-y-auto">
+  <!-- PRE-LOGIN LANDING (2026-10-27): for logged-out visitors the auth
+       card is wrapped by a trial strip (above) and two pricing panels
+       (left: sales reps, right: dealerships). Everything lives INSIDE
+       #authOverlay, so it all hides with the overlay the moment a
+       session starts; signed-in users see no change. Presentation
+       only: no auth, trial or billing logic lives in this markup. -->
+  <div class="min-h-full w-full max-w-[1440px] mx-auto flex flex-col items-center justify-center gap-4 lg:gap-5 p-4">
+    <div class="text-center px-2 shrink-0">
+      <p class="text-2xl lg:text-[2rem] font-extrabold tracking-tight text-slate-900 leading-tight">Start your free 5-day trial</p>
+      <p class="text-sm lg:text-[15px] text-slate-600 font-medium mt-1.5">Full access while you try it — no card up front.</p>
+    </div>
+    <div class="w-full flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-4 lg:gap-5">
+      <aside class="landing-panel glass-card order-1 w-full max-w-md lg:max-w-none lg:w-60 xl:w-72 2xl:w-80 shrink-0 rounded-2xl p-5 lg:p-6 shadow-2xl relative border border-slate-200 bg-white flex flex-col">
+        <div class="flex items-center gap-2.5 mb-4">
+          <span class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><i class="fa-solid fa-user-tie"></i></span>
+          <h2 class="font-extrabold text-slate-900 text-[15px]">For Sales Reps</h2>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <p class="font-extrabold text-slate-900 text-sm">Post — <span class="text-blue-600">$75/mo</span></p>
+            <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">The posting core: your cars on Marketplace, posted for you at a safe pace.</p>
+            <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Your cars on Marketplace, posted for you at a safe pace.</p>
+          </div>
+          <div>
+            <p class="font-extrabold text-slate-900 text-sm">Group — <span class="text-blue-600">$100/mo</span></p>
+            <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">Full automation: auto-post, auto delete &amp; repost, Luca drafting your replies, channels, trade appraisals + wishlist.</p>
+            <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Full automation: auto-post, delete &amp; repost, Luca, channels, trade + wishlist.</p>
+          </div>
+        </div>
+        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 5 days on us.</p>
+        <button type="button" class="landing-trial-btn btn-gradient w-full py-2.5 rounded-xl text-white font-bold text-sm shadow-lg cursor-pointer mt-3">Start free trial</button>
+      </aside>
+      <div class="order-3 lg:order-2 w-full max-w-md shrink-0">
   <div class="glass-card w-full max-w-md rounded-2xl p-8 space-y-6 shadow-2xl relative border border-slate-200 bg-white">
     <div class="flex items-center gap-3 justify-center mb-2">
       <img src="icons/logo-mark-512.png" alt="AutoLaunch" class="w-12 h-12 rounded-2xl shadow-lg shadow-blue-500/25 object-cover">
@@ -658,10 +691,51 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <p id="authResendMsg" class="text-xs font-medium hidden"></p>
     </div>
   </div>
+      </div>
+      <aside class="landing-panel glass-card order-2 lg:order-3 w-full max-w-md lg:max-w-none lg:w-60 xl:w-72 2xl:w-80 shrink-0 rounded-2xl p-5 lg:p-6 shadow-2xl relative border border-slate-200 bg-white flex flex-col">
+        <div class="flex items-center gap-2.5 mb-4">
+          <span class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><i class="fa-solid fa-store"></i></span>
+          <h2 class="font-extrabold text-slate-900 text-[15px]">For Dealerships</h2>
+        </div>
+        <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed">One account runs the whole store. Every seat gets the full kit — and the team leader's account is free, never a seat.</p>
+        <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed">One account runs the whole store — the leader's account is free, never a seat.</p>
+        <div class="space-y-2 mt-4">
+          <p class="font-extrabold text-slate-900 text-sm">Post — <span class="text-blue-600">from $79/seat/mo</span></p>
+          <p class="font-extrabold text-slate-900 text-sm">Group — <span class="text-blue-600">from $99/seat/mo</span></p>
+        </div>
+        <div class="text-[13px] text-slate-600 leading-relaxed mt-3 space-y-1">
+          <p>10+ seats: $75 / $95 a seat</p>
+          <p>25+ seats: $69 / $89 a seat</p>
+          <p>Yearly prepaid saves 5–15%.</p>
+        </div>
+        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 5-day dealership trial, 2 seats to try.</p>
+        <button type="button" class="landing-trial-btn btn-gradient w-full py-2.5 rounded-xl text-white font-bold text-sm shadow-lg cursor-pointer mt-3">Start free trial</button>
+      </aside>
+    </div>
+  </div>
 </div>
 <!-- ============================================================================== -->
 <!-- ======================= SECTION 1: AUTHENTICATION MODAL END ================== -->
 <!-- ============================================================================== -->
+
+<script>
+// Pre-login landing panels (2026-10-27): each panel's "Start free
+// trial" button clicks the auth card's EXISTING Register tab — the
+// same element a visitor clicks — then brings the card into view.
+// No auth logic lives here; switchAuthMode does the rest.
+(function () {
+  document.querySelectorAll(".landing-trial-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var tab = document.getElementById("tabSignUp");
+      if (tab) tab.click();
+      var switcher = document.getElementById("authTabSwitcher");
+      if (switcher && switcher.scrollIntoView) {
+        switcher.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  });
+})();
+</script>
 
 <!-- PLAN GATE MODAL: shown when a signed-in account opens a feature its
      plan doesn't include. Plain and factual — what's locked, which plan
