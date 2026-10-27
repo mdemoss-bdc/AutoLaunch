@@ -40,7 +40,7 @@
 //                           the service role). Quantity = seats on
 //                           the flavor's VOLUME-tiered price (every
 //                           seat billed at the bracket rate for the
-//                           total count — Post 1-9 $79 / 10-24 $75 /
+//                           total count — Post 1-24 $75 /
 //                           25+ $69; Group 1-9 $99 / 10-24 $95 /
 //                           25+ $89 — the server enforces the 1..50
 //                           range, so the open tier never serves
@@ -274,12 +274,13 @@ const DEALER_FLAVOR_PRICE_ENV: Record<string, string> = {
 const DEALER_MAX_SEATS = 50;
 
 // Canonical dealership seat pricing (Phase 2 numbers, Matthew
-// 2026-10-26): EVERY seat bills at the bracket rate for the total
+// 2026-10-26; Post 1-9 amended $79 -> $75 on 2026-10-27 — solo
+// parity, Matthew): EVERY seat bills at the bracket rate for the total
 // seat count. This table is the server-side source of truth for the
 // prepaid-term totals below — it mirrors the app's
 // DEALER_PRICE_TIERS and the volume tiers on the Stripe prices.
 const DEALER_SEAT_BRACKETS: Record<string, Array<[number, number]>> = {
-  post: [[9, 79], [24, 75], [50, 69]],
+  post: [[9, 75], [24, 75], [50, 69]],
   group: [[9, 99], [24, 95], [50, 89]],
 };
 // The solo multi-year ladder (Matthew, 2026-10-26), applied to

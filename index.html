@@ -700,7 +700,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed">One account runs the whole store. Every seat gets the full kit — and the team leader's account is free, never a seat.</p>
         <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed">One account runs the whole store — the leader's account is free, never a seat.</p>
         <div class="space-y-2 mt-4">
-          <p class="font-extrabold text-slate-900 text-sm">Post — <span class="text-blue-600">from $79/seat/mo</span></p>
+          <p class="font-extrabold text-slate-900 text-sm">Post — <span class="text-blue-600">from $75/seat/mo</span></p>
           <p class="font-extrabold text-slate-900 text-sm">Group — <span class="text-blue-600">from $99/seat/mo</span></p>
         </div>
         <div class="text-[13px] text-slate-600 leading-relaxed mt-3 space-y-1">
@@ -4074,13 +4074,15 @@ const SYNC_COOLDOWN_HOURS = { trial: 24, post: 18, automate: 12, group: 6 };
 // seat count from 1 to 50; EVERY seat is billed at the bracket rate
 // for the total count (Stripe volume tiers — the same math the
 // tiered Stripe prices compute). Brackets: 1-9 seats at the top
-// rate, 10-24 in the middle, 25-50 at the floor — at 50 seats the
-// discount against the flat top rate is exactly $500/mo on both
-// flavors (Post $3,450/mo, Group $4,450/mo). There is deliberately
+// rate, 10-24 in the middle, 25-50 at the floor (Post's top and
+// middle brackets are both $75 since 2026-10-27 — the 1-9 rate
+// dropped $79 -> $75 for solo parity, Matthew). At 50 seats the
+// discount against the flat top rate is $300/mo on Post
+// ($3,450/mo) and $500/mo on Group ($4,450/mo). There is deliberately
 // NO bracket past 50: the seat picker stops there. One edit here
 // reprices the Dealership page; the Stripe prices must match.
 const DEALER_PRICE_TIERS = {
-  post:  [{ upTo: 9, perSeat: 79 }, { upTo: 24, perSeat: 75 }, { upTo: 50, perSeat: 69 }],
+  post:  [{ upTo: 9, perSeat: 75 }, { upTo: 24, perSeat: 75 }, { upTo: 50, perSeat: 69 }],
   group: [{ upTo: 9, perSeat: 99 }, { upTo: 24, perSeat: 95 }, { upTo: 50, perSeat: 89 }]
 };
 const DEALER_MAX_SEATS = 50;

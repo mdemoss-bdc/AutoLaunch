@@ -1473,12 +1473,13 @@ nothing more, until a dealer plan activates it.
 
 Matthew's locked numbers (2026-10-26, after rejecting a 100-seat
 bracket and deep per-seat discounts): the seat picker runs **1–50
-member seats**. **Dealership Post: 1–9 seats $79/seat/mo, 10–24
-$75, 25–50 $69. Dealership Group: 1–9 $99/seat/mo, 10–24 $95,
+member seats**. **Dealership Post: 1–24 seats $75/seat/mo, 25–50 $69
+(the 1–9 bracket was $79 until 2026-10-27 — dropped to $75 for
+solo parity, Matthew). Dealership Group: 1–9 $99/seat/mo, 10–24 $95,
 25–50 $89.** Volume pricing — EVERY seat bills at the bracket rate
 for the total count (10 Post seats = 10 × $75 = **$750/mo**; at 50
-seats the discount vs the flat top rate is exactly $500: Post
-$3,450/mo, Group $4,450/mo). The store picks ONE flavor store-wide.
+seats the discount vs the flat top rate is $300 on Post
+($3,450/mo) and exactly $500 on Group ($4,450/mo). The store picks ONE flavor store-wide.
 
 - **THE LEADER RULE (Matthew, 2026-10-26).** The dealership's
   leader (the `admin` membership) is **free, manage-only, and
