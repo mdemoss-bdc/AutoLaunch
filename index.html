@@ -1264,6 +1264,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <p id="dealerBuyMath" class="text-sm font-bold text-slate-800"></p>
       <p id="dealerBuyNote" class="text-[11px] text-slate-400">Seats are for your salespeople — the leader account is always free and doesn't count toward seats. Renews monthly on the day you subscribe. Cancel anytime; access continues to the end of the paid period. All sales final — no refunds.</p>
       <button id="dealerBuyButton" onclick="startDealerCheckout()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Buy seats</button>
+      <div id="dealerPayMethods"></div>
       <p id="dealerBuyMsg" class="text-xs font-medium mt-3 hidden"></p>
     </div>
 
@@ -4998,6 +4999,28 @@ function billingTermSelectorHtml(plan) {
   }).join("") + '</div>';
 }
 
+// ---- Accepted payment methods (buy cards) ---------------------------
+// One shared row rendered by every pick-a-plan surface (purchase
+// gate, signup choice gate, Settings -> Plan, dealership buy panel)
+// so the payment promise can never drift between screens. The list
+// is what Matthew's DEFAULT Stripe payment method configuration
+// (pmc_1RdoNpA3zjwds4H0V4Nysuuj) actually has switched on for
+// Checkout — verified 2026-10-27 by reading the configuration via
+// the Stripe connector: card, Apple Pay, Google Pay, Affirm, Klarna
+// and Afterpay all report available with display "on"; the card
+// brands are the standard US Stripe set. Link, Cash App Pay,
+// Amazon Pay and the EU methods are also on in Stripe but are
+// deliberately not advertised (US dealer audience; short row). If
+// the Stripe settings ever change, update this one list.
+const PAYMENT_METHOD_LABELS = ["Visa", "Mastercard", "Amex", "Discover", "Apple Pay", "Google Pay", "Affirm", "Klarna", "Afterpay"];
+function paymentOptionsHtml() {
+  return '<div class="flex flex-wrap items-center gap-1.5">' +
+    '<span class="text-[11px] font-semibold text-slate-400">We accept</span>' +
+    PAYMENT_METHOD_LABELS.map(function (m) {
+      return '<span class="px-2 py-0.5 rounded-full border border-slate-300 bg-white text-[11px] font-semibold text-slate-500">' + m + '</span>';
+    }).join("") + '</div>';
+}
+
 function renderPurchaseCards(containerId, msgId) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -5013,7 +5036,7 @@ function renderPurchaseCards(containerId, msgId) {
       billingTermSelectorHtml(plan) +
       '<p class="text-[11px] text-slate-400 mt-3">' + planTermRenewalLine(plan) + ((selectedBillingTerm[plan] || "monthly") === "monthly" ? ' Cancel anytime in Settings.' : '') + ' All sales final — no refunds.</p>' +
       '<button onclick="startCheckout(\'' + planTermKind(plan) + '\', \'' + msgId + '\')" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Buy ' + info.name + ' — $' + price + '</button></div>';
-  }).join("");
+  }).join("") + '<div class="sm:col-span-2">' + paymentOptionsHtml() + '</div>';
 }
 
 // ---- Founding Lifetime: RETIRED 2026-10-26 ---------------------------
@@ -5865,6 +5888,8 @@ function renderDealerBuyMath() {
   if (blurb) blurb.innerText = flavor === "post"
     ? "Post: manual posting core — 5 queued posts a day per seat, inventory sync every 18 hours."
     : "Group: the full kit — automation, Luca, channels, no plan cap on queued posts, inventory sync every 6 hours.";
+  const payMethodsEl = document.getElementById("dealerPayMethods");
+  if (payMethodsEl) payMethodsEl.innerHTML = paymentOptionsHtml();
   const bp = document.getElementById("dealerFlavorPost");
   const bg = document.getElementById("dealerFlavorGroup");
   if (bp) bp.className = "px-4 py-2.5 rounded-xl font-bold text-xs cursor-pointer border " + (flavor === "post" ? onCls : offCls);
