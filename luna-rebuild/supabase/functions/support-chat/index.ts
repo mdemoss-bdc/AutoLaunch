@@ -467,8 +467,8 @@ DEALERSHIP ACCOUNTS:
   up to 2 member seats, the full Group feature set, and the leader
   can add members from the Dealership page right away.
 - Paid dealerships pick a flavor and a seat count (1 to 50 seats):
-  Dealership Post — $79/seat/mo for 1-9 seats, $75 for 10-24, $69
-  for 25-50. Dealership Group — $99/seat/mo for 1-9 seats, $95 for
+  Dealership Post — $75/seat/mo for 1-24 seats, $69 for 25-50.
+  Dealership Group — $99/seat/mo for 1-9 seats, $95 for
   10-24, $89 for 25-50. Every seat is billed at the rate for the
   total seat count (a 10-seat Post store pays 10 x $75 = $750/mo).
 - Post seats follow the Post rules (5 queued posts a day per seat,
