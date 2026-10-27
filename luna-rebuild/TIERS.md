@@ -678,7 +678,13 @@ three layers above.
 
 1. ~~Connect Stripe~~ — done 2026-10-26 (account activated; products
    created: AutoLaunch Post `price_1UUtXgA3zjwds4H07Z7dfuJr` $75/mo,
-   AutoLaunch Group `price_1UUtXlA3zjwds4H0QRlUpA9f` $100/mo).
+   AutoLaunch Group `price_1UUtXlA3zjwds4H0QRlUpA9f` $100/mo; plus, for
+   the Founding Lifetime offers below: AutoLaunch Post Lifetime
+   `prod_VVzm4QBde5DItm` / `price_1UUxmZA3zjwds4H0Wn7E5qoS` $1,499
+   one-time, AutoLaunch Group Lifetime `prod_VVzmu6fKoKeiFR` /
+   `price_1UUxmmA3zjwds4H0rVOq19zb` $1,999 one-time, AutoLaunch
+   Support Plan `prod_VVzmTAYH9Jgcs9` /
+   `price_1UUxmnA3zjwds4H0pWVhqdGT` $199/year).
 2. Set the Phantom function secrets: `STRIPE_SECRET_KEY`,
    `STRIPE_PRICE_POST`, `STRIPE_PRICE_GROUP`, `STRIPE_WEBHOOK_SECRET`
    (the secret key comes from Matthew via the Secure Vault flow).
@@ -690,6 +696,102 @@ three layers above.
    enabled in Stripe settings (the cancel button depends on it).
 4. Test one real checkout end-to-end (trial user → pay → webhook
    flips to `active` → portal cancel → `expired` at period end).
+
+## Founding Lifetime + Support Plan (decided + built 2026-10-26, rebuild only)
+
+Matthew approved Luna's recommendation ~19:52 EDT and set the
+support price himself ~19:54 EDT. Terms, exactly as decided:
+
+- **Founding Lifetime, SOLO plans only** (dealerships get NO
+  lifetime — their founding offer is annual prepay + a rate lock,
+  Phase 2 billing work): **Post Lifetime $1,499 one-time** ·
+  **Group Lifetime $1,999 one-time**. **Cap: 50 lifetime buyers
+  total**, both tiers combined. The window closes 30 days after
+  public launch; launch hasn't happened, so availability is
+  implemented as the cap plus config — the close date is a constant
+  left unset (no date logic yet).
+- A lifetime account is `billing_status 'active'` **permanently** for
+  the bought tier — "Yours for the life of the product."
+- **Priority support is included for 1 year** from purchase; **bug
+  reports are always free** (copy point). After year 1, the optional
+  **Support Plan is $199/year** (Matthew's figure).
+
+Schema (applied 2026-10-26; record:
+`supabase/migrations_draft/lifetime_offers_APPLIED_2026-10-26.sql`):
+`user_settings` += `lifetime_tier text NULL` ('post'|'group'),
+`lifetime_purchased_at timestamptz NULL`, `support_plan_status text
+NULL`, `support_period_end timestamptz NULL`.
+
+Stripe (livemode acct_1K3oiuA3zjwds4H0): products/prices listed in
+"What remains to take real money" item 1 above. New Phantom secrets
+`STRIPE_PRICE_LIFETIME_POST` / `STRIPE_PRICE_LIFETIME_GROUP` /
+`STRIPE_PRICE_SUPPORT` set and digest-verified.
+
+Functions: `billing-checkout` accepts plan keys `lifetime_post` /
+`lifetime_group` / `support` beside `post` / `group`. Lifetime runs
+`mode='payment'`; BEFORE any session is created it counts
+`user_settings WHERE lifetime_tier IS NOT NULL` and at >= 50 returns
+409 `{error:"lifetime_sold_out"}`. Support runs `mode='subscription'`
+(yearly price) and only for accounts whose row carries a
+`lifetime_tier` (else 400 `lifetime_required`). Every session carries
+`metadata {kind: <plan key>}` on the session AND, for subscriptions,
+on `subscription_data.metadata` — the webhook routes on it. The
+function also answers `{action:"lifetime_status"}` →
+`{sold, cap: 50, available}` for the app's display. `billing-webhook`
+routes by kind: a lifetime completion sets billing_status 'active' +
+plan_tier + lifetime_tier + lifetime_purchased_at + the Stripe
+customer id, and writes NO subscription fields (current_period_end
+stays NULL forever); support completions and support subscription
+events write ONLY support_plan_status / support_period_end — a
+support subscription's deleted event can never touch billing_status
+or plan_tier, so a lifetime account cancelling support stays active
+forever. Plan-subscription events for a row that carries a
+lifetime_tier likewise never move billing_status (a leftover monthly
+subscription cancelled after a lifetime upgrade can't expire the
+account). Plan routing is otherwise unchanged.
+
+App: a **Founding Lifetime** block under the monthly cards on BOTH
+the purchase gate (`#purchaseGateLifetime`) and Settings → Plans
+(`#lifetimeCardsPlan`): two cards mirroring the monthly ones (same
+PLAN_DETAILS checklists via `planFeaturesHtml` — the lifetime-only
+rows are appended by the renderer, NOT added to PLAN_DETAILS, so the
+plan-details contract is untouched), price lines "$1,499 once" /
+"$1,999 once", extra rows "Pay once — no monthly bill" and "1 year
+of priority support included", and the founding note "Founding
+offer — only 50 available. Yours for the life of the product." Buy
+calls `startCheckout('lifetime_post' | 'lifetime_group')`; when
+`lifetime_status` reports the cap reached, the cards are replaced by
+"The founding lifetime offer has sold out." (a 409 at Buy time lands
+on the same line). The Plans panel fetches the status only in the
+trial/gate states where the block can actually be in front of the
+user. For a lifetime account the Plans billing block reads
+"Lifetime — <tier>. No subscription." plus the support line:
+"Priority support included until <purchase + 1 year>", or past that
+the Support Plan offer ($199/yr, `startCheckout('support')`), or
+"Support plan active until <support_period_end>" while the plan
+runs; the portal (Manage/cancel) button appears for a lifetime
+account only while a Support Plan subscription exists.
+
+**Access audit (the null-period-end trap):** `computeAccessState`
+keys solely off billing_status — `current_period_end` never reaches
+it — and a full-file grep confirmed every other reader of
+current_period_end / periodEnd is display-only (the Plans-tab status
+line and the Settings account modal's plan line). A lifetime row
+('active' + NULL period end) therefore cannot expire anywhere; no
+access-machine change was needed, and the audit is recorded in a
+comment at the pure-logic block.
+
+Verification: function harness 52/52 (kind-routing matrix, cap math
+at 49/50, lifetime completion, support-deleted-leaves-active,
+leftover-sub guard, plan regressions, signature) + billing harness
+69/69 + plan-details harness 202/202 (extraction set extended with
+the three new renderers — no assertion changed) + app wiring
+assertions 25/25; seeded E2E against the deployed function
+(disposable user: lifetime_post → real checkout session verified
+`mode=payment` via the Stripe API; support refused 400 for a
+non-lifetime account; granted lifetime row → support session
+`mode=subscription`, kind support; lifetime_status counts track;
+cleanup to baseline).
 
 ## Dealership accounts — Phase 1 (built 2026-10-26)
 

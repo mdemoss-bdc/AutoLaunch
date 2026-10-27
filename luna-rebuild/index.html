@@ -684,6 +684,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
       <p id="purchaseGateSub" class="text-sm text-slate-500">Pick a plan to keep posting:</p>
     </div>
     <div id="purchaseGateCards" class="grid sm:grid-cols-2 gap-3"></div>
+    <div id="purchaseGateLifetime"></div>
     <p id="purchaseGateMsg" class="text-xs font-medium mt-4 hidden text-center"></p>
     <p class="text-center text-xs text-slate-400 mt-6">
       Wrong account? <button onclick="handleSignOut()" class="text-blue-600 font-semibold cursor-pointer">Sign out</button>
@@ -2835,6 +2836,12 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
             <p id="planBillingStatus" class="text-sm font-semibold text-slate-700"></p>
             <p id="planBillingDetail" class="text-xs text-slate-400 mt-1"></p>
             <div id="purchaseCards" class="grid sm:grid-cols-2 gap-3 mt-4"></div>
+            <div id="lifetimeCardsPlan"></div>
+            <div id="planSupportWrap" class="hidden mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p class="text-sm font-bold text-slate-800">Support Plan — $199/year</p>
+              <p class="text-xs text-slate-500 leading-relaxed mt-1">Keep priority support after your included year. Bug reports are always free, with or without the plan.</p>
+              <button onclick="startCheckout('support', 'planBillingMsg')" class="mt-3 px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Buy Support Plan — $199/yr</button>
+            </div>
             <div id="manageSubWrap" class="hidden mt-4">
               <button id="btnManageSubscription" onclick="openBillingPortal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm cursor-pointer">Manage or cancel subscription</button>
               <p class="text-xs text-slate-400 mt-2">Cancelling keeps your access until the end of the paid month.</p>
@@ -4057,7 +4064,14 @@ let currentBilling = {
   trialStartedAt: null,
   trialEndsAt: null,
   periodEnd: null,
-  hasStripeCustomer: false
+  hasStripeCustomer: false,
+  // Founding Lifetime + Support Plan (2026-10-26): a lifetime row has
+  // status 'active', lifetimeTier set, and periodEnd NULL forever —
+  // nothing may read the NULL period end as an expiry.
+  lifetimeTier: null, // 'post' | 'group' | null
+  lifetimePurchasedAt: null,
+  supportPlanStatus: null, // 'active' | 'past_due' | 'canceled' | null
+  supportPeriodEnd: null
 };
 
 // DEALERSHIP ACCOUNTS (Phase 1, 2026-10-26; see TIERS.md
@@ -4099,6 +4113,14 @@ try {
 // ==== PURE ACCESS LOGIC BEGIN ====
 // Dependency-free (no DOM, no outside globals) — exercised verbatim
 // by the Node harness for the trial/billing build.
+// LIFETIME AUDIT (2026-10-26): a Founding Lifetime row is
+// billing_status 'active' with current_period_end NULL forever, and
+// nothing may treat that as expired — computeAccessState keys solely
+// off billingStatus (periodEnd never reaches it), and a full-file
+// audit confirmed the only current_period_end readers are
+// display-only (the Plans-tab status line and the Settings account
+// modal). plan_tier on a lifetime row is the bought tier, so
+// resolveTier lands it on exactly the access it paid for.
 const TRIAL_ALLOWED_FEATURES = ["inventory", "queue", "manual_posting"];
 
 function computeAccessState(input) {
@@ -4483,6 +4505,63 @@ function renderPurchaseCards(containerId, msgId) {
   }).join("");
 }
 
+// ---- Founding Lifetime (2026-10-26; see TIERS.md) --------------------
+// One-time solo offers: Post Lifetime $1,499 / Group Lifetime $1,999,
+// capped at 50 buyers total. Availability comes from billing-checkout's
+// lifetime_status action and is cached for the session. The cards
+// render optimistically (available) while the count loads — if the
+// offer has in fact sold out, the Buy click surfaces the function's
+// lifetime_sold_out answer honestly.
+let lifetimeStatusCache = null;
+
+function lifetimeCardsHtml(soldOut, msgId) {
+  const head = '<div class="mt-6 pt-5 border-t border-slate-200">' +
+    '<p class="text-sm font-extrabold text-slate-800 text-center">Founding Lifetime</p>' +
+    '<p class="text-[11px] text-slate-400 text-center mt-1">Founding offer — only 50 available. Yours for the life of the product.</p></div>';
+  if (soldOut) {
+    return head + '<p class="text-sm text-slate-500 text-center mt-3">The founding lifetime offer has sold out.</p>';
+  }
+  const cards = [["lifetime_post", "post", "1,499"], ["lifetime_group", "group", "1,999"]].map(function (pair) {
+    const info = PLAN_DETAILS[pair[1]];
+    return '<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col">' +
+      '<div class="flex items-baseline justify-between mb-1">' +
+      '<p class="text-sm font-bold text-slate-800">' + info.name + ' Lifetime</p>' +
+      '<p class="text-sm font-extrabold text-slate-900">$' + pair[2] + '<span class="text-[10px] font-semibold text-slate-400"> once</span></p></div>' +
+      '<p class="text-xs text-slate-500 leading-relaxed">Everything in ' + info.name + ', paid once.</p>' +
+      planFeaturesHtml(pair[1], "mt-3 flex-1") +
+      '<ul class="space-y-1.5 mt-1.5">' +
+      '<li class="flex items-start justify-between gap-3 text-xs"><span class="flex items-start gap-2 min-w-0"><span class="text-emerald-500 font-bold leading-none mt-0.5">✓</span><span class="text-slate-600">Pay once — no monthly bill</span></span></li>' +
+      '<li class="flex items-start justify-between gap-3 text-xs"><span class="flex items-start gap-2 min-w-0"><span class="text-emerald-500 font-bold leading-none mt-0.5">✓</span><span class="text-slate-600">1 year of priority support included</span></span></li></ul>' +
+      '<p class="text-[11px] text-slate-400 mt-3">Bug reports are always free.</p>' +
+      '<button onclick="startCheckout(\'' + pair[0] + '\', \'' + msgId + '\')" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Buy ' + info.name + ' Lifetime — $' + pair[2] + '</button></div>';
+  }).join("");
+  return head + '<div class="grid sm:grid-cols-2 gap-3 mt-3">' + cards + '</div>';
+}
+
+async function renderLifetimeCards(containerId, msgId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = lifetimeCardsHtml(!!(lifetimeStatusCache && !lifetimeStatusCache.available), msgId);
+  if (lifetimeStatusCache) return;
+  try {
+    const { data, error } = await supabaseClient.functions.invoke("billing-checkout", { body: { action: "lifetime_status" } });
+    if (!error && data && data.ok) {
+      lifetimeStatusCache = { sold: data.sold, cap: data.cap, available: !!data.available };
+      el.innerHTML = lifetimeCardsHtml(!lifetimeStatusCache.available, msgId);
+    }
+  } catch (e) { /* fail-open: the optimistic cards stay */ }
+}
+
+// The Plans-tab Support Plan state for a lifetime account: the end of
+// the included priority-support year (purchase + 1 calendar year).
+function lifetimeSupportIncludedUntilMs() {
+  if (!currentBilling.lifetimePurchasedAt) return null;
+  const d = new Date(Date.parse(currentBilling.lifetimePurchasedAt));
+  if (isNaN(d.getTime())) return null;
+  d.setFullYear(d.getFullYear() + 1);
+  return d.getTime();
+}
+
 // The signup choice gate's trial card, rendered from the same
 // PLAN_DETAILS config (checklist included) as the buy cards.
 function renderSignupTrialCard() {
@@ -4528,11 +4607,31 @@ async function startCheckout(plan, msgId) {
         showBillingMsg(msgId, "Checkout opens as soon as billing is switched on — check back shortly.", true);
         return;
       }
+      if (code === "lifetime_sold_out") {
+        lifetimeStatusCache = { sold: 50, cap: 50, available: false };
+        showBillingMsg(msgId, "The founding lifetime offer has sold out.", true);
+        applyBillingUI();
+        return;
+      }
+      if (code === "lifetime_required") {
+        showBillingMsg(msgId, "The Support Plan is available on Lifetime accounts.", true);
+        return;
+      }
       throw error;
     }
     if (data && data.url) { window.location.href = data.url; return; }
     if (data && data.error === "billing_not_configured") {
       showBillingMsg(msgId, "Checkout opens as soon as billing is switched on — check back shortly.", true);
+      return;
+    }
+    if (data && data.error === "lifetime_sold_out") {
+      lifetimeStatusCache = { sold: 50, cap: 50, available: false };
+      showBillingMsg(msgId, "The founding lifetime offer has sold out.", true);
+      applyBillingUI();
+      return;
+    }
+    if (data && data.error === "lifetime_required") {
+      showBillingMsg(msgId, "The Support Plan is available on Lifetime accounts.", true);
       return;
     }
     showBillingMsg(msgId, "Checkout didn't start — please try again.", true);
@@ -4581,6 +4680,7 @@ function applyPurchaseGate() {
       if (sub) sub.innerText = "Pick a plan to keep posting:";
     }
     renderPurchaseCards("purchaseGateCards", "purchaseGateMsg");
+    renderLifetimeCards("purchaseGateLifetime", "purchaseGateMsg");
     // Owner escape hatch: revealed ONLY for an owner with a billing
     // preview active (the only way an owner can be looking at this
     // gate). A genuinely expired non-owner never sees it — their gate
@@ -4616,8 +4716,12 @@ function renderBillingPanel() {
   const detailEl = document.getElementById("planBillingDetail");
   const wrap = document.getElementById("manageSubWrap");
   const cards = document.getElementById("purchaseCards");
+  const lifetimeEl = document.getElementById("lifetimeCardsPlan");
+  const supportWrap = document.getElementById("planSupportWrap");
   const access = billingAccess();
   const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
+  const includedUntilMs = lifetimeSupportIncludedUntilMs();
+  const supportActive = currentBilling.supportPlanStatus === "active" && !!currentBilling.supportPeriodEnd;
   let status = "";
   let detail = "";
   if (isOwner && !ownerBillingPreview) {
@@ -4626,6 +4730,18 @@ function renderBillingPanel() {
   } else if (dealershipCovered()) {
     status = "Covered by your dealership — " + (currentDealership.name || "your dealership") + ".";
     detail = "No subscription is needed on this account.";
+  } else if (currentBilling.lifetimeTier) {
+    // Founding Lifetime: active forever, no subscription, periodEnd
+    // is NULL by design — never an expiry signal (see the access
+    // audit note at computeAccessState).
+    status = "Lifetime — " + PLAN_DETAILS[currentBilling.lifetimeTier].name + ". No subscription.";
+    if (supportActive) {
+      detail = "Support plan active until " + fmtBillingDate(Date.parse(currentBilling.supportPeriodEnd)) + ". Bug reports are always free.";
+    } else if (includedUntilMs && Date.now() < includedUntilMs) {
+      detail = "Priority support included until " + fmtBillingDate(includedUntilMs) + ". Bug reports are always free.";
+    } else {
+      detail = "Your included year of priority support has ended. Bug reports are always free.";
+    }
   } else if (access.mode === "trial") {
     status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
     detail = "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
@@ -4642,9 +4758,29 @@ function renderBillingPanel() {
   if (detailEl) detailEl.innerText = detail;
   renderPurchaseCards("purchaseCards", "planBillingMsg");
   if (cards) cards.classList.toggle("hidden", access.mode === "full");
+  // The founding block rides with the buy decision: rendered in the
+  // trial and gate states (a trialing user browsing Plans to upgrade;
+  // the gate itself renders its own copy), hidden once the account is
+  // on any paid footing — and not fetched at all in states where the
+  // block can't be in front of the user.
+  if (lifetimeEl) {
+    const showLifetime = access.mode === "trial" || access.mode === "gate";
+    lifetimeEl.classList.toggle("hidden", !showLifetime);
+    if (showLifetime) renderLifetimeCards("lifetimeCardsPlan", "planBillingMsg");
+  }
+  // The Support Plan offer: lifetime accounts whose included year has
+  // run out and who don't already hold the plan.
+  if (supportWrap) {
+    const showOffer = !!currentBilling.lifetimeTier && !supportActive &&
+      !(includedUntilMs && Date.now() < includedUntilMs);
+    supportWrap.classList.toggle("hidden", !showOffer);
+  }
   // The portal button only makes sense with a Stripe customer on file
   // (owners and trial accounts have none, so it stays hidden for them).
-  if (wrap) wrap.classList.toggle("hidden", !(access.mode === "full" && currentBilling.hasStripeCustomer));
+  // A lifetime account has a customer but no plan subscription — the
+  // portal is only theirs once a Support Plan subscription exists.
+  if (wrap) wrap.classList.toggle("hidden", !(access.mode === "full" && currentBilling.hasStripeCustomer &&
+    (!currentBilling.lifetimeTier || supportActive)));
 }
 
 function applyBillingUI() {
@@ -5325,7 +5461,11 @@ async function loadUserStoreSettings() {
       trialStartedAt: data ? (data.trial_started_at || null) : null,
       trialEndsAt: data ? (data.trial_ends_at || null) : null,
       periodEnd: data ? (data.current_period_end || null) : null,
-      hasStripeCustomer: !!(data && data.stripe_customer_id)
+      hasStripeCustomer: !!(data && data.stripe_customer_id),
+      lifetimeTier: data ? (data.lifetime_tier || null) : null,
+      lifetimePurchasedAt: data ? (data.lifetime_purchased_at || null) : null,
+      supportPlanStatus: data ? (data.support_plan_status || null) : null,
+      supportPeriodEnd: data ? (data.support_period_end || null) : null
     };
     if (currentUser && !isOwnerUser(currentUser.id) && !dealershipCovered() &&
         (currentBilling.status === null || currentBilling.status === "trialing")) {
