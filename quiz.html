@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How many hours a month do you spend posting cars by hand? — AutoLaunch</title>
+<meta name="description" content="Answer 3 questions and see how many hours a month you spend posting cars to Facebook Marketplace by hand — and how AutoLaunch gives that time back.">
+<meta property="og:title" content="How many hours a month do you spend posting cars by hand?">
+<meta property="og:description" content="Answer 3 questions. See your number.">
+<meta property="og:image" content="https://autolaunch.org/icons/logo-mark-512.png">
+<meta name="theme-color" content="#070D1A">
+<link rel="icon" href="icons/favicon.ico">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(180deg, #0B1424 0%, #070D1A 55%);
+    min-height: 100vh;
+  }
+  .screen { animation: fadeUp .28s ease both; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .dot { width: 28px; height: 6px; border-radius: 9999px; background: rgba(88,166,255,.22); transition: background .25s ease; }
+  .dot.on { background: #2E7CF6; }
+  .opt { transition: background .15s ease, border-color .15s ease, color .15s ease; touch-action: manipulation; }
+  .opt:active { border-color: #2E7CF6; }
+  .opt.picked { background: #2E7CF6 !important; border-color: #2E7CF6 !important; color: #fff !important; }
+  .opt.picked .opt-sub { color: rgba(255,255,255,.85) !important; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 9999px; background: rgba(88,166,255,.25); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border-radius: 50%; background: #2E7CF6; border: 3px solid #BFD9FF; box-shadow: 0 2px 10px rgba(46,124,246,.55); cursor: pointer; }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #2E7CF6; border: 3px solid #BFD9FF; cursor: pointer; }
+</style>
+</head>
+<body class="text-slate-200 antialiased">
+<div class="mx-auto w-full max-w-md px-4 pt-8 pb-16">
+
+  <!-- Brand lockup -->
+  <div class="flex items-center gap-3">
+    <img src="icons/logo-mark-512.png" alt="AutoLaunch" class="w-11 h-11 rounded-xl shadow-lg shadow-blue-500/25 object-cover">
+    <div>
+      <span class="block text-[22px] font-extrabold tracking-tight text-white leading-none">AutoLaunch</span>
+      <span class="block text-[10px] font-bold tracking-[0.2em] text-[#58A6FF] uppercase mt-1">0 TO POSTED</span>
+    </div>
+  </div>
+
+  <!-- Progress dots -->
+  <div class="flex items-center gap-2 mt-7" aria-hidden="true">
+    <span class="dot" data-dot="1"></span>
+    <span class="dot" data-dot="2"></span>
+    <span class="dot" data-dot="3"></span>
+    <span class="ml-2 text-xs font-semibold text-[#9FB0C7]" id="stepLabel">Question 1 of 3</span>
+  </div>
+
+  <!-- STEP 1 -->
+  <section id="screen-1" class="screen mt-6">
+    <h1 class="text-[28px] leading-tight font-extrabold text-white tracking-tight">How many hours a month do you spend posting cars by hand?</h1>
+    <p class="mt-2 text-[15px] text-[#9FB0C7]">Answer 3 questions. See your number.</p>
+
+    <h2 class="mt-8 text-lg font-bold text-white">How many cars do you put on Facebook Marketplace in a month?</h2>
+    <div class="mt-4 space-y-3">
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="cars" data-value="under-20">
+        <i class="fa-solid fa-car text-[#58A6FF] w-6 text-center"></i><span>Under 20</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="cars" data-value="20-50">
+        <i class="fa-solid fa-car-side text-[#58A6FF] w-6 text-center"></i><span>20&ndash;50</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="cars" data-value="50-150">
+        <i class="fa-solid fa-truck-pickup text-[#58A6FF] w-6 text-center"></i><span>50&ndash;150</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="cars" data-value="150-plus">
+        <i class="fa-solid fa-warehouse text-[#58A6FF] w-6 text-center"></i><span>150+</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section id="screen-2" class="screen mt-6 hidden">
+    <h2 class="text-lg font-bold text-white">How do they get posted today?</h2>
+    <div class="mt-4 space-y-3">
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="method" data-value="self">
+        <i class="fa-solid fa-keyboard text-[#58A6FF] w-6 text-center"></i><span>I type them in one by one</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="method" data-value="store">
+        <i class="fa-solid fa-users text-[#58A6FF] w-6 text-center"></i><span>Someone at the store does it</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="method" data-value="barely">
+        <i class="fa-solid fa-eye-slash text-[#58A6FF] w-6 text-center"></i><span>We barely post at all</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="method" data-value="service">
+        <i class="fa-solid fa-briefcase text-[#58A6FF] w-6 text-center"></i><span>A service does it for us</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+    </div>
+    <button type="button" class="backlink mt-6 text-sm font-semibold text-[#58A6FF]" data-back="1"><i class="fa-solid fa-arrow-left mr-2"></i>Back</button>
+  </section>
+
+  <!-- STEP 3 -->
+  <section id="screen-3" class="screen mt-6 hidden">
+    <h2 class="text-lg font-bold text-white">What eats most of your time?</h2>
+    <div class="mt-4 space-y-3">
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="pain" data-value="arrivals">
+        <i class="fa-solid fa-circle-plus text-[#58A6FF] w-6 text-center"></i><span>Posting new arrivals</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="pain" data-value="fresh">
+        <i class="fa-solid fa-arrows-rotate text-[#58A6FF] w-6 text-center"></i><span>Taking sold cars down / keeping listings fresh</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="pain" data-value="messages">
+        <i class="fa-solid fa-comments text-[#58A6FF] w-6 text-center"></i><span>Answering buyer messages</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+      <button type="button" class="opt w-full flex items-center gap-3 text-left bg-[#0E1930] border border-[rgba(59,130,246,0.22)] rounded-2xl px-4 py-4 min-h-[60px] text-base font-semibold text-slate-100" data-key="pain" data-value="all">
+        <i class="fa-solid fa-list-check text-[#58A6FF] w-6 text-center"></i><span>All of it</span><i class="fa-solid fa-chevron-right ml-auto text-[#9FB0C7] text-sm"></i>
+      </button>
+    </div>
+    <button type="button" class="backlink mt-6 text-sm font-semibold text-[#58A6FF]" data-back="2"><i class="fa-solid fa-arrow-left mr-2"></i>Back</button>
+  </section>
+
+  <!-- RESULT -->
+  <section id="screen-4" class="screen mt-6 hidden">
+    <h2 class="text-[24px] leading-snug font-extrabold text-white tracking-tight">Your number</h2>
+
+    <p id="barelyLine" class="hidden mt-4 rounded-2xl border border-[rgba(59,130,246,0.35)] bg-[rgba(46,124,246,0.12)] px-4 py-3 text-[15px] text-slate-100">
+      Then the bigger cost is invisible: cars that never reach the Marketplace at all.
+    </p>
+
+    <div class="mt-4 rounded-3xl border border-[rgba(59,130,246,0.22)] bg-[#101B30] p-5 shadow-[0_12px_32px_rgba(2,6,17,.5)]">
+      <div class="flex items-baseline justify-between gap-3">
+        <label for="mins" class="text-sm font-bold text-white">Minutes to post one car by hand</label>
+        <span id="minsVal" class="text-sm font-extrabold text-[#58A6FF] whitespace-nowrap">10 min</span>
+      </div>
+      <input type="range" id="mins" min="5" max="20" step="1" value="10" class="mt-3" aria-label="Minutes to post one car by hand">
+      <div class="flex justify-between text-[11px] font-semibold text-[#9FB0C7] mt-1"><span>5 min</span><span>20 min</span></div>
+
+      <div class="mt-5 space-y-2 text-[15px]">
+        <p><i class="fa-solid fa-clock text-[#58A6FF] w-5 text-center mr-1"></i>&asymp; <strong class="text-white" id="postH">2.5h</strong> posting new cars</p>
+        <p><i class="fa-solid fa-arrows-rotate text-[#58A6FF] w-5 text-center mr-1"></i>&asymp; <strong class="text-white" id="freshH">2.5h</strong> keeping listings fresh <span class="text-[#9FB0C7]">(deletes + reposts)</span></p>
+      </div>
+
+      <p class="mt-4 text-[22px] leading-snug font-extrabold text-white">&asymp; <span id="totalH">5h</span> a month working Facebook by hand.</p>
+      <p class="mt-2 text-[13px] text-[#9FB0C7]">Estimates from your answers &mdash; about <span id="carsEcho">15</span> cars a month. Adjust the slider to your real pace.</p>
+    </div>
+
+    <div id="painLines" class="mt-4 space-y-3"></div>
+
+    <div class="mt-4 rounded-3xl border border-[rgba(59,130,246,0.22)] bg-[#101B30] p-5">
+      <p class="text-[17px] font-bold text-white">From $75/month &mdash; less than one of those hours is worth.</p>
+      <p class="mt-1 text-[14px] text-[#9FB0C7]">Breaks even if your time is worth <strong class="text-white" id="beVal">$15</strong> an hour.</p>
+      <p class="mt-3 text-[15px] text-slate-200">Same cars. In front of more eyes, quicker &mdash; with the hours back in your day.</p>
+    </div>
+
+    <a id="cta" href="https://autolaunch.org/?src=quiz" class="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2E7CF6] px-5 py-4 text-base font-extrabold text-white shadow-lg shadow-blue-500/25">
+      Start your free 5-day trial <i class="fa-solid fa-arrow-right"></i>
+    </a>
+    <p class="mt-3 text-center text-[13px] text-[#9FB0C7]">Free for 5 days. Then from $75/month &mdash; cancel any time.</p>
+
+    <div class="mt-6 flex items-center justify-between">
+      <button type="button" class="backlink text-sm font-semibold text-[#58A6FF]" data-back="3"><i class="fa-solid fa-arrow-left mr-2"></i>Change answers</button>
+      <button type="button" id="startOver" class="text-sm font-semibold text-[#58A6FF]">Start over</button>
+    </div>
+  </section>
+
+  <p class="mt-12 text-center text-[12px] text-[#5B6B82]">AutoLaunch &middot; 0 TO POSTED &middot; autolaunch.org</p>
+</div>
+
+<script>
+/* QUIZ_CALC_BEGIN — pure logic, extracted and exercised by the Node harness */
+const Q1_CARS = { "under-20": 15, "20-50": 35, "50-150": 100, "150-plus": 200 };
+function round05(x) { return Math.round(x * 2) / 2; }
+function fmtHours(x) { return (x % 1 === 0) ? String(x) : x.toFixed(1); }
+function computeResult(q1key, minutes) {
+  const cars = Q1_CARS[q1key];
+  const posting = round05(cars * minutes / 60);
+  const fresh = posting;
+  const total = posting + fresh;
+  const breakeven = Math.round(75 / Math.max(total, 1));
+  return { cars: cars, posting: posting, fresh: fresh, total: total, breakeven: breakeven };
+}
+function ctaUrl(a) {
+  return "https://autolaunch.org/?src=quiz&cars=" + a.cars + "&method=" + a.method + "&pain=" + a.pain;
+}
+/* QUIZ_CALC_END */
+
+const PAIN_LINES = {
+  arrivals: { icon: "fa-bolt", text: "AutoLaunch pulls your inventory in automatically and posts each car in minutes, at a safe, human pace." },
+  fresh:    { icon: "fa-arrows-rotate", text: "Sold car? One click takes it down, and auto delete & repost keeps the rest fresh." },
+  messages: { icon: "fa-comments", text: "A buyer messages you \u2014 Luca drafts the reply in your voice. You read it, you hit send." }
+};
+const VALID = {
+  cars: ["under-20", "20-50", "50-150", "150-plus"],
+  method: ["self", "store", "barely", "service"],
+  pain: ["arrivals", "fresh", "messages", "all"]
+};
+const state = { step: 1, cars: null, method: null, pain: null };
+
+function show(step) {
+  state.step = step;
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById("screen-" + i).classList.toggle("hidden", i !== step);
+  }
+  document.querySelectorAll(".dot").forEach(function (d) {
+    d.classList.toggle("on", Number(d.dataset.dot) <= Math.min(step, 3));
+  });
+  document.getElementById("stepLabel").textContent =
+    step <= 3 ? ("Question " + step + " of 3") : "Your number";
+  window.scrollTo({ top: 0 });
+}
+
+function renderResult() {
+  const minutes = Number(document.getElementById("mins").value);
+  document.getElementById("minsVal").textContent = minutes + " min";
+  const r = computeResult(state.cars, minutes);
+  document.getElementById("postH").textContent = fmtHours(r.posting) + "h";
+  document.getElementById("freshH").textContent = fmtHours(r.fresh) + "h";
+  document.getElementById("totalH").textContent = fmtHours(r.total) + "h";
+  document.getElementById("carsEcho").textContent = r.cars;
+  document.getElementById("beVal").textContent = "$" + r.breakeven;
+  document.getElementById("barelyLine").classList.toggle("hidden", state.method !== "barely");
+  const keys = state.pain === "all" ? ["arrivals", "fresh", "messages"] : [state.pain];
+  document.getElementById("painLines").innerHTML = keys.map(function (k) {
+    const p = PAIN_LINES[k];
+    return '<div class="flex items-start gap-3 rounded-2xl border border-[rgba(59,130,246,0.22)] bg-[#0E1930] px-4 py-3">'
+      + '<i class="fa-solid ' + p.icon + ' text-[#58A6FF] mt-1 w-5 text-center"></i>'
+      + '<p class="text-[15px] text-slate-100">' + p.text + '</p></div>';
+  }).join("");
+  document.getElementById("cta").href = ctaUrl(state);
+}
+
+document.querySelectorAll(".opt").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    state[btn.dataset.key] = btn.dataset.value;
+    btn.classList.add("picked");
+    setTimeout(function () {
+      btn.classList.remove("picked");
+      if (state.step === 3) { renderResult(); show(4); }
+      else { show(state.step + 1); }
+    }, 170);
+  });
+});
+document.querySelectorAll(".backlink").forEach(function (btn) {
+  btn.addEventListener("click", function () { show(Number(btn.dataset.back)); });
+});
+document.getElementById("mins").addEventListener("input", renderResult);
+document.getElementById("startOver").addEventListener("click", function () {
+  state.cars = null; state.method = null; state.pain = null;
+  document.getElementById("mins").value = 10;
+  show(1);
+});
+
+/* State forcing (deep links + verification): ?cars=&method=&pain=[&mins=] jumps
+   straight to the result; ?step=N opens that question. */
+(function initFromUrl() {
+  const p = new URLSearchParams(location.search);
+  const cars = p.get("cars"), method = p.get("method"), pain = p.get("pain");
+  if (VALID.cars.includes(cars) && VALID.method.includes(method) && VALID.pain.includes(pain)) {
+    state.cars = cars; state.method = method; state.pain = pain;
+    const mins = Number(p.get("mins"));
+    if (mins >= 5 && mins <= 20) document.getElementById("mins").value = mins;
+    renderResult(); show(4); return;
+  }
+  if (VALID.cars.includes(cars)) state.cars = cars;
+  if (VALID.method.includes(method)) state.method = method;
+  if (VALID.pain.includes(pain)) state.pain = pain;
+  const step = Number(p.get("step"));
+  if (step >= 1 && step <= 3) show(step); else show(1);
+})();
+</script>
+</body>
+</html>
