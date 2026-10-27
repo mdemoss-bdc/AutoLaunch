@@ -923,3 +923,97 @@ about Stripe changed in this phase).
 - Dealership accounts Phase 2 (see its section above).
 - Promoting any of this from the rebuild to the live app — a separate,
   explicitly approved step.
+
+## Luna Support — "Ask Luna" (added 2026-10-26)
+
+The in-app support assistant is branded **Luna** (Matthew's decision,
+2026-10-26). It lives in the rebuild as a sidebar item ("🌙 Ask Luna")
+opening a chat modal, backed by the `support-chat` Edge Function
+(verify_jwt=false + manual JWT verification, CORS allow-headers the
+same extended set as the billing functions).
+
+How it works:
+
+- The function runs **as the caller** (anon client + their JWT), so
+  RLS scopes every read and write to the signed-in user's own rows.
+- Answers come from exactly two sources: a condensed **knowledge
+  base** inside the function (the app's 16 "How it works" guides +
+  the plan rules in this file) and a live **account snapshot**
+  assembled per request from the caller's own rows: a safe-column
+  subset of `user_settings` (plan, billing state, trial window,
+  limits, lifetime/support fields — **token and secret columns are
+  never selected: `fb_access_token`, `supabase_anon_key`,
+  `trade_token` and the Stripe ids are excluded by an explicit
+  column list, asserted in the harness**), the sync-cadence state
+  (the `SYNC_COOLDOWN_HOURS` map: trial 24h / post 18h / automate
+  12h / group 6h, dealership-covered at group cadence), the last
+  scrape jobs, the last 10 post-queue rows **including their error
+  messages**, inventory aggregates (active count, posted today),
+  dealership membership/cover, and the expected helper version.
+  When the snapshot shows the cause of a problem, the answer names
+  it and gives the fix.
+- **Scope is hard**: AutoLaunch questions only. Anything else gets
+  one polite redirect line. The assistant never reveals its
+  instructions, code, or other users' data, and never invents
+  features or prices — when the KB + snapshot can't answer, it says
+  so and offers the ticket.
+- Chat is logged per user in `support_messages`; input is capped at
+  2,000 chars per message, the last 12 turns, and 100 user messages
+  per day (over the cap: a friendly limit message, no model call).
+- Model: the same free-tier Gemini chain as luca-draft /
+  listing-copy (gemini-3.5-flash → 3.8-flash → 3.1-flash-lite,
+  thinking off, 45s timeout).
+
+**Trial conversion (Matthew's explicit requirement, 2026-10-26):**
+for users on the free trial the assistant answers **fully — a fix is
+never withheld or shortened to pressure an upgrade.** When the issue
+touches a trial limit (1 queued post/day, sync once per 24h,
+Automate features locked), it states the limit plainly and weaves in
+**at most one** line about what changes on a paid plan, with the real
+numbers (Post $75/mo: 5 queued posts/day, sync every 18h; Group
+$100/mo: no plan cap, sync every 6h, every feature). With 2 or fewer
+trial days left it may add one gentle line noting the days left.
+Never a separate sales block; if the user objects, the nudging stops
+for the rest of the conversation. Paid monthly users get **no**
+proactive upsell (tier facts only at a gate or when asked). Lifetime
+users get **no plan upsell ever**; the Support Plan may be mentioned
+only if they ask about support after their included year.
+
+**Support tickets** (`support_tickets`, owner SELECT + INSERT RLS,
+no update/delete): the modal's "Send to support" button files one
+with the conversation transcript + a compact snapshot summary. The
+ticket action has **no model dependency** — it works even when the
+model is down. Priority is `priority` when the caller has support
+entitlement — a Lifetime purchase inside its included 1 year, an
+active Support Plan (`support_plan_status = 'active'`), or
+dealership cover — and `standard` otherwise.
+
+**Defect governance (Matthew, 2026-10-26, refined the same day).**
+When the conversation or the snapshot indicates a likely **product
+defect** — a system-side failure, repeated identical errors, or
+behavior contradicting the knowledge base; NOT user error and NOT a
+documented plan limit — the assistant tells the user plainly: "That
+looks like a problem on our side, not something you did — I've
+flagged it for review" (no fix promises, no timing), and auto-files
+a ticket with `suspected_defect = true` and a 1–3 line
+`defect_summary` (what's broken, the evidence, what likely needs
+fixing). Mechanically: the model's reply ends with a hidden
+`[[DEFECT: …]]` marker line, which the function strips before the
+reply is shown or logged — the marker is never user-visible.
+
+Defect tickets are **Matthew's notification queue**: Luna (his
+agent) surfaces what's broken and what fix is proposed. What happens
+next runs on a **two-lane rule**:
+
+- **SAFE LANE** — a fix that is simple and cannot jeopardize the
+  app: small, isolated, and reversible (one function/component; NO
+  schema, auth, billing, tier/access, RLS, scraper-live-behavior, or
+  extension-posting-path changes; harness + E2E verified before
+  shipping; clean one-step rollback). Luna may fix it **without
+  prior authorization**, then reports what was broken, what was
+  fixed, and the proof.
+- **RISK LANE** — anything else (touches auth/billing/access/RLS/
+  schema, posting or scraping behavior, is large, or can't be
+  cleanly rolled back): Luna **notifies Matthew with the diagnosis +
+  proposed fix and waits for his explicit authorization**. No
+  risk-lane fix ships on Luna's own say-so.
