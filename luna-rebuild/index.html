@@ -593,6 +593,28 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
     </div>
 
     <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+      <!-- ACCOUNT TYPE (Register only): Individual vs Dealership.
+           Picking Dealership reveals the dealership-name field; the
+           choice is stashed at sign-up and turned into a PENDING
+           dealership registration after the first sign-in (see
+           consumePendingDealershipRegistration). Hidden in Sign In
+           mode by switchAuthMode. No input here is ever `required` —
+           visibility is mode-dependent, so validation happens in JS. -->
+      <div id="authAccountTypeWrap" class="hidden space-y-4">
+        <div>
+          <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Account type</label>
+          <div class="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold text-center text-slate-500 border border-slate-200">
+            <button id="authTypeIndividual" type="button" onclick="setSignupAccountType('individual')" class="py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm">Individual</button>
+            <button id="authTypeDealership" type="button" onclick="setSignupAccountType('dealership')" class="py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer">Dealership</button>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1.5 leading-snug">Dealership registers your store — dealership plans activate at launch, and you'll add your team's seats then.</p>
+        </div>
+        <div id="authDealershipNameWrap" class="hidden">
+          <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Dealership name</label>
+          <input type="text" id="authDealershipName" placeholder="e.g. Moses Honda" autocomplete="organization" autocapitalize="words" spellcheck="false" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
+        </div>
+      </div>
+
       <div>
         <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Email</label>
         <input type="email" id="authEmail" required placeholder="name@dealership.com" autocomplete="email" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600">
@@ -1162,6 +1184,17 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
         <button onclick="addDealershipMember()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Add member</button>
         <p id="dealerAdminMsg" class="text-xs font-medium mt-3 hidden"></p>
       </div>
+    </div>
+
+    <!-- PENDING: self-registered at sign-up, waiting on a dealer plan
+         (Phase 1.5). No seats, no member management — the store turns
+         on when a dealership plan activates it in Phase 2. -->
+    <div id="dealerPendingCard" class="hidden glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
+      <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-building text-blue-600"></i> <span id="dealerPendingName">Dealership</span></h3>
+      <p class="text-xs font-bold text-blue-600 uppercase tracking-wider">Registered — dealership plans activate at launch</p>
+      <p class="text-xs text-slate-500 leading-relaxed">Your dealership is registered under this name. When dealership plans open, you'll pick a seat plan here to activate your store and add your team's logins. Until then, your own account works like any individual AutoLaunch account — your trial or plan applies to you as usual.</p>
+      <p class="text-xs text-slate-500">Seats: —</p>
+      <div id="dealerPendingMembers" class="space-y-2"></div>
     </div>
 
     <!-- MEMBER: covered, no management controls -->
@@ -4151,11 +4184,17 @@ function dealershipCovered() {
 }
 
 // Which Dealership-page view an account gets (pure decision, kept
-// DOM-free so the harness can exercise it): admins manage the
-// roster; plain members see the covered note; an owner with no
-// dealership yet gets the create form; anyone else has no business
-// on the page (the sidebar item stays hidden for them too).
+// DOM-free so the harness can exercise it): the admin of a PENDING
+// dealership (self-registered at sign-up, Phase 1.5) sees the
+// pending state — registered, waiting on a dealer plan; admins of
+// active dealerships manage the roster; plain members see the
+// covered note; an owner with no dealership yet gets the create
+// form; anyone else has no business on the page (the sidebar item
+// stays hidden for them too).
 function dealershipViewMode(isOwner, membership) {
+  if (membership && membership.status === "pending") {
+    return membership.role === "admin" ? "pending" : "none";
+  }
   if (membership && membership.role === "admin") return "admin";
   if (membership) return "member";
   if (isOwner) return "create";
@@ -5088,6 +5127,28 @@ function updateDealershipNav() {
   item.classList.toggle("flex", show);
 }
 
+// Registration fork (Phase 1.5): a sign-up that picked "Dealership"
+// stashed { name } in localStorage (key autolaunch_pending_dealership)
+// before the auth round-trip. On the first signed-in load with no
+// membership yet, turn the stash into a PENDING dealership via the
+// function (which is idempotent — a stash replayed after the row
+// exists just returns it). Fail-soft: a transient failure keeps the
+// stash so the next load retries; the dealership confers nothing
+// until a dealer plan activates it in Phase 2.
+async function consumePendingDealershipRegistration() {
+  if (!currentUser || currentDealership) return;
+  let pending = null;
+  try {
+    pending = JSON.parse(localStorage.getItem("autolaunch_pending_dealership") || "null");
+  } catch (e) { pending = null; }
+  if (!pending || typeof pending.name !== "string" || !pending.name.trim()) return;
+  const { data, code } = await dealerInvoke("register_dealership", { name: pending.name.trim() });
+  if ((data && data.dealership) || code === "already_in_a_dealership") {
+    try { localStorage.removeItem("autolaunch_pending_dealership"); } catch (e) {}
+    await resolveDealershipMembership();
+  }
+}
+
 // One invoke wrapper for the dealership-admin function: returns
 // { data, code } where code is the function's own error string
 // (seat_limit_reached, forbidden, ...) when it sent one.
@@ -5133,12 +5194,21 @@ async function renderDealershipPage() {
   const createCard = document.getElementById("dealerCreateCard");
   const adminCard = document.getElementById("dealerAdminCard");
   const memberCard = document.getElementById("dealerMemberCard");
+  const pendingCard = document.getElementById("dealerPendingCard");
   if (!createCard || !adminCard || !memberCard) return;
   const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
   const mode = dealershipViewMode(isOwner, currentDealership);
   createCard.classList.toggle("hidden", mode !== "create");
   adminCard.classList.toggle("hidden", mode !== "admin");
   memberCard.classList.toggle("hidden", mode !== "member");
+  if (pendingCard) pendingCard.classList.toggle("hidden", mode !== "pending");
+  if (mode === "pending") {
+    const nameEl = document.getElementById("dealerPendingName");
+    if (nameEl) nameEl.innerText = currentDealership.name || "Dealership";
+    const { data } = await dealerInvoke("list_members", { dealership_id: currentDealership.id });
+    renderDealerPendingMembers(data);
+    return;
+  }
   if (mode === "member") {
     const nameEl = document.getElementById("dealerCoveredName");
     if (nameEl) nameEl.innerText = currentDealership.name || "your dealership";
@@ -5154,6 +5224,27 @@ async function renderDealershipPage() {
     return;
   }
   renderDealerMembers(data);
+}
+
+// Pending dealership roster: the same member rows as the admin view
+// but strictly read-only — no reset/delete controls, no add form
+// (the function refuses seat actions until the store is active).
+function renderDealerPendingMembers(data) {
+  const list = document.getElementById("dealerPendingMembers");
+  if (!list) return;
+  const members = (data && data.members) || [];
+  if (!members.length) {
+    list.innerHTML = '<p class="text-sm text-slate-400">Just you so far — your team joins when the dealership activates.</p>';
+    return;
+  }
+  list.innerHTML = members.map(function (m) {
+    const joined = m.created_at ? new Date(m.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+    const isSelf = !!(currentUser && m.user_id === currentUser.id);
+    return '<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">' +
+      '<p class="text-sm font-bold text-slate-800 truncate">' + escapeHtml(m.email || "(no email on file)") + "</p>" +
+      '<p class="text-[11px] text-slate-400">' + (m.role === "admin" ? "Admin" : "Member") + (joined ? " · joined " + joined : "") + (isSelf ? " · you" : "") + "</p>" +
+    "</div>";
+  }).join("");
 }
 
 function renderDealerMembers(data) {
@@ -5339,6 +5430,24 @@ async function resendConfirmationEmail() {
   }
 }
 
+// Registration fork (Phase 1.5): the Register form's account-type
+// choice. 'individual' is the default; 'dealership' reveals the
+// dealership-name field. The choice lives here (not in the DOM) and
+// is read by handleAuthSubmit at sign-up time.
+let signupAccountType = "individual";
+
+function setSignupAccountType(type) {
+  signupAccountType = type === "dealership" ? "dealership" : "individual";
+  const indBtn = document.getElementById("authTypeIndividual");
+  const dealBtn = document.getElementById("authTypeDealership");
+  const nameWrap = document.getElementById("authDealershipNameWrap");
+  const on = "py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm";
+  const off = "py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer";
+  if (indBtn) indBtn.className = signupAccountType === "individual" ? on : off;
+  if (dealBtn) dealBtn.className = signupAccountType === "dealership" ? on : off;
+  if (nameWrap) nameWrap.classList.toggle("hidden", signupAccountType !== "dealership");
+}
+
 function switchAuthMode(mode) {
   authMode = mode;
   const tabIn = document.getElementById("tabSignIn");
@@ -5347,6 +5456,9 @@ function switchAuthMode(mode) {
   document.getElementById("authErrorMsg").classList.add("hidden");
   const confirmPanel = document.getElementById("authConfirmPanel");
   if (confirmPanel) confirmPanel.classList.add("hidden");
+  // The account-type fork exists only on the Register form.
+  const typeWrap = document.getElementById("authAccountTypeWrap");
+  if (typeWrap) typeWrap.classList.toggle("hidden", mode !== "signup");
 
   if (mode === 'signin') {
     tabIn.className = "py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm";
@@ -5446,6 +5558,30 @@ async function handleAuthSubmit(e) {
         submitBtn.innerText = "Register";
         return;
       }
+      // Registration fork (Phase 1.5): a Dealership sign-up must name
+      // the store. The choice + name ride through the email-
+      // confirmation round-trip in localStorage and are consumed on
+      // the first signed-in load (consumePendingDealershipRegistration)
+      // — so the stash is written BEFORE signUp, whichever of the
+      // session / no-session paths the confirmation setting takes.
+      const wantsDealership = signupAccountType === "dealership";
+      const dealershipNameEl = document.getElementById("authDealershipName");
+      const dealershipName = wantsDealership && dealershipNameEl ? dealershipNameEl.value.trim() : "";
+      if (wantsDealership && !dealershipName) {
+        errBox.innerText = "Enter your dealership's name — or pick Individual above.";
+        errBox.classList.remove("hidden", "text-emerald-600", "text-amber-600");
+        errBox.classList.add("text-rose-600");
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Register";
+        return;
+      }
+      try {
+        if (wantsDealership) {
+          localStorage.setItem("autolaunch_pending_dealership", JSON.stringify({ name: dealershipName }));
+        } else {
+          localStorage.removeItem("autolaunch_pending_dealership");
+        }
+      } catch (e) { /* stash is best-effort; sign-up itself proceeds */ }
       submitBtn.innerText = "Registering...";
       const { data, error } = await supabaseClient.auth.signUp({
         email,
@@ -5737,6 +5873,11 @@ async function loadUserStoreSettings() {
   // Covered members skip the trial/billing resolution below — their
   // own billing_status stays null and unused by design.
   await resolveDealershipMembership();
+  // Phase 1.5: a fresh sign-up that registered AS a dealership gets
+  // its pending dealership created here, before billing resolution —
+  // pending confers no coverage, so the trial/choice path below
+  // applies to the new admin exactly as it does to any individual.
+  await consumePendingDealershipRegistration();
   try {
     const { data, error } = await supabaseClient
       .from("user_settings")

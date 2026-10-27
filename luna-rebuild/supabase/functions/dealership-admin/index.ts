@@ -18,6 +18,20 @@
 //     The caller becomes the dealership's first member (role
 //     'admin'). A caller who already belongs to a dealership gets
 //     409 already_in_a_dealership (Phase 1: one dealership per user).
+//   register_dealership {name}   (Phase 1.5, 2026-10-26)
+//     Self-serve registration from the app's Register page, where a
+//     new account picks Individual vs Dealership. ANY signed-in user
+//     with NO existing membership registers their store: the
+//     dealership row is created with status 'pending', seat_limit
+//     and plan_key NULL, and the caller becomes its admin member.
+//     A PENDING dealership confers nothing — only 'active' confers
+//     coverage, and pending dealerships have no seat powers:
+//     create_member / delete_member / reset_member_password all
+//     refuse with 409 dealership_not_active until a dealer plan
+//     activates the store (Phase 2 checkout flips pending ->
+//     active and sets seat_limit / plan_key). A caller who already
+//     belongs to a dealership gets that dealership back unchanged
+//     (idempotent — the app may call this on more than one load).
 //   list_members {dealership_id}
 //     Caller must be an ADMIN member. Returns the roster (email,
 //     role, joined) plus seat usage.
@@ -218,6 +232,51 @@ Deno.serve(async (req) => {
     return json({ ok: true, dealership: dealer, seats_used: 1 });
   }
 
+  // ------------------------------------------------- register_dealership
+  // Phase 1.5 self-serve registration (Register page, Dealership
+  // choice). Creates a PENDING dealership — no coverage, no seat
+  // powers — with the caller as its admin. Idempotent: a caller who
+  // already belongs to a dealership gets it back unchanged.
+  if (action === "register_dealership") {
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) return json({ ok: false, error: "name_required" }, 400);
+
+    const { data: existing } = await svc
+      .from("dealership_account_members")
+      .select("dealership_id")
+      .eq("user_id", callerId)
+      .maybeSingle();
+    if (existing) {
+      const dealer = await getDealership(svc, existing.dealership_id);
+      if (dealer) return json({ ok: true, dealership: dealer, existing: true });
+      return json({ ok: false, error: "dealership_not_found" }, 404);
+    }
+
+    const { data: dealer, error: dErr } = await svc
+      .from("dealership_accounts")
+      .insert({
+        name,
+        created_by: callerId,
+        seat_limit: null,
+        plan_key: null,
+        status: "pending",
+      })
+      .select("id, name, created_by, seat_limit, plan_key, status, created_at")
+      .single();
+    if (dErr || !dealer) {
+      return json({ ok: false, error: "dealership_create_failed" }, 500);
+    }
+    const { error: mErr } = await svc
+      .from("dealership_account_members")
+      .insert({ dealership_id: dealer.id, user_id: callerId, role: "admin" });
+    if (mErr) {
+      // Compensate: don't leave a dealership with no admin behind.
+      await svc.from("dealership_accounts").delete().eq("id", dealer.id);
+      return json({ ok: false, error: "membership_create_failed" }, 500);
+    }
+    return json({ ok: true, dealership: dealer, seats_used: 1 });
+  }
+
   // ------------------------------------------------------- list_members
   if (action === "list_members") {
     const dealershipId = typeof body.dealership_id === "string" ? body.dealership_id : "";
@@ -267,6 +326,9 @@ Deno.serve(async (req) => {
     }
     const dealer = await getDealership(svc, dealershipId);
     if (!dealer) return json({ ok: false, error: "dealership_not_found" }, 404);
+    if (dealer.status !== "active") {
+      return json({ ok: false, error: "dealership_not_active" }, 409);
+    }
 
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!email || email.indexOf("@") < 1) {
@@ -337,6 +399,9 @@ Deno.serve(async (req) => {
     }
     const dealer = await getDealership(svc, dealershipId);
     if (!dealer) return json({ ok: false, error: "dealership_not_found" }, 404);
+    if (dealer.status !== "active") {
+      return json({ ok: false, error: "dealership_not_active" }, 409);
+    }
     const target = await getMembership(svc, dealershipId, targetId);
     if (!target) return json({ ok: false, error: "member_not_found" }, 404);
     if (target.role === "admin" && dealer.created_by !== callerId) {
@@ -378,6 +443,11 @@ Deno.serve(async (req) => {
     }
     if (!(await requireAdmin(svc, dealershipId, callerId))) {
       return json({ ok: false, error: "forbidden" }, 403);
+    }
+    const dealer = await getDealership(svc, dealershipId);
+    if (!dealer) return json({ ok: false, error: "dealership_not_found" }, 404);
+    if (dealer.status !== "active") {
+      return json({ ok: false, error: "dealership_not_active" }, 409);
     }
     const target = await getMembership(svc, dealershipId, targetId);
     if (!target) return json({ ok: false, error: "member_not_found" }, 404);

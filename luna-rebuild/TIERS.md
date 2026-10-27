@@ -1032,7 +1032,8 @@ about Stripe changed in this phase).
 
 - **Model.** `dealership_accounts` (name, `created_by`,
   `seat_limit` NULL = unlimited, `plan_key` =
-  dealer_10/20/50/100/unlimited, `status` active|inactive) and
+  dealer_10/20/50/100/unlimited, `status` active|inactive — plus
+  `pending` for self-registered stores, Phase 1.5 below) and
   `dealership_account_members` (`user_id` UNIQUE — one dealership
   per user in Phase 1; `role` admin|member). The app offers the
   named seat tiers; the function accepts any positive seat count
@@ -1080,6 +1081,8 @@ about Stripe changed in this phase).
   Phase C selector lists alongside `#tradePage`.
 - **Provisioning (Phase 1 limit).** Dealerships exist because an
   owner created them — there is no dealer self-serve purchase yet.
+  (Phase 1.5 below adds self-serve *registration*; purchase is
+  still Phase 2.)
 - **Deferred to Phase 2:** dealer-tier Stripe products + checkout
   (the 10/20/50/100/unlimited ladder as purchasable plans),
   dealership ownership tagging of app data + reassignment when a
@@ -1087,6 +1090,55 @@ about Stripe changed in this phase).
   the database under their user id — nothing is destroyed), and
   member invite emails (Phase 1 admins set a starting password
   instead).
+
+## Dealership accounts — Phase 1.5: register as a dealership (built 2026-10-26)
+
+Matthew, from the rebuild Register page: a new account picks
+**Individual / Dealership** at sign-up, and regular (individual)
+users never see the Dealership tab. Dealer Stripe checkout is
+still Phase 2 — a self-registered dealership is a name on file,
+nothing more, until a dealer plan activates it.
+
+- **The fork.** The Register form carries an account-type segmented
+  control (Individual default) above the email field, shown only in
+  Register mode. Picking Dealership reveals a required
+  **Dealership name** field (validated in JS at submit — the inputs
+  are never HTML-`required`, since the block hides in Sign In mode).
+  At sign-up the choice + name are stashed in localStorage
+  (`autolaunch_pending_dealership`) *before* `auth.signUp`, so they
+  survive the email-confirmation round-trip; on the first signed-in
+  load, `consumePendingDealershipRegistration()` (in
+  `loadUserStoreSettings`, right after membership resolution) calls
+  the function's `register_dealership` and clears the stash.
+  Fail-soft: a transient failure keeps the stash and retries next
+  load. (Confirming on a different device loses the stash — the
+  owner can still provision the store the Phase 1 way.)
+- **`register_dealership` {name}** (dealership-admin, deployed v5).
+  Any signed-in user with NO existing membership: creates the
+  dealership with `status = 'pending'`, `seat_limit` and `plan_key`
+  NULL, and the caller as its admin member. Idempotent — a caller
+  who already belongs to a dealership gets that dealership back
+  unchanged.
+- **'pending' confers nothing.** Coverage still keys on
+  `status = 'active'` only (`dealershipCovered()` is untouched), so
+  a pending admin follows the normal trial / signup-choice / paid
+  path for their own use — the choice gate applies to them exactly
+  as to any individual. Seat powers are refused server-side while
+  pending: `create_member`, `delete_member`, and
+  `reset_member_password` all answer **409 `dealership_not_active`**
+  (`list_members` still works — the roster is just the admin).
+- **Tab + page.** The sidebar Dealership item shows iff the user is
+  an owner OR has any `dealership_account_members` row (any status,
+  any role) — individual accounts never see it. The Dealership page
+  gains a pending view (`dealershipViewMode` → `"pending"`): the
+  dealership name, "Registered — dealership plans activate at
+  launch", a read-only roster (no reset/delete controls, no add
+  form), and seats shown as "—".
+- **Phase 2 activation hook.** Dealer checkout flips the row
+  `pending → active` and sets `seat_limit` / `plan_key` from the
+  purchased tier. Nothing else changes: coverage, the seat guards,
+  and the admin page all key off `status` already, so an activated
+  store simply starts behaving like an owner-provisioned one.
 
 ## What remains for the real paywall
 
