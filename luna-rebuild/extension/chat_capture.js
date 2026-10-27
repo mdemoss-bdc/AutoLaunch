@@ -61,7 +61,7 @@
       if (titled) {
         var t = (titled.getAttribute("aria-label") || "").replace(/^Conversation titled\s*/, "");
         var nm = t.split("·")[0].trim();
-        if (nm && nm.length >= 2 && nm.length <= 60) return nm;
+        if (nm && nm.length >= 2 && nm.length <= 60 && !isJunkName(nm)) return nm;
       }
     } catch (e) { /* fall through to the heading scan */ }
     // Thread header usually carries the buyer's name in a heading.
@@ -71,12 +71,12 @@
       var heads = scopes[i].querySelectorAll("h1, h2");
       for (var j = 0; j < heads.length; j++) {
         var t = textOf(heads[j]);
-        if (t && t.length >= 2 && t.length <= 60 && !/messenger|marketplace|chats|inbox/i.test(t)) return t;
+        if (t && t.length >= 2 && t.length <= 60 && !isJunkName(t) && !/messenger|marketplace|chats|inbox/i.test(t)) return t;
       }
     }
     // Fallback: the document title on thread pages is often the name.
     var title = (document.title || "").replace(/\s*[|·•-]\s*Facebook.*$/i, "").replace(/^\(\d+\)\s*/, "").trim();
-    if (title && !/messenger|facebook/i.test(title) && title.length <= 60) return title;
+    if (title && !isJunkName(title) && !/messenger|facebook/i.test(title) && title.length <= 60) return title;
     return "";
   }
 
@@ -122,8 +122,21 @@
     "Media, files and links": 1, "Privacy & support": 1,
     "Buyer details": 1, "Seller details": 1,
     "Send a quick response": 1,
-    "View buyer": 1, "View seller": 1, "More options": 1
+    "View buyer": 1, "View seller": 1, "More options": 1,
+    // v2.50 (sync repair): the generic participant placeholder and
+    // composer/header furniture from half-rendered threads —
+    // Matthew's live junk rows, 2026-10-27. Never a message body,
+    // never a buyer name.
+    "Facebook user": 1, "Compose": 1, "Conversation with Facebook user": 1
   };
+
+  // v2.50: a scraped "name" that is really Facebook chrome is NOT
+  // a resolved buyer — the worker's gate treats it as unresolved,
+  // so it must never leave this script as a participant name.
+  function isJunkName(n) {
+    if (!n) return true;
+    return !!FB_CHROME_LABELS[String(n).trim()];
+  }
 
   function threadTitleTexts() {
     // The strings this thread's own header shows as its title —
@@ -203,6 +216,7 @@
       if (t === "Message sent" || t === "Message delivered") continue; // status furniture, not a message
       if (/^(View buyer|More options|Privacy & support|Messages|Send a quick response|Marketplace)$/.test(t)) continue;
       if (/^Conversation titled /.test(t)) continue;
+      if (/^Conversation with /.test(t)) continue; // v2.50: half-rendered thread header
       if (/ created this group$/.test(t)) continue;
       if (/mutual friends/.test(t) || /badge on Marketplace/.test(t)) continue;
       // Info-panel guard (v2.1.39): the thread page's right rail
@@ -443,6 +457,7 @@
       // name that never gets corrected.
       if (nm.length > 30) nm = "";
       if (!nm || /\$/.test(nm) || /^(Chats|Marketplace|New message)/i.test(nm)) nm = "";
+      if (isJunkName(nm)) nm = ""; // v2.50: a chrome placeholder is not a name
       var vm = rowText.match(/\$\d[\d,]*\s*-\s*[^·]{4,80}/);
       if (!vm) vm = rowText.match(/\b(19|20)\d{2}\s+[A-Z][A-Za-z]+\s+[A-Z][A-Za-z0-9]+/); // year/make/model label also proves Marketplace
       // Commerce gate (v2.1.34): the plain /messages list mixes in
@@ -536,15 +551,71 @@
     });
   }
 
+  // Gate-skip retry (v2.50, background.js header note 24): the
+  // worker's auto-create gate fails CLOSED on a half-rendered
+  // page — unresolved_name before the header paints the buyer's
+  // name, no_seller_signal before the seller controls / listing
+  // link render. Those skips used to be FINAL: the open thread's
+  // full capture is hash-deduped below, so a thread skipped
+  // mid-render was never re-asked even after the page finished
+  // painting. Track render-dependent skips per thread and re-ask
+  // on later passes; terminal outcomes (created, self_thread,
+  // deleted_by_user) clear the thread. Bounded per page session —
+  // a thread that genuinely never resolves is retried a handful
+  // of times, not forever.
+  var GATE_RETRY_MAX = 10;
+  var RENDER_SKIP_REASONS = { unresolved_name: 1, no_seller_signal: 1 };
+  var gateSkipped = {}; // threadKey -> { capture, tries }
+
+  function gateRetryKey(capture) {
+    return threadKeyOf((capture && capture.threadUrl) || "") ||
+      String((capture && capture.threadUrl) || "");
+  }
+
+  function noteCaptureResult(capture, resp) {
+    var key = gateRetryKey(capture);
+    if (!key) return;
+    if (resp && resp.skipped) {
+      if (RENDER_SKIP_REASONS[resp.skipped]) {
+        var g = gateSkipped[key] || { tries: 0 };
+        g.capture = capture;
+        g.tries += 1;
+        gateSkipped[key] = g;
+      } else {
+        delete gateSkipped[key]; // terminal skip (self / deleted)
+      }
+    } else if (resp && resp.ok) {
+      delete gateSkipped[key];
+    }
+  }
+
+  function sendCaptureTracked(capture) {
+    var p = sendCapture(capture);
+    // sendCapture resolves with the worker's response (or null on
+    // a dead channel) — learning the outcome is the whole point.
+    if (p && p.then) p.then(function (resp) {
+      try { noteCaptureResult(capture, resp); } catch (e) { /* bookkeeping only */ }
+    });
+    return p;
+  }
+
+  function gateRetryDue(key) {
+    var g = gateSkipped[key];
+    return !!g && g.tries < GATE_RETRY_MAX;
+  }
+
   var lastFullHash = "";
   function autoFullCapture() {
     if (!onChatSurface()) return null;
     var c = scrape();
     if (!c.messages.length && !c.buyerName) return null;
     var h = (c.threadUrl || "") + "|" + c.messages.map(function (m) { return m.direction + ":" + m.body; }).join("~");
-    if (h === lastFullHash) return null;
+    // A thread with a render-dependent skip on file bypasses the
+    // hash dedupe while its retry budget lasts — the page may
+    // have finished rendering around the very same messages.
+    if (h === lastFullHash && !gateRetryDue(threadKeyOf(c.threadUrl || ""))) return null;
     lastFullHash = h;
-    return sendCapture(c);
+    return sendCaptureTracked(c);
   }
 
   // App-driven sync (v2.1.38): the AutoLaunch page asks (through the
@@ -556,7 +627,7 @@
     var jobs = [];
     try {
       if (onInboxListSurface()) {
-        collectThreadStubs().forEach(function (c) { jobs.push(sendCapture(c)); });
+        collectThreadStubs().forEach(function (c) { jobs.push(sendCaptureTracked(c)); });
         var snippets = collectThreadSnippets();
         if (snippets.length) {
           jobs.push(new Promise(function (resolve) {
@@ -578,7 +649,19 @@
   function autoPass() {
     try {
       if (onInboxListSurface()) {
-        collectThreadStubs().forEach(sendCapture);
+        var stubKeys = {};
+        collectThreadStubs().forEach(function (c) {
+          stubKeys[gateRetryKey(c)] = 1;
+          sendCaptureTracked(c);
+        });
+        // v2.50: re-ask for gate-skipped stub threads that have
+        // scrolled out of the rendered list — their last capture
+        // rides again while the retry budget lasts.
+        Object.keys(gateSkipped).forEach(function (key) {
+          if (stubKeys[key] || !gateRetryDue(key)) return;
+          var g = gateSkipped[key];
+          if (g.capture && g.capture.stub) sendCaptureTracked(g.capture);
+        });
         var snippets = collectThreadSnippets();
         if (snippets.length) {
           try {

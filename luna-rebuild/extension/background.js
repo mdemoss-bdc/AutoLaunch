@@ -285,6 +285,26 @@
 //     manual capture with no matched prospect and no resolvable
 //     participant declines as no_buyer instead of filing a
 //     nameless "Marketplace buyer" card.
+// 24. SYNC REPAIR (v2.50): three fixes from Matthew's live
+//     session, 2026-10-27. (a) CHROME NAMES: a half-rendered
+//     thread paints the generic participant placeholder
+//     "Facebook user" (plus "Compose" / "Conversation with
+//     Facebook user" furniture); those strings were saved as
+//     messages and even filed as a prospect NAME. chat_capture.js
+//     now filters them everywhere, and autoCreateGate below
+//     treats them as an unresolved name. (b) RENDER-SKIP RETRY:
+//     gate skips for render-dependent reasons (unresolved_name /
+//     no_seller_signal) are no longer final — chat_capture.js
+//     tracks the worker's skip response per thread and re-sends
+//     on later passes, bounded per page session. (c) TOMBSTONES:
+//     deleting a prospect used to be undone by the next
+//     auto-sync pass — the Facebook thread still exists, so
+//     find-or-create simply re-created the card. A trigger now
+//     records every deleted prospect's thread key in
+//     prospect_tombstones; the auto path below checks it before
+//     creating (skip reason deleted_by_user — terminal, never
+//     retried) and a MANUAL Capture of the same thread removes
+//     the tombstone (explicit undelete).
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -417,6 +437,12 @@ function autoCreateGate(capture, ctx) {
   // Hard rule: an unresolved participant name NEVER auto-creates —
   // the "Marketplace buyer" fallback card is exactly what this kills.
   if (!name) return { create: false, reason: "unresolved_name" };
+  // Chrome placeholder names (v2.50, header note 24): "Facebook
+  // user" and its furniture friends are what a half-rendered
+  // thread shows INSTEAD of a participant — not a resolved name.
+  if (/^(facebook user|compose|conversation with facebook user)$/i.test(name)) {
+    return { create: false, reason: "unresolved_name" };
+  }
   // Self test BY IDENTITY (v2.1.47, header note 23): block only when
   // the counterparty's Facebook identity PROVABLY equals the
   // signed-in account's — canonical tokens ("id:<digits>" /
@@ -485,6 +511,14 @@ async function handleCaptureChat(capture) {
   const name = (capture.buyerName || "").trim() || "Marketplace buyer";
   const vehicleText = (capture.vehicleText || "").trim();
   const threadRef = (capture.threadUrl || "").slice(0, 300);
+  // Tombstone key (v2.50, header note 24): the thread's numeric
+  // /t/<id> when the ref carries one, else the normalized ref —
+  // MUST stay in step with prospect_tombstone_key() in the
+  // database, which keys the rows the delete trigger writes.
+  const threadKey = (() => {
+    const m = String(threadRef || "").match(/\/t\/(\d+)/);
+    return m ? m[1] : norm(threadRef);
+  })();
 
   // Match order (auto-capture, v2.1.31): the THREAD is the identity —
   // the same conversation must never become two prospects just because
@@ -505,6 +539,18 @@ async function handleCaptureChat(capture) {
   // adds anything else, and it never passes through the gate. Auto
   // updates to an already-known prospect's thread still flow.
   if (capture.auto && !prospect) {
+    // Tombstone (v2.50, header note 24): a prospect the rep
+    // deleted must STAY deleted — the thread still exists on
+    // Facebook, so without this check the next pass re-creates
+    // the card. Terminal: never created, never retried.
+    if (threadKey) {
+      try {
+        const tombs = await sbGet(`prospect_tombstones?user_id=eq.${userId}&thread_ref=eq.${encodeURIComponent(threadKey)}&select=id&limit=1`);
+        if (tombs && tombs.length) {
+          return { prospectName: null, added: 0, skipped: "deleted_by_user" };
+        }
+      } catch (e) { /* read failed — the gate below still guards creation */ }
+    }
     const gateCtx = { postedCars: [] };
     try {
       gateCtx.postedCars = await sbGet(
@@ -539,6 +585,12 @@ async function handleCaptureChat(capture) {
         : "Captured from a Marketplace chat by Luca."
     });
     prospect = created[0];
+    // Manual Capture of a previously deleted thread is an
+    // explicit undelete (v2.50, header note 24): clear its
+    // tombstone so the thread lives as a normal prospect again.
+    if (!capture.auto && threadKey) {
+      try { await sbDelete(`prospect_tombstones?user_id=eq.${userId}&thread_ref=eq.${encodeURIComponent(threadKey)}`); } catch (e) { /* cosmetic */ }
+    }
   } else {
     // Self-heal older/rougher captures: backfill a placeholder name, a
     // missing label, or a missing thread link when this capture has
