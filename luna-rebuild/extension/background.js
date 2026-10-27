@@ -1567,6 +1567,18 @@ chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === POLL_ALARM) { checkQueue(); checkOutboundReplies(); }
 });
 
+// The app is served from two first-party origins: the custom domain
+// and the GitHub Pages mirror (the rebuild preview rides the mirror).
+// The bridge handshake is accepted from either, and from nowhere else.
+// v2.1.49: autolaunch.org added — before this the worker trusted only
+// the mirror, so on the custom domain the app could never hand over
+// the session token and the queue poller stayed parked.
+function isAppUrl(url) {
+  const u = url || "";
+  return u.startsWith("https://autolaunch.org/") ||
+         u.startsWith("https://mdemoss-bdc.github.io/");
+}
+
 // Handshake path 1 (the real one): bridge.js on the AutoLaunch origin.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return;
@@ -1576,7 +1588,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // bridge on the AutoLaunch origin may ask — same sender discipline
     // as the login handoff below — and the answer is a boolean about
     // the stored session token, never the token itself.
-    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    const fromApp = isAppUrl(sender.tab && sender.tab.url);
     if (!fromApp) return;
     (async () => {
       const token = await storedAccessToken();
@@ -1594,7 +1606,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // AutoLaunch origin may ask — same sender discipline as the ping
     // above. The answer is the install UUID itself (never a user id,
     // never the session token).
-    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    const fromApp = isAppUrl(sender.tab && sender.tab.url);
     if (!fromApp) return;
     (async () => {
       const installId = await getOrCreateInstallId();
@@ -1644,7 +1656,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "AUTOLAUNCH_SET_USER_ID" && message.userId) {
-    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    const fromApp = isAppUrl(sender.tab && sender.tab.url);
     if (!fromApp) return;
     (async () => {
       const updates = { autolaunch_user_id: message.userId };
@@ -1675,7 +1687,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // throttled while it sits in the background. Only the bridge on
     // the AutoLaunch origin may ask. We drive the best Facebook tab's
     // capture script and answer only when it confirms the writes.
-    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    const fromApp = isAppUrl(sender.tab && sender.tab.url);
     if (!fromApp) return;
     (async () => {
       let synced = false;
@@ -1712,7 +1724,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Only the bridge on the AutoLaunch origin may nudge (same sender
     // discipline as the login handoff). Runs the outbound claim
     // immediately — the 1-minute alarm stays as the safety net.
-    const fromApp = (sender.tab && sender.tab.url || "").startsWith("https://mdemoss-bdc.github.io/");
+    const fromApp = isAppUrl(sender.tab && sender.tab.url);
     if (!fromApp) return;
     checkOutboundReplies();
     sendResponse({ ok: true });

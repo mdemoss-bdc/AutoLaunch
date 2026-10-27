@@ -8,7 +8,8 @@
         "bridge.js"
       ],
       "matches": [
-        "https://mdemoss-bdc.github.io/AutoLaunch/*"
+        "https://mdemoss-bdc.github.io/AutoLaunch/*",
+        "https://autolaunch.org/*"
       ],
       "run_at": "document_idle"
     },
@@ -46,7 +47,8 @@
   "description": "Automated Facebook Marketplace helper for AutoLaunch users.",
   "externally_connectable": {
     "matches": [
-      "https://mdemoss-bdc.github.io/*"
+      "https://mdemoss-bdc.github.io/*",
+      "https://autolaunch.org/*"
     ]
   },
   "host_permissions": [
@@ -64,5 +66,5 @@
     "alarms",
     "debugger"
   ],
-  "version": "2.1.48"
+  "version": "2.1.49"
 }
