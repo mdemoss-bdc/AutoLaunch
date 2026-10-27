@@ -11065,6 +11065,7 @@ async function showProspectsPage() {
   renderProspects();
   markProspectsSeen(); // he's looking at them now — badge clears
   syncQueuePoller();
+  prospectsAutoSyncPageShown(); // Prospects syncs itself: poke the helper now, then every ~60s while open
 }
 
 function renderProspects() {
@@ -11339,14 +11340,83 @@ window.addEventListener("message", (event) => {
     setTimeout(() => refreshProspectsSoft(), 600);
   }
 });
+// The one and only sync poke: ask the helper (via the bridge) to run a
+// capture pass now, then repaint from what it stored — at once on its
+// PONG (listener above), or after 4s if no confirmation arrives. The
+// soft-realtime driver below and the Prospects auto-sync scheduler
+// both call this; there is no second poke path.
+function requestLucaSyncNow() {
+  try { window.postMessage({ type: "AUTOLAUNCH_EXT_SYNC_REQUEST", reqId: ++lucaSyncReqSeq }, "*"); } catch (e) { /* repaint fallback below */ }
+  if (lucaSyncFallbackTimer) clearTimeout(lucaSyncFallbackTimer);
+  lucaSyncFallbackTimer = setTimeout(() => refreshProspectsSoft(), 4000);
+}
 setInterval(() => {
   if (document.hidden) return;
   const list = document.getElementById("prospectsList");
   if (!list || list.getClientRects().length === 0) return;
-  try { window.postMessage({ type: "AUTOLAUNCH_EXT_SYNC_REQUEST", reqId: ++lucaSyncReqSeq }, "*"); } catch (e) { /* repaint fallback below */ }
-  if (lucaSyncFallbackTimer) clearTimeout(lucaSyncFallbackTimer);
-  lucaSyncFallbackTimer = setTimeout(() => refreshProspectsSoft(), 4000);
+  requestLucaSyncNow();
 }, 5000);
+
+// PROSPECTS AUTO-SYNC (2026-10-27): the Prospects screen syncs ITSELF —
+// no manual sync click. Opening Prospects pokes the helper once (via
+// requestLucaSyncNow, the same poke the soft-realtime driver uses),
+// and while the page stays open and visible the poke repeats every
+// ~60s. The helper's capture passes live in the Facebook tab, whose
+// timers Chrome throttles in the background; this scheduler lives in
+// the app tab the rep is actually looking at, so a new buyer shows up
+// on its own. Stop rules: leaving Prospects or hiding the tab stops
+// the pokes (every tick re-checks all guards and the timer
+// self-clears), and coming back to a visible Prospects re-pokes once
+// and resumes. Guards: never fire signed-out or under the auth
+// overlay, and never stack on an in-flight poke — a poke counts as in
+// flight until its PONG lands or 5s pass (past the 4s repaint
+// fallback window). A poke nobody answers stays silent, exactly like
+// the manual path always has.
+const PROSPECTS_AUTOSYNC_MS = 60000;
+let prospectsSyncInFlight = false;
+let prospectsSyncInFlightTimer = null;
+let prospectsAutoSyncTimer = null;
+function prospectsSyncCanFire() {
+  if (!currentUser) return false;
+  const overlay = document.getElementById("authOverlay");
+  if (overlay && !overlay.classList.contains("hidden")) return false;
+  const page = document.getElementById("prospectsPage");
+  if (!page || page.classList.contains("hidden")) return false;
+  if (document.hidden) return false;
+  return true;
+}
+function prospectsSyncPoke() {
+  if (prospectsSyncInFlight) return;
+  if (!prospectsSyncCanFire()) { stopProspectsAutoSync(); return; }
+  prospectsSyncInFlight = true;
+  if (prospectsSyncInFlightTimer) clearTimeout(prospectsSyncInFlightTimer);
+  prospectsSyncInFlightTimer = setTimeout(() => { prospectsSyncInFlight = false; prospectsSyncInFlightTimer = null; }, 5000);
+  requestLucaSyncNow();
+}
+function startProspectsAutoSync() {
+  if (prospectsAutoSyncTimer) return;
+  prospectsAutoSyncTimer = setInterval(prospectsSyncPoke, PROSPECTS_AUTOSYNC_MS);
+}
+function stopProspectsAutoSync() {
+  if (prospectsAutoSyncTimer) { clearInterval(prospectsAutoSyncTimer); prospectsAutoSyncTimer = null; }
+}
+function prospectsAutoSyncPageShown() {
+  prospectsSyncPoke();
+  if (prospectsSyncCanFire()) startProspectsAutoSync();
+}
+window.addEventListener("message", (event) => {
+  if (event.origin !== window.location.origin) return;
+  const d = event.data;
+  if (d && d.type === "AUTOLAUNCH_EXT_SYNC_PONG") {
+    prospectsSyncInFlight = false;
+    if (prospectsSyncInFlightTimer) { clearTimeout(prospectsSyncInFlightTimer); prospectsSyncInFlightTimer = null; }
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { stopProspectsAutoSync(); return; }
+  const page = document.getElementById("prospectsPage");
+  if (page && !page.classList.contains("hidden")) prospectsAutoSyncPageShown();
+});
 
 // OUTBOUND REPLIES (Prospects inbox step 2, 2026-10-25): the rep types
 // in AutoLaunch; the row lands in closer_messages with status "queued";
