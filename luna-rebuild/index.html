@@ -801,7 +801,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <span>Get Started</span>
         <span class="w-2 h-2 rounded-full bg-blue-600 shadow-sm shadow-blue-400 ml-auto"></span>
       </a>
-      <a href="#" data-nav="dashboard" onclick="showInventoryPage('dashboard'); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+      <a href="#" data-nav="inventory" onclick="showInventoryPage(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold nav-selected transition cursor-pointer">
         <i class="fa-solid fa-chart-line w-4 text-sky-600 text-xs"></i>
         <span>Dashboard</span>
       </a>
@@ -840,10 +840,6 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <!-- YOUR CARS -->
     <div class="space-y-0.5">
       <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">Your Cars</div>
-      <a href="#" data-nav="inventory" onclick="showInventoryPage(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold nav-selected transition cursor-pointer">
-        <i class="fa-solid fa-car-side w-4 text-xs"></i>
-        <span>Inventory</span>
-      </a>
       <a href="#" onclick="openQueueModal()" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <div class="flex items-center gap-2.5">
           <i class="fa-solid fa-list-check w-4 text-blue-600 text-xs"></i>
@@ -1300,7 +1296,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <select id="clHomeLocation" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
           <option value="">Not set — Luca won't talk about locations or transfers</option>
         </select>
-        <p class="text-[11px] text-slate-400 mt-1">These are the same locations your Inventory filter shows — if you combined rooftops in Settings → Location Groups, pick the combined name and every rooftop in it counts as your lot. When a vehicle a buyer wants sits at a sister lot, Luca will say so — and that you can have it brought over — but he'll confirm they're good with the price first, before anyone commits to moving it.</p>
+        <p class="text-[11px] text-slate-400 mt-1">These are the same locations your Dashboard filter shows — if you combined rooftops in Settings → Location Groups, pick the combined name and every rooftop in it counts as your lot. When a vehicle a buyer wants sits at a sister lot, Luca will say so — and that you can have it brought over — but he'll confirm they're good with the price first, before anyone commits to moving it.</p>
       </div>
 
       <div>
@@ -1563,7 +1559,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <i class="fa-solid fa-bars"></i>
     </button>
     <div class="flex-1 min-w-0">
-      <p class="text-sm font-black text-slate-900 leading-tight">Inventory</p>
+      <p class="text-sm font-black text-slate-900 leading-tight">Dashboard</p>
       <p id="mobileHeaderSummary" class="text-[11px] text-slate-500 truncate">Automations</p>
     </div>
     <button type="button" onclick="toggleMobileHeader()" aria-label="Show or hide header details" class="shrink-0 h-9 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
@@ -1582,7 +1578,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
   <div class="flex-1 min-w-0">
 
     <h1 class="text-2xl font-black text-slate-900 tracking-tight">
-      Inventory
+      Dashboard
     </h1>
 
     <div class="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-slate-500">
@@ -2983,7 +2979,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </div>
     </div>
     <div id="queueItemsList" class="space-y-2">
-      <p class="text-xs text-slate-400 text-center py-8">Nothing queued yet. Pick a car in Inventory and press Post To Facebook — it lines up here, ready to launch.</p>
+      <p class="text-xs text-slate-400 text-center py-8">Nothing queued yet. Pick a car on the Dashboard and press Post To Facebook — it lines up here, ready to launch.</p>
     </div>
   </div>
 </div>
@@ -9085,8 +9081,8 @@ function handleDealerUrlClick(event) {
 }
 
 function showInventoryPage(navKey) {
-    // Dashboard and Inventory are two sidebar entries for this same view;
-    // the sidebar passes its own key so the clicked item is the one lit.
+    // The Dashboard sidebar entry opens this view (the app's main
+    // screen); it lights via the "inventory" nav key.
     setActiveNav(navKey || "inventory");
 
     document
@@ -12286,7 +12282,7 @@ const GUIDES = {
       "Press Save settings."
     ],
     notes: [
-      "No real photos, no post: a vehicle with no photos on the dealer's site is never posted. Queueing skips it (and tells you how many were skipped), its row in Inventory says 'No photo — can't post', and if its photos disappear while it sits in the Post Queue it is marked 'No photos — won't post'.",
+      "No real photos, no post: a vehicle with no photos on the dealer's site is never posted. Queueing skips it (and tells you how many were skipped), its row on the Dashboard says 'No photo — can't post', and if its photos disappear while it sits in the Post Queue it is marked 'No photos — won't post'.",
       "The branding frame is drawn over your real photo — upload the logo once and it saves to your account.",
       "The Download button saves the full-size photo on screen, frame included when the frame is on."
     ]
@@ -12347,7 +12343,7 @@ const GUIDES = {
     ]
   },
   inventory: {
-    title: "Inventory",
+    title: "Dashboard",
     icon: "fa-solid fa-car",
     iconClasses: "bg-indigo-50 text-indigo-600 border-indigo-200",
     modal: null,
@@ -12370,7 +12366,7 @@ const GUIDES = {
     icon: "fa-solid fa-location-dot",
     iconClasses: "bg-rose-50 text-rose-600 border-rose-200",
     modal: null,
-    what: "If your group runs several rooftops that share one lot or one team, combine them into a single location. Groups are a display layer on top of the real rooftop names from your website — the underlying data never changes. The Inventory filter shows your group names, and Luca treats every rooftop inside your home group as 'your lot'.",
+    what: "If your group runs several rooftops that share one lot or one team, combine them into a single location. Groups are a display layer on top of the real rooftop names from your website — the underlying data never changes. The Dashboard filter shows your group names, and Luca treats every rooftop inside your home group as 'your lot'.",
     steps: [
       "Open Settings and find Location Groups.",
       "Name the group the way you think of it (for example, two stores that share a lot).",
@@ -12379,7 +12375,7 @@ const GUIDES = {
     ],
     notes: [
       "A vehicle at a rooftop outside your home group is a 'sister lot' car for Luca: he'll present it, say it can be brought to your lot, and confirm the buyer is good with the price before anyone commits to moving it.",
-      "Changing groups later is safe — Luca reads your groups fresh every time he drafts, and the Inventory filter updates with them."
+      "Changing groups later is safe — Luca reads your groups fresh every time he drafts, and the Dashboard filter updates with them."
     ]
   },
   queue: {
@@ -12389,7 +12385,7 @@ const GUIDES = {
     modal: null,
     what: "Every post, repost and delete waits here for the helper to work through it, in order, at a human pace. The queue is also your receipt book: what posted, what's waiting, and what failed — with the reason.",
     steps: [
-      "Queue cars from Inventory (Post Selected or a row's Post button), or let automations queue them for you.",
+      "Queue cars from the Dashboard (Post Selected or a row's Post button), or let automations queue them for you.",
       "Watch statuses here: queued, working, posted, failed. A failed job says why — read it before retrying.",
       "Use a failed job's Retry button once you've fixed the cause (signed back in to Facebook, refreshed the tab, completed a missing field).",
       "Deleting a listing can be verified on Facebook itself — the listing disappearing from your Facebook selling page is the proof, not just the queue row."
