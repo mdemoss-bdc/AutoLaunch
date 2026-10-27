@@ -1127,6 +1127,44 @@ as a standalone add-on ANYONE can buy** (not lifetime-gated);
 surcharging** — card/BNPL processing fees are AutoLaunch's cost,
 never passed to customers.
 
+**DESIGN CHANGE (Matthew, 2026-10-26 21:26 EDT — supersedes the
+subscription-term design above and below): the 1/2/3-year terms
+are ONE-TIME PURCHASES, not subscriptions** — so buyers can pay
+with Affirm/Klarna and AutoLaunch is paid in full upfront. BNPL
+costs ~6% per completed purchase, borne by Matthew as priced-in
+(the no-surcharging rule). Mechanics:
+
+- Checkout kinds `post_1y/post_2y/post_3y/group_1y/group_2y/
+  group_3y` run in **`payment` mode** against ONE-TIME prices,
+  with session metadata `{kind, plan, years}`.
+- On `checkout.session.completed` for a term kind, the webhook
+  sets `billing_status = 'active'`, `plan_tier` = the term's plan,
+  and **`current_period_end = max(existing end, now) + years`** —
+  re-buys STACK/EXTEND, never restart. `stripe_subscription_id`
+  is untouched (there is no term subscription).
+- Access: an `active` account with NO subscription and a
+  `current_period_end` is **term-limited** (`computeAccessState`):
+  before the end → full access (`termActive`); past it → the
+  purchase gate with "Your prepaid term has ended". The Plans tab
+  shows "Prepaid term — <plan>. Access until <date>." and keeps
+  the buy cards visible so a term holder can stack early.
+- **Monthly → term switch rule**: when a monthly subscriber buys
+  a term, the webhook sets their subscription
+  `cancel_at_period_end = true` — the subscription ends at its
+  current period end (already paid for) and the term covers them
+  from purchase. The eventual subscription deletion is
+  term-protected in the webhook: it must not expire the account
+  or overwrite the term's end date (guard: row period end > now
+  + 60s). Term → term buys stack per the rule above.
+- Copy is kind-aware everywhere: terms say "One-time payment —
+  access until <end date>, does not renew automatically"
+  (cards, confirm modal — with the projected stacked end date —
+  Plans tab, terms.html, Ask Luna KB). Monthly keeps its renewal
+  copy.
+- Referral accrual for terms happens at checkout completion
+  (no invoice exists): +12×years paid months, session-id-keyed
+  in the referral ledger — see "Referral accrual under terms".
+
 ### Term ladder (prices ON the existing Post/Group products)
 
 | Plan | Monthly | 1 year (−5%) | 2 years (−10%) | 3 years (−15%) |
@@ -1134,44 +1172,48 @@ never passed to customers.
 | Post ($75/mo) | $75 | **$855** | **$1,620** | **$2,295** |
 | Group ($100/mo) | $100 | **$1,140** | **$2,160** | **$3,060** |
 
-Stripe prices (livemode, `recurring.interval = year`,
-`interval_count` = term years): Post 1Y
-`price_1UUymDA3zjwds4H0HAo5Uybs`, Post 2Y
-`price_1UUymEA3zjwds4H04A4yOOAA`, Post 3Y
-`price_1UUymFA3zjwds4H0M3nv7Ai3`, Group 1Y
-`price_1UUymHA3zjwds4H0Im7782Om`, Group 2Y
-`price_1UUymIA3zjwds4H0eXxKqFZA`, Group 3Y
-`price_1UUymJA3zjwds4H0bN3plYWf` — on products
-`prod_VVvOTqlQPz76GC` (Post) / `prod_VVvO3wEu0weJ5U` (Group), so
-portal switching groups cleanly. Phantom secrets
-`STRIPE_PRICE_POST_1Y/2Y/3Y` + `STRIPE_PRICE_GROUP_1Y/2Y/3Y` set
-and digest-verified. One upfront charge per term; the subscription
-renews at the SAME term; cancelling keeps access until the term
-ends. `billing-checkout` kinds: `post_1y/post_2y/post_3y/
-group_1y/group_2y/group_3y` (subscription mode, `metadata.kind` =
-the kind; the webhook maps every term kind to its base tier and
-`current_period_end` falls out of the Stripe subscription).
-Retired kinds (`post_annual`, `group_annual`, `lifetime_post`,
-`lifetime_group`) return **400 `no_longer_available`**.
+Stripe prices (**ONE-TIME** — no `recurring`; livemode): Post 1Y
+`price_1UUzI0A3zjwds4H0N9cyq2wh`, Post 2Y
+`price_1UUzI4A3zjwds4H0V3BXVeKI`, Post 3Y
+`price_1UUzI5A3zjwds4H0wVtiRoAo`, Group 1Y
+`price_1UUzI7A3zjwds4H0Vvxbf1L4`, Group 2Y
+`price_1UUzI8A3zjwds4H0FVN6zBpe`, Group 3Y
+`price_1UUzI9A3zjwds4H0wy1QyYry` — on products
+`prod_VVvOTqlQPz76GC` (Post) / `prod_VVvO3wEu0weJ5U` (Group).
+Phantom secrets `STRIPE_PRICE_POST_1Y/2Y/3Y` +
+`STRIPE_PRICE_GROUP_1Y/2Y/3Y` point at these ids (digest-
+verified). The RECURRING term prices created earlier the same
+evening (`price_1UUymD…/1UUymE…/1UUymF…` Post,
+`price_1UUymH…/1UUymI…/1UUymJ…` Group) were **archived** in the
+rework. Retired kinds (`post_annual`, `group_annual`,
+`lifetime_post`, `lifetime_group`) return **400
+`no_longer_available`**.
 
 App: every buy card (purchase gate, signup choice gate,
 Settings → Plans) carries a term selector — **Monthly · 1 year
 (−5%) · 2 years (−10%) · 3 years (−15%)** — and the selection
-drives the shown price, the checkout kind, and the confirm modal's
-price + renewal wording ("Renews every 3 years on the day you
-subscribe…"). PLAN_DETAILS rows are unchanged.
+drives the shown price, the checkout kind, and the confirm
+modal's price + terms wording. PLAN_DETAILS rows are unchanged.
 
 ### Portal plan switching
 
 The default Billing Portal configuration
-(`bpc_1UUtgpA3zjwds4H0HpVljsPv`) now has
-`features.subscription_update.enabled = true` with both products
-and all four prices each (monthly + 1Y + 2Y + 3Y),
+(`bpc_1UUtgpA3zjwds4H0HpVljsPv`) has
+`features.subscription_update.enabled = true`,
 `proration_behavior = create_prorations`, and
-`default_allowed_updates = ["price"]` — a monthly subscriber can
-move to any term (or switch tier) at any time from Settings →
-Plans → "Manage or cancel subscription"; cancellation remains
-at-period-end. Verified by reading the active default config back.
+`default_allowed_updates = ["price"]`; cancellation remains
+at-period-end. Scope **after the one-time rework: monthly ↔
+monthly only** (Post ↔ Group) — terms are one-time purchases
+bought from the Plans tab, not subscription prices, so the
+portal's product list was set to the two monthly prices.
+CORRECTION to the original verification note: the Stripe
+connector's portal-config reads do NOT surface the `products`
+array at all (null in both read and write responses), so the
+products list itself is **not** connector-verifiable — the
+monthly-only payload was written without error (3×), and
+`enabled` / proration / cancel WERE read back verified. A
+30-second dashboard check (Settings → Billing → Customer
+portal) can confirm the products list visually.
 
 ### Support Plan — universal add-on (Matthew, 2026-10-26)
 
@@ -1207,11 +1249,20 @@ passed to customers (Matthew, 2026-10-26).
 
 ### Referral accrual under terms
 
-Accrual counting is **price-interval-driven** (see the Referrals
-section): a 2- or 3-year term buy counts 24/36 paid months toward
-the formula, still capped by the 12-paid-month window — so any
-prepaid term of 1 year or more maxes the referral at 4 free
-months, exactly like the old annual.
+Monthly-plan accrual stays **price-interval-driven** on
+`invoice.paid` (see the Referrals section). Prepaid terms have
+no subscription and no invoice, so they accrue at
+**`checkout.session.completed`**: the referee's paid months
+advance by **12 × years**, capped by the same 12-paid-month
+window and the same `min(4, floor(min(months,12)/3))` formula —
+any term of 1 year or more maxes the referral at 4 free months.
+Idempotency is per **checkout session id** in the
+`referral_invoices` ledger (the shared `accrueReferralMonths`
+core serves both paths). Known limitation: a refunded term
+payment has no invoice, so `charge.refunded` cannot find its
+ledger row to reverse — with the all-sales-final policy, refunds
+are Matthew's manual exception and any referral reversal is
+manual too.
 
 ### Verification — restructure (2026-10-26)
 
@@ -1254,6 +1305,60 @@ months, exactly like the old annual.
   to the pre-run delta, throwaway Stripe customers left inert
   (subscriptions cancelled, no payment method; the connector has
   no customer-delete operation) and marked as test rows.
+
+### Verification — one-time terms rework (2026-10-26, late)
+
+- **Stripe**: the six RECURRING term prices archived (read-back
+  `active: false`); six ONE-TIME prices created on the same
+  products and read back (`unit_amount` correct, `recurring`
+  absent, active). Phantom term secrets repointed at the
+  one-time ids and digest-verified (the GET `value` field is the
+  SHA-256 digest). Portal config rewritten with the monthly-only
+  products payload (products list not connector-readable — see
+  the correction note above).
+- **Functions**: billing-checkout **v22**, billing-webhook
+  **v19**, support-chat **v16** ACTIVE — deployed from sources
+  that merge this rework with the concurrent dealership Phase 2
+  build (the two builds shared the clone; the deployed bytes are
+  the merged files, and this commit's function sources match
+  them).
+- **Harnesses (against HEAD + this patch)**: billing **90/90**
+  (69 + 21 new term-limited access cases: term active, term
+  ended → gate `term_ended`, subscription-with-past-end legacy,
+  no-sub/no-end legacy); restructure **60/60** (payment-mode
+  forms with years metadata; term completion ≈ +3y; stacking;
+  monthly→term switch captures `cancel_at_period_end`;
+  term-protected deletion; plain-subscriber deletion still
+  expires — the protection test is "row end beyond the sub's own
+  end", refined after a harness catch); referral **82/82**
+  (accrual converted from term invoices to checkout completions:
+  1y/3y max-out, partial window +2, duplicate session no-op,
+  ineligible + non-referral cases — the term-invoice and
+  term-price-fallback cases were removed because one-time prices
+  can never appear on a subscription invoice); plan-details
+  **222/222** (the byte-identity assertion on computeAccessState
+  was converted to a term-case presence check — the function
+  legitimately changed; a `currentUserTier` prelude stub was
+  added); consent/terms **126/126** (card + modal copy assertions
+  updated to the one-time wording, incl. the projected end date
+  in the confirm modal); support **60/60**. The sync-cadence and
+  dealership suites are mid-update by the concurrent dealership
+  build (their new assertions target its un-pushed app state) and
+  were not part of this verification.
+- **Seeded E2E 38/38** (disposable user, real GoTrue JWT,
+  deployed functions): all 6 term kinds → real checkout
+  sessions, each read back in Stripe (`mode = payment`, metadata
+  `{kind, plan, years}`, `amount_total` = the term price) + all
+  6 one-time prices read back; retired kinds → 400
+  `no_longer_available`; `lifetime_status` → `available: false`;
+  support checkout for a plain account; monthly-subscription
+  webhook regression (updated → `active`, deleted → `expired`).
+  Term COMPLETION (the +years grant) is harness-proven against
+  the real webhook code — a live completion needs a real payment
+  through the hosted checkout page, which no automated run can
+  perform. Cleanup: disposable user deleted, settings count
+  restored, throwaway Stripe customer left inert and marked
+  (`cus_VW1pKDCWQIfQXM`).
 
 ## Dealership accounts — Phase 1 (built 2026-10-26)
 

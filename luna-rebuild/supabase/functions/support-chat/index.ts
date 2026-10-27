@@ -169,7 +169,7 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
       supabase.from("scraped_inventory").select("vin", { count: "exact", head: true })
         .eq("user_id", userId).gte("marketplace_posted_at", todayStart),
       supabase.from("dealership_account_members")
-        .select("role, dealership_accounts(name, status)")
+        .select("role, dealership_accounts(name, status, plan_flavor, trial_ends_at)")
         .eq("user_id", userId),
     ]);
 
@@ -183,9 +183,26 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     role: m.role,
     name: m.dealership_accounts?.name || "(unnamed dealership)",
     status: m.dealership_accounts?.status || "unknown",
+    flavor: m.dealership_accounts?.plan_flavor || null,
+    trialEndsAt: m.dealership_accounts?.trial_ends_at || null,
   }));
-  const coveredMembership = memberships.find((m: any) => m.status === "active");
+  // Coverage (Phase 2): an active dealership covers its MEMBERS;
+  // so does a dealership still inside its 5-day trial window (full
+  // Group flavor). An expired dealership covers nobody. The leader
+  // (admin) is NEVER covered — that account is manage-only
+  // (Matthew, 2026-10-26); it follows the personal path below.
+  const coveredMembership = memberships.find((m: any) =>
+    m.role === "member" &&
+    (m.status === "active" ||
+      (m.status === "trial" && m.trialEndsAt &&
+        Date.parse(m.trialEndsAt) > now.getTime()))
+  );
   const covered = !!coveredMembership;
+  const coveredFlavor = coveredMembership
+    ? (coveredMembership.status === "trial"
+      ? "group"
+      : coveredMembership.flavor || "group")
+    : null;
 
   const billingState = s?.billing_status || "none";
   const tier = resolveTier(s?.plan_tier);
@@ -197,9 +214,11 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     );
   }
 
-  // Sync cadence state: covered members ride at Group cadence; a
-  // trialing account uses the trial cadence; everyone else their tier.
-  const cadenceKey = covered ? "group" : billingState === "trialing" ? "trial" : tier;
+  // Sync cadence state: covered members ride at their dealership's
+  // flavor (trial dealerships and Group dealerships at Group
+  // cadence, Post dealerships at Post cadence); a trialing account
+  // uses the trial cadence; everyone else their tier.
+  const cadenceKey = covered ? (coveredFlavor || "group") : billingState === "trialing" ? "trial" : tier;
   const cadenceHours = SYNC_COOLDOWN_HOURS[cadenceKey] ?? 18;
   const lastRealSync = jobs.find((j: any) => j.sync_mode !== "test");
   let syncLine = "No inventory sync has run yet on this account.";
@@ -246,7 +265,7 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   if (covered) {
     lines.push(
       `- Dealership cover: this account is a ${coveredMembership.role} of ` +
-      `"${coveredMembership.name}" (active) — covered by the dealership, no personal subscription needed.`,
+      `"${coveredMembership.name}" (${coveredMembership.status === "trial" ? "dealership trial, full Group flavor" : (coveredFlavor || "group") + " plan"}) — covered by the dealership, no personal subscription needed.`,
     );
   } else if (memberships.length) {
     lines.push(
@@ -324,17 +343,19 @@ PLANS AND PRICES:
 - Multi-year prepaid terms (Post and Group): pay up front for 1, 2
   or 3 years and save — 1 year saves 5% (Post $855, Group $1,140),
   2 years saves 10% (Post $1,620, Group $2,160), 3 years saves 15%
-  (Post $2,295, Group $3,060). The term renews at the same term.
+  (Post $2,295, Group $3,060). A term is a ONE-TIME payment, not a
+  subscription: it never renews automatically — access runs to the
+  term's end date, and buying another term stacks more time on.
   There is no lifetime plan — it was retired before launch.
 - Priority Support — $199/year: a standalone add-on ANY account can
   buy (Settings -> Plans). Get priority human help from the
   AutoLaunch team. Bug reports are always free, with or without it.
 - Monthly plans renew on the same day of the month the subscription
-  started; prepaid terms renew on the same day their term ends.
-  Switch plans or terms anytime: Settings -> Plans -> "Manage or
-  cancel subscription" (Stripe Billing Portal) — price differences
-  are prorated. Cancel anytime in the same place; cancelling keeps
-  access until the paid period ends.
+  started. Switch between the monthly plans anytime: Settings ->
+  Plans -> "Manage or cancel subscription" (Stripe Billing Portal)
+  — price differences are prorated. Cancel anytime in the same
+  place; cancelling keeps access until the paid period ends.
+  Prepaid terms are bought from the Plans tab and do not renew.
 - Depending on your state, sales tax may be added at checkout and is
   shown before you pay.
 
@@ -379,7 +400,7 @@ THE HELPER (Chrome extension "AutoLaunch Vehicle Assistant"):
   so the tab is never discarded.
 
 POSTING — HOW IT WORKS AND WHY CARS FAIL:
-- Queue a car from Inventory (Post button, or the auto-poster queues
+- Queue a car from the Dashboard (Post button, or the auto-poster queues
   matching cars after each sync). The extension claims one job at a
   time, roughly once a minute, and deletes the queue row when done —
   an empty queue usually means the work finished, not a bug.
@@ -387,7 +408,7 @@ POSTING — HOW IT WORKS AND WHY CARS FAIL:
   (Settings -> Automation, post_delay_minutes) since the last post.
 - A car with NO real photos can never post.
 - Exterior AND interior color must both be set and not "Standard" —
-  a missing color fails at Facebook's Publish step. In Inventory the
+  a missing color fails at Facebook's Publish step. On the Dashboard the
   car shows an amber "Updates needed" button; set the colors there.
 - Price: listings use the advertised final price (retail minus savings
   plus doc fee). No price yet -> the car is blocked from posting until
@@ -442,11 +463,34 @@ OTHER FEATURES:
 - Every page has a "How it works" guide link with the full walkthrough.
 
 DEALERSHIP ACCOUNTS:
+- Registering as a dealership starts a free 5-day dealership trial:
+  up to 2 member seats, the full Group feature set, and the leader
+  can add members from the Dealership page right away.
+- Paid dealerships pick a flavor and a seat count (1 to 50 seats):
+  Dealership Post — $79/seat/mo for 1-9 seats, $75 for 10-24, $69
+  for 25-50. Dealership Group — $99/seat/mo for 1-9 seats, $95 for
+  10-24, $89 for 25-50. Every seat is billed at the rate for the
+  total seat count (a 10-seat Post store pays 10 x $75 = $750/mo).
+- Post seats follow the Post rules (5 queued posts a day per seat,
+  inventory sync every 18 hours, no Luca/automation); Group seats
+  get the full kit. The admin buys and manages seats on the
+  Dealership page and can change seats or flavor later in the
+  billing portal.
 - A dealership buys seats (slots, not named people). The dealership
   admin creates rep accounts with starting passwords, deletes an
   account to free its slot, and can reset a member's password.
-- Every seat gets the full feature kit. Covered members need no
-  personal subscription and never see trial or purchase screens.
+- THE LEADER RULE: the dealership's leader (admin) account is FREE,
+  manage-only, and NEVER counts as a seat — seats are the member
+  (salesperson) accounts only. The leader login manages the store
+  (roster, seats, billing) from the Dealership page and is never
+  product-covered by the dealership; product features live on the
+  salespeople's accounts. Management access never expires: a leader
+  whose trial or plan lapsed can still open the Dealership page
+  and buy seats.
+- Covered members need no personal subscription and never see
+  trial or purchase screens. When a dealership trial ends unpaid,
+  coverage stops and each member falls back to their own account's
+  trial or plan.
 - Member data belongs to the dealership — a departing rep's book
   stays with the store.
 `.trim();

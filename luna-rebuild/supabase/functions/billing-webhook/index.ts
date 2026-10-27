@@ -22,8 +22,9 @@
 // `kind` metadata billing-checkout stamps on every session and
 // subscription: post / group (monthly plan subscriptions),
 // post_1y / post_2y / post_3y and group_1y / group_2y / group_3y
-// (multi-year prepaid terms — same tiers; the price's interval_count
-// drives both the period and referral accrual), support (the
+// (multi-year prepaid terms — ONE-TIME payments since the
+// 2026-10-26 design change: no subscription exists; completion
+// extends current_period_end by the term's years, stacking), support (the
 // $199/year Support Plan — a standalone add-on any account can buy,
 // Matthew 2026-10-26). RETIRED kinds: post_annual / group_annual
 // (superseded annuals) and lifetime_post / lifetime_group (Founding
@@ -60,11 +61,25 @@
 //     billing_status at all — the lifetime purchase outranks any
 //     leftover monthly subscription (e.g. one the buyer cancels after
 //     upgrading to lifetime).
+//   DEALERSHIP subscriptions (Phase 2, 2026-10-26) route by kind
+//   "dealership" and write ONLY dealership_accounts — never the
+//   admin's user_settings: checkout.session.completed flips the
+//   dealership to status 'active' with seat_limit = the
+//   subscription quantity, plan_flavor from the session metadata,
+//   and the Stripe ids + current_period_end stored;
+//   customer.subscription.updated re-syncs seats/flavor/period
+//   (past_due keeps access, billing_status notes it);
+//   customer.subscription.deleted (or a canceled status) expires
+//   the dealership. Dealership invoices NEVER accrue referral
+//   bonuses: kind "dealership" is not a solo plan kind, so
+//   handleInvoicePaid returns before any accrual.
 //   invoice.paid → REFERRAL ACCRUAL (see TIERS.md "Referrals"): when
 //     the payer is a claimed referee on a solo plan kind, their paid
-//     months advance by the PRICE's interval (monthly price +1; a
-//     yearly price +12 × its interval_count — 1y +12, 2y +24, 3y
-//     +36 — with the eligibility window capped at 12) and every
+//     months advance by the PRICE's interval (a monthly price +1;
+//     the interval math remains for any yearly price) with the
+//     eligibility window capped at 12; prepaid TERM purchases have
+//     no invoice — they accrue at checkout.session.completed
+//     instead (12 × years, ledger-keyed by the session id). Every
 //     completed block of 3 paid months grants the
 //     referrer one free month as STRIPE CUSTOMER BALANCE at the
 //     referrer's own monthly price (Group $100, otherwise $75) — max
@@ -198,6 +213,110 @@ function lifetimeTierOf(kind: string): string | null {
   return null;
 }
 
+// ---- Dealership routing (Phase 2) -----------------------------------
+// The dealership a session/subscription belongs to: checkout stamps
+// metadata.dealership_id on both; subscriptions created before a
+// metadata fix could still be found by their stored subscription id.
+function dealershipIdOf(session: any, sub: any): string {
+  return String(
+    session?.metadata?.dealership_id || sub?.metadata?.dealership_id || "",
+  );
+}
+
+function dealerFlavorOf(session: any, sub: any): string | null {
+  const f = String(session?.metadata?.flavor || sub?.metadata?.flavor || "");
+  if (f === "post" || f === "group") return f;
+  const priceId = sub?.items?.data?.[0]?.price?.id || "";
+  if (priceId && priceId === (Deno.env.get("STRIPE_PRICE_DEALER_POST") || "")) {
+    return "post";
+  }
+  if (priceId && priceId === (Deno.env.get("STRIPE_PRICE_DEALER_GROUP") || "")) {
+    return "group";
+  }
+  return null;
+}
+
+function dealerQuantity(sub: any): number | null {
+  const q = Number(sub?.items?.data?.[0]?.quantity);
+  return Number.isFinite(q) && q > 0 ? Math.floor(q) : null;
+}
+
+async function findDealership(svc: any, session: any, sub: any) {
+  const did = dealershipIdOf(session, sub);
+  if (did) {
+    const { data } = await svc
+      .from("dealership_accounts")
+      .select("id")
+      .eq("id", did)
+      .maybeSingle();
+    if (data?.id) return data.id as string;
+  }
+  if (sub?.id) {
+    const { data } = await svc
+      .from("dealership_accounts")
+      .select("id")
+      .eq("stripe_subscription_id", sub.id)
+      .maybeSingle();
+    if (data?.id) return data.id as string;
+  }
+  return null;
+}
+
+async function handleDealershipCheckout(svc: any, session: any, sub: any) {
+  const did = await findDealership(svc, session, sub);
+  if (!did) {
+    console.error("billing-webhook: dealership checkout, dealership not resolvable");
+    return;
+  }
+  const update: Record<string, unknown> = {
+    status: "active",
+    billing_status: "active",
+    plan_flavor: dealerFlavorOf(session, sub),
+    stripe_customer_id: session.customer ? String(session.customer) : null,
+    stripe_subscription_id: sub?.id ? String(sub.id) : null,
+    current_period_end: periodEndIso(sub),
+  };
+  const qty = dealerQuantity(sub);
+  if (qty !== null) update.seat_limit = qty;
+  const { error } = await svc
+    .from("dealership_accounts")
+    .update(update)
+    .eq("id", did);
+  if (error) throw error;
+}
+
+async function handleDealershipSubscription(svc: any, sub: any, deleted: boolean) {
+  const did = await findDealership(svc, null, sub);
+  if (!did) {
+    console.error("billing-webhook: dealership subscription event, dealership not resolvable");
+    return;
+  }
+  const update: Record<string, unknown> = {
+    stripe_subscription_id: sub.id || null,
+    current_period_end: periodEndIso(sub),
+  };
+  const flavor = dealerFlavorOf(null, sub);
+  if (flavor) update.plan_flavor = flavor;
+  const qty = dealerQuantity(sub);
+  if (qty !== null && !deleted) update.seat_limit = qty;
+  if (deleted || sub.status === "canceled") {
+    update.status = "expired";
+    update.billing_status = "expired";
+  } else if (sub.status === "past_due") {
+    // Card problem, Stripe is retrying: access stays, note the state.
+    console.log("billing-webhook: dealership subscription past_due for " + did);
+    update.billing_status = "past_due";
+  } else if (sub.status === "active" || sub.status === "trialing") {
+    update.status = "active";
+    update.billing_status = "active";
+  }
+  const { error } = await svc
+    .from("dealership_accounts")
+    .update(update)
+    .eq("id", did);
+  if (error) throw error;
+}
+
 function supportStatusOf(subStatus: string | undefined, deleted: boolean): string {
   if (deleted) return "canceled";
   if (subStatus === "active" || subStatus === "trialing") return "active";
@@ -245,6 +364,21 @@ const SOLO_PLAN_KINDS = [
   "post_1y", "post_2y", "post_3y",
   "group_1y", "group_2y", "group_3y",
 ];
+
+// Prepaid terms (design change 2026-10-26): the term kinds are
+// ONE-TIME purchases. A completed term checkout grants `years` of
+// access by extending current_period_end — stacked on top of any
+// time already remaining (early re-buys extend, never restart).
+const TERM_YEARS: Record<string, number> = {
+  post_1y: 1, post_2y: 2, post_3y: 3,
+  group_1y: 1, group_2y: 2, group_3y: 3,
+};
+
+function addYearsISO(baseMs: number, years: number): string {
+  const d = new Date(baseMs);
+  d.setUTCFullYear(d.getUTCFullYear() + years);
+  return d.toISOString();
+}
 const REFERRAL_PAID_MONTH_CAP = 12;
 const REFERRAL_BONUS_CAP = 4;
 
@@ -378,10 +512,34 @@ async function handleInvoicePaid(svc: any, secretKey: string, invoice: any) {
     .maybeSingle();
   if (!ref) return; // not a referred account — nothing accrues
 
-  // Claim the invoice in the ledger FIRST: a PK conflict means a
-  // redelivery of an event already processed — never double-count.
+  // The invoice line's price object first (expanded prices carry
+  // the recurring interval that drives the month count); the
+  // subscription item's price object as the fallback source.
+  const priceObj = invoice.lines?.data?.[0]?.price ||
+    sub.items?.data?.[0]?.price || null;
+  await accrueReferralMonths(
+    svc, secretKey, ref, refereeId, paidMonthsForPrice(priceObj), invoiceId,
+  );
+}
+
+// Shared accrual core (invoice path above; prepaid-term checkout
+// completions below): claims the ledger key FIRST (the invoice id,
+// or the checkout session id for a term purchase — the PK makes any
+// redelivery a no-op), then advances the referee's paid months by
+// rawMonths (window-capped at REFERRAL_PAID_MONTH_CAP) and grants
+// any newly due bonus months as referrer customer balance.
+async function accrueReferralMonths(
+  svc: any,
+  secretKey: string,
+  ref: any,
+  refereeId: string,
+  rawMonths: number,
+  ledgerKey: string,
+) {
+  // Claim the ledger key FIRST: a PK conflict means a redelivery of
+  // an event already processed — never double-count.
   const { error: claimErr } = await svc.from("referral_invoices").insert({
-    invoice_id: invoiceId,
+    invoice_id: ledgerKey,
     referral_id: ref.id,
     referee_user_id: refereeId,
   });
@@ -395,12 +553,7 @@ async function handleInvoicePaid(svc: any, secretKey: string, invoice: any) {
   let creditCents = 0;
   let creditTxnId: string | null = null;
   try {
-    // The invoice line's price object first (expanded prices carry
-    // the recurring interval that drives the month count); the
-    // subscription item's price object as the fallback source.
-    const priceObj = invoice.lines?.data?.[0]?.price ||
-      sub.items?.data?.[0]?.price || null;
-    const months = paidMonthsForPrice(priceObj);
+    const months = rawMonths;
     if (ref.bonus_eligible && months > 0) {
       const room = Math.max(0, REFERRAL_PAID_MONTH_CAP - (ref.referee_paid_months || 0));
       monthsAdded = Math.min(months, room);
@@ -439,7 +592,7 @@ async function handleInvoicePaid(svc: any, secretKey: string, invoice: any) {
           // same due bonus and retries the grant.
           console.error(
             "billing-webhook: referral credit failed for referrer " +
-              ref.referrer_user_id + " (invoice " + invoiceId + ")",
+              ref.referrer_user_id + " (ledger " + ledgerKey + ")",
           );
           creditCents = 0;
           delta = 0;
@@ -467,9 +620,9 @@ async function handleInvoicePaid(svc: any, secretKey: string, invoice: any) {
         bonuses_delta: delta,
         credit_amount_cents: creditCents,
         credit_txn_id: creditTxnId,
-      }).eq("invoice_id", invoiceId);
+      }).eq("invoice_id", ledgerKey);
     } else {
-      await svc.from("referral_invoices").delete().eq("invoice_id", invoiceId);
+      await svc.from("referral_invoices").delete().eq("invoice_id", ledgerKey);
     }
     throw e;
   }
@@ -479,7 +632,7 @@ async function handleInvoicePaid(svc: any, secretKey: string, invoice: any) {
     bonuses_delta: delta,
     credit_amount_cents: creditCents,
     credit_txn_id: creditTxnId,
-  }).eq("invoice_id", invoiceId);
+  }).eq("invoice_id", ledgerKey);
   if (ledErr) throw ledErr;
 }
 
@@ -606,13 +759,89 @@ Deno.serve(async (req) => {
     if (event.type === "checkout.session.completed") {
       const subId = typeof obj.subscription === "string" ? obj.subscription : "";
       const sub = subId ? await fetchSubscription(secretKey, subId) : null;
-      const userId = await findUserId(svc, sub, obj);
       const kind = kindOf(obj, sub);
+      if (kind === "dealership") {
+        // Dealership purchase: writes ONLY the dealership row. The
+        // admin's personal billing is never touched by a store
+        // subscription.
+        await handleDealershipCheckout(svc, obj, sub);
+        return json({ received: true });
+      }
+      const userId = await findUserId(svc, sub, obj);
       const lifetimeTier = lifetimeTierOf(kind);
       const plan = obj.metadata?.plan || sub?.metadata?.plan || "";
       if (userId) {
         let update: Record<string, unknown>;
-        if (lifetimeTier) {
+        let handled = false;
+        if (TERM_YEARS[kind]) {
+          // Prepaid term purchase (ONE-TIME payment — no
+          // subscription exists). Grant: billing active at the
+          // term's tier, current_period_end = max(existing end,
+          // now) + years (re-buys STACK). stripe_subscription_id is
+          // deliberately untouched. Two side effects, both
+          // fail-soft after the grant lands:
+          //  - SWITCH RULE: a monthly subscriber moving to a term
+          //    keeps their subscription only until its current
+          //    period ends (cancel_at_period_end) — the term
+          //    already covers them from today.
+          //  - REFERRALS: no subscription invoice exists, so
+          //    accrual happens here, keyed by the SESSION id.
+          const years = TERM_YEARS[kind];
+          const { data: trow } = await svc
+            .from("user_settings")
+            .select("current_period_end, stripe_subscription_id, stripe_customer_id")
+            .eq("user_id", userId)
+            .maybeSingle();
+          const nowMs = Date.now();
+          const existingEnd = trow?.current_period_end
+            ? Date.parse(trow.current_period_end)
+            : NaN;
+          const baseMs = Number.isFinite(existingEnd) && existingEnd > nowMs
+            ? existingEnd
+            : nowMs;
+          update = {
+            user_id: userId,
+            billing_status: "active",
+            plan_tier: kind.startsWith("group") ? "group" : "post",
+            current_period_end: addYearsISO(baseMs, years),
+            stripe_customer_id: obj.customer
+              ? String(obj.customer)
+              : (trow?.stripe_customer_id ?? null),
+          };
+          const { error } = await svc
+            .from("user_settings")
+            .upsert(update, { onConflict: "user_id" });
+          if (error) throw error;
+          handled = true;
+          const existingSubId = trow?.stripe_subscription_id || "";
+          if (existingSubId) {
+            const cx = await stripeCall(
+              secretKey, "POST",
+              "/subscriptions/" + encodeURIComponent(existingSubId),
+              { cancel_at_period_end: "true" },
+            );
+            if (!cx) {
+              console.error(
+                "billing-webhook: term switch — cancel_at_period_end failed for sub " +
+                  existingSubId + " (user " + userId + ")",
+              );
+            }
+          }
+          try {
+            const { data: ref } = await svc
+              .from("referrals")
+              .select("*")
+              .eq("referee_user_id", userId)
+              .maybeSingle();
+            if (ref) {
+              await accrueReferralMonths(
+                svc, secretKey, ref, userId, 12 * years, String(obj.id || ""),
+              );
+            }
+          } catch (e) {
+            console.error("billing-webhook: term referral accrual failed: " + e);
+          }
+        } else if (lifetimeTier) {
           // Founding Lifetime: active forever at the bought tier.
           // Deliberately NO subscription fields — stripe_subscription_id
           // and current_period_end stay whatever they were (NULL for a
@@ -647,10 +876,12 @@ Deno.serve(async (req) => {
           };
           if (plan === "post" || plan === "group") update.plan_tier = plan;
         }
-        const { error } = await svc
-          .from("user_settings")
-          .upsert(update, { onConflict: "user_id" });
-        if (error) throw error;
+        if (!handled) {
+          const { error } = await svc
+            .from("user_settings")
+            .upsert(update, { onConflict: "user_id" });
+          if (error) throw error;
+        }
       } else {
         console.error("billing-webhook: checkout completed, user not resolvable");
       }
@@ -660,6 +891,10 @@ Deno.serve(async (req) => {
     ) {
       const sub = obj;
       const deleted = event.type === "customer.subscription.deleted";
+      if (kindOf(null, sub) === "dealership") {
+        await handleDealershipSubscription(svc, sub, deleted);
+        return json({ received: true });
+      }
       const userId = await findUserId(svc, sub);
       if (userId) {
         if (kindOf(null, sub) === "support") {
@@ -676,26 +911,45 @@ Deno.serve(async (req) => {
             }, { onConflict: "user_id" });
           if (error) throw error;
         } else {
-          // Plan subscription. A lifetime account outranks it: if the
-          // row carries a lifetime_tier, a leftover monthly
-          // subscription's lifecycle (including the cancel the buyer
-          // does right after upgrading) must never expire the account.
+          // Plan subscription. Two protections outrank it:
+          //  - a lifetime account (historical): a leftover monthly
+          //    subscription's lifecycle must never expire the row;
+          //  - a TERM-PROTECTED row: the account holds prepaid term
+          //    time beyond anything this subscription granted (the
+          //    monthly sub a term buyer switched away from is
+          //    cancelled at period end, and its eventual deletion
+          //    must not expire the term or overwrite its end date).
           const { data: row } = await svc
             .from("user_settings")
-            .select("lifetime_tier")
+            .select("lifetime_tier, current_period_end")
             .eq("user_id", userId)
             .maybeSingle();
+          // Protection test: the row holds time THIS subscription
+          // never granted (a stacked term end far beyond the sub's
+          // own end). An ordinary subscriber's row end EQUALS their
+          // sub's end, so their deletion still expires them exactly
+          // as before — mid-period or at period end alike.
+          const rowEndMs = row?.current_period_end
+            ? Date.parse(row.current_period_end)
+            : NaN;
+          const subEndIso = periodEndIso(sub);
+          const subEndMs = subEndIso ? Date.parse(subEndIso) : NaN;
+          const termProtected = Number.isFinite(rowEndMs) &&
+            (Number.isFinite(subEndMs)
+              ? rowEndMs > subEndMs + 60000
+              : rowEndMs > Date.now() + 60000);
           const update: Record<string, unknown> = {
             user_id: userId,
             stripe_subscription_id: sub.id || null,
             current_period_end: periodEndIso(sub),
           };
-          if (row?.lifetime_tier) {
+          if (row?.lifetime_tier || termProtected) {
             console.log(
-              "billing-webhook: plan subscription event for lifetime user " +
-                userId + " — billing_status untouched",
+              "billing-webhook: plan subscription event for protected user " +
+                userId + " — billing_status + period end untouched",
             );
             delete update.current_period_end;
+            delete update.billing_status;
           } else if (deleted) {
             update.billing_status = "expired";
           } else if (sub.status === "active" || sub.status === "trialing") {
@@ -710,7 +964,7 @@ Deno.serve(async (req) => {
           }
           const priceId = sub.items?.data?.[0]?.price?.id;
           const plan = planFromPriceId(priceId);
-          if (plan && !deleted && !row?.lifetime_tier) {
+          if (plan && !deleted && !row?.lifetime_tier && !termProtected) {
             update.plan_tier = plan;
           }
           const { error } = await svc

@@ -4227,6 +4227,7 @@ let currentBilling = {
   trialEndsAt: null,
   periodEnd: null,
   hasStripeCustomer: false,
+  hasSubscription: false, // stripe_subscription_id present on the row
   // Founding Lifetime + Support Plan (2026-10-26): a lifetime row has
   // status 'active', lifetimeTier set, and periodEnd NULL forever —
   // nothing may read the NULL period end as an expiry.
@@ -4308,8 +4309,25 @@ function computeAccessState(input) {
     return { mode: "gate", gateKind: "expired", daysLeft: 0 };
   }
   if (s === "expired") return { mode: "gate", gateKind: "expired", daysLeft: 0 };
-  // 'active', null (the account's row predates billing — grandfathered),
-  // or anything unrecognized: full access under the normal tier rules.
+  if (s === "active") {
+    // TERM-LIMITED (2026-10-26): a prepaid-term account is 'active'
+    // with NO subscription and a current_period_end — the term is a
+    // one-time purchase, so the period end IS the access boundary.
+    // The case engages ONLY when the caller explicitly reports
+    // hasSubscription === false and a period end exists; an
+    // undefined hasSubscription (older callers, harness fixtures)
+    // and a NULL period end (subscription-less legacy rows) keep
+    // the plain full-access behavior below.
+    if (input.hasSubscription === false && input.periodEndMs) {
+      if (now < input.periodEndMs) {
+        return { mode: "full", gateKind: null, daysLeft: null, termActive: true, termEndsAtMs: input.periodEndMs };
+      }
+      return { mode: "gate", gateKind: "term_ended", daysLeft: 0 };
+    }
+    return { mode: "full", gateKind: null, daysLeft: null };
+  }
+  // null (the account's row predates billing — grandfathered) or
+  // anything unrecognized: full access under the normal tier rules.
   return { mode: "full", gateKind: null, daysLeft: null };
 }
 
@@ -4412,6 +4430,8 @@ function billingAccess() {
     ownerPreview: ownerBillingPreview,
     billingStatus: currentBilling.status,
     trialEndsAtMs: currentBilling.trialEndsAt ? Date.parse(currentBilling.trialEndsAt) : null,
+    periodEndMs: currentBilling.periodEnd ? Date.parse(currentBilling.periodEnd) : null,
+    hasSubscription: currentBilling.hasSubscription,
     nowMs: Date.now()
   });
 }
@@ -4710,8 +4730,8 @@ function openPlanPurchase() {
 // (CHECKOUT_PLAN_INFO). Founding Lifetime was retired the same day,
 // before a single sale — these terms replace it.
 const PLAN_TERM_PRICES = {
-  post: { monthly: "75/mo", "1y": "855/yr", "2y": "1,620/2 yrs", "3y": "2,295/3 yrs" },
-  group: { monthly: "100/mo", "1y": "1,140/yr", "2y": "2,160/2 yrs", "3y": "3,060/3 yrs" }
+  post: { monthly: "75/mo", "1y": "855 one-time", "2y": "1,620 one-time", "3y": "2,295 one-time" },
+  group: { monthly: "100/mo", "1y": "1,140 one-time", "2y": "2,160 one-time", "3y": "3,060 one-time" }
 };
 const PLAN_TERMS = [
   { key: "monthly", label: "Monthly", off: "" },
@@ -4729,8 +4749,22 @@ function planTermKind(plan) {
 function planTermRenewalLine(plan) {
   const t = selectedBillingTerm[plan] || "monthly";
   if (t === "monthly") return "Renews monthly on the day you subscribe.";
-  if (t === "1y") return "Renews every year on the day you subscribe.";
-  return "Renews every " + t.charAt(0) + " years on the day you subscribe.";
+  // Terms are ONE-TIME purchases (Matthew, 2026-10-26): no renewal —
+  // the line states the access window and its projected end date
+  // (stacked on any term time the account already holds).
+  const n = parseInt(t.charAt(0), 10) || 1;
+  return "One-time payment — access until " + fmtBillingDate(projectedTermEndMs(n)) + ". Does not renew automatically.";
+}
+
+// The end of access a term purchase would produce: any term time
+// still remaining counts first (re-buys stack, never restart).
+function projectedTermEndMs(years) {
+  const now = Date.now();
+  const existing = currentBilling.periodEnd ? Date.parse(currentBilling.periodEnd) : NaN;
+  const base = isFinite(existing) && existing > now ? existing : now;
+  const d = new Date(base);
+  d.setFullYear(d.getFullYear() + years);
+  return d.getTime();
 }
 
 function setBillingTerm(plan, term) {
@@ -4765,7 +4799,7 @@ function renderPurchaseCards(containerId, msgId) {
       '<p class="text-xs text-slate-500 leading-relaxed">' + info.tagline + '</p>' +
       planFeaturesHtml(plan, "mt-3 flex-1") +
       billingTermSelectorHtml(plan) +
-      '<p class="text-[11px] text-slate-400 mt-3">' + planTermRenewalLine(plan) + ' Cancel anytime in Settings. All sales final — no refunds.</p>' +
+      '<p class="text-[11px] text-slate-400 mt-3">' + planTermRenewalLine(plan) + ((selectedBillingTerm[plan] || "monthly") === "monthly" ? ' Cancel anytime in Settings.' : '') + ' All sales final — no refunds.</p>' +
       '<button onclick="startCheckout(\'' + planTermKind(plan) + '\', \'' + msgId + '\')" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Buy ' + info.name + ' — $' + price + '</button></div>';
   }).join("");
 }
@@ -4939,13 +4973,13 @@ async function billingFunctionErrorCode(error) {
 const TERMS_VERSION = "2026-10-26";
 const CHECKOUT_PLAN_INFO = {
   post:          { title: "AutoLaunch Post", price: "$75/month",        terms: "Renews monthly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid period." },
-  post_1y:       { title: "AutoLaunch Post — 1-year term", price: "$855/year", terms: "One year of access, paid up front — 5% off monthly billing. Renews every year on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid term." },
-  post_2y:       { title: "AutoLaunch Post — 2-year term", price: "$1,620/2 years", terms: "Two years of access, paid up front — 10% off monthly billing. Renews every 2 years on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid term." },
-  post_3y:       { title: "AutoLaunch Post — 3-year term", price: "$2,295/3 years", terms: "Three years of access, paid up front — 15% off monthly billing. Renews every 3 years on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid term." },
+  post_1y:       { title: "AutoLaunch Post — 1-year term", price: "$855 one-time", years: 1, terms: "One year of access, paid up front — 5% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  post_2y:       { title: "AutoLaunch Post — 2-year term", price: "$1,620 one-time", years: 2, terms: "Two years of access, paid up front — 10% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  post_3y:       { title: "AutoLaunch Post — 3-year term", price: "$2,295 one-time", years: 3, terms: "Three years of access, paid up front — 15% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
   group:         { title: "AutoLaunch Group", price: "$100/month",     terms: "Renews monthly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid period." },
-  group_1y:      { title: "AutoLaunch Group — 1-year term", price: "$1,140/year", terms: "One year of access, paid up front — 5% off monthly billing. Renews every year on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid term." },
-  group_2y:      { title: "AutoLaunch Group — 2-year term", price: "$2,160/2 years", terms: "Two years of access, paid up front — 10% off monthly billing. Renews every 2 years on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid term." },
-  group_3y:      { title: "AutoLaunch Group — 3-year term", price: "$3,060/3 years", terms: "Three years of access, paid up front — 15% off monthly billing. Renews every 3 years on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid term." },
+  group_1y:      { title: "AutoLaunch Group — 1-year term", price: "$1,140 one-time", years: 1, terms: "One year of access, paid up front — 5% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  group_2y:      { title: "AutoLaunch Group — 2-year term", price: "$2,160 one-time", years: 2, terms: "Two years of access, paid up front — 10% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  group_3y:      { title: "AutoLaunch Group — 3-year term", price: "$3,060 one-time", years: 3, terms: "Three years of access, paid up front — 15% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
   support:       { title: "Priority Support", price: "$199/year",      terms: "Priority human help from the AutoLaunch team for one year. Bug reports are always free, with or without this plan. Renews yearly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; priority support continues until the end of the paid year." },
 };
 let pendingCheckout = null;
@@ -4956,7 +4990,11 @@ function startCheckout(plan, msgId) {
   pendingCheckout = { plan: plan, msgId: msgId || null };
   document.getElementById('checkoutConfirmPlan').innerText = info.title;
   document.getElementById('checkoutConfirmPrice').innerText = info.price;
-  document.getElementById('checkoutConfirmTerms').innerText = info.terms;
+  // Term kinds are one-time purchases: their copy carries the
+  // projected access end date (stacked on remaining term time).
+  document.getElementById('checkoutConfirmTerms').innerText = info.years
+    ? info.terms.replace("{END}", fmtBillingDate(projectedTermEndMs(info.years)))
+    : info.terms;
   const box = document.getElementById('checkoutConfirmConsent');
   box.checked = false;
   document.getElementById('checkoutConfirmBtn').disabled = true;
@@ -5061,6 +5099,9 @@ function applyPurchaseGate() {
     if (access.gateKind === "blocked") {
       if (head) head.innerText = "This account isn't eligible for a free trial";
       if (sub) sub.innerText = "Pick a plan to start using AutoLaunch:";
+    } else if (access.gateKind === "term_ended") {
+      if (head) head.innerText = "Your prepaid term has ended";
+      if (sub) sub.innerText = "Pick a plan to keep posting:";
     } else {
       if (head) head.innerText = "Your 5-day trial has ended";
       if (sub) sub.innerText = "Pick a plan to keep posting:";
@@ -5105,6 +5146,8 @@ function renderBillingPanel() {
   const access = billingAccess();
   const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
   const supportActive = currentBilling.supportPlanStatus === "active" && !!currentBilling.supportPeriodEnd;
+  const planName = PLAN_DETAILS[currentUserTier] ? PLAN_DETAILS[currentUserTier].name : "AutoLaunch";
+  const termEndMs = currentBilling.periodEnd ? Date.parse(currentBilling.periodEnd) : null;
   let status = "";
   let detail = "";
   if (isOwner && !ownerBillingPreview) {
@@ -5117,8 +5160,14 @@ function renderBillingPanel() {
     status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
     detail = "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
   } else if (access.mode === "gate") {
-    status = access.gateKind === "blocked" ? "This account isn't eligible for a free trial." : "Your free trial has ended.";
+    status = access.gateKind === "blocked" ? "This account isn't eligible for a free trial."
+      : access.gateKind === "term_ended" ? "Your prepaid term has ended." : "Your free trial has ended.";
     detail = "Pick a plan below to keep using AutoLaunch.";
+  } else if (access.termActive) {
+    // Prepaid term (one-time purchase): show the plan + the exact
+    // end of access. There is no subscription and nothing renews.
+    status = "Prepaid term — " + planName + ". Access until " + fmtBillingDate(termEndMs) + ".";
+    detail = "One-time payment — it does not renew automatically. Buy another term anytime and the time stacks on.";
   } else {
     status = "Subscription active.";
     detail = currentBilling.periodEnd
@@ -5128,7 +5177,9 @@ function renderBillingPanel() {
   statusEl.innerText = status;
   if (detailEl) detailEl.innerText = detail;
   renderPurchaseCards("purchaseCards", "planBillingMsg");
-  if (cards) cards.classList.toggle("hidden", access.mode === "full");
+  // Cards hide for ordinary full (subscription) accounts; a TERM
+  // holder keeps them visible so they can stack another term early.
+  if (cards) cards.classList.toggle("hidden", access.mode === "full" && !access.termActive);
   // The Support Plan card (Matthew, 2026-10-26): a standalone
   // $199/year add-on ANY non-owner account can buy — trial,
   // subscriber, dealership-covered alike. Owners never see it.
@@ -5794,7 +5845,9 @@ function openAccountModal() {
   } else if (access.mode === "gate") {
     billing = access.gateKind === "blocked"
       ? "This account isn't eligible for a free trial."
-      : "Your free trial has ended — pick a plan in Settings → Plan to continue.";
+      : access.gateKind === "term_ended"
+        ? "Your prepaid term has ended — pick a plan in Settings → Plans to continue."
+        : "Your free trial has ended — pick a plan in Settings → Plan to continue.";
   } else {
     billing = currentBilling.periodEnd
       ? "Subscription active · current period ends " + fmtBillingDate(Date.parse(currentBilling.periodEnd)) + "."
@@ -6025,6 +6078,7 @@ async function loadUserStoreSettings() {
       trialEndsAt: data ? (data.trial_ends_at || null) : null,
       periodEnd: data ? (data.current_period_end || null) : null,
       hasStripeCustomer: !!(data && data.stripe_customer_id),
+      hasSubscription: !!(data && data.stripe_subscription_id),
       lifetimeTier: data ? (data.lifetime_tier || null) : null,
       lifetimePurchasedAt: data ? (data.lifetime_purchased_at || null) : null,
       supportPlanStatus: data ? (data.support_plan_status || null) : null,

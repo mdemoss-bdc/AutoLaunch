@@ -6,15 +6,38 @@
 //   group_2y / group_3y     1 year $855/$1,140 = 5% off, 2 years
 //                           $1,620/$2,160 = 10% off, 3 years
 //                           $2,295/$3,060 = 15% off the monthly×term
-//                           totals; prices live ON the Post/Group
-//                           products so portal switching groups
-//                           cleanly). The webhook maps every term
-//                           kind to its base tier, and referral
-//                           accrual counts paid months from the
-//                           price's interval (12 × interval_count).
+//                           totals). DESIGN CHANGE (Matthew,
+//                           2026-10-26 21:26 EDT): the terms are
+//                           ONE-TIME purchases (mode "payment",
+//                           one-time prices), NOT subscriptions —
+//                           so buyers can pay with Affirm/Klarna and
+//                           AutoLaunch is paid in full upfront. The
+//                           webhook's term-completion branch sets
+//                           the access window (stacking period_end)
+//                           from metadata {kind, plan, years}; there
+//                           is no term subscription and no renewal.
 //   support                 Support Plan subscription ($199/year) —
 //                           a standalone add-on ANY account can buy
 //                           (Matthew, 2026-10-26: NOT lifetime-gated).
+//   dealership              Dealership seat subscription (Phase 2,
+//                           2026-10-26): body { plan: "dealership",
+//                           dealership_id, flavor: "post"|"group",
+//                           seats: 1..50 }. The caller MUST be an
+//                           admin member of that dealership (verified
+//                           against dealership_account_members with
+//                           the service role). Quantity = seats on
+//                           the flavor's VOLUME-tiered price (every
+//                           seat billed at the bracket rate for the
+//                           total count — Post 1-9 $79 / 10-24 $75 /
+//                           25+ $69; Group 1-9 $99 / 10-24 $95 /
+//                           25+ $89 — the server enforces the 1..50
+//                           range, so the open tier never serves
+//                           51+). The Stripe customer belongs to the
+//                           DEALERSHIP (created with the admin's
+//                           email, stored on the dealership row) —
+//                           the webhook routes these subscriptions
+//                           by metadata.kind "dealership" and never
+//                           touches the admin's personal billing.
 // RETIRED kinds — post_annual / group_annual (the $750/$1,000
 // "2 months free" annuals, superseded by the term ladder) and
 // lifetime_post / lifetime_group (the Founding Lifetime offer,
@@ -57,7 +80,8 @@
 //   STRIPE_SECRET_KEY, STRIPE_PRICE_POST, STRIPE_PRICE_GROUP,
 //   STRIPE_PRICE_POST_1Y, STRIPE_PRICE_POST_2Y, STRIPE_PRICE_POST_3Y,
 //   STRIPE_PRICE_GROUP_1Y, STRIPE_PRICE_GROUP_2Y, STRIPE_PRICE_GROUP_3Y,
-//   STRIPE_PRICE_SUPPORT, STRIPE_TAX_ENABLED (optional, see above).
+//   STRIPE_PRICE_SUPPORT, STRIPE_PRICE_DEALER_POST,
+//   STRIPE_PRICE_DEALER_GROUP, STRIPE_TAX_ENABLED (optional, above).
 // (The retired STRIPE_PRICE_*_ANNUAL and STRIPE_PRICE_LIFETIME_*
 // secrets may still be set on the project — nothing reads them.)
 // A plan whose price secret is missing returns
@@ -93,15 +117,18 @@ const RETIRED_PLANS = new Set([
   "lifetime_group",
 ]);
 
-const PLANS: Record<string, { priceEnv: string; mode: string; tier: string | null }> = {
+const PLANS: Record<string, { priceEnv: string; mode: string; tier: string | null; years?: number }> = {
   post: { priceEnv: "STRIPE_PRICE_POST", mode: "subscription", tier: "post" },
   group: { priceEnv: "STRIPE_PRICE_GROUP", mode: "subscription", tier: "group" },
-  post_1y: { priceEnv: "STRIPE_PRICE_POST_1Y", mode: "subscription", tier: "post" },
-  post_2y: { priceEnv: "STRIPE_PRICE_POST_2Y", mode: "subscription", tier: "post" },
-  post_3y: { priceEnv: "STRIPE_PRICE_POST_3Y", mode: "subscription", tier: "post" },
-  group_1y: { priceEnv: "STRIPE_PRICE_GROUP_1Y", mode: "subscription", tier: "group" },
-  group_2y: { priceEnv: "STRIPE_PRICE_GROUP_2Y", mode: "subscription", tier: "group" },
-  group_3y: { priceEnv: "STRIPE_PRICE_GROUP_3Y", mode: "subscription", tier: "group" },
+  // Prepaid terms: ONE-TIME prices, payment mode. `years` rides to
+  // the webhook in the session metadata — the term grants that many
+  // years of access from the (stacked) period end.
+  post_1y: { priceEnv: "STRIPE_PRICE_POST_1Y", mode: "payment", tier: "post", years: 1 },
+  post_2y: { priceEnv: "STRIPE_PRICE_POST_2Y", mode: "payment", tier: "post", years: 2 },
+  post_3y: { priceEnv: "STRIPE_PRICE_POST_3Y", mode: "payment", tier: "post", years: 3 },
+  group_1y: { priceEnv: "STRIPE_PRICE_GROUP_1Y", mode: "payment", tier: "group", years: 1 },
+  group_2y: { priceEnv: "STRIPE_PRICE_GROUP_2Y", mode: "payment", tier: "group", years: 2 },
+  group_3y: { priceEnv: "STRIPE_PRICE_GROUP_3Y", mode: "payment", tier: "group", years: 3 },
   support: { priceEnv: "STRIPE_PRICE_SUPPORT", mode: "subscription", tier: null },
 };
 
@@ -163,6 +190,127 @@ async function countLifetimeBuyers(): Promise<number | null> {
   }
 }
 
+
+// ---- Dealership checkout helpers (Phase 2) -------------------------
+// Raw PostgREST with the service key, same pattern as
+// countLifetimeBuyers above — this function deliberately carries no
+// supabase-js import.
+async function svcRest(
+  path: string,
+  init?: { method?: string; body?: unknown },
+): Promise<{ ok: boolean; status: number; data: any }> {
+  const url = Deno.env.get("SUPABASE_URL") ?? "";
+  const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!url || !svc) return { ok: false, status: 0, data: null };
+  try {
+    const headers: Record<string, string> = {
+      "apikey": svc,
+      "Authorization": `Bearer ${svc}`,
+    };
+    let body: string | undefined;
+    if (init?.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(init.body);
+    }
+    const res = await fetch(`${url}/rest/v1/${path}`, {
+      method: init?.method || "GET",
+      headers,
+      body,
+    });
+    const data = await res.json().catch(() => null);
+    return { ok: res.ok, status: res.status, data };
+  } catch {
+    return { ok: false, status: 0, data: null };
+  }
+}
+
+// A minimal Stripe form POST (customers are the only non-session
+// call this function makes).
+async function stripePost(
+  secretKey: string,
+  path: string,
+  params: Record<string, string>,
+): Promise<any | null> {
+  try {
+    const res = await fetch("https://api.stripe.com/v1" + path, {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + secretKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(params).toString(),
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok) {
+      console.error(
+        "billing-checkout: Stripe POST " + path + " failed: " +
+          (out?.error?.message || res.status),
+      );
+      return null;
+    }
+    return out;
+  } catch (e) {
+    console.error("billing-checkout: Stripe POST " + path + " threw: " + e);
+    return null;
+  }
+}
+
+const DEALER_FLAVOR_PRICE_ENV: Record<string, string> = {
+  post: "STRIPE_PRICE_DEALER_POST",
+  group: "STRIPE_PRICE_DEALER_GROUP",
+};
+const DEALER_MAX_SEATS = 50;
+
+// Create the Checkout Session for a fully-built form, with the
+// final-sale consent insurance: if Stripe ever refuses the session
+// over consent_collection, retry ONCE without it (custom_text and
+// the in-app recorded acceptance still stand) and log the omission.
+// Shared by the solo plans and the dealership kind.
+async function finishCheckout(
+  secretKey: string,
+  form: URLSearchParams,
+): Promise<Response> {
+  const attempt = async (withConsent: boolean) => {
+    const f = new URLSearchParams(form);
+    if (!withConsent) f.delete("consent_collection[terms_of_service]");
+    const r = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + secretKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: f.toString(),
+    });
+    const s = await r.json().catch(() => null);
+    return { r, s };
+  };
+
+  let res: Response;
+  let session: any;
+  try {
+    ({ r: res, s: session } = await attempt(true));
+    if ((!res.ok || !session?.url) && session?.error) {
+      console.warn(
+        "billing-checkout: session with consent_collection failed (" +
+          (session.error.message || res.status) +
+          ") \u2014 retrying without consent_collection",
+      );
+      ({ r: res, s: session } = await attempt(false));
+    }
+  } catch (e) {
+    console.error("billing-checkout: Stripe unreachable: " + e);
+    return json({ ok: false, error: "stripe_unreachable" }, 502);
+  }
+  if (!res.ok || !session?.url) {
+    console.error(
+      "billing-checkout: Stripe rejected session: " +
+        (session?.error?.message || res.status),
+    );
+    return json({ ok: false, error: "stripe_error" }, 502);
+  }
+  return json({ ok: true, url: session.url });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ ok: false, error: "POST only" }, 405);
@@ -184,6 +332,93 @@ Deno.serve(async (req) => {
   const plan = String(body?.plan || "");
   if (RETIRED_PLANS.has(plan)) {
     return json({ ok: false, error: "no_longer_available" }, 400);
+  }
+
+  // ---------------------------------------------------------------
+  // Dealership seats (Phase 2). Everything about this purchase
+  // hangs off the DEALERSHIP, not the buyer's personal billing:
+  // admin membership is verified server-side, the seat count is
+  // range-checked (1..50), the Stripe customer is the dealership's
+  // own (created on first purchase with the admin's email), and
+  // the session/subscription metadata carries kind "dealership" +
+  // dealership_id + flavor for the webhook.
+  if (plan === "dealership") {
+    const dealershipId = String(body?.dealership_id || "");
+    const flavor = String(body?.flavor || "");
+    const seats = Number(body?.seats);
+    if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(dealershipId)) {
+      return json({ ok: false, error: "invalid_dealership" }, 400);
+    }
+    if (flavor !== "post" && flavor !== "group") {
+      return json({ ok: false, error: "invalid_flavor" }, 400);
+    }
+    if (!Number.isInteger(seats) || seats < 1 || seats > DEALER_MAX_SEATS) {
+      return json({ ok: false, error: "invalid_seats" }, 400);
+    }
+    const secretKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
+    const priceId = Deno.env.get(DEALER_FLAVOR_PRICE_ENV[flavor]) || "";
+    if (!secretKey || !priceId) {
+      return json({ ok: false, error: "billing_not_configured" }, 503);
+    }
+    const mem = await svcRest(
+      "dealership_account_members?user_id=eq." + user.id +
+        "&dealership_id=eq." + dealershipId + "&select=role",
+    );
+    const memRow = Array.isArray(mem.data) ? mem.data[0] : null;
+    if (!mem.ok || !memRow || memRow.role !== "admin") {
+      return json({ ok: false, error: "not_dealer_admin" }, 403);
+    }
+    const dres = await svcRest(
+      "dealership_accounts?id=eq." + dealershipId +
+        "&select=id,name,status,stripe_customer_id",
+    );
+    const dealer = Array.isArray(dres.data) ? dres.data[0] : null;
+    if (!dres.ok || !dealer) {
+      return json({ ok: false, error: "dealership_not_found" }, 404);
+    }
+    let customerId = dealer.stripe_customer_id
+      ? String(dealer.stripe_customer_id)
+      : "";
+    if (!customerId) {
+      const cust = await stripePost(secretKey, "/customers", {
+        ...(user.email ? { email: String(user.email) } : {}),
+        name: String(dealer.name || "AutoLaunch dealership"),
+        "metadata[dealership_id]": dealershipId,
+        description: "AutoLaunch dealership account",
+      });
+      if (!cust?.id) return json({ ok: false, error: "stripe_error" }, 502);
+      customerId = String(cust.id);
+      await svcRest("dealership_accounts?id=eq." + dealershipId, {
+        method: "PATCH",
+        body: { stripe_customer_id: customerId },
+      });
+    }
+    const appUrl = appReturnUrl(req);
+    const form = new URLSearchParams({
+      "mode": "subscription",
+      "line_items[0][price]": priceId,
+      "line_items[0][quantity]": String(seats),
+      "customer": customerId,
+      "success_url": appUrl + "?checkout=success",
+      "cancel_url": appUrl + "?checkout=cancel",
+      "client_reference_id": user.id,
+      "metadata[user_id]": user.id,
+      "metadata[kind]": "dealership",
+      "metadata[dealership_id]": dealershipId,
+      "metadata[flavor]": flavor,
+      "subscription_data[metadata][user_id]": user.id,
+      "subscription_data[metadata][kind]": "dealership",
+      "subscription_data[metadata][dealership_id]": dealershipId,
+      "subscription_data[metadata][flavor]": flavor,
+      "consent_collection[terms_of_service]": "required",
+      "custom_text[after_submit][message]":
+        "All sales are final \u2014 no refunds. Subscriptions can be cancelled anytime in Settings; access continues to the end of the paid period.",
+    });
+    if ((Deno.env.get("STRIPE_TAX_ENABLED") || "") === "true") {
+      form.set("automatic_tax[enabled]", "true");
+    }
+    // NOTE: no billing_cycle_anchor — same rule as the solo plans.
+    return await finishCheckout(secretKey, form);
   }
   const spec = PLANS[plan];
   if (!spec) {
@@ -220,6 +455,7 @@ Deno.serve(async (req) => {
       "All sales are final — no refunds. Subscriptions can be cancelled anytime in Settings; access continues to the end of the paid period.",
   });
   if (spec.tier) form.set("metadata[plan]", spec.tier);
+  if (spec.years) form.set("metadata[years]", String(spec.years));
   if (spec.mode === "subscription") {
     form.set("subscription_data[metadata][user_id]", user.id);
     form.set("subscription_data[metadata][kind]", plan);
@@ -237,47 +473,5 @@ Deno.serve(async (req) => {
   // NOTE: no billing_cycle_anchor — Stripe's default anchors the
   // monthly renewal to the subscription's start day, per spec.
 
-  const createSession = async (withConsent: boolean) => {
-    const f = new URLSearchParams(form);
-    if (!withConsent) f.delete("consent_collection[terms_of_service]");
-    const r = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + secretKey,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: f.toString(),
-    });
-    const s = await r.json().catch(() => null);
-    return { r, s };
-  };
-
-  let res: Response;
-  let session: any;
-  try {
-    ({ r: res, s: session } = await createSession(true));
-    if ((!res.ok || !session?.url) && session?.error) {
-      // Insurance: if Stripe ever refuses the session over
-      // consent_collection, retry once without it — custom_text and
-      // the in-app recorded acceptance still stand, and checkout is
-      // never taken down by a consent error.
-      console.warn(
-        "billing-checkout: session with consent_collection failed (" +
-          (session.error.message || res.status) +
-          ") — retrying without consent_collection",
-      );
-      ({ r: res, s: session } = await createSession(false));
-    }
-  } catch (e) {
-    console.error("billing-checkout: Stripe unreachable: " + e);
-    return json({ ok: false, error: "stripe_unreachable" }, 502);
-  }
-  if (!res.ok || !session?.url) {
-    console.error(
-      "billing-checkout: Stripe rejected session: " +
-        (session?.error?.message || res.status),
-    );
-    return json({ ok: false, error: "stripe_error" }, 502);
-  }
-  return json({ ok: true, url: session.url });
+  return await finishCheckout(secretKey, form);
 });
