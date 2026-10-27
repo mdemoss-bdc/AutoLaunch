@@ -21,6 +21,17 @@
 // beyond what the thread/listing shows. Haggling, financing specifics,
 // trade-in value, or an upset buyer -> needs_human with a short, safe
 // holding draft instead of an answer.
+//
+// GROUNDING HARDENING (2026-10-26, authorized by Matthew after a live
+// miss stated a placeholder mileage as fact): three layers — (1)
+// placeholder fields (the 1,000-mile new-car default on a used /
+// certified / previously-listed row) are scrubbed before they can
+// reach the prompt; (2) the thread car resolves deterministically
+// and UNIQUELY or it contributes no facts at all (VERIFIED-CAR is the
+// only basis for this car's specs); (3) a deterministic post-draft
+// guard makes every stated price/mileage trace to a verified value
+// (regenerate once, then strip-or-hold). Everything else is v12
+// behavior — the prepared v13 voice changes are NOT in this build.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -123,6 +134,134 @@ function parseDraftText(raw: string) {
   const m = raw.match(/\{[\s\S]*\}/);
   if (m) { try { return JSON.parse(m[0]); } catch { /* fall through */ } }
   return { draft: raw.trim(), needs_human: false, reason: "" };
+}
+
+// ---- Grounding hardening — pure helpers (the Node harness extracts
+// and exercises these verbatim; keep them free of Deno/Supabase refs).
+
+const PLACEHOLDER_NEW_CAR_MILES = 1000;
+
+// A stored mileage is a FACT only when it is a real reading. The
+// scraper parks new cars at exactly 1,000 mi when no reading exists;
+// that value on a used / certified / pre-owned car — or on any car
+// that has already been listed to Marketplace — is the placeholder
+// leaking through, never a fact. Null / zero / missing likewise mean
+// "no fact", not a value.
+function factMileage(c: any): number | null {
+  const m = c?.mileage;
+  if (m === null || m === undefined || !(Number(m) > 0)) return null;
+  const n = Number(m);
+  if (n === PLACEHOLDER_NEW_CAR_MILES) {
+    const cond = String(c?.condition || "").toLowerCase();
+    const usedish = cond.includes("used") || cond.includes("certified") || cond.includes("pre-owned") || cond.includes("preowned");
+    if (usedish || c?.marketplace_posted_at) return null;
+  }
+  return n;
+}
+
+function factPrice(c: any): number | null {
+  const p = c?.price;
+  if (p === null || p === undefined || !(Number(p) > 0)) return null;
+  return Number(p);
+}
+
+// Deterministic pick of THE thread car from candidate inventory rows.
+// An exact listing-price match is the only multi-candidate win (with
+// a make-word tiebreak); a unique candidate wins; anything else is
+// ambiguity and returns null — an unresolved car contributes NO
+// facts, never the first row that happened to come back.
+function pickThreadCar(labelInfo: { price: number | null; makeWord: string | null }, rows: any[]): any | null {
+  if (!rows || !rows.length) return null;
+  let pool = rows;
+  if (labelInfo.price !== null && labelInfo.price !== undefined) {
+    const exact = pool.filter((r: any) => Number(r.price) === labelInfo.price);
+    if (exact.length === 1) return exact[0];
+    if (exact.length > 1) pool = exact;
+    else return null; // the listing price matches nothing on the lot — not uniquely resolvable
+  }
+  if (pool.length === 1) return pool[0];
+  if (labelInfo.makeWord) {
+    const mk = pool.filter((r: any) => String(r.make || "").toLowerCase().split(/[^a-z0-9]+/).includes(labelInfo.makeWord!));
+    if (mk.length === 1) return mk[0];
+  }
+  return null;
+}
+
+// Every price / mileage figure a draft states, normalized to plain
+// numbers ("9,382 miles" -> 9382, "9.4k miles" -> 9400, "$26,159" ->
+// 26159, "$30k" -> 30000). This is the claim set the guard checks.
+function extractFactClaims(text: string): { miles: number[]; prices: number[] } {
+  const miles: number[] = [];
+  const prices: number[] = [];
+  const t = String(text || "");
+  let m: RegExpExecArray | null;
+  const mileRe = /(\d[\d,]*(?:\.\d+)?)\s*(k)?\s*(?:miles|mi)\b/gi;
+  while ((m = mileRe.exec(t))) {
+    let v = parseFloat(m[1].replace(/,/g, ""));
+    if (m[2]) v *= 1000;
+    if (v > 0) miles.push(Math.round(v));
+  }
+  const mileRe2 = /\b(?:mileage|odometer|odo)\b[^0-9]{0,16}(\d[\d,]*)/gi;
+  while ((m = mileRe2.exec(t))) {
+    const v = parseInt(m[1].replace(/,/g, ""), 10);
+    if (v > 0) miles.push(v);
+  }
+  const priceRe = /\$\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(k)?/gi;
+  while ((m = priceRe.exec(t))) {
+    let v = parseFloat(m[1].replace(/,/g, ""));
+    if (m[2]) v *= 1000;
+    if (v > 0) prices.push(Math.round(v));
+  }
+  return { miles, prices };
+}
+
+// Claims in the draft that trace to NO allowed value — the invented
+// facts. Returned as display strings ("1,000 miles", "$25,500").
+function factViolations(draft: string, allowedMiles: Set<number>, allowedPrices: Set<number>): string[] {
+  const claims = extractFactClaims(draft);
+  const out: string[] = [];
+  for (const v of claims.miles) if (!allowedMiles.has(v)) out.push(v.toLocaleString("en-US") + " miles");
+  for (const v of claims.prices) if (!allowedPrices.has(v)) out.push("$" + v.toLocaleString("en-US"));
+  return Array.from(new Set(out));
+}
+
+// Drop only the sentences that carry an unverified claim; the rest
+// of the model's reply (its voice, its next step) survives.
+function stripFactSentences(draft: string, allowedMiles: Set<number>, allowedPrices: Set<number>): string {
+  const parts = String(draft || "").split(/(?<=[.!?])\s+/);
+  const kept = parts.filter(s => !factViolations(s, allowedMiles, allowedPrices).length);
+  return kept.join(" ").trim();
+}
+
+// Post-draft guard flow: clean draft passes untouched; a violating
+// draft regenerates ONCE with the violation named; if the rewrite
+// still violates, the offending sentences are stripped — and if
+// nothing clean remains, a double-check holding line stands in.
+// Every intervention is logged with the prospect id.
+async function enforceFactGuard(
+  draft: string,
+  allowedMiles: Set<number>,
+  allowedPrices: Set<number>,
+  regen: (violations: string[]) => Promise<string>,
+  prospectId: string,
+): Promise<string> {
+  let violations = factViolations(draft, allowedMiles, allowedPrices);
+  if (!violations.length) return draft;
+  console.log("[luca-draft] fact guard: unverified " + violations.join(", ") + " in draft (prospect " + prospectId + ") — regenerating once");
+  try {
+    const second = await regen(violations);
+    if (second) {
+      const v2 = factViolations(second, allowedMiles, allowedPrices);
+      if (!v2.length) return second;
+      violations = v2;
+      draft = second;
+    }
+  } catch (e) {
+    console.log("[luca-draft] fact guard: regeneration failed (prospect " + prospectId + "): " + (e as Error).message);
+  }
+  const stripped = stripFactSentences(draft, allowedMiles, allowedPrices);
+  console.log("[luca-draft] fact guard: fallback after regeneration (prospect " + prospectId + "); stripped unverified " + violations.join(", "));
+  return stripped || "Let me double-check that for you and get right back to you.";
 }
 
 Deno.serve(async (req) => {
@@ -263,7 +402,9 @@ Deno.serve(async (req) => {
     cleanTrim(c.trim) || null,
     c.condition || null,
     c.price ? "$" + Number(c.price).toLocaleString("en-US") : "price: call / not listed",
-    c.mileage ? Number(c.mileage).toLocaleString("en-US") + " miles" : null,
+    // Sanitized: a placeholder mileage (see factMileage) is an
+    // absent fact — the line simply carries no mileage at all.
+    factMileage(c) ? Number(factMileage(c)).toLocaleString("en-US") + " miles" : null,
     c.color ? "Exterior: " + c.color : null,
     c.interior_color ? "Interior: " + c.interior_color : null,
     c.transmission || null,
@@ -316,18 +457,37 @@ Deno.serve(async (req) => {
 
   // Resolve THE vehicle this conversation is about, so spec questions
   // (miles? color? interior? AWD? diesel? manual?) get real answers.
-  // vehicle_id may carry a VIN; otherwise parse the listing label
-  // ("$23,220 - 2026 Volkswagen Jetta") and match year + model in the
-  // rep's active inventory, preferring an exact price match.
+  // DETERMINISTIC + UNIQUE-ONLY (grounding hardening): a VIN or stock
+  // token anywhere in the thread data wins outright; otherwise the
+  // listing label ("$26,159 - 2026 Volkswagen Jetta") is matched
+  // against live inventory and pickThreadCar decides — an exact
+  // price + year/make/model match, or a single candidate. Ambiguity
+  // resolves to NOTHING: no car, no facts (the old code took the
+  // first row back, which is how a placeholder mileage from a
+  // different car got stated as this car's miles).
   let currentCar: any = null;
   {
-    const vid = String(prospect.vehicle_id || "");
-    if (/^[A-HJ-NPR-Z0-9]{11,17}$/i.test(vid)) {
-      const { data } = await supabase.from("scraped_inventory").select("*").eq("vin", vid).eq("is_active", true).limit(1);
+    const label = String(prospect.vehicle_label || "");
+    const threadText = [
+      String(prospect.vehicle_id || ""),
+      label,
+      ...thread.map((m: any) => String(m.body || "")),
+    ].join(" \n ");
+    const vinM = threadText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i);
+    if (vinM) {
+      const { data } = await supabase.from("scraped_inventory").select("*")
+        .ilike("vin", vinM[0]).eq("is_active", true).limit(1);
       if (data && data.length) currentCar = data[0];
     }
     if (!currentCar) {
-      const label = String(prospect.vehicle_label || "");
+      const stockM = threadText.match(/stock\s*#?\s*[:\-]?\s*([A-Za-z0-9]{4,12})/i);
+      if (stockM) {
+        const { data } = await supabase.from("scraped_inventory").select("*")
+          .eq("stock_number", stockM[1]).eq("is_active", true).limit(2);
+        if (data && data.length === 1) currentCar = data[0];
+      }
+    }
+    if (!currentCar) {
       const yearM = label.match(/\b(?:19|20)\d{2}\b/);
       const priceM = label.match(/\$\s*([\d,]+)/);
       const words = label.replace(/\$\s*[\d,]+/, " ").replace(/\b(?:19|20)\d{2}\b/, " ")
@@ -336,10 +496,20 @@ Deno.serve(async (req) => {
         const modelWord = words[words.length - 1].toLowerCase();
         const { data } = await supabase.from("scraped_inventory").select("*")
           .eq("is_active", true).eq("year", parseInt(yearM[0], 10))
-          .ilike("model", "%" + modelWord + "%").limit(10);
+          .ilike("model", "%" + modelWord + "%").limit(25);
         const rows = data || [];
-        const wantPrice = priceM ? parseInt(priceM[1].replace(/,/g, ""), 10) : null;
-        currentCar = rows.find((r: any) => wantPrice && r.price === wantPrice) || rows[0] || null;
+        // The make word: a label word (other than the model word)
+        // that some candidate's make actually carries — used only
+        // as a tiebreak inside pickThreadCar.
+        let makeWord: string | null = null;
+        for (const w of words.slice(0, -1)) {
+          const lw = w.toLowerCase();
+          if (rows.some((r: any) => String(r.make || "").toLowerCase().split(/[^a-z0-9]+/).includes(lw))) { makeWord = lw; break; }
+        }
+        currentCar = pickThreadCar(
+          { price: priceM ? parseInt(priceM[1].replace(/,/g, ""), 10) : null, makeWord },
+          rows,
+        );
       }
     }
     if (currentCar) currentCar._vinSpecs = await carSpecs(currentCar);
@@ -431,7 +601,7 @@ Deno.serve(async (req) => {
     const searchTerm = async (t: string, focus: boolean) => {
       const { data: rows } = await supabase
         .from("scraped_inventory")
-        .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin, location_name")
+        .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin, location_name, marketplace_posted_at")
         .eq("is_active", true)
         .or(`model.ilike.%${t}%,make.ilike.%${t}%`)
         .limit(25);
@@ -493,7 +663,8 @@ Deno.serve(async (req) => {
     "",
     "HARD RULES — never break these:",
     "- Never invent or guess a price, monthly payment, APR, financing term, discount, or trade-in value. The only prices you may mention are ones that appear in the listing label, the conversation, or the INVENTORY RESULTS block.",
-    "- Vehicle facts (stock number, mileage, colors, transmission, drivetrain, fuel, engine, listing link) may ONLY come from the CURRENT VEHICLE or INVENTORY RESULTS blocks, stated exactly as written. When you recommend a vehicle from the results, include its stock # and its link. If a spec the buyer asks about is not in the blocks, say you'll double-check rather than guessing it.",
+    "- Vehicle facts (stock number, mileage, colors, transmission, drivetrain, fuel, engine, listing link) may ONLY come from the VERIFIED-CAR or INVENTORY RESULTS blocks, stated exactly as written. When you recommend a vehicle from the results, include its stock # and its link. If a spec the buyer asks about is not in the blocks, say you'll double-check rather than guessing it.",
+    "- THIS conversation's car: the VERIFIED-CAR block is the ONLY basis for its facts. When there is no VERIFIED-CAR block, the exact car could not be matched in live inventory and you do NOT know its mileage, colors, or specs — never borrow numbers from a similar car or from a search result. For those questions, say you'll double-check and get right back to them.",
     "- If the buyer asks whether you have a particular vehicle and NO block in this request covers it, you do not know either way: never claim to have it OR not have it, and never name a specific alternative vehicle. Say you'll check the lot and get right back to them. The ONE exception: a VERIFIED — NONE IN STOCK line is a completed inventory search — for the vehicles it names, you may say plainly that you don't have one on the lot right now.",
     "- Never promise the vehicle is available as a fact beyond what the conversation shows; phrase it as the salesperson checking/confirming ('Yes, it's still here as of today' is fine when the thread implies a live listing).",
     "- If the buyer is haggling on price, asking financing specifics, asking trade-in value, threatening, or upset: set needs_human to true, give a one-line reason, and make the draft a short polite holding reply that says the salesperson will check and get right back to them.",
@@ -534,8 +705,16 @@ Deno.serve(async (req) => {
 
   const currentBlock = currentCar ? [
     "",
-    "CURRENT VEHICLE — the exact car this conversation is about, from the salesperson's live inventory. These are FACTS; answer spec questions (miles, colors, transmission, drivetrain, fuel, engine) straight from this line:",
+    "VERIFIED-CAR — the exact car this conversation is about, matched live and uniquely to this listing in the salesperson's inventory. These are FACTS; answer spec questions (miles, colors, transmission, drivetrain, fuel, engine) straight from this line, exactly as written:",
     "- " + fmtCar(currentCar),
+  ] : [];
+
+  // No unique match -> the car contributes NO facts. The block tells
+  // Luca plainly that this car's specs are unknown, so spec questions
+  // get the check-the-lot phrasing instead of a borrowed number.
+  const unresolvedBlock = (!currentCar && String(prospect.vehicle_label || "").trim()) ? [
+    "",
+    "THREAD CAR — NOT VERIFIED: this conversation's exact car could not be uniquely matched in live inventory, so its mileage, colors, and specs are UNKNOWN. If the buyer asks about them, say you'll double-check and get right back — never borrow numbers from another car.",
   ] : [];
 
   const userPrompt = [
@@ -546,6 +725,7 @@ Deno.serve(async (req) => {
     "Conversation so far (oldest first):",
     transcript,
     ...currentBlock,
+    ...unresolvedBlock,
     ...voiceBlock,
     ...corrBlock,
     ...invBlock,
@@ -561,10 +741,45 @@ Deno.serve(async (req) => {
   } catch (e) {
     return json({ ok: false, error: "Drafting failed: " + (e as Error).message }, 502);
   }
-  const draft = String(parsed?.draft || "").trim();
+  let draft = String(parsed?.draft || "").trim();
   if (!draft) return json({ ok: false, error: "Luca returned an empty draft" }, 502);
   const needsHuman = !!parsed?.needs_human;
   const reason = String(parsed?.reason || "");
+
+  // ---- Post-draft fact guard (grounding hardening): every price /
+  // mileage figure in the draft must trace to a verified source —
+  // the resolved thread car, a retrieved row actually shown in the
+  // prompt, the listing label itself, or a figure the buyer stated.
+  // Anything else is treated as invented and never reaches the rep.
+  {
+    const allowedMiles = new Set<number>();
+    const allowedPrices = new Set<number>();
+    const allowCar = (c: any) => {
+      if (!c) return;
+      const fm = factMileage(c);
+      if (fm) allowedMiles.add(fm);
+      const fp = factPrice(c);
+      if (fp) allowedPrices.add(fp);
+    };
+    allowCar(currentCar);
+    for (const c of invPrimary) allowCar(c);
+    for (const c of invAlt) allowCar(c);
+    const labelPriceM = String(prospect.vehicle_label || "").match(/\$\s*([\d,]+)/);
+    if (labelPriceM) allowedPrices.add(parseInt(labelPriceM[1].replace(/,/g, ""), 10));
+    for (const m of thread) {
+      if ((m as any).direction !== "in") continue;
+      const bc = extractFactClaims(String((m as any).body || ""));
+      for (const v of bc.miles) allowedMiles.add(v);
+      for (const v of bc.prices) allowedPrices.add(v);
+    }
+    draft = await enforceFactGuard(draft, allowedMiles, allowedPrices, async (violations: string[]) => {
+      const raw2 = await callGemini(apiKey, system, userPrompt +
+        "\n\nCORRECTION — your previous draft stated " + violations.join(", ") +
+        ", which is NOT among the verified facts in the blocks above. Rewrite the reply using only figures that appear in the VERIFIED-CAR or INVENTORY RESULTS blocks (or the listing label itself). If the figure the buyer asked about isn't in those blocks, leave the number out entirely and say you'll double-check.");
+      return String(parseDraftText(raw2)?.draft || "").trim();
+    }, prospectId);
+    if (!draft) return json({ ok: false, error: "Luca returned an empty draft" }, 502);
+  }
 
   // Save the draft so the corrections/outcome loop can learn from it.
   await supabase.from("closer_messages").insert({
