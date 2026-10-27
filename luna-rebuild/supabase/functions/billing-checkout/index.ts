@@ -1,6 +1,10 @@
 // =====================================================================
 // billing-checkout — creates a Stripe Checkout Session for:
 //   post / group            monthly subscriptions ($75 / $100)
+//   post_annual /           annual subscriptions ($750 / $1,000/year —
+//   group_annual            10 months' price, "2 months free"; the
+//                           webhook maps them to the post/group tiers
+//                           and counts them as 12 paid referral months)
 //   lifetime_post / group   Founding Lifetime, one-time payment
 //                           ($1,499 / $1,999; capped at 50 buyers total)
 //   support                 Support Plan subscription ($199/year),
@@ -19,6 +23,7 @@
 //
 // Config comes from function secrets only (never the app, never code):
 //   STRIPE_SECRET_KEY, STRIPE_PRICE_POST, STRIPE_PRICE_GROUP,
+//   STRIPE_PRICE_POST_ANNUAL, STRIPE_PRICE_GROUP_ANNUAL,
 //   STRIPE_PRICE_LIFETIME_POST, STRIPE_PRICE_LIFETIME_GROUP,
 //   STRIPE_PRICE_SUPPORT
 // A plan whose price secret is missing returns
@@ -48,6 +53,8 @@ const LIFETIME_CAP = 50;
 const PLANS: Record<string, { priceEnv: string; mode: string; tier: string | null }> = {
   post: { priceEnv: "STRIPE_PRICE_POST", mode: "subscription", tier: "post" },
   group: { priceEnv: "STRIPE_PRICE_GROUP", mode: "subscription", tier: "group" },
+  post_annual: { priceEnv: "STRIPE_PRICE_POST_ANNUAL", mode: "subscription", tier: "post" },
+  group_annual: { priceEnv: "STRIPE_PRICE_GROUP_ANNUAL", mode: "subscription", tier: "group" },
   lifetime_post: { priceEnv: "STRIPE_PRICE_LIFETIME_POST", mode: "payment", tier: "post" },
   lifetime_group: { priceEnv: "STRIPE_PRICE_LIFETIME_GROUP", mode: "payment", tier: "group" },
   support: { priceEnv: "STRIPE_PRICE_SUPPORT", mode: "subscription", tier: null },

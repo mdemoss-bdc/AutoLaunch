@@ -13,13 +13,18 @@
 //   checkout.session.completed
 //   customer.subscription.updated
 //   customer.subscription.deleted
-// and store the endpoint's signing secret as STRIPE_WEBHOOK_SECRET.
+//   invoice.paid
+//   charge.refunded
+// (the last two were added 2026-10-26 for the referral program) and
+// store the endpoint's signing secret as STRIPE_WEBHOOK_SECRET.
 //
 // Handled events (all writes via the service role). Routing is by the
 // `kind` metadata billing-checkout stamps on every session and
-// subscription: post / group (plan subscriptions), lifetime_post /
-// lifetime_group (one-time Founding Lifetime payments), support (the
-// $199/year Support Plan for Lifetime accounts):
+// subscription: post / group (monthly plan subscriptions),
+// post_annual / group_annual (annual plan subscriptions — same tiers,
+// counted as 12 paid months), lifetime_post / lifetime_group
+// (one-time Founding Lifetime payments), support (the $199/year
+// Support Plan for Lifetime accounts):
 //   checkout.session.completed, kind post/group → billing_status
 //     'active', plan_tier from the session metadata plan, stripe ids
 //     + current_period_end stored. The subscription itself carries
@@ -47,6 +52,23 @@
 //     billing_status at all — the lifetime purchase outranks any
 //     leftover monthly subscription (e.g. one the buyer cancels after
 //     upgrading to lifetime).
+//   invoice.paid → REFERRAL ACCRUAL (see TIERS.md "Referrals"): when
+//     the payer is a claimed referee on a solo plan kind, their paid
+//     months advance (monthly price +1, annual price +12, capped at
+//     12) and every completed block of 3 paid months grants the
+//     referrer one free month as STRIPE CUSTOMER BALANCE at the
+//     referrer's own monthly price (Group $100, otherwise $75) — max
+//     4 free months per referral. Idempotent per invoice via the
+//     referral_invoices ledger: a redelivered event never
+//     double-counts. Dealership-covered referees generate no solo
+//     invoices, so they never accrue — the rule falls out of the
+//     event stream rather than a special case.
+//   charge.refunded → reverses exactly what the refunded charge's
+//     invoice granted: paid months come back off, and granted bonus
+//     months are revoked by a positive balance transaction up to the
+//     credit still unapplied on the referrer's customer (any part
+//     already consumed is logged as a shortfall on the ledger row —
+//     see the limitation note in TIERS.md).
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -142,7 +164,9 @@ function periodEndIso(sub: any): string | null {
 function planFromPriceId(priceId: string | null | undefined): string | null {
   if (!priceId) return null;
   if (priceId === (Deno.env.get("STRIPE_PRICE_POST") || "")) return "post";
+  if (priceId === (Deno.env.get("STRIPE_PRICE_POST_ANNUAL") || "")) return "post";
   if (priceId === (Deno.env.get("STRIPE_PRICE_GROUP") || "")) return "group";
+  if (priceId === (Deno.env.get("STRIPE_PRICE_GROUP_ANNUAL") || "")) return "group";
   return null;
 }
 
@@ -191,6 +215,320 @@ async function findUserId(svc: any, sub: any, session?: any): Promise<string | n
     if (data?.user_id) return data.user_id;
   }
   return null;
+}
+
+// =====================================================================
+// Referral accrual — Matthew's program (TIERS.md "Referrals"):
+// paid_months counts 1 per monthly payment, 12 per annual payment;
+// bonus_due = min(4, floor(paid_months / 3)); accrual only while the
+// referee is under 12 paid months and only from bonus-eligible rows.
+// One formula covers the monthly path and the year-up-front path.
+// =====================================================================
+
+const SOLO_PLAN_KINDS = ["post", "group", "post_annual", "group_annual"];
+const REFERRAL_PAID_MONTH_CAP = 12;
+const REFERRAL_BONUS_CAP = 4;
+
+// Paid months a price represents on an invoice: annual prices count
+// 12, monthly prices count 1, anything else (support, add-ons) 0 —
+// a 0 means this invoice can never be a referral payment.
+function paidMonthsForPrice(priceId: string | null | undefined): number {
+  if (!priceId) return 0;
+  if (
+    priceId === (Deno.env.get("STRIPE_PRICE_POST_ANNUAL") || "") ||
+    priceId === (Deno.env.get("STRIPE_PRICE_GROUP_ANNUAL") || "")
+  ) return 12;
+  if (
+    priceId === (Deno.env.get("STRIPE_PRICE_POST") || "") ||
+    priceId === (Deno.env.get("STRIPE_PRICE_GROUP") || "")
+  ) return 1;
+  return 0;
+}
+
+// A free month is worth the REFERRER's own monthly price: Group
+// (plan or lifetime) $100, anything else $75 (Post monthly value;
+// annual buyers' credit is denominated in months of their plan).
+function referrerMonthlyCents(row: any): number {
+  const tier = row?.lifetime_tier || row?.plan_tier || "";
+  return tier === "group" ? 10000 : 7500;
+}
+
+// Minimal Stripe API caller for the customer-balance writes (the
+// subscription fetch above is GET-only and bespoke).
+async function stripeCall(
+  secretKey: string,
+  method: string,
+  path: string,
+  form?: Record<string, string>,
+): Promise<any | null> {
+  try {
+    const init: RequestInit = {
+      method,
+      headers: { "Authorization": "Bearer " + secretKey },
+    };
+    if (form) {
+      (init.headers as Record<string, string>)["Content-Type"] =
+        "application/x-www-form-urlencoded";
+      init.body = new URLSearchParams(form).toString();
+    }
+    const res = await fetch("https://api.stripe.com/v1" + path, init);
+    const out = await res.json().catch(() => null);
+    if (!res.ok) {
+      console.error(
+        "billing-webhook: Stripe " + method + " " + path + " failed: " +
+          (out?.error?.message || res.status),
+      );
+      return null;
+    }
+    return out;
+  } catch (e) {
+    console.error("billing-webhook: Stripe " + method + " " + path + " threw: " + e);
+    return null;
+  }
+}
+
+// The referrer's Stripe customer: the stored id when there is one;
+// otherwise create the customer (email from the Auth record) and
+// store the id, so a credit is never lost for want of a customer.
+async function ensureReferrerCustomer(
+  svc: any,
+  secretKey: string,
+  referrerId: string,
+  row: any,
+): Promise<string | null> {
+  if (row?.stripe_customer_id) return String(row.stripe_customer_id);
+  let email = "";
+  try {
+    const { data } = await svc.auth.admin.getUserById(referrerId);
+    email = String(data?.user?.email || "");
+  } catch { /* fall through — customer can exist without an email */ }
+  const cust = await stripeCall(secretKey, "POST", "/customers", {
+    ...(email ? { email } : {}),
+    "metadata[user_id]": referrerId,
+    description: "AutoLaunch account (created for referral credit)",
+  });
+  if (!cust?.id) return null;
+  await svc
+    .from("user_settings")
+    .upsert(
+      { user_id: referrerId, stripe_customer_id: String(cust.id) },
+      { onConflict: "user_id" },
+    );
+  return String(cust.id);
+}
+
+async function handleInvoicePaid(svc: any, secretKey: string, invoice: any) {
+  const invoiceId = String(invoice?.id || "");
+  const subId = typeof invoice?.subscription === "string" ? invoice.subscription : "";
+  if (!invoiceId || !subId) return; // one-time payments have no subscription
+  const sub = await fetchSubscription(secretKey, subId);
+  if (!SOLO_PLAN_KINDS.includes(kindOf(null, sub))) return; // support etc.
+  const refereeId = await findUserId(svc, sub, null);
+  if (!refereeId) {
+    console.error("billing-webhook: invoice.paid, user not resolvable for " + invoiceId);
+    return;
+  }
+  const { data: ref } = await svc
+    .from("referrals")
+    .select("*")
+    .eq("referee_user_id", refereeId)
+    .maybeSingle();
+  if (!ref) return; // not a referred account — nothing accrues
+
+  // Claim the invoice in the ledger FIRST: a PK conflict means a
+  // redelivery of an event already processed — never double-count.
+  const { error: claimErr } = await svc.from("referral_invoices").insert({
+    invoice_id: invoiceId,
+    referral_id: ref.id,
+    referee_user_id: refereeId,
+  });
+  if (claimErr) {
+    if (String(claimErr.code || "").includes("23505")) return;
+    throw claimErr;
+  }
+
+  let monthsAdded = 0;
+  let delta = 0;
+  let creditCents = 0;
+  let creditTxnId: string | null = null;
+  try {
+    const priceId = invoice.lines?.data?.[0]?.price?.id ||
+      sub.items?.data?.[0]?.price?.id;
+    const months = paidMonthsForPrice(priceId);
+    if (ref.bonus_eligible && months > 0) {
+      const room = Math.max(0, REFERRAL_PAID_MONTH_CAP - (ref.referee_paid_months || 0));
+      monthsAdded = Math.min(months, room);
+      const newMonths = (ref.referee_paid_months || 0) + monthsAdded;
+      const bonusDue = Math.min(
+        REFERRAL_BONUS_CAP,
+        Math.floor(newMonths / 3),
+      );
+      delta = Math.max(0, bonusDue - (ref.bonuses_granted || 0));
+      if (delta > 0) {
+        const { data: rrow } = await svc
+          .from("user_settings")
+          .select("plan_tier, lifetime_tier, stripe_customer_id")
+          .eq("user_id", ref.referrer_user_id)
+          .maybeSingle();
+        creditCents = delta * referrerMonthlyCents(rrow);
+        const custId = await ensureReferrerCustomer(
+          svc, secretKey, ref.referrer_user_id, rrow,
+        );
+        const txn = custId
+          ? await stripeCall(
+            secretKey, "POST",
+            "/customers/" + encodeURIComponent(custId) + "/balance_transactions",
+            {
+              amount: String(-creditCents),
+              currency: "usd",
+              description: "AutoLaunch referral bonus — free month credit",
+            },
+          )
+          : null;
+        if (txn?.id) {
+          creditTxnId = String(txn.id);
+        } else {
+          // The credit didn't land — don't count the bonus. The
+          // months still count, so a later payment re-derives the
+          // same due bonus and retries the grant.
+          console.error(
+            "billing-webhook: referral credit failed for referrer " +
+              ref.referrer_user_id + " (invoice " + invoiceId + ")",
+          );
+          creditCents = 0;
+          delta = 0;
+        }
+      }
+      if (monthsAdded > 0 || delta > 0) {
+        const { error: upErr } = await svc
+          .from("referrals")
+          .update({
+            referee_paid_months: newMonths,
+            bonuses_granted: (ref.bonuses_granted || 0) + delta,
+          })
+          .eq("id", ref.id);
+        if (upErr) throw upErr;
+      }
+    }
+  } catch (e) {
+    // If the credit already landed before the failure, persist the
+    // ledger facts so the retry (which will see the claim row and
+    // skip) can't double-grant; otherwise release the claim so
+    // Stripe's retry reprocesses cleanly.
+    if (creditTxnId) {
+      await svc.from("referral_invoices").update({
+        months_added: monthsAdded,
+        bonuses_delta: delta,
+        credit_amount_cents: creditCents,
+        credit_txn_id: creditTxnId,
+      }).eq("invoice_id", invoiceId);
+    } else {
+      await svc.from("referral_invoices").delete().eq("invoice_id", invoiceId);
+    }
+    throw e;
+  }
+
+  const { error: ledErr } = await svc.from("referral_invoices").update({
+    months_added: monthsAdded,
+    bonuses_delta: delta,
+    credit_amount_cents: creditCents,
+    credit_txn_id: creditTxnId,
+  }).eq("invoice_id", invoiceId);
+  if (ledErr) throw ledErr;
+}
+
+async function handleChargeRefunded(svc: any, secretKey: string, charge: any) {
+  const invoiceId = typeof charge?.invoice === "string" ? charge.invoice : "";
+  if (!invoiceId) return;
+  const { data: inv } = await svc
+    .from("referral_invoices")
+    .select("*")
+    .eq("invoice_id", invoiceId)
+    .maybeSingle();
+  if (!inv || inv.refund_status === "reversed") return;
+
+  let revokedCents = 0;
+  let note: string | null = null;
+  if ((inv.months_added || 0) > 0 || (inv.bonuses_delta || 0) > 0) {
+    const { data: ref } = await svc
+      .from("referrals")
+      .select("*")
+      .eq("id", inv.referral_id)
+      .maybeSingle();
+    if (ref) {
+      const newMonths = Math.max(
+        0,
+        (ref.referee_paid_months || 0) - (inv.months_added || 0),
+      );
+      const bonusDue = Math.min(REFERRAL_BONUS_CAP, Math.floor(newMonths / 3));
+      const revokeMonths = Math.max(
+        0,
+        Math.min(inv.bonuses_delta || 0, (ref.bonuses_granted || 0) - bonusDue),
+      );
+      if (revokeMonths > 0 && (inv.credit_amount_cents || 0) > 0) {
+        const perMonth = Math.floor(
+          inv.credit_amount_cents / Math.max(1, inv.bonuses_delta || 1),
+        );
+        const intended = perMonth * revokeMonths;
+        const { data: rrow } = await svc
+          .from("user_settings")
+          .select("stripe_customer_id")
+          .eq("user_id", ref.referrer_user_id)
+          .maybeSingle();
+        const custId = rrow?.stripe_customer_id
+          ? String(rrow.stripe_customer_id)
+          : null;
+        const cust = custId
+          ? await stripeCall(
+            secretKey, "GET",
+            "/customers/" + encodeURIComponent(custId),
+          )
+          : null;
+        // Only the still-unapplied part of the credit can come back:
+        // the customer's negative balance is the credit sitting there.
+        const sitting = cust ? Math.max(0, -Number(cust.balance || 0)) : 0;
+        revokedCents = Math.min(intended, sitting);
+        if (revokedCents > 0 && custId) {
+          const txn = await stripeCall(
+            secretKey, "POST",
+            "/customers/" + encodeURIComponent(custId) + "/balance_transactions",
+            {
+              amount: String(revokedCents),
+              currency: "usd",
+              description:
+                "AutoLaunch referral bonus revoked — referred payment refunded",
+            },
+          );
+          if (!txn?.id) revokedCents = 0;
+        }
+        if (revokedCents < intended) {
+          note = "shortfall: intended " + intended + "c, revoked " +
+            revokedCents + "c (remainder already consumed)";
+          console.error(
+            "billing-webhook: referral refund " + note + " for invoice " +
+              invoiceId,
+          );
+        }
+      }
+      const { error: upErr } = await svc
+        .from("referrals")
+        .update({
+          referee_paid_months: newMonths,
+          bonuses_granted: Math.max(
+            0,
+            (ref.bonuses_granted || 0) - revokeMonths,
+          ),
+        })
+        .eq("id", ref.id);
+      if (upErr) throw upErr;
+    }
+  }
+  const { error } = await svc.from("referral_invoices").update({
+    refund_status: "reversed",
+    revoked_cents: revokedCents,
+    refund_note: note,
+  }).eq("invoice_id", invoiceId);
+  if (error) throw error;
 }
 
 Deno.serve(async (req) => {
@@ -333,6 +671,10 @@ Deno.serve(async (req) => {
       } else {
         console.error("billing-webhook: subscription event, user not resolvable");
       }
+    } else if (event.type === "invoice.paid") {
+      await handleInvoicePaid(svc, secretKey, obj);
+    } else if (event.type === "charge.refunded") {
+      await handleChargeRefunded(svc, secretKey, obj);
     }
     // All other event types: acknowledged and ignored.
   } catch (e) {

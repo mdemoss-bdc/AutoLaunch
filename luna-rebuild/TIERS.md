@@ -504,6 +504,12 @@ cards are unchanged (label left, value right, one line).
   monthly renewal to the subscription's start day, which is exactly
   the same-day-of-month rule. Prices come from the
   `STRIPE_PRICE_POST` / `STRIPE_PRICE_GROUP` secrets, never the app.
+  Plan keys include the annual kinds `post_annual` / `group_annual`
+  ($750 / $1,000 per year — see "Referrals" for why annual exists)
+  via `STRIPE_PRICE_POST_ANNUAL` / `STRIPE_PRICE_GROUP_ANNUAL`; the
+  session's `plan` metadata still carries the base tier, so the
+  webhook treats an annual purchase exactly like a monthly one of
+  the same tier.
 - `billing-portal` (JWT): Billing Portal session for the account's
   stored `stripe_customer_id` — the cancel path. Portal cancellation
   takes effect at period end; access continues until then.
@@ -513,7 +519,10 @@ cards are unchanged (label left, value right, one line).
   status sync (past_due keeps access — Stripe is retrying the card;
   canceled → `expired`); `customer.subscription.deleted` → `expired`
   (this fires when a portal cancellation reaches the period end, so
-  cancelling never cuts access early). If the webhook secret isn't
+  cancelling never cuts access early). It also handles
+  `invoice.paid` and `charge.refunded` for referral accrual (see
+  "Referrals" below; the endpoint's registered events were extended
+  with those two on 2026-10-26). If the webhook secret isn't
   set, the endpoint returns 503 and processes **nothing** — there is
   deliberately no accept-and-log mode.
 - Until the Stripe secrets exist, checkout/portal return
@@ -738,7 +747,12 @@ three layers above.
    one-time, AutoLaunch Group Lifetime `prod_VVzmu6fKoKeiFR` /
    `price_1UUxmmA3zjwds4H0rVOq19zb` $1,999 one-time, AutoLaunch
    Support Plan `prod_VVzmTAYH9Jgcs9` /
-   `price_1UUxmnA3zjwds4H0pWVhqdGT` $199/year).
+   `price_1UUxmnA3zjwds4H0pWVhqdGT` $199/year; plus, for solo annual
+   billing below: AutoLaunch Post Annual `prod_VW0RNQPG9kyvi0` /
+   `price_1UUyQqA3zjwds4H03NCwc5Gp` $750/year, AutoLaunch Group
+   Annual `prod_VW0RDW8kJX1nUJ` / `price_1UUyQuA3zjwds4H044MqFKCa`
+   $1,000/year — annual is 10 months' price, "2 months free", the
+   same rule as the dealership tiers).
 2. Set the Phantom function secrets: `STRIPE_SECRET_KEY`,
    `STRIPE_PRICE_POST`, `STRIPE_PRICE_GROUP`, `STRIPE_WEBHOOK_SECRET`
    (the secret key comes from Matthew via the Secure Vault flow).
@@ -846,6 +860,166 @@ assertions 25/25; seeded E2E against the deployed function
 non-lifetime account; granted lifetime row → support session
 `mode=subscription`, kind support; lifetime_status counts track;
 cleanup to baseline).
+
+## Referrals + solo annual billing (decided + built 2026-10-26, rebuild only)
+
+Matthew's program, in his numbers: **every user gets a referral
+link; when a referred account pays, the referrer earns 1 free month
+for every 3 paid months of that referral; a referral paying a year
+up front earns 4 free months.** Caps (his 3-account cap + the
+accrual window Luna proposed and he adopted): bonuses come from at
+most **3 referral accounts** per referrer, and accrue only during
+each referral's **first 12 paid months** — so at most **4 free
+months per referral and 12 per referrer, ever**. One formula covers
+both payment shapes: `paid_months` counts 1 per monthly payment and
+12 per annual payment; `bonus_due = min(4, floor(paid_months / 3))`.
+
+### Solo annual billing (the up-front case needs it)
+
+Annual prices are **10 months' price — "2 months free"**, the same
+rule as the dealership tiers: **Post Annual $750/year**
+(`prod_VW0RNQPG9kyvi0` / `price_1UUyQqA3zjwds4H03NCwc5Gp`) and
+**Group Annual $1,000/year** (`prod_VW0RDW8kJX1nUJ` /
+`price_1UUyQuA3zjwds4H044MqFKCa`), via Phantom secrets
+`STRIPE_PRICE_POST_ANNUAL` / `STRIPE_PRICE_GROUP_ANNUAL`
+(digest-verified). `billing-checkout` accepts `post_annual` /
+`group_annual` beside the monthly kinds (subscription mode; the
+session's `plan` metadata is the base tier, so annual accounts are
+indistinguishable from monthly ones everywhere except the referral
+counter). Every buy card (purchase gate, signup choice gate,
+Settings → Plans) carries the second option under its Buy button:
+"or $750/year — 2 months free" (Group: $1,000/year).
+
+### The claim (referral-claim Edge Function, ACTIVE v1)
+
+- **Code**: 8 characters from an unambiguous alphabet (no 0/O/1/I/L),
+  generated server-side on first ask (`{action:"my_code"}`), stored
+  on `user_settings.referral_code` (UNIQUE, lazy). The link is
+  `<app origin>?ref=<code>` — built from the current origin, so it
+  survives the autolaunch.org move.
+- **Capture**: the app reads `?ref=` at load into localStorage
+  (`autolaunch_ref_code`), strips the param, and — once the account
+  exists and settings resolve — claims it via `referral-claim`
+  `{code, ext_install_id?}` (the helper install id rides along
+  fail-open, same bridge as trial-start).
+- **Rules server-side**: unknown code → 404; code owner claiming
+  their own code → 400 `self_referral`; **an account is referred
+  once** — a repeat claim returns the existing row untouched
+  (idempotent, first claim stands). Self-referral is also refused
+  when the two accounts' **normalized emails match** (trial-start's
+  exact normalization: Gmail dots/+tag fold to one inbox, Outlook
+  family +tag only) or when the passed helper install id holds a
+  trial EXT claim belonging to the code owner. Only the referrer's
+  **first 3 claimed referees** get `bonus_eligible = true`; later
+  referees are recorded (they display, they count as sign-ups) but
+  never accrue.
+
+### Accrual (billing-webhook: invoice.paid / charge.refunded)
+
+The webhook endpoint (`we_1UUveCA3zjwds4H0ImFfHrpM`) now also
+receives `invoice.paid` and `charge.refunded`. On `invoice.paid`
+for a subscription whose kind is a solo plan kind (post / group /
+post_annual / group_annual — never support, never the one-time
+lifetime payments):
+
+1. The payer's `referrals` row (as referee) is looked up. No row →
+   nothing happens (most invoices aren't referral payments).
+2. The invoice is claimed in the **`referral_invoices` ledger**
+   (invoice id is the PK) BEFORE any math — a redelivered event
+   hits the PK conflict and stops, so a bonus can never double.
+3. Paid months advance: monthly price +1, annual price +12, capped
+   at 12 total. `bonus_due = min(4, floor(months/3))`; any newly
+   due months are granted at once as a **negative Stripe customer
+   balance transaction on the referrer** — worth the referrer's own
+   monthly price per month (Group $100, otherwise $75; a lifetime
+   referrer's credit sits on their customer and pays down future
+   invoices, e.g. the Support Plan). If the referrer has no Stripe
+   customer yet, one is created (email from their Auth record) and
+   stored — a credit is never dropped for want of a customer. If the
+   credit write itself fails, the bonus is NOT counted (months
+   still advance, so the next payment re-derives and retries it).
+
+**Balance, not coupons**: customer balance applies automatically to
+the referrer's next invoice(s) — a monthly referrer's next bill is
+simply $0 (or reduced); an annual referrer sees it at renewal.
+Nothing expires and no coupon bookkeeping exists.
+
+On `charge.refunded` for a ledgered invoice, exactly what that
+invoice granted is reversed: its paid months come back off the
+referee's counter, and any bonus months it caused are removed —
+recovered by a positive balance transaction **up to the credit
+still unapplied** on the referrer's customer. **Limitation
+(accepted)**: credit the referrer already spent (an invoice it
+already paid down) can't be clawed back — the shortfall is logged
+and stored on the ledger row (`refund_note`), and the bonus counter
+is still corrected so the program never over-grants going forward.
+
+**Dealership interplay**: owners and covered members may hold links
+and see stats like anyone. Accrual keys off solo subscription
+invoices only — a dealership-covered referee generates none, so a
+referee who becomes covered simply stops accruing further months
+(their history stays), and covered referrers earn nothing because
+they never have invoices of their own to offset... their credit, if
+any were granted from an earlier solo period, remains valid balance.
+
+### The app surface
+
+Settings → Plans gains a **Referrals card** under the plan card:
+the account's link with a Copy button, two stats (referrals signed
+up, free months earned), a per-referee progress list ("2 of 3 paid
+months toward your next free month" / "First year complete — N
+earned" / "beyond your 3 bonus accounts…"), and the plain rules
+line: *"Earn 1 free month for every 3 months a referral pays — up
+to 4 free months per referral, from up to 3 referrals, during their
+first year."* Rows read through the referrer's RLS SELECT; referee
+identities are never shown (the row carries only the referee's user
+id, and the card labels them Referral #1, #2, …).
+
+Schema record:
+`supabase/migrations_draft/referrals_APPLIED_2026-10-26.sql`
+(`referrals` + `referral_invoices` + `user_settings.referral_code`;
+RLS: referrer SELECT own `referrals` rows, no client writes
+anywhere; `referral_invoices` is service-role only).
+
+### Verification — referrals + annual (2026-10-26)
+
+- **Harness** (`~/workspace/referral-work/harness.mjs`, real
+  function sources, stubbed Deno/Stripe/Supabase): **59/59** —
+  annual checkout forms (mode subscription, annual prices, kind
+  `post_annual`/`group_annual`, `plan` metadata = base tier, no
+  anchor); accrual (monthly 3→1 free month at −$75 for a Post
+  referrer, 6→2, 12→4 cap, 13th month no-op but ledgered; annual →
+  12 months + 4 free months at once, −$400.00 for a
+  Group referrer; partial-window annual (+2 months to the cap,
+  3→4 granted); ineligible referee → 0 but ledgered; duplicate
+  `invoice.paid` → no double count/grant; support-kind invoice and
+  non-referral payer → untouched; lifetime referrer credited at the
+  Group value with a customer created on demand); refunds (full
+  reversal when the credit sits untouched; months-only reversal;
+  partially consumed credit → only the remainder revoked and the
+  shortfall noted on the ledger row; redelivery no-op); claims
+  (stable lazy code, happy claim, idempotency, self-referral by id /
+  Gmail-normalized email / owner helper-install claim, different
+  Gmail inbox allowed, 4th referee recorded ineligible, unknown code
+  404, no-JWT 401).
+- **Seeded E2E** (disposable GoTrue users, deployed functions,
+  throwaway Stripe objects): **27/27** — code generation + all claim
+  rules live as above; annual + monthly checkouts returned real
+  `checkout.stripe.com` sessions; and a **live-fired `invoice.paid`**
+  (a trialing Post subscription's first invoice on a throwaway
+  customer) advanced the referee to 1 paid month through the
+  deployed webhook. The 3-month grant itself is harness-proven (a
+  live account can't fast-forward three billing cycles). Cleanup
+  verified to baseline: 5 auth users, 3 settings rows, 0 referral
+  rows, 0 ledger rows, test subscription/customers deleted,
+  mosescars still `trialing`.
+- **Regressions**: billing 69/69, lifetime 52/52, plan-details
+  207/207, dealership 44/44, sync cadence 50/50, support-chat 60/60
+  (plan-details + dealership harnesses gained the referral functions
+  in their extraction sets — the same sanctioned update the lifetime
+  build made; no assertion changed). The older post-cap harness
+  fails identically against the pre-change base (its extraction set
+  predates the dealership build) — pre-existing, untouched.
 
 ## Dealership accounts — Phase 1 (built 2026-10-26)
 

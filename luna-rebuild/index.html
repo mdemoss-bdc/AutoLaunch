@@ -2881,6 +2881,19 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
 
         </div>
 
+        <!-- REFERRALS CARD -->
+        <div id="referralCard" class="glass-card rounded-2xl p-6 mt-6">
+          <h3 class="font-bold text-lg mb-2">
+            Referrals
+          </h3>
+          <p class="text-sm text-slate-500 mb-4">
+            Share your link — when someone who signs up through it pays for AutoLaunch, you earn free months.
+          </p>
+          <div id="referralBody">
+            <p class="text-xs text-slate-400">Loading your referral link…</p>
+          </div>
+        </div>
+
       </div><!-- /settingsPanelPlan -->
 
         <!-- SAVE -->
@@ -4590,7 +4603,8 @@ function renderPurchaseCards(containerId, msgId) {
       '<p class="text-xs text-slate-500 leading-relaxed">' + info.tagline + '</p>' +
       planFeaturesHtml(plan, "mt-3 flex-1") +
       '<p class="text-[11px] text-slate-400 mt-3">Renews monthly on the day you subscribe. Cancel anytime in Settings.</p>' +
-      '<button onclick="startCheckout(\'' + plan + '\', \'' + msgId + '\')" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Buy ' + info.name + ' — $' + info.price + '/mo</button></div>';
+      '<button onclick="startCheckout(\'' + plan + '\', \'' + msgId + '\')" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Buy ' + info.name + ' — $' + info.price + '/mo</button>' +
+      '<button onclick="startCheckout(\'' + plan + '_annual\', \'' + msgId + '\')" class="mt-2 w-full py-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer">or $' + (plan === "post" ? "750" : "1,000") + '/year — 2 months free</button></div>';
   }).join("");
 }
 
@@ -4649,6 +4663,121 @@ function lifetimeSupportIncludedUntilMs() {
   if (isNaN(d.getTime())) return null;
   d.setFullYear(d.getFullYear() + 1);
   return d.getTime();
+}
+
+// ---- Referrals (2026-10-26; see TIERS.md "Referrals") ---------------
+// Every account has a share link: <app origin>?ref=CODE — origin-based,
+// so the link survives the autolaunch.org move. A visitor's ?ref= is
+// stashed in localStorage at page load (captureReferralCode below);
+// after sign-in the app claims it ONCE via the referral-claim function,
+// whose server-side rules decide everything (referred once, no
+// self-referrals, the referrer's first 3 referees are the bonus
+// accounts). Free months themselves land as Stripe customer balance
+// from the billing webhook — no accrual logic lives client-side.
+let referralState = { code: null, rows: null, loaded: false, claiming: false };
+
+function referralLink() {
+  if (!referralState.code) return "";
+  return window.location.origin + window.location.pathname + "?ref=" + referralState.code;
+}
+
+// Fire-and-forget claim attempt, run from loadUserStoreSettings once
+// the account is signed in and resolved. Definitive refusals
+// (invalid code, self-referral) drop the stashed code so we don't
+// retry them forever; anything transient keeps it for the next load.
+async function maybeClaimReferral() {
+  if (!currentUser || referralState.claiming) return;
+  let code = null;
+  try { code = window.localStorage.getItem("autolaunch_ref_code"); } catch (e) { /* ignore */ }
+  if (!code) return;
+  referralState.claiming = true;
+  try {
+    const extInstallId = await requestExtInstallId(800);
+    const body = { code: code };
+    if (extInstallId) body.ext_install_id = extInstallId;
+    const { data, error } = await supabaseClient.functions.invoke("referral-claim", { body: body });
+    if (!error && data && data.ok) {
+      try { window.localStorage.removeItem("autolaunch_ref_code"); } catch (e) { /* ignore */ }
+    } else if (error) {
+      const errCode = await billingFunctionErrorCode(error);
+      if (errCode === "invalid_code" || errCode === "self_referral") {
+        try { window.localStorage.removeItem("autolaunch_ref_code"); } catch (e) { /* ignore */ }
+      }
+    }
+  } catch (e) { /* fail-open: claiming never blocks the app */ }
+  referralState.claiming = false;
+}
+
+async function loadReferralCard() {
+  const body = document.getElementById("referralBody");
+  if (!body || !currentUser) return;
+  if (referralState.loaded) { renderReferralBody(); return; }
+  try {
+    const { data: mine } = await supabaseClient.from("user_settings")
+      .select("referral_code").eq("user_id", currentUser.id).maybeSingle();
+    referralState.code = mine ? (mine.referral_code || null) : null;
+    if (!referralState.code) {
+      const { data, error } = await supabaseClient.functions.invoke("referral-claim", { body: { action: "my_code" } });
+      if (!error && data && data.ok && data.code) referralState.code = data.code;
+    }
+    const { data: rows } = await supabaseClient.from("referrals")
+      .select("referee_user_id, referee_paid_months, bonuses_granted, bonus_eligible, created_at")
+      .eq("referrer_user_id", currentUser.id)
+      .order("created_at", { ascending: true });
+    referralState.rows = rows || [];
+    referralState.loaded = true;
+    renderReferralBody();
+  } catch (e) { /* fail-open: the card keeps its loading line */ }
+}
+
+function renderReferralBody() {
+  const body = document.getElementById("referralBody");
+  if (!body) return;
+  if (!referralState.code) {
+    body.innerHTML = '<p class="text-xs text-slate-400">Your referral link isn\'t ready yet — try reopening Settings in a moment.</p>';
+    return;
+  }
+  const rows = referralState.rows || [];
+  const earned = rows.reduce(function (sum, r) { return sum + (r.bonuses_granted || 0); }, 0);
+  let html = '<div class="flex gap-2">' +
+    '<input id="referralLinkInput" readonly value="' + referralLink() + '" onclick="this.select()" class="flex-1 border border-slate-300 rounded-xl px-3 py-2.5 text-xs bg-white text-slate-600">' +
+    '<button onclick="copyReferralLink()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-xs cursor-pointer">Copy</button></div>' +
+    '<p id="referralCopyMsg" class="text-xs font-medium mt-2 hidden"></p>' +
+    '<div class="flex gap-8 mt-4">' +
+    '<div><p class="text-lg font-extrabold text-slate-800">' + rows.length + '</p><p class="text-[11px] text-slate-400">referrals signed up</p></div>' +
+    '<div><p class="text-lg font-extrabold text-slate-800">' + earned + '</p><p class="text-[11px] text-slate-400">free months earned</p></div></div>';
+  if (rows.length) {
+    html += '<div class="mt-4 space-y-2">' + rows.map(function (r, i) {
+      const months = r.referee_paid_months || 0;
+      const granted = r.bonuses_granted || 0;
+      let line;
+      if (!r.bonus_eligible) line = "Signed up — beyond your 3 bonus accounts, so this one doesn't earn free months.";
+      else if (granted >= 4) line = "Earned you the maximum 4 free months.";
+      else if (months >= 12) line = "First year complete — " + granted + " free month" + (granted === 1 ? "" : "s") + " earned.";
+      else line = (months - granted * 3) + " of 3 paid months toward your next free month · " + granted + " earned so far";
+      return '<div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"><p class="text-xs font-bold text-slate-700">Referral #' + (i + 1) + '</p><p class="text-[11px] text-slate-500 mt-0.5">' + line + '</p></div>';
+    }).join("") + '</div>';
+  }
+  html += '<p class="text-[11px] text-slate-400 leading-relaxed mt-4">Earn 1 free month for every 3 months a referral pays — up to 4 free months per referral, from up to 3 referrals, during their first year. Free months are applied as credit toward your next bill.</p>';
+  body.innerHTML = html;
+}
+
+async function copyReferralLink() {
+  const msg = document.getElementById("referralCopyMsg");
+  const showMsg = function (text, cls) {
+    if (!msg) return;
+    msg.innerText = text;
+    msg.className = "text-xs font-medium mt-2 " + cls;
+    msg.classList.remove("hidden");
+  };
+  try {
+    await navigator.clipboard.writeText(referralLink());
+    showMsg("Link copied.", "text-emerald-600");
+  } catch (e) {
+    const input = document.getElementById("referralLinkInput");
+    if (input) input.select();
+    showMsg("Link selected — copy it with Ctrl+C.", "text-slate-500");
+  }
 }
 
 // The signup choice gate's trial card, rendered from the same
@@ -4870,6 +4999,9 @@ function renderBillingPanel() {
   // portal is only theirs once a Support Plan subscription exists.
   if (wrap) wrap.classList.toggle("hidden", !(access.mode === "full" && currentBilling.hasStripeCustomer &&
     (!currentBilling.lifetimeTier || supportActive)));
+  // Referrals card (its own section under the plan card): link,
+  // stats, per-referee progress. Own loader, cached, fail-open.
+  loadReferralCard();
 }
 
 function applyBillingUI() {
@@ -5661,6 +5793,10 @@ async function loadUserStoreSettings() {
     applyBillingUI();
     renderPlanPanel();
     refreshSyncButtonState();
+    // REFERRALS: if this account arrived through a referral link,
+    // claim it now that the account exists and is resolved
+    // (fire-and-forget — see maybeClaimReferral).
+    maybeClaimReferral();
 
     if (data) {
 
@@ -10985,6 +11121,24 @@ async function sendTikTokTestPost() {
     if (testBtn) testBtn.disabled = false;
   }
 }
+
+// Arriving via a referral link (?ref=CODE): stash the code in
+// localStorage — the claim itself needs a signed-in account, so it
+// happens after sign-in (maybeClaimReferral). Then strip the param.
+(function captureReferralCode() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (!ref) return;
+    const clean = ref.trim().toUpperCase();
+    if (/^[A-Z0-9]{8}$/.test(clean)) {
+      window.localStorage.setItem("autolaunch_ref_code", clean);
+    }
+    params.delete("ref");
+    const qs = params.toString();
+    history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+  } catch (e) { /* never let a referral link break page load */ }
+})();
 
 // Returning from tiktok-callback.html: ?tiktok=connected — celebrate once,
 // then strip the param so a refresh doesn't re-toast.
