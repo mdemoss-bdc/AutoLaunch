@@ -752,7 +752,10 @@ three layers above.
    `price_1UUyQqA3zjwds4H03NCwc5Gp` $750/year, AutoLaunch Group
    Annual `prod_VW0RDW8kJX1nUJ` / `price_1UUyQuA3zjwds4H044MqFKCa`
    $1,000/year — annual is 10 months' price, "2 months free", the
-   same rule as the dealership tiers).
+   same rule as the dealership tiers). **[Update 2026-10-26: the
+   Lifetime and Annual products/prices above were ARCHIVED in the
+   price restructure — multi-year term prices on the Post/Group
+   products replaced them; see "Price restructure".]**
 2. Set the Phantom function secrets: `STRIPE_SECRET_KEY`,
    `STRIPE_PRICE_POST`, `STRIPE_PRICE_GROUP`, `STRIPE_WEBHOOK_SECRET`
    (the secret key comes from Matthew via the Secure Vault flow).
@@ -837,6 +840,20 @@ redeployed with this build): she states it plainly, never promises
 or implies a refund, explains that cancelling keeps access until
 the period ends, and offers a ticket for exceptional cases —
 Matthew decides exceptions personally; the bot does not grant them.
+
+## Founding Lifetime + Support Plan — RETIRED 2026-10-26 (historical record)
+
+> **RETIRED the same evening it was built (Matthew, 2026-10-26
+> ~20:55 EDT): "Drop Lifetime — multi-year prepaid replaces it."**
+> Zero lifetime sales ever occurred. The Stripe Lifetime products
+> and prices are archived, `billing-checkout` refuses the lifetime
+> kinds with `no_longer_available`, the app's Lifetime cards are
+> removed, and the `lifetime_status` action answers
+> `available: false`. The **Support Plan survives** — re-decided the
+> same evening as a **standalone add-on ANY account can buy** (see
+> "Price restructure" below). The `user_settings` lifetime columns
+> stay (unused, harmless). Everything under this header is the
+> build record of the retired offer, kept for audit.
 
 ## Founding Lifetime + Support Plan (decided + built 2026-10-26, rebuild only)
 
@@ -944,24 +961,24 @@ accrual window Luna proposed and he adopted): bonuses come from at
 most **3 referral accounts** per referrer, and accrue only during
 each referral's **first 12 paid months** — so at most **4 free
 months per referral and 12 per referrer, ever**. One formula covers
-both payment shapes: `paid_months` counts 1 per monthly payment and
-12 per annual payment; `bonus_due = min(4, floor(paid_months / 3))`.
+both payment shapes: `paid_months` counts by the price's interval —
+1 per monthly payment, 12 × interval_count per yearly payment (a
+3-year term counts 36, still capped by the 12-month window);
+`bonus_due = min(4, floor(paid_months / 3))`.
 
-### Solo annual billing (the up-front case needs it)
+### Solo annual billing — SUPERSEDED 2026-10-26 by multi-year terms
 
-Annual prices are **10 months' price — "2 months free"**, the same
-rule as the dealership tiers: **Post Annual $750/year**
-(`prod_VW0RNQPG9kyvi0` / `price_1UUyQqA3zjwds4H03NCwc5Gp`) and
-**Group Annual $1,000/year** (`prod_VW0RDW8kJX1nUJ` /
-`price_1UUyQuA3zjwds4H044MqFKCa`), via Phantom secrets
-`STRIPE_PRICE_POST_ANNUAL` / `STRIPE_PRICE_GROUP_ANNUAL`
-(digest-verified). `billing-checkout` accepts `post_annual` /
-`group_annual` beside the monthly kinds (subscription mode; the
-session's `plan` metadata is the base tier, so annual accounts are
-indistinguishable from monthly ones everywhere except the referral
-counter). Every buy card (purchase gate, signup choice gate,
-Settings → Plans) carries the second option under its Buy button:
-"or $750/year — 2 months free" (Group: $1,000/year).
+The original annual prices were **10 months' price — "2 months
+free"** (16.7% off — over Matthew's 15% discount cap): **Post
+Annual $750/year** (`prod_VW0RNQPG9kyvi0` /
+`price_1UUyQqA3zjwds4H03NCwc5Gp`) and **Group Annual $1,000/year**
+(`prod_VW0RDW8kJX1nUJ` / `price_1UUyQuA3zjwds4H044MqFKCa`). The
+restructure (below) **archived both products and prices** and
+replaced them with 1/2/3-year term prices ON the Post/Group
+products; `billing-checkout` now refuses `post_annual` /
+`group_annual` with `no_longer_available`, and the buy cards carry
+a term selector instead of the "2 months free" button. The
+`STRIPE_PRICE_*_ANNUAL` secrets remain set on Phantom (unused).
 
 ### The claim (referral-claim Edge Function, ACTIVE v1)
 
@@ -992,16 +1009,20 @@ Settings → Plans) carries the second option under its Buy button:
 The webhook endpoint (`we_1UUveCA3zjwds4H0ImFfHrpM`) now also
 receives `invoice.paid` and `charge.refunded`. On `invoice.paid`
 for a subscription whose kind is a solo plan kind (post / group /
-post_annual / group_annual — never support, never the one-time
-lifetime payments):
+post_1y / post_2y / post_3y / group_1y / group_2y / group_3y —
+never support):
 
 1. The payer's `referrals` row (as referee) is looked up. No row →
    nothing happens (most invoices aren't referral payments).
 2. The invoice is claimed in the **`referral_invoices` ledger**
    (invoice id is the PK) BEFORE any math — a redelivered event
    hits the PK conflict and stops, so a bonus can never double.
-3. Paid months advance: monthly price +1, annual price +12, capped
-   at 12 total. `bonus_due = min(4, floor(months/3))`; any newly
+3. Paid months advance **price-interval-driven** (restructure,
+   2026-10-26): the invoice line's price interval decides — a
+   monthly price +1, a yearly price +12 × its interval_count
+   (1-year term +12, 2-year +24, 3-year +36) — with the accrual
+   window capped at 12 total. `bonus_due = min(4, floor(months/3))`;
+   any newly
    due months are granted at once as a **negative Stripe customer
    balance transaction on the referrer** — worth the referrer's own
    monthly price per month (Group $100, otherwise $75; a lifetime
@@ -1093,6 +1114,146 @@ anywhere; `referral_invoices` is service-role only).
   build made; no assertion changed). The older post-cap harness
   fails identically against the pre-change base (its extraction set
   predates the dealership build) — pre-existing, untouched.
+
+## Price restructure — Lifetime retired, multi-year terms, portal switching, Support Plan universal, sales tax (2026-10-26)
+
+Matthew's decisions, all 2026-10-26 (~20:55–21:01 EDT): **drop
+Lifetime** ("I'd be losing a lot of potential money") and replace
+it with **multi-year prepaid terms** — "buy 1-2-3 years at a time,
+bigger discount to a max of 15%"; **monthly subscribers may upgrade
+to a prepaid term at any time**; the **$199/yr Support Plan stays
+as a standalone add-on ANYONE can buy** (not lifetime-gated);
+**automatic sales-tax collection is APPROVED**; and **no
+surcharging** — card/BNPL processing fees are AutoLaunch's cost,
+never passed to customers.
+
+### Term ladder (prices ON the existing Post/Group products)
+
+| Plan | Monthly | 1 year (−5%) | 2 years (−10%) | 3 years (−15%) |
+|---|---|---|---|---|
+| Post ($75/mo) | $75 | **$855** | **$1,620** | **$2,295** |
+| Group ($100/mo) | $100 | **$1,140** | **$2,160** | **$3,060** |
+
+Stripe prices (livemode, `recurring.interval = year`,
+`interval_count` = term years): Post 1Y
+`price_1UUymDA3zjwds4H0HAo5Uybs`, Post 2Y
+`price_1UUymEA3zjwds4H04A4yOOAA`, Post 3Y
+`price_1UUymFA3zjwds4H0M3nv7Ai3`, Group 1Y
+`price_1UUymHA3zjwds4H0Im7782Om`, Group 2Y
+`price_1UUymIA3zjwds4H0eXxKqFZA`, Group 3Y
+`price_1UUymJA3zjwds4H0bN3plYWf` — on products
+`prod_VVvOTqlQPz76GC` (Post) / `prod_VVvO3wEu0weJ5U` (Group), so
+portal switching groups cleanly. Phantom secrets
+`STRIPE_PRICE_POST_1Y/2Y/3Y` + `STRIPE_PRICE_GROUP_1Y/2Y/3Y` set
+and digest-verified. One upfront charge per term; the subscription
+renews at the SAME term; cancelling keeps access until the term
+ends. `billing-checkout` kinds: `post_1y/post_2y/post_3y/
+group_1y/group_2y/group_3y` (subscription mode, `metadata.kind` =
+the kind; the webhook maps every term kind to its base tier and
+`current_period_end` falls out of the Stripe subscription).
+Retired kinds (`post_annual`, `group_annual`, `lifetime_post`,
+`lifetime_group`) return **400 `no_longer_available`**.
+
+App: every buy card (purchase gate, signup choice gate,
+Settings → Plans) carries a term selector — **Monthly · 1 year
+(−5%) · 2 years (−10%) · 3 years (−15%)** — and the selection
+drives the shown price, the checkout kind, and the confirm modal's
+price + renewal wording ("Renews every 3 years on the day you
+subscribe…"). PLAN_DETAILS rows are unchanged.
+
+### Portal plan switching
+
+The default Billing Portal configuration
+(`bpc_1UUtgpA3zjwds4H0HpVljsPv`) now has
+`features.subscription_update.enabled = true` with both products
+and all four prices each (monthly + 1Y + 2Y + 3Y),
+`proration_behavior = create_prorations`, and
+`default_allowed_updates = ["price"]` — a monthly subscriber can
+move to any term (or switch tier) at any time from Settings →
+Plans → "Manage or cancel subscription"; cancellation remains
+at-period-end. Verified by reading the active default config back.
+
+### Support Plan — universal add-on (Matthew, 2026-10-26)
+
+The Support Plan ($199/year, `prod_VVzmTAYH9Jgcs9` /
+`price_1UUxmnA3zjwds4H0pWVhqdGT`) is a standalone add-on **any
+account can buy** — `billing-checkout`'s old lifetime-only gate is
+removed. The Plans tab shows the card to every non-owner account
+(trial, subscribers, dealership-covered alike): "Priority Support
+— $199/year. Get priority human help from the AutoLaunch team. Bug
+reports are always free." Buy goes through the standard
+confirm-modal → checkout path. While active, the card shows
+"Support plan active until <date>" plus the portal manage path
+(the webhook now also stores the Stripe customer id on a support
+purchase so support-only buyers can reach the portal). Support
+tickets' priority entitlement is simply: `support_plan_status =
+'active'` OR dealership-covered → `priority`.
+
+### Sales tax — DECIDED (Matthew, 2026-10-26)
+
+Automatic tax collection is **approved**. The duty to collect
+follows **nexus**: home state (West Virginia) first; other states
+only when economic-nexus thresholds are crossed (~$100k / 200
+transactions, varies by state), and SaaS taxability itself varies
+by state. Plan: **Stripe Tax** computes and collects once
+activated. Matthew's dashboard steps: **activate Stripe Tax →
+register West Virginia → assign the SaaS tax code to the
+subscription products → tell Luna**, who then flips the Phantom
+secret `STRIPE_TAX_ENABLED` to `"true"`. Scaffold is already in
+`billing-checkout`: sessions carry `automatic_tax {enabled: true}`
+ONLY when that secret is exactly `"true"` (default unset → no
+change to checkout). **No surcharging**: processing fees are never
+passed to customers (Matthew, 2026-10-26).
+
+### Referral accrual under terms
+
+Accrual counting is **price-interval-driven** (see the Referrals
+section): a 2- or 3-year term buy counts 24/36 paid months toward
+the formula, still capped by the 12-paid-month window — so any
+prepaid term of 1 year or more maxes the referral at 4 free
+months, exactly like the old annual.
+
+### Verification — restructure (2026-10-26)
+
+- **Stripe**: Lifetime products (`prod_VVzm4QBde5DItm`,
+  `prod_VVzmu6fKoKeiFR`) + Annual products (`prod_VW0RNQPG9kyvi0`,
+  `prod_VW0RDW8kJX1nUJ`) and all four of their prices archived
+  (read-back verified `active: false`); Support product left
+  ACTIVE. Six term prices created on the Post/Group products and
+  read back (amount + `year × interval_count` + product each).
+  Portal config `bpc_1UUtgpA3zjwds4H0HpVljsPv` updated in place and
+  read back: subscription_update enabled, both products × 4
+  prices, `create_prorations`, cancel still at-period-end.
+- **Functions deployed**: billing-checkout **v14**, billing-webhook
+  **v11**, support-chat **v6**, all ACTIVE (checkout + webhook carry
+  the restructure; support-chat carries the simplified priority
+  rule + KB updates). Phantom secrets
+  `STRIPE_PRICE_{POST,GROUP}_{1Y,2Y,3Y}` digest-verified;
+  `STRIPE_TAX_ENABLED` deliberately NOT set.
+- **Harnesses (all green)**: restructure (ex-lifetime) 56/56 + app
+  wiring assertions 36/36 (converted: lifetime-sale assertions →
+  absence/rejection assertions, support gate removed, term kinds +
+  webhook term mapping added); referral 79/79 (accrual reconciled
+  to price-interval-driven counting: expanded price objects for
+  1y/2y/3y, line-price precedence, id-fallback, partial window);
+  billing 69/69 (unchanged); plan-details 222/222; dealership
+  55/55; sync cadence 50/50 + scraper 36/36; support-chat 60/60
+  (priority matrix converted to the universal rule); consent/terms
+  124/124 (kind set = monthly + 6 terms + support; success path
+  runs on post_3y; terms feed the confirm modal).
+- **Seeded E2E 41/41** (disposable user, real GoTrue JWT, deployed
+  functions): all 6 term kinds → real checkout sessions, each read
+  back in Stripe (`mode=subscription`, kind metadata,
+  `amount_total` = the term price); retired kinds → 400
+  `no_longer_available`; `lifetime_status` → `available: false`;
+  support checkout succeeds for a plain account; a real throwaway
+  post_3y subscription drove the deployed webhook —
+  `subscription.updated` → `plan_tier 'post'`, billing `active`,
+  `current_period_end` **1095 days** out; cancellation →
+  `expired`. Cleanup: disposable user deleted, DB counts restored
+  to the pre-run delta, throwaway Stripe customers left inert
+  (subscriptions cancelled, no payment method; the connector has
+  no customer-delete operation) and marked as test rows.
 
 ## Dealership accounts — Phase 1 (built 2026-10-26)
 

@@ -21,10 +21,15 @@
 // Handled events (all writes via the service role). Routing is by the
 // `kind` metadata billing-checkout stamps on every session and
 // subscription: post / group (monthly plan subscriptions),
-// post_annual / group_annual (annual plan subscriptions — same tiers,
-// counted as 12 paid months), lifetime_post / lifetime_group
-// (one-time Founding Lifetime payments), support (the $199/year
-// Support Plan for Lifetime accounts):
+// post_1y / post_2y / post_3y and group_1y / group_2y / group_3y
+// (multi-year prepaid terms — same tiers; the price's interval_count
+// drives both the period and referral accrual), support (the
+// $199/year Support Plan — a standalone add-on any account can buy,
+// Matthew 2026-10-26). RETIRED kinds: post_annual / group_annual
+// (superseded annuals) and lifetime_post / lifetime_group (Founding
+// Lifetime, dropped 2026-10-26 before any sale) — billing-checkout
+// refuses to create them now; the lifetime branches below remain
+// only as harmless history for events that can no longer occur:
 //   checkout.session.completed, kind post/group → billing_status
 //     'active', plan_tier from the session metadata plan, stripe ids
 //     + current_period_end stored. The subscription itself carries
@@ -34,8 +39,11 @@
 //     set, lifetime_purchased_at stamped, stripe_customer_id stored.
 //     NO subscription fields — a lifetime account's
 //     current_period_end stays NULL forever and nothing may expire it.
-//   checkout.session.completed, kind support → ONLY
-//     support_plan_status / support_period_end are written.
+//   checkout.session.completed, kind support → ONLY the support
+//     fields (support_plan_status / support_period_end) plus the
+//     Stripe customer id are written — the customer id is what gives
+//     a support-only buyer their Billing Portal path; billing_status
+//     and plan_tier are never touched by a support event.
 //   customer.subscription.updated / deleted → for kind 'support'
 //     subscriptions, ONLY the support fields are written — a support
 //     subscription event can never touch billing_status or plan_tier
@@ -54,8 +62,10 @@
 //     upgrading to lifetime).
 //   invoice.paid → REFERRAL ACCRUAL (see TIERS.md "Referrals"): when
 //     the payer is a claimed referee on a solo plan kind, their paid
-//     months advance (monthly price +1, annual price +12, capped at
-//     12) and every completed block of 3 paid months grants the
+//     months advance by the PRICE's interval (monthly price +1; a
+//     yearly price +12 × its interval_count — 1y +12, 2y +24, 3y
+//     +36 — with the eligibility window capped at 12) and every
+//     completed block of 3 paid months grants the
 //     referrer one free month as STRIPE CUSTOMER BALANCE at the
 //     referrer's own monthly price (Group $100, otherwise $75) — max
 //     4 free months per referral. Idempotent per invoice via the
@@ -164,9 +174,14 @@ function periodEndIso(sub: any): string | null {
 function planFromPriceId(priceId: string | null | undefined): string | null {
   if (!priceId) return null;
   if (priceId === (Deno.env.get("STRIPE_PRICE_POST") || "")) return "post";
-  if (priceId === (Deno.env.get("STRIPE_PRICE_POST_ANNUAL") || "")) return "post";
   if (priceId === (Deno.env.get("STRIPE_PRICE_GROUP") || "")) return "group";
-  if (priceId === (Deno.env.get("STRIPE_PRICE_GROUP_ANNUAL") || "")) return "group";
+  // Multi-year prepaid terms (2026-10-26): every term price maps to
+  // its base tier. The retired *_ANNUAL price secrets are no longer
+  // consulted — those prices are archived in Stripe.
+  for (const term of ["1Y", "2Y", "3Y"]) {
+    if (priceId === (Deno.env.get("STRIPE_PRICE_POST_" + term) || "")) return "post";
+    if (priceId === (Deno.env.get("STRIPE_PRICE_GROUP_" + term) || "")) return "group";
+  }
   return null;
 }
 
@@ -225,23 +240,51 @@ async function findUserId(svc: any, sub: any, session?: any): Promise<string | n
 // One formula covers the monthly path and the year-up-front path.
 // =====================================================================
 
-const SOLO_PLAN_KINDS = ["post", "group", "post_annual", "group_annual"];
+const SOLO_PLAN_KINDS = [
+  "post", "group",
+  "post_1y", "post_2y", "post_3y",
+  "group_1y", "group_2y", "group_3y",
+];
 const REFERRAL_PAID_MONTH_CAP = 12;
 const REFERRAL_BONUS_CAP = 4;
 
-// Paid months a price represents on an invoice: annual prices count
-// 12, monthly prices count 1, anything else (support, add-ons) 0 —
-// a 0 means this invoice can never be a referral payment.
-function paidMonthsForPrice(priceId: string | null | undefined): number {
+// Paid months a price represents on an invoice — PRICE-INTERVAL-
+// DRIVEN (2026-10-26): the invoice line's expanded price object
+// carries `recurring: { interval, interval_count }`; a monthly
+// price counts its interval_count (1), a yearly price counts
+// 12 × interval_count (1y → 12, 2y → 24, 3y → 36). Anything else
+// (support, add-ons, unknown prices) counts 0 — a 0 means this
+// invoice can never be a referral payment. Fallback, for payloads
+// whose line price is NOT expanded (no `recurring` object): match
+// the price id against the configured plan prices — monthly ids →
+// 1, term ids → 12/24/36, and the RETIRED annual ids → 12 (an
+// in-flight legacy annual subscription, if one ever existed, would
+// still count its year; those prices are archived, so this is
+// belt-and-braces only).
+function paidMonthsForPrice(price: any): number {
+  if (!price) return 0;
+  const rec = typeof price === "object" ? price.recurring : null;
+  if (rec && typeof rec.interval === "string") {
+    const count = Number(rec.interval_count) || 1;
+    if (rec.interval === "month") return count;
+    if (rec.interval === "year") return 12 * count;
+    return 0;
+  }
+  const priceId = typeof price === "string" ? price : price.id;
   if (!priceId) return 0;
-  if (
-    priceId === (Deno.env.get("STRIPE_PRICE_POST_ANNUAL") || "") ||
-    priceId === (Deno.env.get("STRIPE_PRICE_GROUP_ANNUAL") || "")
-  ) return 12;
   if (
     priceId === (Deno.env.get("STRIPE_PRICE_POST") || "") ||
     priceId === (Deno.env.get("STRIPE_PRICE_GROUP") || "")
   ) return 1;
+  const terms: Array<[string, number]> = [
+    ["STRIPE_PRICE_POST_1Y", 12], ["STRIPE_PRICE_GROUP_1Y", 12],
+    ["STRIPE_PRICE_POST_2Y", 24], ["STRIPE_PRICE_GROUP_2Y", 24],
+    ["STRIPE_PRICE_POST_3Y", 36], ["STRIPE_PRICE_GROUP_3Y", 36],
+    ["STRIPE_PRICE_POST_ANNUAL", 12], ["STRIPE_PRICE_GROUP_ANNUAL", 12],
+  ];
+  for (const [env, months] of terms) {
+    if (priceId === (Deno.env.get(env) || "")) return months;
+  }
   return 0;
 }
 
@@ -352,9 +395,12 @@ async function handleInvoicePaid(svc: any, secretKey: string, invoice: any) {
   let creditCents = 0;
   let creditTxnId: string | null = null;
   try {
-    const priceId = invoice.lines?.data?.[0]?.price?.id ||
-      sub.items?.data?.[0]?.price?.id;
-    const months = paidMonthsForPrice(priceId);
+    // The invoice line's price object first (expanded prices carry
+    // the recurring interval that drives the month count); the
+    // subscription item's price object as the fallback source.
+    const priceObj = invoice.lines?.data?.[0]?.price ||
+      sub.items?.data?.[0]?.price || null;
+    const months = paidMonthsForPrice(priceObj);
     if (ref.bonus_eligible && months > 0) {
       const room = Math.max(0, REFERRAL_PAID_MONTH_CAP - (ref.referee_paid_months || 0));
       monthsAdded = Math.min(months, room);
@@ -580,12 +626,16 @@ Deno.serve(async (req) => {
             stripe_customer_id: obj.customer ? String(obj.customer) : null,
           };
         } else if (kind === "support") {
-          // Support Plan purchase: support fields ONLY. Access was
-          // already settled by the lifetime purchase behind it.
+          // Support Plan purchase (a standalone add-on any account
+          // can buy): the support fields ONLY, plus the Stripe
+          // customer id — a support-only buyer needs it for the
+          // Billing Portal manage path. billing_status / plan_tier
+          // are never touched by a support purchase.
           update = {
             user_id: userId,
             support_plan_status: "active",
             support_period_end: periodEndIso(sub),
+            stripe_customer_id: obj.customer ? String(obj.customer) : null,
           };
         } else {
           update = {
