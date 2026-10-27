@@ -111,6 +111,58 @@ the tier gates already deny, so there is no scraper-side hole for
 this rule. (Server-side enforcement in general remains the phase-2
 item listed at the bottom.)
 
+### Sync cadence — one inventory sync per window (added 2026-10-26)
+
+Matthew's rule: inventory freshness is part of what a plan buys —
+**one user-requested sync per window**, by access level:
+
+| Access | Sync window |
+|---|---|
+| Trial (`trialing`) | **1 per 24 hours** |
+| Post (tier 1) | **1 per 18 hours** |
+| Automate | **1 per 12 hours** |
+| Group | **1 per 6 hours** |
+
+- **Group means ANY Group account** — a solo user who buys Group
+  syncs every 6 hours, and a dealership-covered member resolves to
+  the same Group cadence. The 6h window is a tier property, not a
+  dealership perk.
+- The Automate 12h figure is Luna's interpolation between Post (18h)
+  and Group (6h); the numbers live in ONE config constant in each
+  layer — `SYNC_COOLDOWN_HOURS` in `index.html` and the same-named
+  map in `scraper.py` — so changing it is a one-line edit in both.
+- **Owners are exempt** (the hard rule above the tier system). The
+  app passes the exemption off while an owner preview is active, so
+  previews show the cadence the previewed customer gets — the same
+  convention as the daily post cap.
+- **The initial scrape when opening a new account never counts.**
+  The clock is the account's most recent prior **non-test**
+  `scrape_jobs` row: `sync_mode = 'test'` rows are the onboarding
+  preview — they neither set the clock nor are ever blocked. An
+  account with no prior non-test job can always sync.
+- **App enforcement**: the pure decision is `syncCooldownState`
+  (PURE ACCESS LOGIC block), fed by `getSyncCooldownState()` (reads
+  the account's recent jobs, test rows filtered out). In
+  `triggerLiveLotCrawl` the check runs before any button visuals or
+  insert: a blocked click queues nothing and says "Inventory sync is
+  available once every <N> hours on your plan — next sync at <local
+  time>." The sidebar Sync control (`#navSyncItem`) also reflects
+  the state on settings load (`refreshSyncButtonState`): dimmed with
+  a "Sync in 5h 12m" countdown while blocked.
+- **Scraper backstop**: `run_scraper` serves a pending job only
+  after `_apply_sync_cadence_guard` clears it — tier resolved from
+  the job user's `user_settings` with the app's rules (owners exempt;
+  `billing_status = 'trialing'` → 24h; `plan_tier` via `resolveTier`
+  leniency, so legacy values land on Automate's 12h; an active
+  dealership membership → Group 6h, read best-effort). A refused job
+  is marked `failed` with `cars_synced` 0 and the crawl is skipped.
+  Scheduled runs carry no job row and are **never** guarded — and
+  the guard fails open (missing settings row, unreadable timestamp,
+  any lookup error → the crawl proceeds); it bites only when a tier
+  clearly resolves and the window clearly hasn't elapsed.
+- Expired/blocked accounts don't reach sync at all (the purchase
+  gate), so the cadence doesn't need a state for them.
+
 ### What each plan includes — PLAN_DETAILS (added 2026-10-26)
 
 **AutoLaunch Pay is CUT (Matthew, 2026-10-26):** every dealership
@@ -130,7 +182,7 @@ gives them — no vague card copy. So plan descriptions now live in
 ONE config in `index.html`: **`PLAN_DETAILS`** (next to
 `TIER_FEATURES`), with an entry per plan (`trial` / `post` /
 `automate` / `group`) holding its display name, price label, one-line
-tagline, and an 11-row feature list of `{ label, included }` entries
+tagline, and a 12-row feature list of `{ label, included }` entries
 (the daily-cap row carries a `value` instead of a check):
 
 | Row | Trial | Post | Automate | Group |
@@ -138,6 +190,7 @@ tagline, and an 11-row feature list of `{ label, included }` entries
 | Inventory sync & workspace | ✓ | ✓ | ✓ | ✓ |
 | Manual Marketplace posting | ✓ | ✓ | ✓ | ✓ |
 | Queued posts per day | **1 per day** | **5 per day** | No plan cap — your own safety limit | No plan cap — your own safety limit |
+| Inventory sync | **1 per 24 hours** | **1 per 18 hours** | **1 per 12 hours** | **1 per 6 hours** |
 | AI listing copy | — | ✓ | ✓ | ✓ |
 | Auto-post new arrivals | — | — | ✓ | ✓ |
 | Auto delete & repost | — | — | ✓ | ✓ |
@@ -152,7 +205,8 @@ included flags follow `TIER_FEATURES` (a capability is included
 exactly when the plan's tier meets its minimum tier; the trial's
 column follows `TRIAL_ALLOWED_FEATURES`), and the cap values follow
 `TIER_DAILY_POST_CAP` (Post 5; Automate/Group none) plus the trial's
-1-per-day rule. The trial entry also carries the note line: "No card
+1-per-day rule. The "Inventory sync" row is a value row too, mirroring
+`SYNC_COOLDOWN_HOURS` exactly (see "Sync cadence" above). The trial entry also carries the note line: "No card
 needed. When the trial ends, pick a plan to keep posting." (The
 reserved `teams` key stays in `TIER_FEATURES` — nothing calls it;
 multi-user access now runs through dealership membership instead.)

@@ -802,7 +802,7 @@ body.dark-shell :is(#authOverlay, #settingsModal, #queueModal, #guideModal, #wis
         </div>
         <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-600 text-[10px] font-mono font-bold text-white">0</span>
       </a>
-      <a href="#" onclick="triggerLiveLotCrawl(event); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+      <a href="#" id="navSyncItem" onclick="triggerLiveLotCrawl(event); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <div class="flex items-center gap-2.5">
           <i class="fa-solid fa-rotate w-4 text-blue-600 text-xs"></i>
           <span>Sync Inventory</span>
@@ -3790,6 +3790,17 @@ const TIER_FEATURES = {
 // effectiveDailyPostAllowance in the pure access block).
 const TIER_DAILY_POST_CAP = { post: 5, automate: null, group: null };
 
+// Inventory sync cadence (Matthew, 2026-10-26): ONE user-requested
+// inventory sync per window, by plan — trial 24h, Post 18h, Automate
+// 12h, Group 6h. Group means ANY Group account (a solo buyer on Group
+// syncs at 6h exactly like a dealership-covered member, who resolves
+// to Group). The Automate figure is Luna's interpolation between Post
+// and Group — this map is the one-line place to change it. Owners are
+// exempt entirely (see syncCooldownState). Enforced in the app at the
+// Sync Inventory flow and again as a backstop in the scraper; the
+// first scrape on a new account never counts.
+const SYNC_COOLDOWN_HOURS = { trial: 24, post: 18, automate: 12, group: 6 };
+
 // ==== PLAN DETAILS — the ONE source of truth for what each plan ====
 // gives (Matthew, 2026-10-26: when someone is picking between the
 // free trial, the 1st tier and the 2nd tier, they must know EXACTLY
@@ -3800,7 +3811,9 @@ const TIER_DAILY_POST_CAP = { post: 5, automate: null, group: null };
 // list. The feature rows mirror TIER_FEATURES — a capability is
 // included exactly when the plan's tier meets its minimum tier — and
 // the "Queued posts per day" row is a VALUE mirroring
-// TIER_DAILY_POST_CAP plus the trial's 1-per-day rule. Automate is
+// TIER_DAILY_POST_CAP plus the trial's 1-per-day rule, and the
+// "Inventory sync" row is a VALUE mirroring SYNC_COOLDOWN_HOURS.
+// Automate is
 // described here for the Plan panel only: the gates SELL Post and
 // Group (Matthew's spec), so Automate carries no price and no card.
 const PLAN_DETAILS = {
@@ -3814,6 +3827,7 @@ const PLAN_DETAILS = {
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
       { label: "Queued posts per day", value: "1 per day" },
+      { label: "Inventory sync", value: "1 per 24 hours" },
       { label: "AI listing copy", included: false },
       { label: "Auto-post new arrivals", included: false },
       { label: "Auto delete & repost", included: false },
@@ -3833,6 +3847,7 @@ const PLAN_DETAILS = {
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
       { label: "Queued posts per day", value: "5 per day" },
+      { label: "Inventory sync", value: "1 per 18 hours" },
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: false },
       { label: "Auto delete & repost", included: false },
@@ -3852,6 +3867,7 @@ const PLAN_DETAILS = {
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
       { label: "Queued posts per day", value: "No plan cap — your own safety limit" },
+      { label: "Inventory sync", value: "1 per 12 hours" },
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: true },
       { label: "Auto delete & repost", included: true },
@@ -3871,6 +3887,7 @@ const PLAN_DETAILS = {
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
       { label: "Queued posts per day", value: "No plan cap — your own safety limit" },
+      { label: "Inventory sync", value: "1 per 6 hours" },
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: true },
       { label: "Auto delete & repost", included: true },
@@ -4171,6 +4188,48 @@ function effectiveDailyPostAllowance(tier, userLimit, billingStatus, isOwner) {
   if (cap === null || cap === undefined) return userLimit;
   if (!userLimit || userLimit >= 999) return cap;
   return Math.min(userLimit, cap);
+}
+
+// Inventory sync cadence (Matthew, 2026-10-26): one user-requested
+// sync per window — SYNC_COOLDOWN_HOURS, resolved from the same
+// access facts as everything else. access = { mode, tier, isOwner,
+// covered }: mode is the billingAccess() mode, tier is
+// effectiveTier(), isOwner is the EXEMPTION flag (the caller passes
+// false while an owner preview is active, exactly like the post-cap
+// allowance, so a preview shows the cadence the previewed customer
+// gets), and covered marks an active-dealership member (dealership
+// members resolve to the Group cadence — the same 6h any Group
+// account gets). Returns { allowed, hours, nextAt }:
+//   hours null -> no cadence applies (owner, or mode "gate" where a
+//                 sync is unreachable behind the purchase gate anyway)
+//   nextAt     -> ms epoch when the next sync unlocks (null whenever
+//                 allowed or no cadence applies)
+// The clock is the account's most recent prior NON-TEST scrape: test
+// rows are the onboarding preview — they neither set the clock nor
+// are ever blocked, and the caller excludes them when it reads
+// lastSyncAt/priorNonTestCount. An account with no prior non-test
+// sync can always sync — the initial scrape when opening a new
+// account never counts. An unreadable last-sync time fails open.
+function syncCooldownState(access, lastSyncAtISO, priorNonTestCount, nowMs) {
+  let hours = null;
+  if (access.isOwner) {
+    hours = null;
+  } else if (access.mode === "trial") {
+    hours = SYNC_COOLDOWN_HOURS.trial;
+  } else if (access.mode === "gate") {
+    hours = null;
+  } else if (access.covered) {
+    hours = SYNC_COOLDOWN_HOURS.group;
+  } else {
+    hours = SYNC_COOLDOWN_HOURS[access.tier] || null;
+  }
+  if (hours === null || hours === undefined) return { allowed: true, hours: null, nextAt: null };
+  if (!priorNonTestCount) return { allowed: true, hours: hours, nextAt: null };
+  const last = lastSyncAtISO ? Date.parse(lastSyncAtISO) : NaN;
+  if (!isFinite(last)) return { allowed: true, hours: hours, nextAt: null };
+  const nextAt = last + hours * 3600000;
+  if (nowMs >= nextAt) return { allowed: true, hours: hours, nextAt: null };
+  return { allowed: false, hours: hours, nextAt: nextAt };
 }
 
 const BILLING_GRANDFATHER_CUTOFF_MS = Date.parse("2026-10-26T00:00:00Z");
@@ -5488,6 +5547,7 @@ async function loadUserStoreSettings() {
     }
     applyBillingUI();
     renderPlanPanel();
+    refreshSyncButtonState();
 
     if (data) {
 
@@ -8009,6 +8069,69 @@ async function enqueueMarketplaceCar(vin) {
   }
 }
 // ==============================================================================
+// ====================== SYNC CADENCE (APP SIDE) ===============================
+// ==============================================================================
+// One user-requested inventory sync per plan window
+// (SYNC_COOLDOWN_HOURS; the pure decision is syncCooldownState in the
+// access block). Reads the account's recent scrape_jobs — 'test' rows
+// are the onboarding preview: they neither set the clock nor are ever
+// blocked, and the first non-test scrape on a new account is always
+// allowed. Fail-open throughout: a read error must never block a sync.
+async function getSyncCooldownState() {
+  const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
+  const previewing = isOwner && (!!ownerTestTier || !!ownerBillingPreview);
+  const access = {
+    mode: billingMode(),
+    tier: effectiveTier(),
+    isOwner: isOwner && !previewing,
+    covered: dealershipCovered()
+  };
+  let lastSyncAt = null, priorCount = 0;
+  try {
+    const { data } = await supabaseClient
+      .from("scrape_jobs")
+      .select("started_at, sync_mode")
+      .eq("user_id", currentUser.id)
+      .order("started_at", { ascending: false })
+      .limit(200);
+    const rows = (data || []).filter(function (r) { return r.sync_mode !== "test"; });
+    priorCount = rows.length;
+    if (rows.length) lastSyncAt = rows[0].started_at;
+  } catch (e) {
+    return { allowed: true, hours: null, nextAt: null };
+  }
+  return syncCooldownState(access, lastSyncAt, priorCount, Date.now());
+}
+
+function syncCooldownRemainingLabel(nextAt, nowMs) {
+  const mins = Math.max(1, Math.ceil((nextAt - nowMs) / 60000));
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h >= 1) return "Sync in " + h + "h " + m + "m";
+  return "Sync in " + m + "m";
+}
+
+// Reflect the cadence on the sidebar Sync control: while blocked it
+// shows the countdown; the click handler re-checks live either way,
+// so this is presentation only.
+async function refreshSyncButtonState() {
+  const btn = document.getElementById("navSyncItem");
+  if (!btn || !currentUser) return;
+  try {
+    const st = await getSyncCooldownState();
+    const label = btn.querySelector("span");
+    if (!st.allowed && st.nextAt) {
+      btn.dataset.syncBlocked = "1";
+      btn.classList.add("opacity-60");
+      if (label) label.innerText = syncCooldownRemainingLabel(st.nextAt, Date.now());
+    } else {
+      delete btn.dataset.syncBlocked;
+      btn.classList.remove("opacity-60");
+      if (label) label.innerText = "Sync Inventory";
+    }
+  } catch (e) { /* fail-open: leave the control exactly as it is */ }
+}
+
+// ==============================================================================
 // ====================== SYNC INVENTORY START ==================================
 // ==============================================================================
 
@@ -8024,6 +8147,21 @@ async function triggerLiveLotCrawl(event) {
     // and restores the element's own content, and ignores repeat
     // clicks while a sync is being queued.
     if (btn.dataset.syncing === "1") return;
+
+    // SYNC CADENCE (Matthew, 2026-10-26): one user-requested sync per
+    // plan window. Checked before any visual change: a blocked click
+    // queues nothing and only explains itself.
+    const cdState = await getSyncCooldownState();
+    if (!cdState.allowed) {
+        alert(
+            "Inventory sync is available once every " + cdState.hours +
+            " hours on your plan \u2014 next sync at " +
+            new Date(cdState.nextAt).toLocaleString() + "."
+        );
+        refreshSyncButtonState();
+        return;
+    }
+
     btn.dataset.syncing = "1";
     const originalHTML = btn.innerHTML;
 
@@ -8088,6 +8226,8 @@ async function triggerLiveLotCrawl(event) {
         delete btn.dataset.syncing;
 
         btn.innerHTML = originalHTML;
+
+        refreshSyncButtonState();
 
     }
 

@@ -4,7 +4,7 @@ import os
 import re
 import sys
 from typing import List
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from playwright.async_api import async_playwright
 from supabase import create_client
@@ -1684,6 +1684,152 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
         print(f"[!] Stale pass warning (non-fatal): {e}")
         return 0
 # ==============================================================================
+# ====================== SYNC CADENCE GUARD START ==============================
+# ==============================================================================
+# Per-plan inventory sync cadence (Matthew, 2026-10-26): ONE
+# user-requested sync per window — trial 24h, Post 18h, Automate 12h,
+# Group 6h (any Group account; dealership-covered members resolve to
+# the Group cadence exactly like a solo Group buyer). The app gates
+# the Sync button with the same numbers (SYNC_COOLDOWN_HOURS in
+# index.html — keep the two maps in step); this guard is the backstop
+# for scrape_jobs rows inserted any other way. It applies ONLY to
+# user-requested jobs: a run serving a pending non-test job. Scheduled
+# runs carry no job row and are never guarded, and 'test' jobs (the
+# onboarding preview) are never blocked and never set the clock — the
+# initial scrape when opening a new account never counts. Owners are
+# exempt (mirrors OWNER_USER_IDS in the app). Fail-open throughout: a
+# missing settings row, an unreadable timestamp, or any lookup error
+# lets the crawl proceed; the guard bites only when a settings row
+# clearly resolves a tier and the window clearly has not elapsed.
+SYNC_COOLDOWN_HOURS = {"trial": 24, "post": 18, "automate": 12, "group": 6}
+OWNER_USER_IDS = {
+    "40a95557-504a-460f-a891-462bb2b4f25c",  # Matthew
+    "9cdba37e-ac31-464d-92b9-0745772fbf00",  # Jourdan
+}
+
+
+def _resolve_tier_scraper(raw):
+    # Mirror of the app's resolveTier(): real tiers pass through, no
+    # value means a brand-new 'post', and any legacy value ('trial',
+    # 'free', ...) resolves to 'automate' so nobody loses access.
+    if raw in ("post", "automate", "group"):
+        return raw
+    if raw is None or raw == "":
+        return "post"
+    return "automate"
+
+
+def _parse_job_ts(value):
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _sync_cooldown_hours(uid, settings_row, covered):
+    """Sync window in hours for this account, or None = no cadence."""
+    if uid in OWNER_USER_IDS:
+        return None
+    if covered:
+        return SYNC_COOLDOWN_HOURS["group"]
+    if not settings_row:
+        return None  # fail-open: nothing on file to resolve against
+    if settings_row.get("billing_status") == "trialing":
+        return SYNC_COOLDOWN_HOURS["trial"]
+    return SYNC_COOLDOWN_HOURS[_resolve_tier_scraper(settings_row.get("plan_tier"))]
+
+
+def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now):
+    """Reason string if this job must be cadence-refused, else None.
+    Pure: prior_jobs is the account's scrape_jobs history; the current
+    job (matched by id) and every 'test' row are excluded from the
+    clock — the clock is the most recent prior NON-TEST job."""
+    if not job:
+        return None
+    if job.get("sync_mode") == "test":
+        return None
+    hours = _sync_cooldown_hours(uid, settings_row, covered)
+    if hours is None:
+        return None
+    priors = [
+        j for j in (prior_jobs or [])
+        if j.get("id") != job.get("id") and j.get("sync_mode") != "test"
+    ]
+    if not priors:
+        return None  # first real sync — the initial scrape never counts
+    latest = max(priors, key=lambda j: j.get("started_at") or "")
+    started = _parse_job_ts(latest.get("started_at"))
+    if started is None:
+        return None  # fail-open on an unreadable clock
+    unlock = started + timedelta(hours=hours)
+    if now < unlock:
+        return (
+            f"last non-test sync started {latest.get('started_at')} is inside "
+            f"this plan's {hours}h sync window (next sync at {unlock.isoformat()})"
+        )
+    return None
+
+
+def _dealership_covered(uid):
+    """Best-effort: True when the user belongs to an ACTIVE dealership
+    account (Phase 1 membership tables). Any read problem answers
+    False and the normal billing resolution decides instead."""
+    try:
+        rows = (
+            db.table("dealership_account_members")
+            .select("dealership_id")
+            .eq("user_id", uid)
+            .execute()
+        ).data or []
+        for r in rows:
+            d = (
+                db.table("dealership_accounts")
+                .select("status")
+                .eq("id", r.get("dealership_id"))
+                .execute()
+            ).data or []
+            if d and d[0].get("status") == "active":
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _apply_sync_cadence_guard(uid, job, settings_row):
+    """Backstop enforcement for one user-requested job. Returns True
+    when the job was refused: it is marked failed (cars_synced 0) and
+    the caller must skip the crawl."""
+    if job.get("sync_mode") == "test":
+        return False
+    covered = _dealership_covered(uid)
+    priors = (
+        db.table("scrape_jobs")
+        .select("id, started_at, sync_mode")
+        .eq("user_id", uid)
+        .execute()
+    ).data or []
+    reason = _sync_cadence_block_reason(
+        uid, job, settings_row, covered, priors, datetime.now(timezone.utc)
+    )
+    if not reason:
+        return False
+    db.table("scrape_jobs").update({
+        "status": "failed",
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "cars_synced": 0,
+    }).eq("id", job["id"]).execute()
+    print(f"[!] Sync cadence: job {job['id']} refused for user {uid[:8]} — {reason}")
+    return True
+# ==============================================================================
+# ====================== SYNC CADENCE GUARD END ================================
+# ==============================================================================
+
+# ==============================================================================
 # ====================== SCRAPER ENTRYPOINT START ==============================
 # ==============================================================================
 
@@ -1691,6 +1837,8 @@ async def run_scraper():
 
     active_job_id = None
     active_job_mode = None
+    active_job = None
+    target_settings_row = None
 
     target_uid = os.environ.get("USER_ID")
 
@@ -1723,6 +1871,7 @@ async def run_scraper():
 
             active_job_id = latest_job["id"]
             active_job_mode = latest_job.get("sync_mode")
+            active_job = latest_job
 
         print(
             f"ACTIVE_JOB_ID => {active_job_id}"
@@ -1735,6 +1884,8 @@ async def run_scraper():
             .execute()
         )
 
+        target_settings_row = (res.data or [None])[0]
+
         users_to_scrape = res.data or []
 
     else:
@@ -1746,6 +1897,20 @@ async def run_scraper():
         )
 
         users_to_scrape = res.data or []
+
+    # SYNC CADENCE GUARD (Matthew, 2026-10-26): refuse a user-requested
+    # job that lands inside the account's sync window. active_job is
+    # set only when this run serves a pending job for USER_ID, so
+    # scheduled runs (no job) walk straight past. Fail-open: any guard
+    # error is logged and the crawl proceeds.
+    if active_job is not None:
+        try:
+            if _apply_sync_cadence_guard(
+                (target_uid or "").strip(), active_job, target_settings_row
+            ):
+                return
+        except Exception as e:
+            print(f"[!] Sync cadence guard warning (non-fatal, proceeding): {e}")
 
     if not users_to_scrape:
 
