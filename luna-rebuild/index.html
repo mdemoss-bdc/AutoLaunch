@@ -12446,8 +12446,12 @@ function openModal(id) {
 // through closeModal — the exact call the ✕ makes — so per-modal close
 // behavior (queue poller sync, etc.) is unchanged. authOverlay and
 // purchaseGateOverlay and signupChoiceOverlay are excluded: they
-// are gates, not dismissible modals.
-const MODAL_CLOSE_DENY = new Set(["authOverlay", "purchaseGateOverlay", "signupChoiceOverlay"]);
+// are gates, not dismissible modals. checkoutConfirmModal is excluded
+// too: it is the final-sale consent surface — it needs an explicit
+// answer (Continue to payment / Not now), and a stray backdrop tap or
+// Escape must never dismiss it, above all while confirmCheckout() is
+// recording the acceptance and creating the checkout.
+const MODAL_CLOSE_DENY = new Set(["authOverlay", "purchaseGateOverlay", "signupChoiceOverlay", "checkoutConfirmModal"]);
 function topmostOpenModal() {
   const open = [...document.querySelectorAll("div.fixed.inset-0[id]")]
     .filter(el => !el.classList.contains("hidden") && !MODAL_CLOSE_DENY.has(el.id));
