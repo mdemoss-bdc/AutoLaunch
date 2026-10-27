@@ -31,7 +31,26 @@
 // only basis for this car's specs); (3) a deterministic post-draft
 // guard makes every stated price/mileage trace to a verified value
 // (regenerate once, then strip-or-hold). Everything else is v12
-// behavior — the prepared v13 voice changes are NOT in this build.
+// behavior.
+//
+// VOICE LEARNING v13 (2026-10-27, Matthew's go — "work on Luca, try
+// to make him as smart as you"): the three prepared v13 voice
+// changes, rebased onto the v24 grounding-hardened source:
+//   1. junkBody length cap 400 -> 1500 chars, so a rep's long-form
+//      messages (e.g. Matthew's ~1,400-char program-stacking
+//      walkthrough) can form voice pairs. Pairs still slice to 300
+//      chars in the prompt, so prompt size is unchanged; the
+//      file-extension junk rejection is untouched.
+//   2. Voice read window .limit(150) -> .limit(600) prospect-linked
+//      messages. The imported voice bank (~176 rows by 2026-10-26)
+//      outgrew the 150-row window, silently dropping older threads
+//      from study. Delivered pairs stay capped at 10, unchanged.
+//   3. Vocabulary build paginated with .range(): it read make/model
+//      with .limit(4000), which PostgREST silently caps at 1,000
+//      rows — for a 2,000+ car account the make/model vocabulary was
+//      built from only the first 1,000 cars, so models stocked only
+//      beyond that window never became searchable words.
+// Grounding behavior (v24) is unchanged. This is platform v25.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -336,14 +355,14 @@ Deno.serve(async (req) => {
   // conversation; sharper with every chat. Per-user by construction
   // (RLS + this user filter) — voices never mix between reps.
   type VRow = { prospect_id: string; direction: string; origin: string; body: string; status: string | null; created_at: string };
-  const junkBody = (b: string) => !b || b.length < 3 || b.length > 400 || /\.(csv|txt|pdf|jpe?g|png|zip)$/i.test(b.trim());
+  const junkBody = (b: string) => !b || b.length < 3 || b.length > 1500 || /\.(csv|txt|pdf|jpe?g|png|zip)$/i.test(b.trim()); // v13: cap 400 -> 1500 (see header)
   const { data: voiceRows } = await supabase
     .from("closer_messages")
     .select("prospect_id, direction, origin, body, created_at, status")
     .eq("user_id", user.id)
     .neq("prospect_id", prospectId)
     .order("created_at", { ascending: false })
-    .limit(150);
+    .limit(600); // v13: window 150 -> 600 (see header)
   const byProspect = new Map<string, VRow[]>();
   for (const r of (voiceRows || []) as VRow[]) {
     if (!r.prospect_id) continue;
@@ -545,8 +564,14 @@ Deno.serve(async (req) => {
     if (cached && Date.now() - cached.at < 600000) {
       vocab = cached.words;
     } else {
-      const { data: vrows } = await supabase
-        .from("scraped_inventory").select("make, model").eq("is_active", true).limit(4000);
+      // v13: paginate — .limit(4000) silently capped at 1,000 rows.
+      const vrows: any[] = [];
+      for (let vfrom = 0; ; vfrom += 1000) {
+        const { data: vpage } = await supabase
+          .from("scraped_inventory").select("make, model").eq("is_active", true).range(vfrom, vfrom + 999);
+        vrows.push(...(vpage || []));
+        if (!vpage || vpage.length < 1000) break;
+      }
       for (const r of vrows || []) {
         for (const s of [String((r as any).make || ""), String((r as any).model || "")]) {
           for (const w of s.toLowerCase().split(/[^a-z0-9]+/)) if (w.length >= 3) vocab.add(w);
