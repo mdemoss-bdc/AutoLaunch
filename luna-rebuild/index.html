@@ -556,6 +556,15 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
    At >=768px this rule does not apply and the bar shows exactly as before. */
 @media (max-width: 767px) {
   #filterBar:not(.mobile-filters-open) { display: none; }
+  /* A select sizes to its longest option (production colors run to 69
+     chars, e.g. "Wind Chill Pearl With Midnight Black Metallic Roof
+     [Extra_Cost_Color]" = a 576px-wide select in a 358px bar). As flex
+     items with min-width:auto the wrappers could not shrink, so the bar
+     stretched the whole dashboard sideways on phones. Let the wrappers
+     shrink and cap each select at its wrapper: no option text, however
+     long, can widen the page. Desktop (>=768px) is untouched. */
+  #filterBar > div { min-width: 0; max-width: 100%; }
+  #filterBar select { max-width: 100%; }
 }
 /* Phone layout: the Inventory header bar + automation ribbon collapse
    behind the phone-only compact bar (toggleMobileHeader adds
