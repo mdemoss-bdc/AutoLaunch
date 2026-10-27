@@ -149,6 +149,27 @@
     return out.slice(-30);
   }
 
+  // Seller-side evidence for the worker's auto-create gate
+  // (v2.1.46): which surface this thread was read on, and whether
+  // the thread pane carries the SELLER's controls. "View buyer"
+  // renders only when the signed-in user is the listing's seller;
+  // a buyer-side thread shows "View seller" instead.
+  function threadSurface() {
+    var p = window.location.pathname || "";
+    return p.indexOf("/marketplace/inbox") === 0 ? "marketplace_inbox" : "";
+  }
+
+  function findSellerContext() {
+    try {
+      var scope = findChatPopup() || document.querySelector('[role="main"]') || document;
+      var els = scope.querySelectorAll("a, button, [role='button'], span");
+      for (var i = 0; i < els.length; i++) {
+        if ((els[i].textContent || "").trim() === "View buyer") return true;
+      }
+    } catch (e) { /* heuristic only — never break the page */ }
+    return false;
+  }
+
   function scrape() {
     var listing = findListing();
     return {
@@ -156,6 +177,8 @@
       vehicleText: listing.vehicleText,
       itemUrl: listing.itemUrl,
       threadUrl: window.location.href,
+      surface: threadSurface(),
+      sellerContext: findSellerContext(),
       messages: findMessages()
     };
   }
@@ -252,10 +275,12 @@
       if (!vm) vm = rowText.match(/\b(19|20)\d{2}\s+[A-Z][A-Za-z]+\s+[A-Z][A-Za-z0-9]+/); // year/make/model label also proves Marketplace
       // Commerce gate (v2.1.34): the plain /messages list mixes in
       // personal chats, business-page chats and the Meta AI chat —
-      // none of those are buyers. A row becomes a prospect ONLY with
-      // Marketplace evidence: a priced listing label, a year/make/
-      // model label, or the Marketplace inbox surface itself (which
-      // is commerce-only by construction).
+      // none of those are buyers. A row is only SENT with Marketplace
+      // evidence: a priced listing label, a year/make/model label,
+      // or the Marketplace inbox surface itself (which is commerce-
+      // only by construction). Since v2.1.46 this pre-filter no
+      // longer decides creation — the worker's autoCreateGate does,
+      // and it fails closed where this pass cannot tell.
       var onMarketplaceInbox = (window.location.pathname || "").indexOf("/marketplace/inbox") === 0;
       var yearMake = /\b(19|20)\d{2}\s+[A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+/.test(rowText);
       if (!onMarketplaceInbox && !vm && !yearMake) continue;
@@ -265,6 +290,11 @@
         vehicleText: vm ? cleanListingLabel(vm[0]) : "",
         itemUrl: "",
         threadUrl: "https://www.facebook.com/messages/t/" + key,
+        // v2.1.46: the worker's auto-create gate keys its surface
+        // signal on this — a stub born on the Marketplace inbox is
+        // commerce-surface evidence; a plain /messages row is not.
+        surface: onMarketplaceInbox ? "marketplace_inbox" : "",
+        sellerContext: false,
         messages: [],
         stub: true
       });

@@ -252,6 +252,21 @@
 //     first, then the inventory row's stock_number, so the content
 //     script always sees the best-known value. Fail-open: no
 //     stock anywhere still means no line, exactly as before.
+// 22. AUTO-CREATE GATE (v2.1.46): the old Marketplace-only auto rule
+//     keyed creation on the mere PRESENCE of a listing label — and
+//     labels leak: a plain 1:1 Messenger chat about tires scraped
+//     one, and a thread whose counterparty is the rep himself (a
+//     Marketplace system/self thread) matched his own car's label.
+//     On 2026-10-26 both became junk prospects on Matthew's account
+//     the moment the app synced. Creation now runs through
+//     autoCreateGate: a resolved participant name is mandatory (an
+//     unresolved name NEVER auto-creates), a counterparty resolving
+//     to the rep himself never creates, and at least one positive
+//     seller-side signal must fire — the Marketplace inbox surface,
+//     the seller's own thread controls ("View buyer"), or a label
+//     matching one of the user's own posted cars. Snippet sync and
+//     updates to known prospects are untouched: the gate decides
+//     CREATION only, and it fails closed.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -372,6 +387,74 @@ async function sbPost(path, body) {
   });
 }
 
+// ---------------------------------------------------------------------
+// AUTO-CREATE GATE (v2.1.46, header note 22). Pure function: given an
+// AUTO capture and the context handleCaptureChat assembled (the rep's
+// own name from their Luca profile, the user's Marketplace-posted
+// cars), decide whether the capture may CREATE a prospect. Manual
+// captures never pass through here, and neither do captures for an
+// already-known prospect (their message sync is not creation).
+function autoCreateGate(capture, ctx) {
+  var norm = function (s) {
+    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  };
+  var name = String((capture && capture.buyerName) || "").trim();
+  // Hard rule: an unresolved participant name NEVER auto-creates —
+  // the "Marketplace buyer" fallback card is exactly what this kills.
+  if (!name) return { create: false, reason: "unresolved_name" };
+  // Self/system threads: the counterparty resolving to the rep
+  // himself (full profile name, or a bare first name matching the
+  // rep's) is the rep talking to Facebook about his own listing —
+  // never a buyer. A real buyer who shares the rep's first name is
+  // one manual Capture away; a junk card is the bug being fixed.
+  var rep = norm(ctx && ctx.repName);
+  if (rep) {
+    if (norm(name) === rep) return { create: false, reason: "self_thread" };
+    if (norm(name) === rep.split(" ")[0]) {
+      return { create: false, reason: "self_thread" };
+    }
+  }
+  var label = String((capture && capture.vehicleText) || "").trim();
+  // Signal 1 — surface: the Marketplace inbox is commerce-only by
+  // construction; a listing label must ride along so a bare system
+  // row there still cannot create on surface alone.
+  if (capture && capture.surface === "marketplace_inbox" && label) {
+    return { create: true, signal: "marketplace_inbox" };
+  }
+  // Signal 2 — seller's thread: the open pane showed the seller's
+  // own controls ("View buyer" renders only for the listing's
+  // seller; a buyer-side thread shows "View seller" instead).
+  if (capture && capture.sellerContext === true && label) {
+    return { create: true, signal: "seller_thread" };
+  }
+  // Signal 3 — own listing: the label's year + make match one of
+  // the user's own Marketplace-posted cars.
+  if (label && labelMatchesPostedCar(label, (ctx && ctx.postedCars) || [])) {
+    return { create: true, signal: "own_listing" };
+  }
+  return { create: false, reason: "no_seller_signal" };
+}
+
+// Does a listing label ("$26,159 - 2026 Volkswagen Jetta", "2026
+// Volkswagen Jetta") name one of the user's posted cars? Token-based
+// contains on year + make, so multi-word makes ("Land Rover") work
+// the same way. postedCars rows come from scraped_inventory with
+// marketplace_posted_at set — cars this user actually listed.
+function labelMatchesPostedCar(label, postedCars) {
+  var text = " " + String(label || "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ") + " ";
+  for (var i = 0; i < postedCars.length; i++) {
+    var car = postedCars[i] || {};
+    var year = parseInt(car.year, 10);
+    var make = String(car.make || "").trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ").trim();
+    if (!year || !make) continue;
+    if (text.indexOf(" " + year + " ") === -1) continue;
+    if (text.indexOf(" " + make + " ") !== -1) return true;
+  }
+  return false;
+}
+
 // Luca chat capture (Phase 2): a chat_capture.js scrape of an open
 // Messenger/Marketplace thread lands here. Find-or-create the buyer as
 // a Prospect, then store only the messages we don't already have.
@@ -394,14 +477,32 @@ async function handleCaptureChat(capture) {
   if (!prospect) {
     prospect = rows.find(r => norm(r.name) === norm(name) && (!vehicleText || norm(r.vehicle_label) === norm(vehicleText)));
   }
-  // Marketplace-only auto rule (Matthew, 2026-10-25): AUTO captures
-  // may only bring in Marketplace threads — a listing label in the
-  // capture is the evidence. Merely opening a Messenger chat must
-  // never create a prospect or save its messages; the manual Capture
-  // button (no auto flag) is how a rep adds anything else. Auto
+  // Marketplace-only auto rule (Matthew, 2026-10-25; tightened
+  // v2.1.46, header note 22): creating a prospect from an AUTO
+  // capture requires a resolved participant name AND a positive
+  // seller-side signal — see autoCreateGate. Merely opening a
+  // Messenger chat must never create a prospect or save its
+  // messages; the manual Capture button (no auto flag) is how a rep
+  // adds anything else, and it never passes through the gate. Auto
   // updates to an already-known prospect's thread still flow.
-  if (capture.auto && !prospect && !vehicleText) {
-    return { prospectName: null, added: 0, skipped: "not_marketplace" };
+  if (capture.auto && !prospect) {
+    const gateCtx = { repName: "", postedCars: [] };
+    try {
+      const prof = await sbGet(
+        `closer_profiles?user_id=eq.${userId}&select=profile&limit=1`);
+      if (prof && prof.length && prof[0].profile) {
+        gateCtx.repName = prof[0].profile.rep_name || "";
+      }
+    } catch (e) { /* the remaining signals still decide */ }
+    try {
+      gateCtx.postedCars = await sbGet(
+        `scraped_inventory?user_id=eq.${userId}` +
+        `&marketplace_posted_at=not.is.null&select=year,make,model&limit=300`) || [];
+    } catch (e) { /* no inventory signal this pass */ }
+    const gate = autoCreateGate(capture, gateCtx);
+    if (!gate.create) {
+      return { prospectName: null, added: 0, skipped: gate.reason };
+    }
   }
   if (!prospect) {
     const created = await sbPost("prospects", {
