@@ -70,7 +70,17 @@
 //   customer.subscription.updated re-syncs seats/flavor/period
 //   (past_due keeps access, billing_status notes it);
 //   customer.subscription.deleted (or a canceled status) expires
-//   the dealership. Dealership invoices NEVER accrue referral
+//   the dealership. DEALERSHIP PREPAID TERMS (2026-10-27) route by
+//   kind "dealership_term": ONE-TIME payments (no subscription);
+//   completion sets status 'active' + billing_status 'term_active',
+//   plan_flavor + seat_limit from the session metadata, and
+//   current_period_end = max(existing end, now) + years (re-buys
+//   STACK, mirroring the solo terms). An existing monthly
+//   subscription is set cancel_at_period_end (mirroring the solo
+//   switch rule), and while billing_status is 'term_active' with a
+//   paid-through end beyond the subscription's own end, dealership
+//   subscription lifecycle events NEVER expire the term or move its
+//   end date (mirroring the solo term-row protection). Dealership invoices NEVER accrue referral
 //   bonuses: kind "dealership" is not a solo plan kind, so
 //   handleInvoicePaid returns before any accrual.
 //   invoice.paid → REFERRAL ACCRUAL (see TIERS.md "Referrals"): when
@@ -285,11 +295,134 @@ async function handleDealershipCheckout(svc: any, session: any, sub: any) {
   if (error) throw error;
 }
 
+// The dealership row WITH its billing fields (the term grant needs
+// the existing paid-through end + subscription id; findDealership
+// above selects only the id for the monthly paths).
+async function findDealershipRow(svc: any, session: any, sub: any) {
+  const cols = "id, current_period_end, stripe_subscription_id, stripe_customer_id, billing_status";
+  const did = dealershipIdOf(session, sub);
+  if (did) {
+    const { data } = await svc
+      .from("dealership_accounts")
+      .select(cols)
+      .eq("id", did)
+      .maybeSingle();
+    if (data?.id) return data;
+  }
+  if (sub?.id) {
+    const { data } = await svc
+      .from("dealership_accounts")
+      .select(cols)
+      .eq("stripe_subscription_id", sub.id)
+      .maybeSingle();
+    if (data?.id) return data;
+  }
+  return null;
+}
+
+// Dealership prepaid term completion (2026-10-27): a ONE-TIME
+// payment — no subscription exists. Grant: status 'active' with
+// billing_status 'term_active' at the bought flavor, seat_limit =
+// the bought seats, current_period_end = max(existing end, now) +
+// years (re-buys STACK, mirroring the solo term branch).
+// stripe_subscription_id is deliberately untouched: a store
+// switching from monthly keeps its subscription id until the sub's
+// own period ends. SWITCH RULE (fail-soft, after the grant lands):
+// that existing monthly subscription is set cancel_at_period_end —
+// the term already covers the store from today. No referral
+// accrual: dealership purchases never accrue (see header).
+async function handleDealershipTermCheckout(
+  svc: any,
+  session: any,
+  secretKey: string,
+) {
+  const row = await findDealershipRow(svc, session, null);
+  if (!row) {
+    console.error("billing-webhook: dealership term checkout, dealership not resolvable");
+    return;
+  }
+  const flavor = dealerFlavorOf(session, null);
+  const seats = Number(session?.metadata?.seats);
+  const years = Number(session?.metadata?.years);
+  if (
+    !flavor || ![1, 2, 3].includes(years) ||
+    !Number.isInteger(seats) || seats < 1 || seats > 50
+  ) {
+    console.error("billing-webhook: dealership term checkout, bad session metadata");
+    return;
+  }
+  const nowMs = Date.now();
+  const existingEnd = row.current_period_end
+    ? Date.parse(row.current_period_end)
+    : NaN;
+  const baseMs = Number.isFinite(existingEnd) && existingEnd > nowMs
+    ? existingEnd
+    : nowMs;
+  const update: Record<string, unknown> = {
+    status: "active",
+    billing_status: "term_active",
+    plan_flavor: flavor,
+    seat_limit: seats,
+    stripe_customer_id: session.customer
+      ? String(session.customer)
+      : (row.stripe_customer_id ?? null),
+    current_period_end: addYearsISO(baseMs, years),
+  };
+  const { error } = await svc
+    .from("dealership_accounts")
+    .update(update)
+    .eq("id", row.id);
+  if (error) throw error;
+  const existingSubId = row.stripe_subscription_id || "";
+  if (existingSubId) {
+    const cx = await stripeCall(
+      secretKey, "POST",
+      "/subscriptions/" + encodeURIComponent(existingSubId),
+      { cancel_at_period_end: "true" },
+    );
+    if (!cx) {
+      console.error(
+        "billing-webhook: dealership term switch — cancel_at_period_end failed for sub " +
+          existingSubId + " (dealership " + row.id + ")",
+      );
+    }
+  }
+}
+
 async function handleDealershipSubscription(svc: any, sub: any, deleted: boolean) {
   const did = await findDealership(svc, null, sub);
   if (!did) {
     console.error("billing-webhook: dealership subscription event, dealership not resolvable");
     return;
+  }
+  // TERM PROTECTION (2026-10-27, mirroring the solo rule): a
+  // dealership holding prepaid term time beyond anything this
+  // subscription granted (billing_status 'term_active' and a
+  // paid-through end past the sub's own end) must not be expired
+  // or have its end/seats/flavor moved by the subscription's
+  // lifecycle — the monthly sub a term buyer switched away from is
+  // cancelled at period end, and its eventual deletion lands here.
+  // An ordinary subscriber's row end EQUALS their sub's end, so
+  // their events flow through exactly as before.
+  {
+    const row = await findDealershipRow(svc, null, sub);
+    const rowEndMs = row?.current_period_end
+      ? Date.parse(row.current_period_end)
+      : NaN;
+    const subEndIso = periodEndIso(sub);
+    const subEndMs = subEndIso ? Date.parse(subEndIso) : NaN;
+    const termProtected = row?.billing_status === "term_active" &&
+      Number.isFinite(rowEndMs) &&
+      (Number.isFinite(subEndMs)
+        ? rowEndMs > subEndMs + 60000
+        : rowEndMs > Date.now() + 60000);
+    if (termProtected) {
+      console.log(
+        "billing-webhook: dealership subscription event for term-protected dealership " +
+          did + " — status + period end untouched",
+      );
+      return;
+    }
   }
   const update: Record<string, unknown> = {
     stripe_subscription_id: sub.id || null,
@@ -760,6 +893,13 @@ Deno.serve(async (req) => {
       const subId = typeof obj.subscription === "string" ? obj.subscription : "";
       const sub = subId ? await fetchSubscription(secretKey, subId) : null;
       const kind = kindOf(obj, sub);
+      if (kind === "dealership_term") {
+        // Dealership prepaid term: writes ONLY the dealership row.
+        // No subscription exists (one-time payment); the grant +
+        // stacking live in handleDealershipTermCheckout.
+        await handleDealershipTermCheckout(svc, obj, secretKey);
+        return json({ received: true });
+      }
       if (kind === "dealership") {
         // Dealership purchase: writes ONLY the dealership row. The
         // admin's personal billing is never touched by a store

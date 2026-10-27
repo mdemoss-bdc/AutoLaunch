@@ -19,10 +19,22 @@
 //   support                 Support Plan subscription ($199/year) —
 //                           a standalone add-on ANY account can buy
 //                           (Matthew, 2026-10-26: NOT lifetime-gated).
-//   dealership              Dealership seat subscription (Phase 2,
-//                           2026-10-26): body { plan: "dealership",
-//                           dealership_id, flavor: "post"|"group",
-//                           seats: 1..50 }. The caller MUST be an
+//   dealership              Dealership seats (Phase 2, 2026-10-26;
+//                           prepaid terms added 2026-10-27): body
+//                           { plan: "dealership", dealership_id,
+//                           flavor: "post"|"group", seats: 1..50,
+//                           term_years?: 0|1|2|3 }. term_years 0 or
+//                           absent = the monthly seat subscription
+//                           below. term_years 1/2/3 = a ONE-TIME
+//                           payment of the FULL term amount up front
+//                           (mode "payment", inline price_data on the
+//                           flavor's dealer product; total computed
+//                           HERE from the canonical seat brackets and
+//                           the solo term ladder — 1yr 5% off, 2yr
+//                           10% off, 3yr 15% off — never from a
+//                           client-supplied amount). The webhook
+//                           routes those sessions by metadata.kind
+//                           "dealership_term". The caller MUST be an
 //                           admin member of that dealership (verified
 //                           against dealership_account_members with
 //                           the service role). Quantity = seats on
@@ -261,6 +273,71 @@ const DEALER_FLAVOR_PRICE_ENV: Record<string, string> = {
 };
 const DEALER_MAX_SEATS = 50;
 
+// Canonical dealership seat pricing (Phase 2 numbers, Matthew
+// 2026-10-26): EVERY seat bills at the bracket rate for the total
+// seat count. This table is the server-side source of truth for the
+// prepaid-term totals below — it mirrors the app's
+// DEALER_PRICE_TIERS and the volume tiers on the Stripe prices.
+const DEALER_SEAT_BRACKETS: Record<string, Array<[number, number]>> = {
+  post: [[9, 79], [24, 75], [50, 69]],
+  group: [[9, 99], [24, 95], [50, 89]],
+};
+// The solo multi-year ladder (Matthew, 2026-10-26), applied to
+// dealership terms unchanged: 1yr 5% off, 2yr 10%, 3yr 15%.
+const DEALER_TERM_DISCOUNT_PCT: Record<number, number> = {
+  1: 5,
+  2: 10,
+  3: 15,
+};
+
+function dealerSeatRateDollars(flavor: string, seats: number): number {
+  const brackets = DEALER_SEAT_BRACKETS[flavor] || DEALER_SEAT_BRACKETS.group;
+  for (const [upTo, rate] of brackets) {
+    if (seats <= upTo) return rate;
+  }
+  return brackets[brackets.length - 1][1];
+}
+
+// Full up-front term total, in cents:
+//   perSeat × seats × 12 × years × (1 − discount).
+// monthlyDollars × 12 × years × (100 − pct) is already the cent
+// amount (dollars × 100 × (100 − pct)/100), and every factor is an
+// integer, so the result is always exact — e.g. 10 Group seats for
+// 1 year: $950 × 12 × 95 = 1,083,000¢ = $10,830.00.
+function dealerTermTotalCents(
+  flavor: string,
+  seats: number,
+  years: number,
+): number {
+  const monthlyDollars = dealerSeatRateDollars(flavor, seats) * seats;
+  return monthlyDollars * 12 * years * (100 - DEALER_TERM_DISCOUNT_PCT[years]);
+}
+
+// A minimal Stripe GET (the term flow reads the flavor's monthly
+// price to reuse its product for inline price_data).
+async function stripeGet(
+  secretKey: string,
+  path: string,
+): Promise<any | null> {
+  try {
+    const res = await fetch("https://api.stripe.com/v1" + path, {
+      headers: { "Authorization": "Bearer " + secretKey },
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok) {
+      console.error(
+        "billing-checkout: Stripe GET " + path + " failed: " +
+          (out?.error?.message || res.status),
+      );
+      return null;
+    }
+    return out;
+  } catch (e) {
+    console.error("billing-checkout: Stripe GET " + path + " threw: " + e);
+    return null;
+  }
+}
+
 // Create the Checkout Session for a fully-built form, with the
 // final-sale consent insurance: if Stripe ever refuses the session
 // over consent_collection, retry ONCE without it (custom_text and
@@ -346,6 +423,9 @@ Deno.serve(async (req) => {
     const dealershipId = String(body?.dealership_id || "");
     const flavor = String(body?.flavor || "");
     const seats = Number(body?.seats);
+    // Prepaid term selector: 0/absent = monthly subscription;
+    // 1/2/3 = that many years billed in full up front.
+    const termYears = Number(body?.term_years ?? body?.years ?? 0);
     if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(dealershipId)) {
       return json({ ok: false, error: "invalid_dealership" }, 400);
     }
@@ -354,6 +434,9 @@ Deno.serve(async (req) => {
     }
     if (!Number.isInteger(seats) || seats < 1 || seats > DEALER_MAX_SEATS) {
       return json({ ok: false, error: "invalid_seats" }, 400);
+    }
+    if (![0, 1, 2, 3].includes(termYears)) {
+      return json({ ok: false, error: "invalid_term" }, 400);
     }
     const secretKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
     const priceId = Deno.env.get(DEALER_FLAVOR_PRICE_ENV[flavor]) || "";
@@ -395,25 +478,62 @@ Deno.serve(async (req) => {
     }
     const appUrl = appReturnUrl(req);
     const form = new URLSearchParams({
-      "mode": "subscription",
-      "line_items[0][price]": priceId,
-      "line_items[0][quantity]": String(seats),
       "customer": customerId,
       "success_url": appUrl + "?checkout=success",
       "cancel_url": appUrl + "?checkout=cancel",
       "client_reference_id": user.id,
       "metadata[user_id]": user.id,
-      "metadata[kind]": "dealership",
       "metadata[dealership_id]": dealershipId,
       "metadata[flavor]": flavor,
-      "subscription_data[metadata][user_id]": user.id,
-      "subscription_data[metadata][kind]": "dealership",
-      "subscription_data[metadata][dealership_id]": dealershipId,
-      "subscription_data[metadata][flavor]": flavor,
       "consent_collection[terms_of_service]": "required",
-      "custom_text[after_submit][message]":
-        "All sales are final \u2014 no refunds. Subscriptions can be cancelled anytime in Settings; access continues to the end of the paid period.",
     });
+    if (termYears > 0) {
+      // Prepaid term: ONE-TIME payment of the full term amount,
+      // computed server-side above. The line item rides on the
+      // flavor's existing dealer product (read off its monthly
+      // price) via inline price_data — no new Stripe prices, and
+      // the amount can never be influenced by the client.
+      const price = await stripeGet(
+        secretKey,
+        "/prices/" + encodeURIComponent(priceId),
+      );
+      const productId = typeof price?.product === "string"
+        ? price.product
+        : (price?.product?.id ? String(price.product.id) : "");
+      if (!productId) {
+        return json({ ok: false, error: "stripe_error" }, 502);
+      }
+      form.set("mode", "payment");
+      form.set("line_items[0][quantity]", "1");
+      form.set("line_items[0][price_data][currency]", "usd");
+      form.set(
+        "line_items[0][price_data][unit_amount]",
+        String(dealerTermTotalCents(flavor, seats, termYears)),
+      );
+      form.set("line_items[0][price_data][product]", productId);
+      form.set("metadata[kind]", "dealership_term");
+      form.set("metadata[seats]", String(seats));
+      form.set("metadata[years]", String(termYears));
+      form.set(
+        "custom_text[after_submit][message]",
+        "All sales are final \u2014 no refunds. This is a one-time payment for the full term; it does not renew automatically.",
+      );
+      // NOTE: no subscription_data — a term purchase creates no
+      // subscription. The webhook grants the paid-through window.
+    } else {
+      form.set("mode", "subscription");
+      form.set("line_items[0][price]", priceId);
+      form.set("line_items[0][quantity]", String(seats));
+      form.set("metadata[kind]", "dealership");
+      form.set("subscription_data[metadata][user_id]", user.id);
+      form.set("subscription_data[metadata][kind]", "dealership");
+      form.set("subscription_data[metadata][dealership_id]", dealershipId);
+      form.set("subscription_data[metadata][flavor]", flavor);
+      form.set(
+        "custom_text[after_submit][message]",
+        "All sales are final \u2014 no refunds. Subscriptions can be cancelled anytime in Settings; access continues to the end of the paid period.",
+      );
+    }
     if ((Deno.env.get("STRIPE_TAX_ENABLED") || "") === "true") {
       form.set("automatic_tax[enabled]", "true");
     }

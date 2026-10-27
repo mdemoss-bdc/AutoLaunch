@@ -1567,6 +1567,51 @@ $3,450/mo, Group $4,450/mo). The store picks ONE flavor store-wide.
   and the snapshot's dealership cover is members-only, flavor-
   aware, exactly like the app.
 
+## Dealership accounts — Phase 2.5: prepaid multi-year terms (built 2026-10-27)
+
+Matthew's rule: **when anyone selects a yearly plan, it is billed
+in full up front.** Solo plans already worked that way; dealerships
+were monthly-only. The dealer Buy panel now offers the same four
+choices — **Monthly / 1 year (−5%) / 2 years (−10%) / 3 years
+(−15%)** — with the solo ladder applied to the dealership seat
+math: total = per-seat bracket rate × seats × 12 × years ×
+(1 − discount), charged ONCE at checkout. Canonical checks:
+**10 Group seats, 1yr = $10,830.00; 10 Post seats, 1yr =
+$8,550.00; 50 Group seats, 3yr = $136,170.00.** Seats stay 1–50.
+
+- **Checkout.** `billing-checkout` kind `dealership` gains
+  `term_years` (0/absent = the existing monthly subscription,
+  unchanged). For 1/2/3 it builds a mode `"payment"` session with
+  inline `price_data` on the flavor's EXISTING dealer product
+  (product id read off the monthly price — no new Stripe prices)
+  and the total computed server-side from the canonical brackets —
+  never from a client amount. Metadata kind `"dealership_term"`
+  {dealership_id, flavor, seats, years}; no subscription_data.
+  The buy still runs through the final-sale consent modal first;
+  the recorded plan_key is `dealer_post` / `dealer_group` for
+  monthly and `dealer_post_1y` … `dealer_group_3y` for terms.
+- **Webhook.** `checkout.session.completed` kind
+  `"dealership_term"` writes ONLY `dealership_accounts`: status
+  'active', **billing_status 'term_active'**, plan_flavor,
+  seat_limit = bought seats, current_period_end =
+  max(existing end, now) + years (**stacking**, mirroring solo).
+  An existing monthly subscription is set
+  `cancel_at_period_end` (the solo switch rule), and subscription
+  lifecycle events can never expire or move a term_active row
+  whose paid-through end runs past the subscription's own end
+  (the solo term-row protection, mirrored). No referral accrual —
+  dealership purchases never accrue.
+- **Coverage.** The app honors the term paid-through end lazily,
+  exactly like the trial window: a `term_active` member is covered
+  only while `current_period_end` is ahead; past it, the store
+  presents as expired (leader gets the restart Buy panel, members
+  the ended note) until a new purchase flips the row. A term
+  store's leader also sees the Buy panel during the term to stack
+  more time. The Buy panel's term buttons each show their full
+  up-front total, and the consent modal states the one-time total
+  and the projected paid-through date. No schema change — the
+  marker rides the existing `billing_status` column.
+
 ## What remains for the real paywall
 
 - Custom SMTP so confirmation/resend email isn't throttled.

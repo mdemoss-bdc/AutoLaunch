@@ -1228,8 +1228,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     </div>
 
     <!-- BUY SEATS: shown to a trial admin (convert before the trial
-         ends) and to an expired dealership's admin (restart). Flavor
-         toggle + seat picker with live per-seat/total math; Buy goes
+         ends), a prepaid-term admin (stack more time), and an
+         expired dealership's admin (restart). Flavor toggle + seat
+         picker + billing-term picker (monthly, or 1/2/3 years paid
+         in full up front) with live per-seat/total math; Buy goes
          through the final-sale consent modal like every purchase. -->
     <div id="dealerBuyCard" class="hidden glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
       <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-users text-blue-600"></i> <span id="dealerBuyTitle">Buy seats</span></h3>
@@ -1250,9 +1252,18 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           <button onclick="dealerStepSeats(1)" class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-300 font-extrabold text-slate-700 cursor-pointer">+</button>
         </div>
       </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Billing term</label>
+        <div class="flex flex-wrap gap-1" role="group" aria-label="Dealership billing term">
+          <button id="dealerTermMonthly" onclick="dealerSetTerm(0)" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer border">Monthly<span id="dealerTermMonthlyTotal" class="block text-[10px] font-semibold opacity-80"></span></button>
+          <button id="dealerTerm1y" onclick="dealerSetTerm(1)" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer border">1 year · −5%<span id="dealerTerm1yTotal" class="block text-[10px] font-semibold opacity-80"></span></button>
+          <button id="dealerTerm2y" onclick="dealerSetTerm(2)" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer border">2 years · −10%<span id="dealerTerm2yTotal" class="block text-[10px] font-semibold opacity-80"></span></button>
+          <button id="dealerTerm3y" onclick="dealerSetTerm(3)" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer border">3 years · −15%<span id="dealerTerm3yTotal" class="block text-[10px] font-semibold opacity-80"></span></button>
+        </div>
+      </div>
       <p id="dealerBuyMath" class="text-sm font-bold text-slate-800"></p>
-      <p class="text-[11px] text-slate-400">Seats are for your salespeople — the leader account is always free and doesn't count toward seats. Renews monthly on the day you subscribe. Cancel anytime; access continues to the end of the paid period. All sales final — no refunds.</p>
-      <button onclick="startDealerCheckout()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Buy seats</button>
+      <p id="dealerBuyNote" class="text-[11px] text-slate-400">Seats are for your salespeople — the leader account is always free and doesn't count toward seats. Renews monthly on the day you subscribe. Cancel anytime; access continues to the end of the paid period. All sales final — no refunds.</p>
+      <button id="dealerBuyButton" onclick="startDealerCheckout()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs shadow-sm cursor-pointer">Buy seats</button>
       <p id="dealerBuyMsg" class="text-xs font-medium mt-3 hidden"></p>
     </div>
 
@@ -3991,6 +4002,23 @@ function dealerMonthlyTotal(flavor, seats) {
   return dealerSeatRate(flavor, n) * n;
 }
 
+// Dealership prepaid terms (2026-10-27, Matthew: "when anyone
+// selects a yearly plan, i want it fully billed up front"): the
+// same discount ladder as the solo terms — 1yr 5% off, 2yr 10%,
+// 3yr 15% — applied to the monthly total × 12 × years. The result
+// is the FULL amount charged once at checkout (billing-checkout
+// recomputes it server-side from the same brackets; this copy is
+// display + consent-modal only). Whole dollars for every seat
+// count: the monthly totals are whole dollars and the ladder
+// factors (×12×years×0.95/0.90/0.85) stay integral.
+const DEALER_TERM_DISCOUNT_PCT = { 1: 5, 2: 10, 3: 15 };
+
+function dealerTermTotal(flavor, seats, years) {
+  const y = Number(years) || 0;
+  if (!y || !DEALER_TERM_DISCOUNT_PCT[y]) return dealerMonthlyTotal(flavor, seats);
+  return dealerMonthlyTotal(flavor, seats) * 12 * y * (100 - DEALER_TERM_DISCOUNT_PCT[y]) / 100;
+}
+
 // ==== PLAN DETAILS — the ONE source of truth for what each plan ====
 // gives (Matthew, 2026-10-26: when someone is picking between the
 // free trial, the 1st tier and the 2nd tier, they must know EXACTLY
@@ -4343,13 +4371,40 @@ function dealershipTrialActive(d, nowMs) {
   return isFinite(ends) && nowMs < ends;
 }
 
+// Prepaid-term dealerships (2026-10-27): the webhook marks a term
+// purchase billing_status 'term_active' with current_period_end as
+// the paid-through end. Coverage honors that end LAZILY — the row
+// still says 'active' after the end passes, so (exactly like the
+// trial window) the app treats a passed end as lapsed until a new
+// purchase or subscription flips the row.
+function dealershipTermActive(d, nowMs) {
+  if (!d || d.billingStatus !== "term_active") return false;
+  if (!d.periodEnd) return false;
+  const ends = Date.parse(d.periodEnd);
+  return isFinite(ends) && nowMs < ends;
+}
+
+function dealershipTermLapsed(d, nowMs) {
+  if (!d || d.billingStatus !== "term_active") return false;
+  if (!d.periodEnd) return false;
+  const ends = Date.parse(d.periodEnd);
+  return isFinite(ends) && nowMs >= ends;
+}
+
 function dealershipCovered() {
   if (!currentDealership) return false;
   // LEADER RULE (Matthew, 2026-10-26): coverage is for MEMBERS
   // (salespeople) only. The leader (admin) account is manage-only —
   // free, never a seat, never product-covered (see isDealershipLeader).
   if (currentDealership.role !== "member") return false;
-  if (currentDealership.status === "active") return true;
+  if (currentDealership.status === "active") {
+    // A prepaid-term store covers only inside its paid-through
+    // window; a monthly store's row is flipped by the webhook.
+    if (currentDealership.billingStatus === "term_active") {
+      return dealershipTermActive(currentDealership, Date.now());
+    }
+    return true;
+  }
   return dealershipTrialActive(currentDealership, Date.now());
 }
 
@@ -4390,7 +4445,8 @@ function dealershipViewMode(isOwner, membership) {
   // the admin gets the restart view, members the ended note —
   // coverage itself already keys off the window (dealershipCovered).
   if (membership && (membership.status === "expired" ||
-      (membership.status === "trial" && !dealershipTrialActive(membership, Date.now())))) {
+      (membership.status === "trial" && !dealershipTrialActive(membership, Date.now())) ||
+      (membership.status === "active" && dealershipTermLapsed(membership, Date.now())))) {
     return membership.role === "admin" ? "expiredAdmin" : "expiredMember";
   }
   if (membership && membership.role === "admin") return "admin";
@@ -5206,6 +5262,10 @@ async function proceedToCheckout(plan, msgId, extra) {
         showBillingMsg(msgId, "Seat count has to be between 1 and 50.", true);
         return;
       }
+      if (code === "invalid_term") {
+        showBillingMsg(msgId, "Billing term has to be monthly, 1, 2 or 3 years.", true);
+        return;
+      }
       throw error;
     }
     if (data && data.url) { window.location.href = data.url; return; }
@@ -5320,7 +5380,9 @@ function renderBillingPanel() {
     status = "Covered by your dealership — " + (currentDealership.name || "your dealership") + " (" + flavorName + ").";
     detail = currentDealership.status === "trial"
       ? "Your dealership is in its free trial — full Group access until " + fmtBillingDate(Date.parse(currentDealership.trialEndsAt)) + ". No subscription is needed on this account."
-      : "No subscription is needed on this account.";
+      : currentDealership.billingStatus === "term_active" && currentDealership.periodEnd
+        ? "Your dealership prepaid in full — access paid through " + fmtBillingDate(Date.parse(currentDealership.periodEnd)) + ". No subscription is needed on this account."
+        : "No subscription is needed on this account.";
   } else if (access.mode === "trial") {
     status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
     detail = "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
@@ -5543,11 +5605,18 @@ async function renderDealershipPage() {
   memberCard.classList.toggle("hidden", mode !== "member");
   if (expiredCard) expiredCard.classList.toggle("hidden", mode !== "expiredMember");
   // The buy card rides along for the trial admin (convert before
-  // the trial ends) and headlines the expired admin's restart view.
-  if (buyCard) buyCard.classList.toggle("hidden", !(mode === "expiredAdmin" || (mode === "admin" && currentDealership && currentDealership.status === "trial")));
+  // the trial ends), for a prepaid-term admin (stack another term
+  // before this one runs out), and headlines the expired admin's
+  // restart view.
+  if (buyCard) buyCard.classList.toggle("hidden", !(mode === "expiredAdmin" || (mode === "admin" && currentDealership && (currentDealership.status === "trial" || dealershipTermActive(currentDealership, Date.now())))));
   if (mode === "expiredAdmin") {
-    renderDealerBuyPanel("Your dealership's trial has ended",
-      "Pick a flavor and a seat count to switch your store back on. Your roster is saved — nobody has to re-register.");
+    if (currentDealership && dealershipTermLapsed(currentDealership, Date.now())) {
+      renderDealerBuyPanel("Your dealership's prepaid term has ended",
+        "Pick a flavor, a seat count and a billing term to switch your store back on. Your roster is saved — nobody has to re-register.");
+    } else {
+      renderDealerBuyPanel("Your dealership's trial has ended",
+        "Pick a flavor and a seat count to switch your store back on. Your roster is saved — nobody has to re-register.");
+    }
     return;
   }
   if (mode === "expiredMember") {
@@ -5573,6 +5642,9 @@ async function renderDealershipPage() {
   if (currentDealership.status === "trial") {
     renderDealerBuyPanel("Buy seats before your trial ends",
       "Your trial runs at the full Group flavor. Pick the flavor and seat count your store keeps when it converts — buying now means no interruption.");
+  } else if (dealershipTermActive(currentDealership, Date.now())) {
+    renderDealerBuyPanel("Add prepaid time before this term ends",
+      "Your store is prepaid through " + fmtBillingDate(Date.parse(currentDealership.periodEnd)) + ". Buying another term now stacks the new time on top of what's left — nothing is lost.");
   }
   const { data, code } = await dealerInvoke("list_members", { dealership_id: currentDealership.id });
   if (!data || code) {
@@ -5611,7 +5683,9 @@ function renderDealerStatusLines() {
           ? "unlimited seats"
           : currentDealership.seatLimit + " seats";
         line.innerText = flavorName + " · " + seats +
-          (currentDealership.periodEnd ? " · current period ends " + fmtBillingDate(Date.parse(currentDealership.periodEnd)) : "");
+          (currentDealership.periodEnd
+            ? (currentDealership.billingStatus === "term_active" ? " · prepaid through " : " · current period ends ") + fmtBillingDate(Date.parse(currentDealership.periodEnd))
+            : "");
       }
     }
   }
@@ -5660,7 +5734,28 @@ function renderDealerMembers(data) {
 // The picker state: flavor + seat count. Math is DEALER_PRICE_TIERS
 // (the same brackets as the Stripe volume prices): EVERY seat bills
 // at the bracket rate for the total count.
-const dealerBuy = { flavor: "group", seats: 10 };
+const dealerBuy = { flavor: "group", seats: 10, termYears: 0 };
+
+// Billing-term picker: 0 = monthly subscription; 1/2/3 = prepaid
+// years billed in full up front (dealerTermTotal).
+function dealerSetTerm(years) {
+  dealerBuy.termYears = [0, 1, 2, 3].includes(years) ? years : 0;
+  renderDealerBuyMath();
+}
+
+// The paid-through date a term purchase would produce: any
+// dealership time still remaining counts first (re-buys stack,
+// never restart) — mirrors the webhook's max(existing end, now).
+function dealerProjectedTermEndMs(years) {
+  const now = Date.now();
+  const existing = currentDealership && currentDealership.periodEnd
+    ? Date.parse(currentDealership.periodEnd)
+    : NaN;
+  const base = isFinite(existing) && existing > now ? existing : now;
+  const d = new Date(base);
+  d.setFullYear(d.getFullYear() + years);
+  return d.getTime();
+}
 
 function renderDealerBuyPanel(title, sub) {
   const titleEl = document.getElementById("dealerBuyTitle");
@@ -5701,16 +5796,55 @@ function dealerStepSeats(delta) {
 function renderDealerBuyMath() {
   const flavor = dealerBuy.flavor;
   const seats = dealerBuy.seats;
+  const years = dealerBuy.termYears || 0;
   const rate = dealerSeatRate(flavor, seats);
   const total = dealerMonthlyTotal(flavor, seats);
+  const termTotal = years ? dealerTermTotal(flavor, seats, years) : null;
   const math = document.getElementById("dealerBuyMath");
-  if (math) math.innerText = seats + (seats === 1 ? " seat" : " seats") + " × $" + rate + " = $" + total.toLocaleString() + "/month";
+  if (math) {
+    math.innerText = years
+      ? seats + (seats === 1 ? " seat" : " seats") + " × $" + rate + " = $" + total.toLocaleString() + "/month · " +
+        years + (years === 1 ? " year" : " years") + " prepaid at " + DEALER_TERM_DISCOUNT_PCT[years] + "% off = $" +
+        termTotal.toLocaleString() + " one-time, paid in full up front"
+      : seats + (seats === 1 ? " seat" : " seats") + " × $" + rate + " = $" + total.toLocaleString() + "/month";
+  }
+  // The term choices themselves carry their full up-front totals,
+  // so the price of every option is visible before it's picked.
+  const termTotals = {
+    dealerTermMonthlyTotal: "$" + total.toLocaleString() + "/mo",
+    dealerTerm1yTotal: "$" + dealerTermTotal(flavor, seats, 1).toLocaleString() + " up front",
+    dealerTerm2yTotal: "$" + dealerTermTotal(flavor, seats, 2).toLocaleString() + " up front",
+    dealerTerm3yTotal: "$" + dealerTermTotal(flavor, seats, 3).toLocaleString() + " up front"
+  };
+  for (const id of Object.keys(termTotals)) {
+    const el = document.getElementById(id);
+    if (el) el.innerText = termTotals[id];
+  }
+  const onCls = "bg-blue-600 text-white border-blue-600";
+  const offCls = "bg-white text-slate-600 border-slate-300";
+  const termBtns = { dealerTermMonthly: 0, dealerTerm1y: 1, dealerTerm2y: 2, dealerTerm3y: 3 };
+  for (const id of Object.keys(termBtns)) {
+    const el = document.getElementById(id);
+    if (el) el.className = "px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer border " + (termBtns[id] === years ? onCls : offCls);
+  }
+  const note = document.getElementById("dealerBuyNote");
+  if (note) {
+    note.innerText = years
+      ? "Seats are for your salespeople — the leader account is always free and doesn't count toward seats. One-time payment of $" +
+        termTotal.toLocaleString() + " for " + years + (years === 1 ? " year" : " years") + " — access paid through " +
+        fmtBillingDate(dealerProjectedTermEndMs(years)) + ". It does not renew automatically; buying another term later stacks the time on. All sales final — no refunds."
+      : "Seats are for your salespeople — the leader account is always free and doesn't count toward seats. Renews monthly on the day you subscribe. Cancel anytime; access continues to the end of the paid period. All sales final — no refunds.";
+  }
+  const buyBtn = document.getElementById("dealerBuyButton");
+  if (buyBtn) {
+    buyBtn.innerText = years
+      ? "Buy seats — $" + termTotal.toLocaleString() + " one-time"
+      : "Buy seats — $" + total.toLocaleString() + "/month";
+  }
   const blurb = document.getElementById("dealerFlavorBlurb");
   if (blurb) blurb.innerText = flavor === "post"
     ? "Post: manual posting core — 5 queued posts a day per seat, inventory sync every 18 hours."
     : "Group: the full kit — automation, Luca, channels, no plan cap on queued posts, inventory sync every 6 hours.";
-  const onCls = "bg-blue-600 text-white border-blue-600";
-  const offCls = "bg-white text-slate-600 border-slate-300";
   const bp = document.getElementById("dealerFlavorPost");
   const bg = document.getElementById("dealerFlavorGroup");
   if (bp) bp.className = "px-4 py-2.5 rounded-xl font-bold text-xs cursor-pointer border " + (flavor === "post" ? onCls : offCls);
@@ -5721,17 +5855,31 @@ function startDealerCheckout() {
   if (!currentDealership) return;
   const flavor = dealerBuy.flavor;
   const seats = dealerBuy.seats;
+  const years = dealerBuy.termYears || 0;
   const rate = dealerSeatRate(flavor, seats);
   const total = dealerMonthlyTotal(flavor, seats);
-  const info = {
-    title: (flavor === "post" ? "Dealership Post" : "Dealership Group") + " — " + seats + (seats === 1 ? " seat" : " seats"),
-    price: "$" + total.toLocaleString() + "/month",
-    terms: seats + (seats === 1 ? " seat" : " seats") + " at $" + rate + " per seat, billed monthly. Seats are for your salespeople — your leader account is free and never counts as a seat. Renews monthly on the day you subscribe, until you cancel. Cancel anytime from the Dealership page; access continues to the end of the paid period."
-  };
+  const flavorName = flavor === "post" ? "Dealership Post" : "Dealership Group";
+  const seatLabel = seats + (seats === 1 ? " seat" : " seats");
+  // Monthly and prepaid-term buys alike go through startCheckout —
+  // the final-sale consent modal + terms_acceptances record gate
+  // every dealer buy click (verified by the dealer-term harness).
+  const info = years
+    ? {
+        title: flavorName + " — " + seatLabel + " — " + years + "-year prepaid term",
+        price: "$" + dealerTermTotal(flavor, seats, years).toLocaleString() + " one-time",
+        terms: seatLabel + " at $" + rate + " per seat ($" + total.toLocaleString() + "/month) × " + (years * 12) + " months, " +
+          DEALER_TERM_DISCOUNT_PCT[years] + "% off, billed in full up front as one payment. Access paid through " +
+          fmtBillingDate(dealerProjectedTermEndMs(years)) + ". It does not renew automatically; buy another term anytime and the time stacks on. Seats are for your salespeople — your leader account is free and never counts as a seat."
+      }
+    : {
+        title: flavorName + " — " + seatLabel,
+        price: "$" + total.toLocaleString() + "/month",
+        terms: seatLabel + " at $" + rate + " per seat, billed monthly. Seats are for your salespeople — your leader account is free and never counts as a seat. Renews monthly on the day you subscribe, until you cancel. Cancel anytime from the Dealership page; access continues to the end of the paid period."
+      };
   startCheckout("dealership", "dealerBuyMsg", {
     info: info,
-    planKey: flavor === "post" ? "dealer_post" : "dealer_group",
-    extra: { dealership_id: currentDealership.id, flavor: flavor, seats: seats }
+    planKey: (flavor === "post" ? "dealer_post" : "dealer_group") + (years ? "_" + years + "y" : ""),
+    extra: { dealership_id: currentDealership.id, flavor: flavor, seats: seats, term_years: years }
   });
 }
 
