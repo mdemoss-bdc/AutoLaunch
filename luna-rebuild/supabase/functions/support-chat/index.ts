@@ -9,14 +9,13 @@
 //     live ACCOUNT SNAPSHOT assembled from the caller's own rows:
 //     settings, sync cadence state, recent scrape jobs, recent post
 //     queue rows (with their error messages), inventory aggregates,
-//     dealership membership, lifetime/support state. Diagnosis first:
+//     dealership membership, support-plan state. Diagnosis first:
 //     when the snapshot shows the cause, the answer names it.
 //   {action:"ticket", messages:[...]} — files a support_tickets row
 //     (transcript + snapshot summary). Priority = 'priority' when the
-//     caller has support entitlement (lifetime within its included
-//     year, an active Support Plan, or dealership cover), else
-//     'standard'. No model dependency — tickets work even when the
-//     model is down.
+//     caller has support entitlement (an active Support Plan, or
+//     dealership cover), else 'standard'. No model dependency —
+//     tickets work even when the model is down.
 //
 // DEFECT GOVERNANCE (Matthew, 2026-10-26): when the conversation or
 // the snapshot indicates a likely PRODUCT DEFECT (system-side failure,
@@ -215,13 +214,12 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
         : `Next sync available at ${nextAt.toISOString()}.`);
   }
 
-  // Ticket priority: support entitlement = lifetime inside its
-  // included year, an active Support Plan, or dealership cover.
-  const lifetimeDate = s?.lifetime_purchased_at ? Date.parse(s.lifetime_purchased_at) : null;
-  const lifetimeInYear = lifetimeDate !== null &&
-    now.getTime() - lifetimeDate < 365 * 86400000;
+  // Ticket priority (Matthew, 2026-10-26): support entitlement = an
+  // active Support Plan, or dealership cover. (The old lifetime
+  // included-year rule is moot — the Lifetime offer was retired
+  // before any sale.)
   const priority: "standard" | "priority" =
-    lifetimeInYear || s?.support_plan_status === "active" || covered
+    s?.support_plan_status === "active" || covered
       ? "priority"
       : "standard";
 
@@ -323,15 +321,39 @@ PLANS AND PRICES:
   cap on queued posts (the user's own daily safety limit applies).
   Sync every 12 hours.
 - Group — $100/month: everything in Post + Automate. Sync every 6 hours.
-- Founding Lifetime (launch offer, solo users only): Post $1,499 or
-  Group $1,999, paid once — capped at 50 buyers total. Lifetime means
-  the life of the product, that tier's features, updates included,
-  bug reports always free, and priority 1-on-1 support included for
-  1 year. After that year an optional Support Plan is $199/year.
+- Multi-year prepaid terms (Post and Group): pay up front for 1, 2
+  or 3 years and save — 1 year saves 5% (Post $855, Group $1,140),
+  2 years saves 10% (Post $1,620, Group $2,160), 3 years saves 15%
+  (Post $2,295, Group $3,060). The term renews at the same term.
+  There is no lifetime plan — it was retired before launch.
+- Priority Support — $199/year: a standalone add-on ANY account can
+  buy (Settings -> Plans). Get priority human help from the
+  AutoLaunch team. Bug reports are always free, with or without it.
 - Monthly plans renew on the same day of the month the subscription
-  started. Cancel anytime: Settings -> Plans -> "Manage or cancel
-  subscription" (Stripe Billing Portal). Cancelling keeps access until
-  the paid period ends.
+  started; prepaid terms renew on the same day their term ends.
+  Switch plans or terms anytime: Settings -> Plans -> "Manage or
+  cancel subscription" (Stripe Billing Portal) — price differences
+  are prorated. Cancel anytime in the same place; cancelling keeps
+  access until the paid period ends.
+- Depending on your state, sales tax may be added at checkout and is
+  shown before you pay.
+
+REFUNDS (Matthew's policy — state it plainly, never soften it):
+- ALL sales are final. There are NO refunds on any plan — monthly,
+  multi-year prepaid terms, or the Support Plan. The policy is shown
+  on every buy card, confirmed with an "all sales are final"
+  checkbox before payment, and written in the Terms of Service.
+- If a user asks for a refund: state the policy plainly and kindly
+  ("All AutoLaunch sales are final, so I can't refund that
+  purchase"), then give the helpful facts: cancelling stops future
+  charges and access continues until the end of the period already
+  paid for (Settings -> Plans -> "Manage or cancel subscription").
+- NEVER promise, imply or hint that a refund might be approved.
+  In any refund conversation, also offer the escalation: the user
+  can send their case to a person with the "Send to support" button
+  under this chat — exceptional cases (charged twice, charged after
+  cancelling, charged in error) are reviewed personally. Filing the
+  ticket is the whole offer: do not predict or promise its outcome.
 - Every account also has its OWN daily posting safety limit and pacing
   settings (Settings -> Automation). The stricter of the plan cap and
   the personal limit is the one that applies.
@@ -458,9 +480,8 @@ if they directly ask.`;
     return `
 PLAN TALK (this user is NOT on the trial): no proactive upsell. State
 tier facts only when the user has actually hit a higher-tier gate or
-asks about plans. If this is a Lifetime account (the snapshot says
-so), NEVER upsell a plan; the $199/yr Support Plan may be mentioned
-only if they ask about support and their included first year is over.`;
+asks about plans. The $199/yr Support Plan (a standalone add-on anyone
+can buy) may be mentioned only if they ask about support.`;
   })();
 
   return `You are Luna, AutoLaunch's in-app support assistant. You help the signed-in user with AutoLaunch — and only AutoLaunch.

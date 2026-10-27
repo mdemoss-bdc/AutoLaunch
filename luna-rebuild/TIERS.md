@@ -765,6 +765,79 @@ three layers above.
 4. Test one real checkout end-to-end (trial user → pay → webhook
    flips to `active` → portal cancel → `expired` at period end).
 
+## Refund policy (decided + built 2026-10-26, rebuild only)
+
+**Matthew's decision: ALL sales are final. No refunds — on every
+plan, including Founding Lifetime purchases and the Support Plan.**
+He chose the absolute form over Luna's proposed 14-day exception
+window for Lifetime. Subscriptions still cancel anytime (Settings →
+Plans, Stripe portal); cancelling stops future charges and access
+runs to the end of the paid period — there are simply no refunds,
+including for partial periods. The policy is the same sentence
+everywhere: *"All sales are final. We do not offer refunds on any
+plan, including Lifetime purchases and the Support Plan."*
+
+**Double consent (the disclosure record):**
+1. **In-app, recorded.** Every Buy button (all seven checkout kinds:
+   post, group, post_annual, group_annual, lifetime_post,
+   lifetime_group, support) opens the `#checkoutConfirmModal` FIRST:
+   plan, price, renewal terms, the final-sale line, a link to the
+   Terms, and a required checkbox — *"I understand all sales are
+   final and there are no refunds."* — with the Continue button
+   disabled until checked. Confirming inserts a row in
+   **`terms_acceptances`** (user_id, plan_key, terms_version
+   `2026-10-26`, accepted_at; RLS owner INSERT + SELECT only, no
+   update/delete — append-only) and only then runs checkout. The
+   insert is deliberately NOT fail-open: if the record can't be
+   written, checkout does not proceed — the record is the point.
+   Every buy card also prints "All sales final — no refunds." next
+   to its renewal copy.
+2. **At Stripe.** `billing-checkout` sends
+   `consent_collection { terms_of_service: "required" }` on every
+   session plus `custom_text.after_submit` restating the policy.
+   Verified live 2026-10-26 (seeded E2E): a real session read back
+   from Stripe carries `consent_collection.terms_of_service =
+   "required"` and the exact after-submit policy text — Stripe
+   accepted consent collection even though the account's URLs are
+   unset (`business_profile.terms_of_service_url` and
+   `privacy_policy_url` both null, checked via the connector). The
+   connector's account-update write is NOT supported
+   (`PostAccountsAccount` → "unsupported Stripe API write
+   operation"), so setting the URLs is a **Matthew dashboard step** —
+   recommended so Checkout's Terms link points at AutoLaunch's own
+   page: Stripe → Settings → Business settings → Public details →
+   Terms of service URL `https://mdemoss-bdc.github.io/AutoLaunch/luna-rebuild/terms.html`
+   and Privacy policy URL
+   `https://mdemoss-bdc.github.io/AutoLaunch/luna-rebuild/privacy.html`.
+   As insurance, billing-checkout retries a refused session ONCE
+   without consent_collection (logged) so checkout can never be
+   taken down by a consent error.
+
+**Terms page.** `luna-rebuild/terms.html` carries the full policy
+(version line `Version 2026-10-26`): plans & billing, the refund
+policy verbatim, trial terms, Founding Lifetime terms, the Support
+Plan, referral terms, support scope, plus the pre-existing general
+terms (content rights, acceptable use, third-party platforms,
+liability). `TERMS_VERSION` in the app must match the page — bump
+both together; acceptance rows keep the version they were recorded
+under.
+
+**Chargebacks are still bank-decided.** The policy and the two
+consent records do not block a customer from disputing a charge —
+banks decide disputes (typically up to ~120 days). What the double
+consent provides is the evidence package for winning the "changed
+my mind / not as described" categories: the card-level disclosure,
+the timestamped in-app acceptance of a versioned policy, and
+Stripe's own recorded Terms acceptance. True fraud claims
+("never authorized") are fought with the AUTOLAUNCH statement
+descriptor and usage records, not terms.
+
+**Ask Luna** knows the policy (support-chat KB "REFUNDS" block,
+redeployed with this build): she states it plainly, never promises
+or implies a refund, explains that cancelling keeps access until
+the period ends, and offers a ticket for exceptional cases —
+Matthew decides exceptions personally; the bot does not grant them.
+
 ## Founding Lifetime + Support Plan (decided + built 2026-10-26, rebuild only)
 
 Matthew approved Luna's recommendation ~19:52 EDT and set the
