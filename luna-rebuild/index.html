@@ -1651,8 +1651,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <button onclick="openPlanPurchase()" class="px-3 py-1.5 rounded-lg btn-gradient text-white text-xs font-bold cursor-pointer shrink-0">View plans</button>
   </div>
 
-  <!-- 6-Card Vibrant Automation Ribbon -->
-  <div class="mobile-collapsible-header grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+  <!-- 5-Card Vibrant Automation Ribbon -->
+  <div class="mobile-collapsible-header grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
     
     <!-- 1. Automations -->
     <div onclick="openSettingsModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
@@ -1713,26 +1713,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </div>
     </div>
 
-    <!-- 4. Automatic photo edits -->
-    <div onclick="openAutoPhotoEditsModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
-      <div class="flex items-start justify-between">
-        <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
-          Automatic photo edits <i class="fa-solid fa-chevron-right text-[9px] text-slate-400"></i>
-        </span>
-        <label onclick="event.stopPropagation()" class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" id="chkRibbonPhotoCrop" onchange="toggleRibbonSetting('auto_crop')" class="sr-only peer">
-          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
-        </label>
-      </div>
-      <div>
-        <p id="photoEditStatusLabel" class="text-[10px] text-slate-500">On — first photo · smart crop</p>
-        <span class="text-[10px] text-blue-600 flex items-center gap-1 pt-1 font-semibold" onclick="event.stopPropagation(); openGuide('photoedits')">
-          <i class="fa-solid fa-circle-info text-[9px]"></i> How it works
-        </span>
-      </div>
-    </div>
-
-    <!-- 5. Safe posting limits -->
+    <!-- 4. Safe posting limits -->
     <div onclick="openPostingSafetyModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
@@ -1750,7 +1731,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </div>
     </div>
 
-    <!-- 6. Posting preferences -->
+    <!-- 5. Posting preferences -->
     <div onclick="openPostingPreferencesModal()" class="glass-card ribbon-card rounded-xl p-3.5 flex flex-col justify-between shadow-sm space-y-2 cursor-pointer transition hover:border-blue-300">
       <div class="flex items-start justify-between">
         <span class="text-xs font-bold text-slate-900 flex items-center gap-1">
@@ -12053,16 +12034,14 @@ document.addEventListener("click", (e) => {
 //   auto_repost   = enable_auto_repost     (same as Repost modal)
 //   auto_crop     = auto_crop_enabled      (same as Photo Edits modal)
 const RIBBON_SETTING_FIELDS = {
-  auto_main: ["auto_post_enabled", "enable_auto_repost", "auto_crop_enabled"],
+  auto_main: ["auto_post_enabled", "enable_auto_repost"],
   auto_arrivals: ["auto_post_enabled"],
-  auto_repost: ["enable_auto_repost"],
-  auto_crop: ["auto_crop_enabled"]
+  auto_repost: ["enable_auto_repost"]
 };
 const RIBBON_SETTING_CHECKBOX = {
   auto_main: "chkRibbonAutoMain",
   auto_arrivals: "chkRibbonArrivals",
-  auto_repost: "chkRibbonRepost",
-  auto_crop: "chkRibbonPhotoCrop"
+  auto_repost: "chkRibbonRepost"
 };
 
 async function toggleRibbonSetting(k) {
@@ -12101,7 +12080,7 @@ async function toggleRibbonSetting(k) {
 
   // Keep every other control that reflects the same columns in sync.
   if (k === "auto_main") {
-    ["chkRibbonArrivals", "chkRibbonRepost", "chkRibbonPhotoCrop"].forEach(id => {
+    ["chkRibbonArrivals", "chkRibbonRepost"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.checked = value;
     });
@@ -12222,7 +12201,7 @@ async function toggleSettingsAutoPost(el) {
 function syncRibbonMasterCheckbox() {
   const master = document.getElementById("chkRibbonAutoMain");
   if (!master) return;
-  const parts = ["chkRibbonArrivals", "chkRibbonRepost", "chkRibbonPhotoCrop"]
+  const parts = ["chkRibbonArrivals", "chkRibbonRepost"]
     .map(id => document.getElementById(id));
   if (parts.every(el => el)) {
     master.checked = parts.every(el => el.checked);
@@ -12243,10 +12222,10 @@ const GUIDES = {
     icon: "fa-solid fa-bolt",
     iconClasses: "bg-blue-50 text-blue-600 border-blue-200",
     modal: "settingsModal",
-    what: "This is the master switch for the three automations next to it: auto-posting new arrivals, auto delete & repost, and automatic photo edits. Flip it and all three flip with it.",
+    what: "This is the master switch for the two automations next to it: auto-posting new arrivals and auto delete & repost. Flip it and both flip with it.",
     steps: [
       "Flip the Automations switch on — the three cards beside it turn on with it.",
-      "Set each one up on its own card (frequency, photo edits, limits). The master switch never changes their settings.",
+      "Set each one up on its own card (frequency, limits). The master switch never changes their settings.",
       "Turn a single card off anytime without touching the others.",
       "The same Auto Posting switch also lives in Settings, under the Automation tab."
     ],
@@ -12591,12 +12570,12 @@ function renderRibbonStatuses() {
   const repostOn = !!(repostEl && repostEl.checked);
   const cropOn = !!(cropEl && cropEl.checked);
 
-  // Master card: its switch is the AND of the three below (see
+  // Master card: its switch is the AND of the two below (see
   // syncRibbonMasterCheckbox), so the words count what is really running.
   const masterLbl = document.getElementById("ribbonMasterStatusLabel");
   if (masterLbl) {
-    const onCount = [arrivalsOn, repostOn, cropOn].filter(Boolean).length;
-    masterLbl.innerText = onCount === 3
+    const onCount = [arrivalsOn, repostOn].filter(Boolean).length;
+    masterLbl.innerText = onCount === 2
       ? "On — all automations running"
       : onCount === 0
         ? "Off — no auto-posting or updates"
