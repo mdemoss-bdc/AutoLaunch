@@ -104,6 +104,80 @@
     return { vehicleText: "", itemUrl: "" };
   }
 
+  // Chrome-label filter (v2.1.48): the thread page's info rail and
+  // header render their labels as dir="auto" text too, and the
+  // scrape stored them as if they were the rep's own messages —
+  // "Mute", "Customize chat", "Chat members", the thread's own
+  // title — polluting the Prospects view and Luca's voice data.
+  // Two defenses: (1) an exact whole-text denylist of the known
+  // Facebook chrome labels, plus the thread's own title text;
+  // (2) a structural rule — a real message bubble is a plain text
+  // block, never the whole content of a control (quick-reply chips
+  // and rail rows are controls) and never inside a chrome region
+  // (page header, nav, info rail, form). Whole-text only, always:
+  // a real sentence that merely mentions a label is a message.
+  var FB_CHROME_LABELS = {
+    "Mute": 1, "Unmute": 1,
+    "Customize chat": 1, "Chat members": 1,
+    "Media, files and links": 1, "Privacy & support": 1,
+    "Buyer details": 1, "Seller details": 1,
+    "Send a quick response": 1,
+    "View buyer": 1, "View seller": 1, "More options": 1
+  };
+
+  function threadTitleTexts() {
+    // The strings this thread's own header shows as its title —
+    // "Name · Listing" from the aria-label, the header element's
+    // visible text, and the name + listing pair rebuilt from the
+    // scrapers. If the scrape meets one of these as a "message",
+    // it is the header talking, not a person.
+    var out = {};
+    try {
+      var titled = document.querySelector('[aria-label^="Conversation titled "]');
+      if (titled) {
+        var t = (titled.getAttribute("aria-label") || "").replace(/^Conversation titled\s*/, "").trim();
+        if (t) out[t] = 1;
+        var vis = textOf(titled);
+        if (vis) out[vis] = 1;
+      }
+    } catch (e) { /* heuristic only */ }
+    try {
+      var name = findBuyerName();
+      var lt = (findListing().vehicleText || "").replace(/^\$[\d,]+\s*-\s*/, "").trim();
+      if (name && lt) out[name + " · " + lt] = 1;
+    } catch (e) { /* heuristic only */ }
+    return out;
+  }
+
+  function isChromeText(t, titles) {
+    if (!t) return false;
+    if (FB_CHROME_LABELS[t]) return true;
+    if (titles && titles[t]) return true;
+    return false;
+  }
+
+  function inChromeStructure(node, t) {
+    // Structural containment: walk the node's ancestors. Chrome
+    // regions (header / nav / complementary rail / search / form)
+    // disqualify outright. A control (button / role=button) whose
+    // ENTIRE text is this text also disqualifies — the node is the
+    // control's label. A control holding more than this text (a
+    // message row with hover actions) does not, and a link inside
+    // a bubble (a pasted URL) never does.
+    try {
+      var el = node;
+      for (var up = 0; up < 14 && el && el !== document.body; up++) {
+        var role = el.getAttribute ? (el.getAttribute("role") || "") : "";
+        var tag = el.tagName || "";
+        if (role === "complementary" || role === "banner" || role === "navigation" ||
+            role === "search" || tag === "HEADER" || tag === "NAV" || tag === "FORM") return true;
+        if ((role === "button" || tag === "BUTTON") && textOf(el) === t) return true;
+        el = el.parentElement;
+      }
+    } catch (e) { /* heuristic only — the text checks still apply */ }
+    return false;
+  }
+
   function findMessages() {
     // Popup first: when the chat is the floating mini-window, scope to
     // it — its own midpoint is what separates buyer (left) from rep
@@ -117,6 +191,7 @@
     var paneMid = pane.left + pane.width / 2;
     var out = [];
     var seen = {};
+    var titles = threadTitleTexts();
     for (var i = 0; i < nodes.length; i++) {
       var t = textOf(nodes[i]);
       if (!t || t.length < 1 || t.length > 1000) continue;
@@ -138,6 +213,10 @@
       if (/\.(csv|txt|pdf|jpe?g|png|gif|mp3|wav|zip|docx?|xlsx?)$/i.test(t)) continue;
       if (/^\d+(\.\d+)?\s?(KB|MB|GB|B)$/.test(t)) continue;
       if (/Unread message:/.test(t)) continue;
+      // Chrome-label filter (v2.1.48): the exact denylist + this
+      // thread's title, and the structural containment rule.
+      if (isChromeText(t, titles)) continue;
+      if (inChromeStructure(nodes[i], t)) continue;
       var r = nodes[i].getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       var key = t + "|" + (r.left > paneMid ? "R" : "L");
@@ -427,6 +506,7 @@
         snippet = snippet.replace(/^You[:\s]+/i, "").trim();
       }
       if (snippet.length < 2) continue;
+      if (isChromeText(snippet, null)) continue; // v2.1.48: a chrome label is not a snippet
       out.push({
         threadRef: "https://www.facebook.com/messages/t/" + key,
         snippet: snippet.slice(0, 140),
