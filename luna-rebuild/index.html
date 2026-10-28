@@ -3119,6 +3119,50 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         </div>
 
+
+        <!-- OWNER TOOLS CARD — renders only for Matthew (OWNER_USER_IDS[0]);
+             the owner-grant Edge Function enforces the same check server-side. -->
+        <div id="ownerGrantCard" class="glass-card rounded-2xl p-6 hidden">
+          <h3 class="font-bold text-lg mb-2">
+            Owner tools
+          </h3>
+          <p class="text-sm text-slate-500 mb-4">
+            Give a trial user full Automate access until their trial ends.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <input
+              type="email"
+              id="ownerGrantEmail"
+              placeholder="name@dealership.com"
+              class="flex-1 border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white">
+            <button
+              type="button"
+              id="ownerGrantBtn"
+              onclick="ownerGrantSubmit()"
+              class="px-5 py-3 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">
+              Grant full access
+            </button>
+          </div>
+          <p id="ownerGrantMsg" class="text-xs font-medium mt-3 hidden"></p>
+          <div id="ownerGrantList" class="mt-4 space-y-2"></div>
+
+          <div class="mt-6 pt-5 border-t border-slate-200">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <h4 class="font-bold text-sm text-slate-800">Suggestions</h4>
+              <select id="ownerSuggestionsFilter" onchange="loadOwnerSuggestions()" class="border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white cursor-pointer">
+                <option value="unviewed" selected>Unviewed</option>
+                <option value="accepted">Luna accepted</option>
+                <option value="denied">Luna denied</option>
+                <option value="parked">Luna parked</option>
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div id="ownerSuggestionsList" class="space-y-2">
+              <p class="text-xs text-slate-400">Loading…</p>
+            </div>
+          </div>
+        </div>
+
       </div><!-- /settingsPanelPlan -->
 
         <!-- SAVE -->
@@ -4458,6 +4502,134 @@ function renderPlanPanel() {
     }
   }
   renderBillingPanel();
+  loadOwnerGrantTools();
+}
+
+// ===== OWNER GRANT TOOL + SUGGESTIONS INBOX (Matthew only) =====
+// The Owner tools card (Settings → Plans) renders only for Matthew's
+// account (OWNER_USER_IDS[0]). The owner-grant Edge Function checks
+// the caller again server-side against its OWNER_GRANT_USER_ID secret
+// and refuses everyone else — this gate is courtesy, not security.
+const OWNER_GRANT_USER_ID = OWNER_USER_IDS[0]; // Matthew
+
+function isOwnerGrantUser() {
+  return !!(currentUser && currentUser.id === OWNER_GRANT_USER_ID);
+}
+
+async function ownerGrantInvoke(body) {
+  try {
+    const { data, error } = await supabaseClient.functions.invoke("owner-grant", { body: body });
+    if (error) {
+      const code = await billingFunctionErrorCode(error);
+      if (code === "forbidden") return { ok: false, message: "This tool only works on the owner account." };
+      return { ok: false, message: "The request didn't go through — try again." };
+    }
+    return data || { ok: false, message: "No answer from the server — try again." };
+  } catch (e) {
+    return { ok: false, message: "The request didn't go through — try again." };
+  }
+}
+
+function ownerGrantMsg(text, isError) {
+  const el = document.getElementById("ownerGrantMsg");
+  if (!el) return;
+  el.innerText = text;
+  el.className = "text-xs font-medium mt-3 " + (isError ? "text-red-600" : "text-emerald-600");
+}
+
+function loadOwnerGrantTools() {
+  const card = document.getElementById("ownerGrantCard");
+  if (!card) return;
+  if (!isOwnerGrantUser()) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  refreshOwnerGrantList();
+  loadOwnerSuggestions();
+}
+
+async function refreshOwnerGrantList() {
+  const listEl = document.getElementById("ownerGrantList");
+  if (!listEl || !isOwnerGrantUser()) return;
+  const res = await ownerGrantInvoke({ action: "list" });
+  if (!res.ok) { listEl.innerHTML = ""; return; }
+  const rows = res.grants || [];
+  if (!rows.length) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">No grants yet.</p>';
+    return;
+  }
+  listEl.innerHTML = rows.map(function (g) {
+    const until = g.ends_at ? new Date(g.ends_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+    const state = g.revoked_at
+      ? '<span class="text-slate-400 font-semibold text-xs">Revoked</span>'
+      : '<button type="button" onclick="ownerGrantRevoke(\'' + g.target_user_id + '\')" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">Revoke</button>';
+    return '<div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">' +
+      '<p class="text-xs text-slate-600"><span class="font-bold text-slate-800">' + escapeHtml(g.target_email || "") + '</span> · until ' + until + '</p>' +
+      state + "</div>";
+  }).join("");
+}
+
+async function ownerGrantSubmit() {
+  if (!isOwnerGrantUser()) return;
+  const input = document.getElementById("ownerGrantEmail");
+  const btn = document.getElementById("ownerGrantBtn");
+  const email = input ? (input.value || "").trim() : "";
+  if (!email) { ownerGrantMsg("Enter the trial user's email address.", true); return; }
+  if (btn) btn.disabled = true;
+  const res = await ownerGrantInvoke({ action: "grant", email: email });
+  if (btn) btn.disabled = false;
+  if (res.ok) {
+    ownerGrantMsg("Full Automate access granted to " + email + " until their trial ends.", false);
+    if (input) input.value = "";
+    refreshOwnerGrantList();
+  } else {
+    ownerGrantMsg(res.message || "Couldn't grant access.", true);
+  }
+}
+
+async function ownerGrantRevoke(targetUserId) {
+  if (!isOwnerGrantUser()) return;
+  const res = await ownerGrantInvoke({ action: "revoke", target_user_id: targetUserId });
+  if (res.ok) {
+    ownerGrantMsg("Grant revoked — that account is back on its normal trial.", false);
+    refreshOwnerGrantList();
+  } else {
+    ownerGrantMsg(res.message || "Couldn't revoke that grant.", true);
+  }
+}
+
+// Suggestions inbox (read-only): the daily review files each
+// suggestion as do / no / park; this is where they land for Matthew.
+async function loadOwnerSuggestions() {
+  const listEl = document.getElementById("ownerSuggestionsList");
+  const sel = document.getElementById("ownerSuggestionsFilter");
+  if (!listEl || !isOwnerGrantUser()) return;
+  const filter = sel ? sel.value : "unviewed";
+  listEl.innerHTML = '<p class="text-xs text-slate-400">Loading…</p>';
+  const res = await ownerGrantInvoke({ action: "suggestions_list", filter: filter });
+  if (!res.ok) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">Couldn\'t load suggestions.</p>';
+    return;
+  }
+  const rows = res.suggestions || [];
+  if (!rows.length) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">Nothing here.</p>';
+    return;
+  }
+  const verdictLabels = { "do": "Luna accepted", "no": "Luna denied", "park": "Luna parked" };
+  listEl.innerHTML = rows.map(function (s) {
+    const when = s.created_at ? new Date(s.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+    const chipText = s.status === "reviewed" ? (verdictLabels[s.verdict] || "Reviewed") : "Unviewed";
+    let noteLine = "";
+    if (s.status === "reviewed" && s.verdict_note) {
+      noteLine = '<p class="text-xs text-slate-500 mt-1.5"><span class="font-bold text-slate-600">Luna:</span> ' + escapeHtml(s.verdict_note) + "</p>";
+    }
+    return '<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">' +
+      '<div class="flex items-start justify-between gap-3">' +
+      '<p class="text-sm text-slate-700 leading-relaxed">' + escapeHtml(s.body || "") + '</p>' +
+      '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5">' + chipText + '</span>' +
+      '</div>' +
+      '<p class="text-[11px] text-slate-400 mt-1.5">' + escapeHtml(s.submitter_email || "Unknown sender") + (when ? " · " + when : "") + '</p>' +
+      noteLine + "</div>";
+  }).join("");
 }
 
 // Owner-only: preview the gates as another tier (this device only).
