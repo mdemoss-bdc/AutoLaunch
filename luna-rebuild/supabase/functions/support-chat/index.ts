@@ -475,27 +475,36 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
 const KB = `
 ABOUT AUTOLAUNCH: a lightweight tool that takes a dealership's or rep's
 inventory from their website and posts it to Facebook Marketplace (plus
-optional TikTok, Instagram and Facebook Page channels). It is NOT a CRM.
+optional channels — Facebook Page posting is live, and TikTok and Instagram are coming soon). It is NOT a CRM.
 
 PLANS AND PRICES:
 - 5-day free trial: no card needed. Queue 1 post per day, inventory sync
   once every 24 hours. Automate features are locked during the trial.
   When the trial ends, a plan is required to keep posting.
-- Post — $75/month: manual core (inventory, post queue, manual posting,
-  AI listing copy). Cap: 5 queued posts per day. Sync every 18 hours.
-- Post + Automate — the middle tier, described in Settings -> Plans
-  (the buy screens sell Post and Automate): everything in Post plus
-  auto-post new arrivals, auto delete & repost, channels, Luca +
-  Prospects, Customer Wishlist, Trade Appraisals, intro videos. No plan
-  cap on queued posts (the user's own daily safety limit applies).
-  Sync every 12 hours.
-- Automate — $100/month: everything in Post + Automate, plus team
-  features. Sync every 6 hours. (Dealership accounts buy this same
-  top tier per seat as Dealership Group.)
-- Multi-year prepaid terms (Post and Automate): pay up front for 1, 2
-  or 3 years and save — 1 year saves 5% (Post $855, Automate $1,140),
-  2 years saves 10% (Post $1,620, Automate $2,160), 3 years saves 15%
-  (Post $2,295, Automate $3,060). A term is a ONE-TIME payment, not a
+- Self Post — $75/month: POSTING ONLY (inventory, post queue, manual
+  posting, AI listing copy). Cap: 5 queued posts per day. Sync every
+  18 hours. Self Post has NO delete: it cannot remove a listing in
+  the app, by hand or automatically — deleting is an Automate
+  feature; on Self Post the user takes the listing down on Facebook
+  itself.
+- Automate — $100/month: everything in Self Post plus all the
+  automation: auto-post new arrivals, delete listings + auto delete
+  & repost, Facebook Page posting, Luca + Prospects, Customer
+  Wishlist, Trade Appraisals, intro videos, plus team features.
+  No plan cap on queued posts (the user's own daily safety limit
+  applies). Sync every 6 hours. Channels are Automate-only:
+  Facebook Page posting is live; TikTok and Instagram are coming
+  soon (TikTok's app is in review with TikTok; Instagram follows
+  once Meta business verification clears). (Dealership accounts
+  buy this same top tier per seat as Dealership Group.)
+- Post + Automate — a legacy tier some older accounts still hold;
+  it is not sold anymore and Settings -> Plans shows it as
+  Automate: everything in Self Post plus the automation (no team
+  features). Sync every 12 hours.
+- Multi-year prepaid terms (Self Post and Automate): pay up front for 1, 2
+  or 3 years and save — 1 year saves 5% (Self Post $855, Automate $1,140),
+  2 years saves 10% (Self Post $1,620, Automate $2,160), 3 years saves 15%
+  (Self Post $2,295, Automate $3,060). A term is a ONE-TIME payment, not a
   subscription: it never renews automatically — access runs to the
   term's end date, and buying another term stacks more time on.
   There is no lifetime plan — it was retired before launch.
@@ -643,12 +652,12 @@ DEALERSHIP ACCOUNTS:
   up to 2 member seats, the full Group feature set, and the leader
   can add members from the Dealership page right away.
 - Paid dealerships pick a flavor and a seat count (1 to 50 seats):
-  Dealership Post — $75/seat/mo for 1-24 seats, $69 for 25-50.
+  Dealership Self Post — $75/seat/mo for 1-24 seats, $69 for 25-50.
   Dealership Group — $99/seat/mo for 1-9 seats, $95 for
   10-24, $89 for 25-50. Every seat is billed at the rate for the
-  total seat count (a 10-seat Post store pays 10 x $75 = $750/mo).
-- Post seats follow the Post rules (5 queued posts a day per seat,
-  inventory sync every 18 hours, no Luca/automation); Group seats
+  total seat count (a 10-seat Self Post store pays 10 x $75 = $750/mo).
+- Self Post seats follow the Self Post rules (5 queued posts a day per seat,
+  inventory sync every 18 hours, no delete, no Luca/automation); Group seats
   get the full kit. The admin buys and manages seats on the
   Dealership page and can change seats or flavor later in the
   billing portal.
@@ -765,10 +774,6 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "photos",
-    1
-   ],
-   [
     "facebook",
     1
    ],
@@ -782,10 +787,6 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    ],
    [
     "pick",
-    1
-   ],
-   [
-    "website",
     1
    ],
    [
@@ -803,9 +804,17 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    [
     "queues",
     1
+   ],
+   [
+    "through",
+    1
+   ],
+   [
+    "daily",
+    1
    ]
   ],
-  "text": "Auto-post new arrivals: Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus Instagram, TikTok or your Facebook Page if you have switched those channels on.\nSteps:\n1. Flip the switch on this card — or open the card and press Done, because saving turns it on.\n2. Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.\n3. Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.\n4. Set how many it may post per day under Safe posting limits — the auto poster queues up to that many a day, newest cars first.\n5. Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels.\nGood to know:\n- Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.\n- Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.\n- Every auto-posted car counts against your daily posting limit, same as cars you queue by hand.\n- A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website."
+  "text": "Auto-post new arrivals: Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus your Facebook Page if you have switched that channel on. (TikTok and Instagram are coming soon — Automate-plan channels.)\nSteps:\n1. Flip the switch on this card — or open the card and press Done, because saving turns it on.\n2. Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.\n3. Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.\n4. Set how many it may post per day under Safe posting limits — the auto poster queues up to that many a day, newest cars first.\n5. Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels.\nGood to know:\n- Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.\n- Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.\n- Every auto-posted car counts against your daily posting limit, same as cars you queue by hand. …"
  },
  {
   "id": "guide:repost",
@@ -1100,11 +1109,11 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     3
    ],
    [
-    "autolaunch",
+    "facebook",
     1
    ],
    [
-    "facebook",
+    "autolaunch",
     1
    ],
    [
@@ -1148,7 +1157,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "The Chrome extension (your posting helper): AutoLaunch posts through a small Chrome extension — the helper — because Facebook Marketplace posting happens in YOUR signed-in Facebook session. The helper also powers Luca: it captures Marketplace chats into Prospects and delivers the replies you send from AutoLaunch. No helper, no posting and no chat sync — but your inventory, wishlist and settings live in AutoLaunch itself and work without it.\nSteps:\n1. Open the Chrome Extension page in AutoLaunch and follow the install steps there (download, unzip, load it in chrome://extensions with Developer mode on). A one-click Chrome Web Store install is coming.\n2. Sign in to the helper with the same AutoLaunch account, and keep Chrome signed in to your Facebook account.\n3. Leave one computer as your hub: it must be AWAKE (locked is fine), with Chrome open and a Facebook or Messenger tab open. Posting, reposts, chat capture and reply delivery all run from that machine.\n4. In Chrome settings, exempt facebook.com from Memory Saver / tab sleeping — a slept Facebook tab can't post or sync.\n5. Confirm vs Full Auto: Confirm mode fills each listing in and waits for your click on Publish. Full Auto posts on its own. Start in Confirm until you trust the flow.\nGood to know:\n- After the helper updates, REFRESH your open tabs (the AutoLaunch tab first, then Messenger) — an updated extension can't talk to tabs that were already open. …"
+  "text": "The Chrome extension (your posting helper): AutoLaunch posts through a small Chrome extension — the helper — because Facebook Marketplace posting happens in YOUR signed-in Facebook session. The helper also powers Luca: it captures Marketplace chats into Prospects and delivers the replies you send from AutoLaunch. No helper, no posting and no chat sync — but your inventory, wishlist and settings live in AutoLaunch itself and work without it.\nSteps:\n1. Open the Chrome Extension page in AutoLaunch and follow the install steps there (download, unzip, load it in chrome://extensions with Developer mode on). A one-click Chrome Web Store install is coming soon — it's under review with Google; the guided setup here is the way today.\n2. Sign in to the helper with the same AutoLaunch account, and keep Chrome signed in to your Facebook account.\n3. Leave one computer as your hub: it must be AWAKE (locked is fine), with Chrome open and a Facebook or Messenger tab open. Posting, reposts, chat capture and reply delivery all run from that machine.\n4. In Chrome settings, exempt facebook.com from Memory Saver / tab sleeping — a slept Facebook tab can't post or sync.\n5. Confirm vs Full Auto: Confirm mode fills each listing in and waits for your click on Publish. Full Auto posts on its own. Start in Confirm until you trust the flow.\nGood to know: …"
  },
  {
   "id": "guide:inventory",
@@ -1632,15 +1641,11 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "marketplace",
-    1
-   ],
-   [
     "posting",
     1
    ],
    [
-    "settings",
+    "marketplace",
     1
    ],
    [
@@ -1648,7 +1653,11 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "posts",
+    "page",
+    1
+   ],
+   [
+    "settings",
     1
    ],
    [
@@ -1664,19 +1673,19 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "automation",
-    1
-   ],
-   [
     "autolaunch",
     1
    ],
    [
     "platform",
     1
+   ],
+   [
+    "home",
+    1
    ]
   ],
-  "text": "Syndication channels (TikTok, Instagram, Facebook Pages): Marketplace is the home channel; the same cars can also go out as video and posts. TikTok posting is built and connects from Settings; Instagram follows once your business verification clears with Meta; your Facebook Page can carry listings alongside your personal Marketplace posts.\nSteps:\n1. Open Settings and find the channel connections (TikTok first).\n2. Connect the account you actually sell from — posting runs in that account's name.\n3. Turn channels on per automation in Settings → Automation → Syndication Channels.\n4. Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel.\nGood to know:\n- Channel rules differ (video-first on TikTok, business accounts on Instagram). AutoLaunch formats per channel — you write nothing per platform.\n- If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
+  "text": "Syndication channels (TikTok, Instagram, Facebook Pages): Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. TikTok and Instagram are coming soon: TikTok's app is in review with TikTok, and Instagram follows once business verification clears with Meta. Both are Automate-plan channels.\nSteps:\n1. Open Settings → Automation → Syndication Channels.\n2. Connect the account you actually sell from — posting runs in that account's name.\n3. Turn on the Facebook Page channel there — TikTok and Instagram light up there when they launch.\n4. Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel.\nGood to know:\n- Channel rules differ (video-first on TikTok, business accounts on Instagram when it lands). AutoLaunch formats per channel — you write nothing per platform.\n- If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
  },
  {
   "id": "guide:introvideos",
@@ -1901,7 +1910,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     2
    ]
   ],
-  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: 5 days, no card needed. Queued posts on the trial: 1 per day; inventory sync 1 sync per 24 hours. Automate features are locked on the trial.\n- Post — $75/month: queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no auto-post, no channels, no Luca.\n- Post + Automate (described in Settings -> Plans; the buy screens sell Post and Automate): everything in Post plus auto-post new arrivals, auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Automate — $100/month: everything in Post + Automate. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Post 1 year $855, 2 years $1,620, 3 years $2,295; Automate 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
+  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: 5 days, no card needed. Queued posts on the trial: 1 per day; inventory sync 1 sync per 24 hours. Automate features are locked on the trial.\n- Self Post — $75/month: POSTING ONLY — queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no delete (removing a listing in the app is an Automate feature), no auto-post, no channels, no Luca.\n- Post + Automate (a legacy tier some older accounts still hold — not sold anymore; Settings -> Plans shows it as Automate): everything in Self Post plus auto-post new arrivals, delete listings + auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Automate — $100/month: everything in Self Post, plus all the automation and team features. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Self Post 1 year $855, 2 years $1,620, 3 years $2,295; Automate 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Self Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
  },
  {
   "id": "terms",
