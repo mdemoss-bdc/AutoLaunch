@@ -2118,10 +2118,9 @@ TRIAL CONVERSION (this user is on the free trial — Matthew's rules):
   hours, listing copy included); Group is $100/mo (no plan cap on
   queued posts, sync every 6 hours, every feature including auto-post,
   Luca and the channels).
-- This user has ${snap.trialDaysLeft ?? "?"} day(s) of trial left.
-  Mention how many trial days are left ONLY if that number is 2 or
-  fewer (then at most ONE gentle line). If more than 2 days remain, do
-  not state the days left at all.
+${snap.trialDaysLeft !== null && snap.trialDaysLeft <= 2
+      ? `- This user has ${snap.trialDaysLeft} day(s) of trial left — you may add ONE gentle line noting the days left.`
+      : "- Do not state how many trial days are left."}
 - Maximum ONE such nudge per reply, inside the answer — never a
   separate sales block, never pushy. If the user objects to being sold
   to, drop it completely for the rest of the conversation.`;
