@@ -1231,7 +1231,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
   <div class="max-w-5xl mx-auto space-y-6">
     <div>
       <h2 class="text-2xl font-extrabold text-slate-900">Trade Appraisals</h2>
-      <p class="text-slate-500 mt-1">Send a customer your link — they answer 10 condition questions and upload photos of their trade, and the whole packet lands here for the desk. Every appraisal is stamped <span class="font-semibold text-slate-700">Fair</span> condition.</p>
+      <p class="text-slate-500 mt-1">Send a customer your link — they answer 10 condition questions and upload photos of their trade, and the whole packet lands here for the desk. Every appraisal is stamped <span class="font-semibold text-slate-700">Fair</span> condition. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('trade')">How Trade Appraisals works →</span></p>
     </div>
     <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
       <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-link text-blue-600"></i> Your trade-in link</h3>
@@ -6790,6 +6790,7 @@ async function initAppSession(user) {
   await fetchLiveInventory(true);
   await loadPostingQueue();
   syncQueuePoller();
+  probeHelperVersionOnce();
 }
 
 async function loadUserStoreSettings() {
@@ -10109,6 +10110,65 @@ let extPongListener = null;
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
 const EXPECTED_EXT_VERSION = "2.1.51";
+// Stored helper version (2026-10-28): the PONG in checkExtensionStatus
+// and the sign-in probe below carry the helper's self-reported version.
+// Persist it on user_settings (helper_version / helper_seen_at) so Ask
+// Luna's account snapshot can name the build a user actually runs —
+// but write ONLY when the stored value differs, never on every ping.
+let helperVersionPersisted = null;
+async function persistHelperVersion(version) {
+  if (!currentUser || !version || typeof supabaseClient === "undefined") return;
+  const v = String(version);
+  if (helperVersionPersisted === v) return;
+  try {
+    const { data } = await supabaseClient
+      .from("user_settings")
+      .select("helper_version")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    if (data && data.helper_version === v) { helperVersionPersisted = v; return; }
+    const patch = { helper_version: v, helper_seen_at: new Date().toISOString() };
+    const { data: upd, error } = await supabaseClient
+      .from("user_settings")
+      .update(patch)
+      .eq("user_id", currentUser.id)
+      .select("user_id");
+    if (error) throw error;
+    if (!upd || upd.length === 0) {
+      const { error: upErr } = await supabaseClient
+        .from("user_settings")
+        .upsert(Object.assign({ user_id: currentUser.id }, patch), { onConflict: "user_id" });
+      if (upErr) throw upErr;
+    }
+    helperVersionPersisted = v;
+  } catch (e) { /* best-effort — version reporting must never break the page */ }
+}
+
+// One-shot version probe at sign-in: users who never open the
+// Extension page still get their installed version recorded. Posts
+// the same PING the setup page uses; stays silent when no helper
+// answers (no bridge -> nothing to record).
+function probeHelperVersionOnce() {
+  let timer = null;
+  const listener = function (event) {
+    if (event.source !== window) return;
+    if (event.origin !== window.location.origin) return;
+    const data = event.data;
+    if (!data || data.type !== "AUTOLAUNCH_EXT_PONG") return;
+    window.removeEventListener("message", listener);
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (data.version) persistHelperVersion(data.version);
+  };
+  window.addEventListener("message", listener);
+  timer = setTimeout(function () { window.removeEventListener("message", listener); }, 2000);
+  try {
+    window.postMessage({ type: "AUTOLAUNCH_EXT_PING" }, "*");
+  } catch (e) {
+    window.removeEventListener("message", listener);
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function extVersionParts(v) {
     return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
 }
@@ -10165,6 +10225,7 @@ function checkExtensionStatus() {
         const data = event.data;
         if (!data || data.type !== "AUTOLAUNCH_EXT_PONG") return;
         clearExtPing();
+        if (data.version) persistHelperVersion(data.version);
         if (!data.hasToken) { renderExtStatus("waiting"); return; }
         // Helpers older than v2.1.24 don't report a version at all —
         // that silence is itself the out-of-date signal.
@@ -13681,6 +13742,25 @@ const GUIDES = {
       "Not live yet: no channel attaches clips today. Uploading now means your clip is ready the moment channel support lands.",
       "Intro videos never affect Marketplace posting — if a clip has any problem, posting carries on without it.",
       "Clips are stored on your account only."
+    ]
+  },
+  trade: {
+    title: "Trade Appraisals",
+    video: "trade",
+    icon: "fa-solid fa-right-left",
+    iconClasses: "bg-orange-50 text-orange-600 border-orange-200",
+    modal: null,
+    what: "When a customer asks what their car is worth, don't guess — send them your trade-in link. They describe the vehicle, answer 10 condition questions and upload photos; the packet lands here for the desk to work. No number is ever shown to the customer — the figure is yours.",
+    steps: [
+      "Copy your trade-in link at the top of this page and send it to the customer.",
+      "They enter the vehicle and mileage — the VIN decode fills in year, make and model — and answer the 10 condition questions: tires, inspection, hidden damage, smoked in, seat rips/stains/tears, warning lights, cracked glass, mechanical issues, transmission, brakes and rotors.",
+      "They upload 8–12 photos: 6 or more of the car inside and out, plus a required VIN plate photo and a required photo of the dash with the vehicle started and running — it proves the odometer and shows any warning lights.",
+      "The submission lands here as a new appraisal, and the customer is added to Prospects at the Talking stage.",
+      "Open it, read the answers and photos, and work the number at the desk the way you always do."
+    ],
+    notes: [
+      "Every appraisal is stamped Fair condition, and the customer agrees up front: if anything is omitted or turns out different when you see the vehicle, the trade value can change.",
+      "AutoLaunch does not value the car — no automated price, no KBB number. The intake collects the evidence; your desk sets the figure."
     ]
   }
 };

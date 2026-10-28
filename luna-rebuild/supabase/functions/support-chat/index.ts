@@ -38,6 +38,14 @@
 // account snapshot (support_tickets.snapshot) alongside the one-line
 // summary, so review starts at the answer.
 //
+// PHASE 2 (2026-10-28): (1) TRADE GUIDE — the app's GUIDES map gains a
+// "trade" entry, so doc grounding covers Trade Appraisals too (corpus
+// regenerated from the new HEAD; 19 chunks). (2) STORED HELPER
+// VERSION — user_settings.helper_version / helper_seen_at (written by
+// the app from the bridge PONG, only when the value changes) join the
+// snapshot: support can now name the helper build the user actually
+// runs, not just the expected one.
+//
 // verify_jwt=false at the platform level; the caller's JWT is verified
 // manually (same pattern as listing-copy / luca-draft). The snapshot
 // NEVER reads token/secret columns — user_settings is selected by an
@@ -139,7 +147,8 @@ const SETTINGS_COLUMNS =
   "current_period_end, lifetime_tier, lifetime_purchased_at, " +
   "support_plan_status, support_period_end, " +
   "auto_post_min_photos, auto_post_locations, auto_post_conditions, " +
-  "enable_auto_repost, repost_frequency_days";
+  "enable_auto_repost, repost_frequency_days, " +
+  "helper_version, helper_seen_at";
 
 interface Snapshot {
   text: string;          // formatted for the system prompt
@@ -352,7 +361,19 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     `settings last_synced_at: ${s?.last_synced_at || "never recorded"}.`,
   );
   lines.push(`- ${syncLine}`);
-  lines.push(`- The current AutoLaunch helper (Chrome extension) version is ${EXPECTED_EXT_VERSION}.`);
+  if (s?.helper_version) {
+    lines.push(
+      `- Helper installed for this account: v${s.helper_version} ` +
+      `(current version is ${EXPECTED_EXT_VERSION}` +
+      (s.helper_version === EXPECTED_EXT_VERSION ? ` — up to date` : ` — OUT OF DATE`) +
+      `). Reported by the app ${s.helper_seen_at || "at an unrecorded time"}.`,
+    );
+  } else {
+    lines.push(
+      `- The current AutoLaunch helper (Chrome extension) version is ${EXPECTED_EXT_VERSION}. ` +
+      `(No installed helper version has been reported for this account yet.)`,
+    );
+  }
   if (jobs.length) {
     lines.push("- Recent sync jobs (newest first):");
     for (const j of jobs.slice(0, 5)) {
@@ -398,6 +419,7 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     ` queueFailed=${queue.filter((q: any) => q.status === "failed").length}` +
     ` queueToday=posted:${qToday.posted},pending:${qToday.pending},processing:${qToday.processing},failed:${qToday.failed}` +
     ` invUpdated=${invUpdatedAt || "none"}` +
+    ` helperInstalled=${s?.helper_version || "unreported"}` +
     ` priority=${priority}`;
 
   return {
@@ -1656,6 +1678,69 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    ]
   ],
   "text": "My Intro Videos: A short clip of YOU — your face, your name, your lot — that can bookend your vehicle videos on channels like TikTok, so buyers meet the salesperson, not just the car. Filmed once on your phone, used everywhere.\nSteps:\n1. Open Settings → Dealership → My Intro Videos and upload (up to 6 clips, each under 50 MB and 90 seconds — under 30 seconds works best).\n2. Pick whether channels use one selected clip or rotate randomly.\n3. Flip the master toggle on so you're ready the day channels start using clips.\n4. Keep it simple: name, store, and one line about how you work. Buyers decide in the first three seconds.\nGood to know:\n- Not live yet: no channel attaches clips today. Uploading now means your clip is ready the moment channel support lands.\n- Intro videos never affect Marketplace posting — if a clip has any problem, posting carries on without it.\n- Clips are stored on your account only."
+ },
+ {
+  "id": "guide:trade",
+  "title": "Guide — Trade Appraisals",
+  "k": [
+   [
+    "trade",
+    3
+   ],
+   [
+    "appraisals",
+    3
+   ],
+   [
+    "customer",
+    1
+   ],
+   [
+    "vehicle",
+    1
+   ],
+   [
+    "condition",
+    1
+   ],
+   [
+    "photos",
+    1
+   ],
+   [
+    "desk",
+    1
+   ],
+   [
+    "number",
+    1
+   ],
+   [
+    "send",
+    1
+   ],
+   [
+    "trade-in",
+    1
+   ],
+   [
+    "link",
+    1
+   ],
+   [
+    "answer",
+    1
+   ],
+   [
+    "questions",
+    1
+   ],
+   [
+    "upload",
+    1
+   ]
+  ],
+  "text": "Trade Appraisals: When a customer asks what their car is worth, don't guess — send them your trade-in link. They describe the vehicle, answer 10 condition questions and upload photos; the packet lands here for the desk to work. No number is ever shown to the customer — the figure is yours.\nSteps:\n1. Copy your trade-in link at the top of this page and send it to the customer.\n2. They enter the vehicle and mileage — the VIN decode fills in year, make and model — and answer the 10 condition questions: tires, inspection, hidden damage, smoked in, seat rips/stains/tears, warning lights, cracked glass, mechanical issues, transmission, brakes and rotors.\n3. They upload 8–12 photos: 6 or more of the car inside and out, plus a required VIN plate photo and a required photo of the dash with the vehicle started and running — it proves the odometer and shows any warning lights.\n4. The submission lands here as a new appraisal, and the customer is added to Prospects at the Talking stage.\n5. Open it, read the answers and photos, and work the number at the desk the way you always do.\nGood to know:\n- Every appraisal is stamped Fair condition, and the customer agrees up front: if anything is omitted or turns out different when you see the vehicle, the trade value can change.\n- AutoLaunch does not value the car — no automated price, no KBB number. The intake collects the evidence; your desk sets the figure."
  },
  {
   "id": "pricing",
