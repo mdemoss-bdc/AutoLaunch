@@ -961,6 +961,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <span class="w-4 text-center text-xs">🌙</span>
         <span>Ask Luna</span>
       </a>
+      <a href="#" onclick="openSuggestionModal(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+        <i class="fa-solid fa-lightbulb w-4 text-amber-500 text-xs"></i>
+        <span>Suggest an improvement</span>
+      </a>
     </div>
   </div>
 
@@ -3680,6 +3684,42 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-200">
       <span class="text-[11px] text-slate-400">Luna can look at your account to diagnose problems.</span>
       <button onclick="sendLunaSupportTicket()" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Send to support</button>
+    </div>
+  </div>
+</div>
+
+<!-- Suggest an improvement: the sidebar tab files the signed-in
+     user's idea into the `suggestions` table (insert-own RLS; the
+     app never reads the table back in v1). Luna scores every
+     suggestion and Matt sees the verdict. If a suggestion ships,
+     the first user to suggest it (by created_at) earns a free
+     month — user_id + created_at on the row are the whole record
+     the reward needs. -->
+<div id="suggestionModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+  <div class="glass-card w-full max-w-lg rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+      <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-lightbulb text-amber-500"></i> <span>Suggest an improvement</span>
+      </h3>
+      <button onclick="closeModal('suggestionModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <div id="suggestionFormView" class="space-y-4">
+      <textarea id="suggestionInput" rows="5" maxlength="4000" placeholder="What would make AutoLaunch better for you? Be as specific as you like — what you were doing, what you wished it did."
+        class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"></textarea>
+      <div class="space-y-1">
+        <p class="text-[11px] text-slate-400 leading-relaxed">Every suggestion is read and scored. Most won't get built — when the case proves out, it ships.</p>
+        <p class="text-[11px] font-semibold text-slate-500 leading-relaxed">If we build your suggestion, your next month is on us — first to suggest it counts.</p>
+      </div>
+      <p id="suggestionError" class="text-[11px] font-medium text-rose-600 hidden"></p>
+      <div class="flex items-center justify-end gap-2">
+        <button onclick="closeModal('suggestionModal')" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
+        <button id="suggestionSubmitBtn" onclick="submitSuggestion()" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Submit</button>
+      </div>
+    </div>
+    <div id="suggestionDoneView" class="hidden space-y-4 text-center py-4">
+      <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto"><i class="fa-solid fa-check text-xl"></i></div>
+      <p class="text-sm text-slate-700 leading-relaxed">Got it — thanks. Your suggestion goes to Luna for scoring, and Matt sees the verdict. (And if it ships, your next month is on us.)</p>
+      <button onclick="closeModal('suggestionModal')" class="px-5 py-2 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Done</button>
     </div>
   </div>
 </div>
@@ -6530,6 +6570,55 @@ function openLunaSupport() {
   }
   const input = document.getElementById("lunaSupportInput");
   if (input) setTimeout(() => input.focus(), 50);
+}
+
+// SUGGESTION BOX (2026-10-27): the sidebar "Suggest an improvement"
+// tab opens this modal — it is not a page and never takes the
+// active pill (no data-nav, same as Settings / Ask Luna). Submit
+// inserts ONE row into `suggestions` under the signed-in user's own
+// id (RLS insert-own enforces it; the app never reads the table
+// back — Luna scores the rows service-side and Matt sees the
+// verdicts). Empty text is blocked here and again by the table's
+// check constraint.
+let suggestionBusy = false;
+function openSuggestionModal() {
+  const form = document.getElementById("suggestionFormView");
+  const done = document.getElementById("suggestionDoneView");
+  const input = document.getElementById("suggestionInput");
+  const err = document.getElementById("suggestionError");
+  if (form) form.classList.remove("hidden");
+  if (done) done.classList.add("hidden");
+  if (input) input.value = "";
+  if (err) { err.textContent = ""; err.classList.add("hidden"); }
+  openModal("suggestionModal");
+  if (input) setTimeout(() => input.focus(), 50);
+}
+
+async function submitSuggestion() {
+  if (suggestionBusy) return;
+  const input = document.getElementById("suggestionInput");
+  const btn = document.getElementById("suggestionSubmitBtn");
+  const err = document.getElementById("suggestionError");
+  const showErr = (msg) => { if (err) { err.textContent = msg; err.classList.remove("hidden"); } };
+  const body = ((input && input.value) || "").trim();
+  if (!body) { showErr("Write your suggestion first — even one sentence helps."); return; }
+  if (!currentUser) { showErr("You need to be signed in to send a suggestion."); return; }
+  suggestionBusy = true;
+  if (btn) { btn.disabled = true; btn.classList.add("opacity-60"); }
+  try {
+    const { error } = await supabaseClient.from("suggestions").insert({ user_id: currentUser.id, body });
+    if (error) throw error;
+    if (err) err.classList.add("hidden");
+    const form = document.getElementById("suggestionFormView");
+    const done = document.getElementById("suggestionDoneView");
+    if (form) form.classList.add("hidden");
+    if (done) done.classList.remove("hidden");
+  } catch (e) {
+    showErr("That didn't send — check your connection and try again. Your text is still here.");
+  } finally {
+    suggestionBusy = false;
+    if (btn) { btn.disabled = false; btn.classList.remove("opacity-60"); }
+  }
 }
 
 async function sendLunaSupport() {
