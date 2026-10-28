@@ -13369,7 +13369,23 @@ function openAutoPhotoEditsModal() {
   // frame baked in when the frame is on).
   refreshPhotoPreview();
 }
-function openPostingSafetyModal() { syncDailyLimitHighlight(); document.getElementById("postingSafetyModal").classList.remove("hidden"); }
+// The modal's controls must open showing the limit actually in force.
+// The markup ships "10 a day" checked and a placeholder "20" in the
+// custom box, and nothing ever synced them from userDailyPostLimit —
+// so the modal always DISPLAYED 10, and any Save from it (even a
+// posting-speed-only change) wrote 10 over the stored limit. Sync the
+// controls from state on every open; the save path already reads the
+// controls faithfully, so display and stored value can no longer drift.
+function syncDailyLimitControlsFromState() {
+  const limit = userDailyPostLimit;
+  const target = (!limit || limit === 10) ? "10" : (limit >= 999 ? "unlimited" : "custom");
+  document.querySelectorAll('input[name="dailyLimitRadio"]').forEach(r => { r.checked = (r.value === target); });
+  const customInput = document.getElementById("inputCustomDailyLimit");
+  if (customInput && target === "custom") customInput.value = limit;
+  toggleCustomLimitInput(target === "custom");
+}
+
+function openPostingSafetyModal() { syncDailyLimitControlsFromState(); syncDailyLimitHighlight(); document.getElementById("postingSafetyModal").classList.remove("hidden"); }
 function openPostingPreferencesModal() { document.getElementById("postingPreferencesModal").classList.remove("hidden"); }
 // Filter bar: reset every bar select to its "All/Any" option and re-render.
 // populateFilterDropdowns() runs after the reset so the Model list rebuilds
