@@ -119,6 +119,21 @@ def load_production_rows(uid):
 
 
 def table_count(name):
+    """Exact row count. PostgREST count responses can silently cap at
+    the server row limit — the 2026-10-28 proof run's ledger read
+    '1000' for a 2,898-row scraped_inventory — so page through ids
+    when the table has one; fall back to count='exact' otherwise."""
+    try:
+        total, start = 0, 0
+        while True:
+            chunk = (db.table(name).select("id")
+                     .range(start, start + 999).execute()).data or []
+            total += len(chunk)
+            if len(chunk) < 1000:
+                return total
+            start += 1000
+    except Exception:
+        pass
     try:
         return (db.table(name).select("id", count="exact").limit(1).execute()).count
     except Exception:
