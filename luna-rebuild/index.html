@@ -606,15 +606,16 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         </div>
         <div class="space-y-4">
           <div>
-            <p class="font-extrabold text-slate-900 text-sm">Post — <span class="text-blue-600">$75/mo</span></p>
-            <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">The posting core: your cars on Marketplace, posted for you at a safe pace.</p>
-            <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Your cars on Marketplace, posted for you at a safe pace.</p>
+            <p class="font-extrabold text-slate-900 text-sm">Self Post — <span class="text-blue-600">$75/mo</span></p>
+            <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">Marketplace posting · inventory pulls every 18h · up to 5 posts a day</p>
+            <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Marketplace posting · inventory pulls every 18h · up to 5 posts a day</p>
             <p class="text-[13px] font-bold text-slate-700 leading-relaxed mt-1.5">You post each car yourself — no automation included.</p>
           </div>
           <div>
             <p class="font-extrabold text-slate-900 text-sm">Automate — <span class="text-blue-600">$100/mo</span></p>
-            <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">Full automation: auto-post, auto delete &amp; repost, Luca drafting your replies, channels, trade appraisals + wishlist.</p>
-            <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Full automation: auto-post, delete &amp; repost, Luca, channels, trade + wishlist.</p>
+            <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">Full automation: auto-post, delete listings + auto delete &amp; repost, Luca reply drafts, Facebook Page posting, trade appraisals + wishlist · inventory pulls every 6h.</p>
+            <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Auto-post, delete listings + auto delete &amp; repost, Luca drafts, Facebook Page, trade + wishlist · pulls every 6h.</p>
+            <p class="text-[13px] font-bold text-slate-700 leading-relaxed mt-1.5">TikTok &amp; Instagram — coming soon, Automate only.</p>
           </div>
         </div>
         <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 5 days on us.</p>
@@ -698,10 +699,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           <span class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><i class="fa-solid fa-store"></i></span>
           <h2 class="font-extrabold text-slate-900 text-[15px]">For Dealerships</h2>
         </div>
-        <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed">One account runs the whole store. Every seat gets the full kit — and the team leader's account is free, never a seat.</p>
-        <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed">One account runs the whole store — the leader's account is free, never a seat.</p>
+        <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed">One account runs the whole store. Post seats get the Self Post kit; Group seats get the full kit + teams. The team leader's account is free, never a seat.</p>
+        <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed">One account runs the whole store — Post seats get the Self Post kit, Group seats the full kit. The leader's account is free, never a seat.</p>
         <div class="space-y-2 mt-4">
-          <p class="font-extrabold text-slate-900 text-sm">Post — <span class="text-blue-600">from $75/seat/mo</span></p>
+          <p class="font-extrabold text-slate-900 text-sm">Self Post — <span class="text-blue-600">from $75/seat/mo</span></p>
           <p class="font-extrabold text-slate-900 text-sm">Group — <span class="text-blue-600">from $99/seat/mo</span></p>
         </div>
         <div class="text-[13px] text-slate-600 leading-relaxed mt-3 space-y-1">
@@ -751,7 +752,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     </button>
     <div class="flex items-center gap-3">
       <span class="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-lock"></i></span>
-      <h3 id="planGateTitle" class="font-extrabold text-lg text-slate-900">Available on Post + Automate</h3>
+      <h3 id="planGateTitle" class="font-extrabold text-lg text-slate-900">Available on Automate</h3>
     </div>
     <div id="planGateVideoSlot" class="hidden"></div>
     <p id="planGateBody" class="text-sm text-slate-600 leading-relaxed"></p>
@@ -1332,7 +1333,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <div>
         <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Plan</label>
         <div class="flex gap-2">
-          <button id="dealerFlavorPost" onclick="dealerSetFlavor('post')" class="px-4 py-2.5 rounded-xl font-bold text-xs cursor-pointer border">Post</button>
+          <button id="dealerFlavorPost" onclick="dealerSetFlavor('post')" class="px-4 py-2.5 rounded-xl font-bold text-xs cursor-pointer border">Self Post</button>
           <button id="dealerFlavorGroup" onclick="dealerSetFlavor('group')" class="px-4 py-2.5 rounded-xl font-bold text-xs cursor-pointer border">Group — full kit</button>
         </div>
         <p id="dealerFlavorBlurb" class="text-[11px] text-slate-400 mt-1.5"></p>
@@ -1628,9 +1629,9 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <div class="p-5 rounded-2xl bg-blue-50 border border-blue-200">
       <h2 class="text-sm font-black text-slate-900 flex items-center gap-2">
         <i class="fa-brands fa-chrome text-blue-600"></i>
-        Coming soon: one-click install from the Chrome Web Store
+        Coming soon — one-click install from the Chrome Web Store
       </h2>
-      <p class="text-sm text-slate-600 mt-1.5 leading-relaxed">The helper is being prepared for the Chrome Web Store as an unlisted listing. Until that listing is live there is no store link — use the manual install steps below; they take a couple of minutes.</p>
+      <p class="text-sm text-slate-600 mt-1.5 leading-relaxed">The helper's unlisted Chrome Web Store listing is under review with Google. Until it's approved there is no store link — use the manual install steps below; they work today and take a couple of minutes.</p>
     </div>
 
     <!-- MANUAL INSTALL STEPS -->
@@ -2841,19 +2842,19 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-semibold text-slate-800">Instagram</p>
-              <p class="text-xs text-slate-500">Photo carousels &amp; Reels via the official API. Needs a Professional account and the Phase 6 channel setup.</p>
+              <p class="text-sm font-semibold text-slate-800">Instagram <span class="ml-1.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">Coming soon</span></p>
+              <p class="text-xs text-slate-500">Instagram posting isn't live yet — it follows once business verification clears with Meta.</p>
             </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="chkChannelInstagram" onchange="toggleChannelSetting('instagram', this)" class="sr-only peer">
+            <label class="relative inline-flex items-center opacity-50 cursor-not-allowed">
+              <input type="checkbox" id="chkChannelInstagram" onchange="toggleChannelSetting('instagram', this)" class="sr-only peer" disabled>
               <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
             </label>
           </div>
 
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-semibold text-slate-800">TikTok</p>
-              <p class="text-xs text-slate-500">Generated vehicle videos via the official API. Public posting unlocks after TikTok's client audit.</p>
+              <p class="text-sm font-semibold text-slate-800">TikTok <span class="ml-1.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">Coming soon</span></p>
+              <p class="text-xs text-slate-500">Generated vehicle videos via the official API. Coming soon — in review with TikTok; public posting unlocks after their client audit.</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="chkChannelTiktok" onchange="toggleChannelSetting('tiktok', this)" class="sr-only peer">
@@ -3088,7 +3089,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             </label>
             <select id="ownerTierSelect" onchange="setOwnTierForTesting(this.value)" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white">
               <option value="">Owner — full access</option>
-              <option value="post">Post</option>
+              <option value="post">Self Post</option>
               <option value="automate">Post + Automate</option>
               <option value="group">Automate</option>
             </select>
@@ -4257,7 +4258,7 @@ function dealerTermTotal(flavor, seats, years) {
 // Group (Matthew's spec), so Automate carries no price and no card.
 const PLAN_DETAILS = {
   trial: {
-    name: "5-day free trial",
+    name: "Free trial",
     priceLabel: "Free",
     price: null,
     tagline: "The basics, free for 5 days.",
@@ -4269,8 +4270,8 @@ const PLAN_DETAILS = {
       { label: "Inventory sync", value: "1 sync per 24 hours" },
       { label: "AI listing copy", included: false },
       { label: "Auto-post new arrivals", included: false },
-      { label: "Auto delete & repost", included: false },
-      { label: "TikTok, Instagram & Facebook Page posting", included: false },
+      { label: "Delete listings + auto delete & repost", included: false },
+      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: false },
       { label: "Luca AI Assistant + Prospects", included: false },
       { label: "Customer Wishlist", included: false },
       { label: "Trade Appraisals", included: false },
@@ -4278,10 +4279,10 @@ const PLAN_DETAILS = {
     ]
   },
   post: {
-    name: "Post",
+    name: "Self Post",
     priceLabel: "$75/mo",
     price: 75,
-    tagline: "For one salesperson posting by hand — no automation included.",
+    tagline: "For one salesperson posting by hand — no automation, no delete.",
     features: [
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
@@ -4289,8 +4290,8 @@ const PLAN_DETAILS = {
       { label: "Inventory sync", value: "1 sync per 18 hours" },
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: false },
-      { label: "Auto delete & repost", included: false },
-      { label: "TikTok, Instagram & Facebook Page posting", included: false },
+      { label: "Delete listings + auto delete & repost", included: false },
+      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: false },
       { label: "Luca AI Assistant + Prospects", included: false },
       { label: "Customer Wishlist", included: false },
       { label: "Trade Appraisals", included: false },
@@ -4301,7 +4302,7 @@ const PLAN_DETAILS = {
     name: "Post + Automate",
     priceLabel: null,
     price: null,
-    tagline: "Everything in Post, plus all the automation.",
+    tagline: "Everything in Self Post, plus all the automation.",
     features: [
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
@@ -4309,8 +4310,8 @@ const PLAN_DETAILS = {
       { label: "Inventory sync", value: "1 sync per 12 hours" },
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: true },
-      { label: "Auto delete & repost", included: true },
-      { label: "TikTok, Instagram & Facebook Page posting", included: true },
+      { label: "Delete listings + auto delete & repost", included: true },
+      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true },
       { label: "Luca AI Assistant + Prospects", included: true },
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
@@ -4321,7 +4322,7 @@ const PLAN_DETAILS = {
     name: "Automate",
     priceLabel: "$100/mo",
     price: 100,
-    tagline: "Everything in Post + Automate, plus team features.",
+    tagline: "Everything in Self Post, plus all the automation and team features.",
     features: [
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
@@ -4329,8 +4330,8 @@ const PLAN_DETAILS = {
       { label: "Inventory sync", value: "1 sync per 6 hours" },
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: true },
-      { label: "Auto delete & repost", included: true },
-      { label: "TikTok, Instagram & Facebook Page posting", included: true },
+      { label: "Delete listings + auto delete & repost", included: true },
+      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true },
       { label: "Luca AI Assistant + Prospects", included: true },
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
@@ -4364,7 +4365,7 @@ function planFeaturesHtml(planKey, listClass) {
 
 const FEATURE_LABELS = {
   autopost: "Auto-post new arrivals",
-  auto_repost: "Auto delete & repost",
+  auto_repost: "Delete listings + auto delete & repost",
   channels: "Extra posting channels",
   luca: "Luca · AI Assistant",
   prospects: "Prospects",
@@ -4465,12 +4466,23 @@ function requireTier(feature) {
   const label = FEATURE_LABELS[feature] || "This feature";
   const title = document.getElementById("planGateTitle");
   const body = document.getElementById("planGateBody");
-  if (title) title.innerText = "Available on " + PLAN_DETAILS[need].name;
-  if (body) body.innerText = label + " is part of the " + PLAN_DETAILS[need].name + " plan. Your account is on the " + PLAN_DETAILS[effectiveTier()].name + " plan.";
+  if (title) title.innerText = "Available on " + planDisplayName(need);
+  if (body) body.innerText = label + " is part of the " + planDisplayName(need) + " plan. Your account is on the " + currentPlanDisplayName() + " plan.";
   showDemoVideo("planGateVideoSlot", feature);
   const modal = document.getElementById("planGateModal");
   if (modal) modal.classList.remove("hidden");
   return false;
+}
+
+// The Settings -> Plans comparison list shows exactly three cards:
+// Free trial, Self Post (the 'post' entry) and Automate (the 'group'
+// entry — the sellable full tier). The legacy 'automate' tier stays in
+// PLAN_DETAILS for resolution, but it is not a fourth card: an
+// 'automate' account displays — and is badged — as Automate.
+function planCardKeyForTier(tier) { return tier === "post" ? "post" : "group"; }
+function planDisplayName(tier) { return PLAN_DETAILS[planCardKeyForTier(tier)].name; }
+function currentPlanDisplayName() {
+  return billingMode() === "trial" ? PLAN_DETAILS.trial.name : planDisplayName(effectiveTier());
 }
 
 function renderPlanPanel() {
@@ -4479,17 +4491,17 @@ function renderPlanPanel() {
   if (!nameEl || !listEl) return;
   const eff = effectiveTier();
   const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
-  nameEl.innerText = PLAN_DETAILS[eff].name + (isOwner && !ownerTestTier ? " (owner — full access)" : "");
+  nameEl.innerText = currentPlanDisplayName() + (isOwner && !ownerTestTier ? " (owner — full access)" : "");
   // The tier list renders from PLAN_DETAILS — the same config and
   // the same checklist renderer as the gates, so what Settings shows
   // can never drift from what the signup/purchase gates promised.
   // During the trial (real, or an owner previewing it) the trial
   // card leads the list as the current plan.
   const inTrial = billingMode() === "trial";
-  const planKeys = (inTrial ? ["trial"] : []).concat(["post", "automate", "group"]);
+  const planKeys = ["trial", "post", "group"];
   listEl.innerHTML = planKeys.map(function (t) {
     const info = PLAN_DETAILS[t];
-    const isCurrent = inTrial ? t === "trial" : t === eff;
+    const isCurrent = inTrial ? t === "trial" : t === planCardKeyForTier(eff);
     return '<div class="rounded-xl border ' + (isCurrent ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50") + ' p-4">' +
       '<div class="flex items-center justify-between mb-1">' +
       '<p class="text-sm font-bold text-slate-800">' + info.name + "</p>" +
@@ -5216,8 +5228,8 @@ function showPostCapNotice() {
   const cap = TIER_DAILY_POST_CAP[effectiveTier()] || 5;
   const title = document.getElementById("planGateTitle");
   const body = document.getElementById("planGateBody");
-  if (title) title.innerText = "Post plan daily limit";
-  if (body) body.innerText = "You've reached the Post plan's limit of " + cap + " queued posts per day. The Automate plan lifts this cap — your own daily posting limit still applies there. You can queue more cars tomorrow, or switch plans in Settings.";
+  if (title) title.innerText = "Self Post plan daily limit";
+  if (body) body.innerText = "You've reached the Self Post plan's limit of " + cap + " queued posts per day. The Automate plan lifts this cap — your own daily posting limit still applies there. You can queue more cars tomorrow, or switch plans in Settings.";
   clearDemoVideo("planGateVideoSlot");
   const modal = document.getElementById("planGateModal");
   if (modal) modal.classList.remove("hidden");
@@ -5535,10 +5547,10 @@ async function billingFunctionErrorCode(error) {
 // NOT proceed: the record is the point of the step.
 const TERMS_VERSION = "2026-10-26";
 const CHECKOUT_PLAN_INFO = {
-  post:          { title: "AutoLaunch Post", price: "$75/month",        terms: "Renews monthly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid period." },
-  post_1y:       { title: "AutoLaunch Post — 1-year term", price: "$855 one-time", years: 1, terms: "One year of access, paid up front — 5% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
-  post_2y:       { title: "AutoLaunch Post — 2-year term", price: "$1,620 one-time", years: 2, terms: "Two years of access, paid up front — 10% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
-  post_3y:       { title: "AutoLaunch Post — 3-year term", price: "$2,295 one-time", years: 3, terms: "Three years of access, paid up front — 15% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  post:          { title: "AutoLaunch Self Post", price: "$75/month",        terms: "Renews monthly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid period." },
+  post_1y:       { title: "AutoLaunch Self Post — 1-year term", price: "$855 one-time", years: 1, terms: "One year of access, paid up front — 5% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  post_2y:       { title: "AutoLaunch Self Post — 2-year term", price: "$1,620 one-time", years: 2, terms: "Two years of access, paid up front — 10% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  post_3y:       { title: "AutoLaunch Self Post — 3-year term", price: "$2,295 one-time", years: 3, terms: "Three years of access, paid up front — 15% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
   group:         { title: "AutoLaunch Automate", price: "$100/month",     terms: "Renews monthly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid period." },
   group_1y:      { title: "AutoLaunch Automate — 1-year term", price: "$1,140 one-time", years: 1, terms: "One year of access, paid up front — 5% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
   group_2y:      { title: "AutoLaunch Automate — 2-year term", price: "$2,160 one-time", years: 2, terms: "Two years of access, paid up front — 10% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
@@ -5736,7 +5748,7 @@ function renderBillingPanel() {
   const access = billingAccess();
   const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
   const supportActive = currentBilling.supportPlanStatus === "active" && !!currentBilling.supportPeriodEnd;
-  const planName = PLAN_DETAILS[currentUserTier] ? PLAN_DETAILS[currentUserTier].name : "AutoLaunch";
+  const planName = PLAN_DETAILS[currentUserTier] ? planDisplayName(currentUserTier) : "AutoLaunch";
   const termEndMs = currentBilling.periodEnd ? Date.parse(currentBilling.periodEnd) : null;
   let status = "";
   let detail = "";
@@ -5747,7 +5759,7 @@ function renderBillingPanel() {
     status = "Dealership leader — " + (currentDealership.name || "your dealership") + ".";
     detail = "This leader account manages your store's AutoLaunch seats. Product features live on your salespeople's accounts. Buy or manage seats on the Dealership page.";
   } else if (dealershipCovered()) {
-    const flavorName = dealershipFlavorTier() === "post" ? "Dealership Post" : "Dealership Group";
+    const flavorName = dealershipFlavorTier() === "post" ? "Dealership Self Post" : "Dealership Group";
     status = "Covered by your dealership — " + (currentDealership.name || "your dealership") + " (" + flavorName + ").";
     detail = currentDealership.status === "trial"
       ? "Your dealership is in its free trial — full Group access until " + fmtBillingDate(Date.parse(currentDealership.trialEndsAt)) + ". No subscription is needed on this account."
@@ -6052,7 +6064,7 @@ function renderDealerStatusLines() {
     if (active) {
       const line = document.getElementById("dealerPlanLine");
       if (line) {
-        const flavorName = (currentDealership.planFlavor === "post") ? "Dealership Post" : "Dealership Group";
+        const flavorName = (currentDealership.planFlavor === "post") ? "Dealership Self Post" : "Dealership Group";
         const seats = currentDealership.seatLimit === null || currentDealership.seatLimit === undefined
           ? "unlimited seats"
           : currentDealership.seatLimit + " seats";
@@ -6244,7 +6256,7 @@ function renderDealerBuyMath() {
   }
   const blurb = document.getElementById("dealerFlavorBlurb");
   if (blurb) blurb.innerText = flavor === "post"
-    ? "Post: manual posting core — 5 queued posts a day per seat, inventory sync every 18 hours."
+    ? "Self Post: manual posting core — 5 queued posts a day per seat, inventory sync every 18 hours."
     : "Group: the full kit — automation, Luca, channels, no plan cap on queued posts, inventory sync every 6 hours.";
   const payMethodsEl = document.getElementById("dealerPayMethods");
   if (payMethodsEl) payMethodsEl.innerHTML = paymentOptionsHtml();
@@ -6261,7 +6273,7 @@ function startDealerCheckout() {
   const years = dealerBuy.termYears || 0;
   const rate = dealerSeatRate(flavor, seats);
   const total = dealerMonthlyTotal(flavor, seats);
-  const flavorName = flavor === "post" ? "Dealership Post" : "Dealership Group";
+  const flavorName = flavor === "post" ? "Dealership Self Post" : "Dealership Group";
   const seatLabel = seats + (seats === 1 ? " seat" : " seats");
   // Monthly and prepaid-term buys alike go through startCheckout —
   // the final-sale consent modal + terms_acceptances record gate
@@ -6695,7 +6707,7 @@ function openAccountModal() {
   const isOwner = isOwnerUser(currentUser.id);
   const eff = effectiveTier();
   const planEl = document.getElementById("accountPlanLine");
-  if (planEl) planEl.innerText = "Plan: " + PLAN_DETAILS[eff].name + (isOwner && !ownerTestTier ? " (owner — full access)" : "");
+  if (planEl) planEl.innerText = "Plan: " + currentPlanDisplayName() + (isOwner && !ownerTestTier ? " (owner — full access)" : "");
   let billing = "";
   if (isOwner && !ownerBillingPreview) {
     billing = "Owner account — no subscription needed.";
@@ -8509,6 +8521,11 @@ async function markVehicleSold(vin) {
   if (!car) return;
   const title = `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}`.trim();
 
+  // PLANS (Matthew, 2026-10-28): automatic removal on exit is the
+  // Automate delete feature. On Self Post the setting alone no longer
+  // queues anything — the car is marked sold and the listing stays.
+  const autoRemoveActive = autoDeleteOnExitEnabled && tierAllows("auto_repost");
+
   if ((car.status || "").toLowerCase() === "sold") {
     alert(`"${title}" is already marked sold.`);
     return;
@@ -8516,8 +8533,10 @@ async function markVehicleSold(vin) {
 
   const note = !car.marketplace_posted_at
     ? ""
-    : autoDeleteOnExitEnabled
+    : autoRemoveActive
     ? "\n\nIts Facebook listing will be queued for removal — the helper will take it down."
+    : autoDeleteOnExitEnabled
+    ? "\n\nRemoving a listing is an Automate feature, so its Facebook listing will stay up — you can take it down on Facebook itself."
     : "\n\nAuto-remove is off in Settings, so its Facebook listing will stay up until you remove it by hand.";
   if (!confirm(`Mark "${title}" as sold?${note}`)) return;
 
@@ -8544,7 +8563,7 @@ async function markVehicleSold(vin) {
     car.marketplace_posted_at = decisionCar.marketplace_posted_at;
 
     let removal = null;
-    if (isPosted && autoDeleteOnExitEnabled) {
+    if (isPosted && autoRemoveActive) {
       removal = await queueListingRemoval(decisionCar);
       await loadPostingQueue();
     }
@@ -8552,8 +8571,10 @@ async function markVehicleSold(vin) {
 
     if (!isPosted) {
       alert(`"${title}" marked sold.`);
-    } else if (!autoDeleteOnExitEnabled) {
-      alert(`"${title}" marked sold.\n\nAuto-remove is off, so the Facebook listing was left up — use "Remove from Facebook" to take it down.`);
+    } else if (!autoRemoveActive) {
+      alert(autoDeleteOnExitEnabled
+        ? `"${title}" marked sold.\n\nRemoving a listing is an Automate feature, so the Facebook listing was left up — you can take it down on Facebook itself.`
+        : `"${title}" marked sold.\n\nAuto-remove is off, so the Facebook listing was left up — use "Remove from Facebook" to take it down.`);
     } else if (removal === "already") {
       alert(`"${title}" marked sold.\n\nA listing removal was already queued — the helper will take the listing down. Watch the Post Queue.`);
     } else {
@@ -8578,6 +8599,10 @@ async function markVehicleSold(vin) {
 // at click time.
 async function removeVehicleFromFacebook(vin) {
   if (!currentUser) return;
+  // PLANS (Matthew, 2026-10-28): removing a listing is an Automate
+  // feature — Self Post posts only, it does not delete. requireTier
+  // shows the standard plan notice (the trial notice on trials).
+  if (!requireTier("auto_repost")) return;
   const car = rawInventory.find(c => c.vin === vin);
   const title = car ? `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}`.trim() : vin;
 
@@ -8630,6 +8655,9 @@ async function removeVehicleFromFacebook(vin) {
 // actually gone.
 async function bulkRemoveSelectedFromFacebook() {
   if (!currentUser) return;
+  // PLANS (Matthew, 2026-10-28): bulk removal is the same Automate
+  // delete feature as the single Remove button — gated identically.
+  if (!requireTier("auto_repost")) return;
 
   const selectedVehicles = getSelectedInventoryCars();
 
@@ -8974,7 +9002,11 @@ async function removeVehicleFromInventory(vin) {
   const title = car ? `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}` : vin;
 
   const wasPosted = !!(car && car.marketplace_posted_at);
-  const removalNote = wasPosted && autoDeleteOnExitEnabled
+  // PLANS (Matthew, 2026-10-28): auto-removal on exit is the Automate
+  // delete feature — the setting alone does not queue a removal on
+  // Self Post.
+  const autoRemoveActive = autoDeleteOnExitEnabled && tierAllows("auto_repost");
+  const removalNote = wasPosted && autoRemoveActive
     ? "\n\nIts Facebook listing will also be queued for removal — the helper will take it down."
     : "";
   if (!confirm(`Are you sure you want to remove "${title}" from your active inventory?${removalNote}`)) return;
@@ -8995,7 +9027,7 @@ async function removeVehicleFromInventory(vin) {
     // the confirm note (see freshCarForDecision).
     let removal = null;
     const decisionCar = await freshCarForDecision(vin, car);
-    if (decisionCar && decisionCar.marketplace_posted_at && autoDeleteOnExitEnabled) {
+    if (decisionCar && decisionCar.marketplace_posted_at && autoRemoveActive) {
       try {
         removal = await queueListingRemoval(decisionCar);
         await loadPostingQueue();
@@ -9116,6 +9148,10 @@ function paintQueueRowPending(id) {
 async function retryQueueItem(id) {
     if (!id || !currentUser) return;
     if (retryInFlightIds.has(id)) return; // double-click: already on it
+    // PLANS (Matthew, 2026-10-28): retrying a failed DELETE job runs a
+    // listing removal — an Automate feature, gated like the Remove button.
+    const retryItem = postingQueue.find(i => String(i.id) === String(id));
+    if (retryItem && retryItem.action === "delete" && !requireTier("auto_repost")) return;
     retryInFlightIds.add(id);
     hideQueueRetryNote();
     paintQueueRowPending(id);
@@ -9144,7 +9180,16 @@ async function retryQueueItem(id) {
 async function retryAllFailedQueueItems() {
     if (!currentUser) return;
     if (bulkRetryInFlight) return;
-    const failedIds = postingQueue.filter(i => i.status === "failed").map(i => i.id);
+    // PLANS (Matthew, 2026-10-28): a bulk retry must not resurrect
+    // DELETE jobs on a plan without the delete feature (Automate) —
+    // those rows stay failed; if only deletes failed, say why.
+    let failedItems = postingQueue.filter(i => i.status === "failed");
+    if (!tierAllows("auto_repost")) {
+        const hadItems = failedItems.length > 0;
+        failedItems = failedItems.filter(i => i.action !== "delete");
+        if (hadItems && !failedItems.length) { requireTier("auto_repost"); return; }
+    }
+    const failedIds = failedItems.map(i => i.id);
     if (!failedIds.length) return;
     bulkRetryInFlight = true;
     const btn = document.getElementById("queueRetryFailedBtn");
@@ -9157,7 +9202,8 @@ async function retryAllFailedQueueItems() {
             .from("auto_posting_queue")
             .update({ status: "pending", error_message: null, executed_at: null })
             .eq("user_id", currentUser.id)
-            .eq("status", "failed");
+            .eq("status", "failed")
+            .in("id", failedIds);
         if (error) throw error;
     } catch (err) {
         updateFailed = true;
@@ -13673,7 +13719,7 @@ const GUIDES = {
     icon: "fa-solid fa-paper-plane",
     iconClasses: "bg-purple-50 text-purple-600 border-purple-200",
     modal: "autoPostModal",
-    what: "Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus Instagram, TikTok or your Facebook Page if you have switched those channels on.",
+    what: "Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus your Facebook Page if you have switched that channel on. (TikTok and Instagram are coming soon — Automate-plan channels.)",
     steps: [
       "Flip the switch on this card — or open the card and press Done, because saving turns it on.",
       "Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.",
@@ -13768,7 +13814,7 @@ const GUIDES = {
     modal: null,
     what: "AutoLaunch posts through a small Chrome extension — the helper — because Facebook Marketplace posting happens in YOUR signed-in Facebook session. The helper also powers Luca: it captures Marketplace chats into Prospects and delivers the replies you send from AutoLaunch. No helper, no posting and no chat sync — but your inventory, wishlist and settings live in AutoLaunch itself and work without it.",
     steps: [
-      "Open the Chrome Extension page in AutoLaunch and follow the install steps there (download, unzip, load it in chrome://extensions with Developer mode on). A one-click Chrome Web Store install is coming.",
+      "Open the Chrome Extension page in AutoLaunch and follow the install steps there (download, unzip, load it in chrome://extensions with Developer mode on). A one-click Chrome Web Store install is coming soon — it's under review with Google; the guided setup here is the way today.",
       "Sign in to the helper with the same AutoLaunch account, and keep Chrome signed in to your Facebook account.",
       "Leave one computer as your hub: it must be AWAKE (locked is fine), with Chrome open and a Facebook or Messenger tab open. Posting, reposts, chat capture and reply delivery all run from that machine.",
       "In Chrome settings, exempt facebook.com from Memory Saver / tab sleeping — a slept Facebook tab can't post or sync.",
@@ -13925,15 +13971,15 @@ const GUIDES = {
     icon: "fa-solid fa-share-nodes",
     iconClasses: "bg-cyan-50 text-cyan-600 border-cyan-200",
     modal: null,
-    what: "Marketplace is the home channel; the same cars can also go out as video and posts. TikTok posting is built and connects from Settings; Instagram follows once your business verification clears with Meta; your Facebook Page can carry listings alongside your personal Marketplace posts.",
+    what: "Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. TikTok and Instagram are coming soon: TikTok's app is in review with TikTok, and Instagram follows once business verification clears with Meta. Both are Automate-plan channels.",
     steps: [
-      "Open Settings and find the channel connections (TikTok first).",
+      "Open Settings → Automation → Syndication Channels.",
       "Connect the account you actually sell from — posting runs in that account's name.",
-      "Turn channels on per automation in Settings → Automation → Syndication Channels.",
+      "Turn on the Facebook Page channel there — TikTok and Instagram light up there when they launch.",
       "Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel."
     ],
     notes: [
-      "Channel rules differ (video-first on TikTok, business accounts on Instagram). AutoLaunch formats per channel — you write nothing per platform.",
+      "Channel rules differ (video-first on TikTok, business accounts on Instagram when it lands). AutoLaunch formats per channel — you write nothing per platform.",
       "If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
     ]
   },
