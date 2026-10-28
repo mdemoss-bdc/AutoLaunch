@@ -102,4 +102,16 @@ jobs:
             exit 0
           fi
           git commit -m "scraper_next shadow digest $run_id (step 2)"
-          git push
+          # HEAD moves during the ~45-min crawl (other AutoLaunch work
+          # pushes to main), so a bare push is rejected non-fast-forward
+          # — exactly what happened on the 2026-10-28 proof run. Rebase
+          # the digest commit onto the latest main and retry.
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort; echo "digest rebase failed"; exit 1; }
+            if git push origin HEAD:main; then echo "digest pushed (attempt $attempt)"; exit 0; fi
+            echo "digest push rejected (attempt $attempt) — retrying"
+            sleep 5
+          done
+          echo "digest push failed after 3 attempts"
+          exit 1
