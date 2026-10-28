@@ -12,7 +12,8 @@
 //     dealership membership, support-plan state. Diagnosis first:
 //     when the snapshot shows the cause, the answer names it.
 //   {action:"ticket", messages:[...]} — files a support_tickets row
-//     (transcript + snapshot summary). Priority = 'priority' when the
+//     (transcript + the full account snapshot and its summary).
+//     Priority = 'priority' when the
 //     caller has support entitlement (an active Support Plan, or
 //     dealership cover), else 'standard'. No model dependency —
 //     tickets work even when the model is down.
@@ -27,6 +28,15 @@
 // the summary. The marker must never reach the user. What happens
 // after the ticket lands is governed by the two-lane rule in
 // TIERS.md — this function only files the ticket.
+//
+// PHASE 1 (2026-10-28): (1) DOC GROUNDING — question-matched passages
+// from the app's own guides / plan data / terms (DOC_CHUNKS below,
+// generated from git HEAD) are injected under the knowledge base and
+// take precedence on specifics. (2) RICHER SNAPSHOT — today's queue
+// counts by status, the latest failed rows, inventory freshness and
+// the auto-post setup join the snapshot. (3) TICKETS carry the FULL
+// account snapshot (support_tickets.snapshot) alongside the one-line
+// summary, so review starts at the answer.
 //
 // verify_jwt=false at the platform level; the caller's JWT is verified
 // manually (same pattern as listing-copy / luca-draft). The snapshot
@@ -51,7 +61,7 @@ function json(body: unknown, status = 200) {
 }
 
 // Keep in step with EXPECTED_EXT_VERSION in luna-rebuild/index.html.
-const EXPECTED_EXT_VERSION = "2.1.45";
+const EXPECTED_EXT_VERSION = "2.1.51";
 
 // Inventory sync cadence (hours between syncs) by access level — the
 // same map as SYNC_COOLDOWN_HOURS in luna-rebuild/index.html (see
@@ -127,7 +137,9 @@ const SETTINGS_COLUMNS =
   "daily_post_limit, post_delay_minutes, auto_post_enabled, " +
   "dealership_name, onboarding_complete, last_synced_at, " +
   "current_period_end, lifetime_tier, lifetime_purchased_at, " +
-  "support_plan_status, support_period_end";
+  "support_plan_status, support_period_end, " +
+  "auto_post_min_photos, auto_post_locations, auto_post_conditions, " +
+  "enable_auto_repost, repost_frequency_days";
 
 interface Snapshot {
   text: string;          // formatted for the system prompt
@@ -148,21 +160,35 @@ function resolveTier(planTier: unknown): string {
   return "automate";
 }
 
+function fmtNameList(v: unknown): string {
+  if (!Array.isArray(v) || !v.length) return "all (no restriction)";
+  return v.map((e: any) => {
+    if (typeof e === "string") return e;
+    if (e && typeof e === "object") {
+      return e.name || e.label || JSON.stringify(e).slice(0, 60);
+    }
+    return String(e);
+  }).join(", ");
+}
+
 async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   const now = new Date();
   const todayStart = new Date(Date.UTC(
     now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
   )).toISOString();
 
-  const [settingsRes, jobsRes, queueRes, activeRes, postedRes, memberRes] =
-    await Promise.all([
+  const [
+    settingsRes, jobsRes, queueRes, activeRes, postedRes, memberRes,
+    qTotalRes, qPostedRes, qPendingRes, qProcessingRes, qFailedRes,
+    failedRes, invFreshRes, invNewRes,
+  ] = await Promise.all([
       supabase.from("user_settings").select(SETTINGS_COLUMNS)
         .eq("user_id", userId).maybeSingle(),
       supabase.from("scrape_jobs")
         .select("status, started_at, completed_at, cars_synced, sync_mode")
         .eq("user_id", userId).order("started_at", { ascending: false }).limit(8),
       supabase.from("auto_posting_queue")
-        .select("status, action, error_message, created_at, stock_num, target_channel, year, make, model")
+        .select("id, status, action, error_message, created_at, stock_num, target_channel, year, make, model")
         .eq("user_id", userId).order("created_at", { ascending: false }).limit(10),
       supabase.from("scraped_inventory").select("vin", { count: "exact", head: true })
         .eq("user_id", userId).eq("is_active", true),
@@ -171,6 +197,29 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
       supabase.from("dealership_account_members")
         .select("role, dealership_accounts(name, status, plan_flavor, trial_ends_at)")
         .eq("user_id", userId),
+      supabase.from("auto_posting_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId).gte("created_at", todayStart),
+      supabase.from("auto_posting_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId).eq("status", "posted").gte("created_at", todayStart),
+      supabase.from("auto_posting_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId).eq("status", "pending").gte("created_at", todayStart),
+      supabase.from("auto_posting_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId).eq("status", "processing").gte("created_at", todayStart),
+      supabase.from("auto_posting_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId).eq("status", "failed").gte("created_at", todayStart),
+      supabase.from("auto_posting_queue")
+        .select("id, status, action, error_message, created_at, stock_num, target_channel, year, make, model")
+        .eq("user_id", userId).eq("status", "failed")
+        .order("created_at", { ascending: false }).limit(3),
+      supabase.from("scraped_inventory").select("last_updated")
+        .eq("user_id", userId).order("last_updated", { ascending: false }).limit(1),
+      supabase.from("scraped_inventory").select("first_seen")
+        .eq("user_id", userId).order("first_seen", { ascending: false }).limit(1),
     ]);
 
   const s = settingsRes.data || null;
@@ -178,6 +227,17 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   const queue = queueRes.data || [];
   const activeCount = activeRes.count ?? 0;
   const postedToday = postedRes.count ?? 0;
+  const qToday = {
+    posted: qPostedRes.count ?? 0,
+    pending: qPendingRes.count ?? 0,
+    processing: qProcessingRes.count ?? 0,
+    failed: qFailedRes.count ?? 0,
+  };
+  const qOther = Math.max(0, (qTotalRes.count ?? 0) -
+    (qToday.posted + qToday.pending + qToday.processing + qToday.failed));
+  const failedRows = failedRes.data || [];
+  const invUpdatedAt = invFreshRes.data?.[0]?.last_updated || null;
+  const invFirstSeenAt = invNewRes.data?.[0]?.first_seen || null;
 
   const memberships = (memberRes.data || []).map((m: any) => ({
     role: m.role,
@@ -272,7 +332,25 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
       `- Dealership memberships: ${memberships.map((m: any) => `${m.role} of "${m.name}" (${m.status})`).join("; ")}.`,
     );
   }
+  if (s) {
+    lines.push(
+      `- Auto-post setup: minimum photos ${s.auto_post_min_photos ?? "not set"}; ` +
+      `locations ${fmtNameList(s.auto_post_locations)}; ` +
+      `conditions ${fmtNameList(s.auto_post_conditions)}; ` +
+      `auto delete & repost ${s.enable_auto_repost ? `on (every ${s.repost_frequency_days ?? "?"} days)` : "off"}.`,
+    );
+  }
+  lines.push(
+    `- Post queue today: ${qToday.posted} posted, ${qToday.pending} pending, ` +
+    `${qToday.processing} processing, ${qToday.failed} failed` +
+    (qOther ? `, ${qOther} in other statuses` : "") + `.`,
+  );
   lines.push(`- Inventory: ${activeCount} active cars. Posted to Marketplace today: ${postedToday}.`);
+  lines.push(
+    `- Inventory freshness: newest car record updated ${invUpdatedAt || "never"}; ` +
+    `newest arrival first seen ${invFirstSeenAt || "never"}; ` +
+    `settings last_synced_at: ${s?.last_synced_at || "never recorded"}.`,
+  );
   lines.push(`- ${syncLine}`);
   lines.push(`- The current AutoLaunch helper (Chrome extension) version is ${EXPECTED_EXT_VERSION}.`);
   if (jobs.length) {
@@ -297,6 +375,19 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   } else {
     lines.push("- Post queue: no rows on this account yet.");
   }
+  const recentIds = new Set(queue.map((q: any) => q.id));
+  const extraFailed = failedRows.filter((q: any) => !recentIds.has(q.id));
+  if (extraFailed.length) {
+    lines.push("- Most recent failed post rows (beyond the list above):");
+    for (const q of extraFailed) {
+      const car = [q.year, q.make, q.model].filter(Boolean).join(" ") || "car";
+      lines.push(
+        `  * ${q.created_at} — ${q.action || "post"} ${car} (stock ${q.stock_num || "?"}) ` +
+        `via ${q.target_channel || "marketplace"}: failed` +
+        (q.error_message ? ` — error: ${String(q.error_message).slice(0, 300)}` : ""),
+      );
+    }
+  }
 
   const summary =
     `billing=${billingState} tier=${tier}` +
@@ -305,6 +396,8 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     ` activeInventory=${activeCount} postedToday=${postedToday}` +
     ` lastSync=${lastRealSync ? `${lastRealSync.started_at}/${lastRealSync.status}` : "none"}` +
     ` queueFailed=${queue.filter((q: any) => q.status === "failed").length}` +
+    ` queueToday=posted:${qToday.posted},pending:${qToday.pending},processing:${qToday.processing},failed:${qToday.failed}` +
+    ` invUpdated=${invUpdatedAt || "none"}` +
     ` priority=${priority}`;
 
   return {
@@ -495,7 +588,1265 @@ DEALERSHIP ACCOUNTS:
   stays with the store.
 `.trim();
 
-function buildSystemPrompt(snap: Snapshot): string {
+// DOC_CHUNKS is GENERATED from git HEAD bytes (extract_corpus.mjs):
+// the GUIDES map + PLAN_DETAILS / DEALER_PRICE_TIERS / PLAN_TERM_PRICES in
+// luna-rebuild/index.html, and terms.html essentials. Do not hand-edit the
+// chunk texts — regenerate from HEAD so grounding never drifts from the app.
+const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: string }[] = [
+ {
+  "id": "guide:automations",
+  "title": "Guide — Automations",
+  "k": [
+   [
+    "automations",
+    3
+   ],
+   [
+    "switch",
+    1
+   ],
+   [
+    "master",
+    1
+   ],
+   [
+    "flip",
+    1
+   ],
+   [
+    "card",
+    1
+   ],
+   [
+    "auto",
+    1
+   ],
+   [
+    "cards",
+    1
+   ],
+   [
+    "turn",
+    1
+   ],
+   [
+    "settings",
+    1
+   ],
+   [
+    "posting",
+    1
+   ],
+   [
+    "post",
+    1
+   ],
+   [
+    "next",
+    1
+   ],
+   [
+    "auto-posting",
+    1
+   ]
+  ],
+  "text": "Automations: This is the master switch for the two automations next to it: auto-posting new arrivals and auto delete & repost. Flip it and both flip with it.\nSteps:\n1. Flip the Automations switch on — the three cards beside it turn on with it.\n2. Set each one up on its own card (frequency, limits). The master switch never changes their settings.\n3. Turn a single card off anytime without touching the others.\n4. The same Auto Posting switch also lives in Settings, under the Automation tab.\nGood to know:\n- The master switch only shows on when all three cards are on. If just some are on, this card says so instead of pretending.\n- Automations work through the Post Queue and the Chrome extension, and every post counts against your daily posting limit."
+ },
+ {
+  "id": "guide:autopost",
+  "title": "Guide — Auto-post new arrivals",
+  "k": [
+   [
+    "auto-post",
+    3
+   ],
+   [
+    "arrivals",
+    3
+   ],
+   [
+    "autopost",
+    3
+   ],
+   [
+    "cars",
+    1
+   ],
+   [
+    "posting",
+    1
+   ],
+   [
+    "photos",
+    1
+   ],
+   [
+    "facebook",
+    1
+   ],
+   [
+    "open",
+    1
+   ],
+   [
+    "post",
+    1
+   ],
+   [
+    "pick",
+    1
+   ],
+   [
+    "website",
+    1
+   ],
+   [
+    "autolaunch",
+    1
+   ],
+   [
+    "locations",
+    1
+   ],
+   [
+    "conditions",
+    1
+   ],
+   [
+    "queues",
+    1
+   ]
+  ],
+  "text": "Auto-post new arrivals: Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus Instagram, TikTok or your Facebook Page if you have switched those channels on.\nSteps:\n1. Flip the switch on this card — or open the card and press Done, because saving turns it on.\n2. Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.\n3. Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.\n4. Set how many it may post per day under Safe posting limits — the auto poster queues up to that many a day, newest cars first.\n5. Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels.\nGood to know:\n- Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.\n- Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.\n- Every auto-posted car counts against your daily posting limit, same as cars you queue by hand.\n- A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website."
+ },
+ {
+  "id": "guide:repost",
+  "title": "Guide — Auto delete & repost",
+  "k": [
+   [
+    "auto",
+    3
+   ],
+   [
+    "delete",
+    3
+   ],
+   [
+    "repost",
+    3
+   ],
+   [
+    "extension",
+    1
+   ],
+   [
+    "listing",
+    1
+   ],
+   [
+    "posts",
+    1
+   ],
+   [
+    "schedule",
+    1
+   ],
+   [
+    "pick",
+    1
+   ],
+   [
+    "card",
+    1
+   ],
+   [
+    "open",
+    1
+   ],
+   [
+    "signed",
+    1
+   ],
+   [
+    "facebook",
+    1
+   ],
+   [
+    "reposts",
+    1
+   ],
+   [
+    "confirm",
+    1
+   ],
+   [
+    "never",
+    1
+   ]
+  ],
+  "text": "Auto delete & repost: Listings that sit on Marketplace too long sink in search. This deletes the tired listing and posts the car again fresh, on the schedule you pick, so it ranks like a new arrival.\nSteps:\n1. Flip the switch on this card.\n2. Open the card and pick how often: every 1, 3, 7 or 14 days.\n3. Press Done — saving turns the schedule on.\n4. Keep Chrome open with the extension installed and signed in, and stay signed in to Facebook. Reposts run from your browser.\nGood to know:\n- Confirm mode is the extension default: it fills the listing in and waits for you to click Publish, so nothing posts without you seeing it first.\n- Reposts count against your daily posting limit.\n- Cars that sell or leave your website are never reposted.\n- If Facebook asks you to log in or confirm your identity, the job stops and is marked failed — the extension never types into those screens."
+ },
+ {
+  "id": "guide:photoedits",
+  "title": "Guide — Automatic photo edits",
+  "k": [
+   [
+    "automatic",
+    3
+   ],
+   [
+    "photo",
+    3
+   ],
+   [
+    "edits",
+    3
+   ],
+   [
+    "photoedits",
+    3
+   ],
+   [
+    "frame",
+    1
+   ],
+   [
+    "photos",
+    1
+   ],
+   [
+    "post",
+    1
+   ],
+   [
+    "real",
+    1
+   ],
+   [
+    "logo",
+    1
+   ],
+   [
+    "open",
+    1
+   ],
+   [
+    "exactly",
+    1
+   ],
+   [
+    "dealer",
+    1
+   ],
+   [
+    "optional",
+    1
+   ],
+   [
+    "branding",
+    1
+   ],
+   [
+    "name",
+    1
+   ],
+   [
+    "address",
+    1
+   ]
+  ],
+  "text": "Automatic photo edits: Your vehicles post with their real photos, exactly as they come from your dealer's website — nothing is replaced or generated. The only touches available here are an optional branding frame (your logo plus a strip with your dealership name, address and email) and auto-crop, which keeps the part of the photo you choose in frame.\nSteps:\n1. Open this card — the preview shows the selected vehicle's actual first photo, full size, exactly as it will post.\n2. Optional: open the 'Branding' tab, flip on the frame, upload your store logo and check the name and address — the preview updates with the frame on it.\n3. Turn Auto-crop on, open the 'Adjust crop' tab and drag the photo to set what stays in frame, then pick 'Every photo' or 'First photo only' underneath.\n4. Press Save settings.\nGood to know:\n- No real photos, no post: a vehicle with no photos on the dealer's site is never posted. Queueing skips it (and tells you how many were skipped), its row on the Dashboard says 'No photo — can't post', and if its photos disappear while it sits in the Post Queue it is marked 'No photos — won't post'.\n- The branding frame is drawn over your real photo — upload the logo once and it saves to your account.\n- The Download button saves the full-size photo on screen, frame included when the frame is on."
+ },
+ {
+  "id": "guide:safety",
+  "title": "Guide — Safe posting limits",
+  "k": [
+   [
+    "safe",
+    3
+   ],
+   [
+    "posting",
+    3
+   ],
+   [
+    "limits",
+    3
+   ],
+   [
+    "safety",
+    3
+   ],
+   [
+    "posts",
+    1
+   ],
+   [
+    "limit",
+    1
+   ],
+   [
+    "today",
+    1
+   ],
+   [
+    "daily",
+    1
+   ],
+   [
+    "facebook",
+    1
+   ],
+   [
+    "post",
+    1
+   ],
+   [
+    "like",
+    1
+   ],
+   [
+    "stops",
+    1
+   ],
+   [
+    "number",
+    1
+   ],
+   [
+    "card",
+    1
+   ],
+   [
+    "pick",
+    1
+   ],
+   [
+    "unlimited",
+    1
+   ]
+  ],
+  "text": "Safe posting limits: A daily cap and human-like pacing for your posts. Facebook restricts accounts that post like robots — this keeps your posting looking like a person, and stops you at the number you set.\nSteps:\n1. Open this card.\n2. Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.\n3. Pick a posting speed: Standard, or Cautious for twice the spacing between posts.\n4. Press Save. The counter on this card shows how much of today's limit you have used.\nGood to know:\n- The counter counts today's Marketplace queue items that did not fail, plus cars already marked posted today.\n- The Chrome extension checks the same limit before it posts. Hit the cap and queueing stops with a message — nothing is queued past it.\n- Unlimited means no cap at all. It is offered, but it is the fastest way to earn a Facebook restriction."
+ },
+ {
+  "id": "guide:preferences",
+  "title": "Guide — Posting preferences",
+  "k": [
+   [
+    "posting",
+    3
+   ],
+   [
+    "preferences",
+    3
+   ],
+   [
+    "title",
+    1
+   ],
+   [
+    "post",
+    1
+   ],
+   [
+    "save",
+    1
+   ],
+   [
+    "marketplace",
+    1
+   ],
+   [
+    "vehicle",
+    1
+   ],
+   [
+    "type",
+    1
+   ],
+   [
+    "emoji",
+    1
+   ],
+   [
+    "miles",
+    1
+   ],
+   [
+    "descriptions",
+    1
+   ],
+   [
+    "description",
+    1
+   ],
+   [
+    "posts",
+    1
+   ],
+   [
+    "recipe",
+    1
+   ]
+  ],
+  "text": "Posting preferences: The recipe every Marketplace post is built from: vehicle type, a title emoji, miles or kilometres, the details that go into every post, and how your descriptions get written.\nSteps:\n1. Open this card and set the listing options: vehicle type, title emoji, distance in Miles or KM.\n2. Choose what goes in every post: clean title, new or used, mileage in the title, VIN and stock number in the description.\n3. For descriptions, leave AI writing on and add anything it should always mention (warranty, delivery, financing), then pick Short, Medium or Long — or turn AI off to use a standard description.\n4. Press Save preferences.\nGood to know:\n- Changes save to your account and apply to posts made after you save. Posts already live on Marketplace do not change.\n- These are the same settings the posting flow uses, so what you set here is what buyers see."
+ },
+ {
+  "id": "guide:extension",
+  "title": "Guide — The Chrome extension (your posting helper)",
+  "k": [
+   [
+    "chrome",
+    3
+   ],
+   [
+    "extension",
+    3
+   ],
+   [
+    "posting",
+    3
+   ],
+   [
+    "helper",
+    3
+   ],
+   [
+    "autolaunch",
+    1
+   ],
+   [
+    "facebook",
+    1
+   ],
+   [
+    "open",
+    1
+   ],
+   [
+    "confirm",
+    1
+   ],
+   [
+    "posts",
+    1
+   ],
+   [
+    "marketplace",
+    1
+   ],
+   [
+    "chat",
+    1
+   ],
+   [
+    "sync",
+    1
+   ],
+   [
+    "settings",
+    1
+   ],
+   [
+    "steps",
+    1
+   ],
+   [
+    "install",
+    1
+   ],
+   [
+    "mode",
+    1
+   ]
+  ],
+  "text": "The Chrome extension (your posting helper): AutoLaunch posts through a small Chrome extension — the helper — because Facebook Marketplace posting happens in YOUR signed-in Facebook session. The helper also powers Luca: it captures Marketplace chats into Prospects and delivers the replies you send from AutoLaunch. No helper, no posting and no chat sync — but your inventory, wishlist and settings live in AutoLaunch itself and work without it.\nSteps:\n1. Open the Chrome Extension page in AutoLaunch and follow the install steps there (download, unzip, load it in chrome://extensions with Developer mode on). A one-click Chrome Web Store install is coming.\n2. Sign in to the helper with the same AutoLaunch account, and keep Chrome signed in to your Facebook account.\n3. Leave one computer as your hub: it must be AWAKE (locked is fine), with Chrome open and a Facebook or Messenger tab open. Posting, reposts, chat capture and reply delivery all run from that machine.\n4. In Chrome settings, exempt facebook.com from Memory Saver / tab sleeping — a slept Facebook tab can't post or sync.\n5. Confirm vs Full Auto: Confirm mode fills each listing in and waits for your click on Publish. Full Auto posts on its own. Start in Confirm until you trust the flow.\nGood to know:\n- After the helper updates, REFRESH your open tabs (the AutoLaunch tab first, then Messenger) — an updated extension can't talk to tabs that were already open. …"
+ },
+ {
+  "id": "guide:inventory",
+  "title": "Guide — Dashboard",
+  "k": [
+   [
+    "dashboard",
+    3
+   ],
+   [
+    "inventory",
+    3
+   ],
+   [
+    "price",
+    1
+   ],
+   [
+    "post",
+    1
+   ],
+   [
+    "website",
+    1
+   ],
+   [
+    "never",
+    1
+   ],
+   [
+    "sync",
+    1
+   ],
+   [
+    "answers",
+    1
+   ],
+   [
+    "missing",
+    1
+   ],
+   [
+    "vehicle",
+    1
+   ],
+   [
+    "automatically",
+    1
+   ],
+   [
+    "posting",
+    1
+   ],
+   [
+    "luca",
+    1
+   ],
+   [
+    "urls",
+    1
+   ]
+  ],
+  "text": "Dashboard: Every vehicle AutoLaunch knows about, synced from your dealership website. Sync runs automatically overnight, and Sync Inventory in the left panel pulls a fresh copy on demand. This list is the single source of truth for posting — and for Luca's answers.\nSteps:\n1. Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.\n2. Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.\n3. Fix flags before posting: a car with no price or a missing color shows 'need attention' and can't post until it's resolved — click through and complete what's missing.\n4. Select cars and use Post Selected, or post one car from its row. Everything goes through the Post Queue.\nGood to know:\n- Prices post at the advertised final price from your website. A car whose price can't be determined is never guessed — it's flagged instead, so a wrong price never reaches Marketplace.\n- A vehicle with no photos on your website is never posted. No exceptions.\n- Luca answers buyers ONLY from this inventory. If a car is missing or wrong here, fix it here — his answers follow within the next draft.\n- Cars that sell or leave your website drop off automatically on the next sync and are never reposted."
+ },
+ {
+  "id": "guide:locations",
+  "title": "Guide — Location groups (combining rooftops)",
+  "k": [
+   [
+    "location",
+    3
+   ],
+   [
+    "groups",
+    3
+   ],
+   [
+    "combining",
+    3
+   ],
+   [
+    "rooftops",
+    3
+   ],
+   [
+    "locations",
+    3
+   ],
+   [
+    "group",
+    1
+   ],
+   [
+    "luca",
+    1
+   ],
+   [
+    "rooftop",
+    1
+   ],
+   [
+    "names",
+    1
+   ],
+   [
+    "lot'",
+    1
+   ],
+   [
+    "share",
+    1
+   ],
+   [
+    "dashboard",
+    1
+   ],
+   [
+    "filter",
+    1
+   ],
+   [
+    "home",
+    1
+   ],
+   [
+    "good",
+    1
+   ],
+   [
+    "runs",
+    1
+   ],
+   [
+    "several",
+    1
+   ]
+  ],
+  "text": "Location groups (combining rooftops): If your group runs several rooftops that share one lot or one team, combine them into a single location. Groups are a display layer on top of the real rooftop names from your website — the underlying data never changes. The Dashboard filter shows your group names, and Luca treats every rooftop inside your home group as 'your lot'.\nSteps:\n1. Open Settings and find Location Groups.\n2. Name the group the way you think of it (for example, two stores that share a lot).\n3. Tick every rooftop that belongs in it and save. Ungrouped rooftops keep their own names.\n4. On the Luca · AI Assistant page, pick that group as 'Your lot' so Luca's answers match how you actually sell.\nGood to know:\n- A vehicle at a rooftop outside your home group is a 'sister lot' car for Luca: he'll present it, say it can be brought to your lot, and confirm the buyer is good with the price before anyone commits to moving it.\n- Changing groups later is safe — Luca reads your groups fresh every time he drafts, and the Dashboard filter updates with them."
+ },
+ {
+  "id": "guide:queue",
+  "title": "Guide — Post Queue",
+  "k": [
+   [
+    "post",
+    3
+   ],
+   [
+    "queue",
+    3
+   ],
+   [
+    "facebook",
+    1
+   ],
+   [
+    "helper",
+    1
+   ],
+   [
+    "failed",
+    1
+   ],
+   [
+    "delete",
+    1
+   ],
+   [
+    "listing",
+    1
+   ],
+   [
+    "waits",
+    1
+   ],
+   [
+    "posted",
+    1
+   ],
+   [
+    "dashboard",
+    1
+   ],
+   [
+    "button",
+    1
+   ],
+   [
+    "retry",
+    1
+   ],
+   [
+    "yourself",
+    1
+   ],
+   [
+    "repost",
+    1
+   ]
+  ],
+  "text": "Post Queue: Every post, repost and delete waits here for the helper to work through it, in order, at a human pace. The queue is also your receipt book: what posted, what's waiting, and what failed — with the reason.\nSteps:\n1. Queue cars from the Dashboard (Post Selected or a row's Post button), or let automations queue them for you.\n2. Watch statuses here: queued, working, posted, failed. A failed job says why — read it before retrying.\n3. Use a failed job's Retry button once you've fixed the cause (signed back in to Facebook, refreshed the tab, completed a missing field).\n4. Sold it? Take it down yourself any time: use Remove from Facebook on the car's Dashboard row — the delete waits here in the queue and the helper removes the listing on Facebook. The clip above shows that manual delete, start to finish.\n5. Deleting a listing can be verified on Facebook itself — the listing disappearing from your Facebook selling page is the proof, not just the queue row.\nGood to know:\n- Every queue item counts against your daily posting limit, including reposts.\n- Don't click inside the helper's tab while a job is running — it can knock the job off course.\n- If a job fails because Facebook wants a login or an identity check, the helper stops on purpose. Handle it in Facebook yourself, then retry."
+ },
+ {
+  "id": "guide:wishlist",
+  "title": "Guide — Customer Wishlist",
+  "k": [
+   [
+    "customer",
+    3
+   ],
+   [
+    "wishlist",
+    3
+   ],
+   [
+    "matches",
+    1
+   ],
+   [
+    "wants",
+    1
+   ],
+   [
+    "make",
+    1
+   ],
+   [
+    "model",
+    1
+   ],
+   [
+    "year",
+    1
+   ],
+   [
+    "match",
+    1
+   ],
+   [
+    "cars",
+    1
+   ],
+   [
+    "customers'",
+    1
+   ],
+   [
+    "standing",
+    1
+   ],
+   [
+    "buyer",
+    1
+   ],
+   [
+    "hunting",
+    1
+   ],
+   [
+    "range",
+    1
+   ]
+  ],
+  "text": "Customer Wishlist: Your customers' standing wants. Add what a buyer is hunting for — make, model, year range, budget — and AutoLaunch checks every arrival against the list. When a car lands that matches, you hear about it before anyone else knows it's there.\nSteps:\n1. Add Customer Want: the customer's name and what they're after, as loosely or tightly as they described it.\n2. Matches are checked automatically whenever your inventory syncs, or any time with 'Check for matches now'.\n3. The sidebar badge only lights for NEW matches you haven't seen — open the Wishlist and it clears. No noise.\n4. Reach out your way: wishlist outreach goes through your own phone's Messages app, never a paid texting service.\nGood to know:\n- A match means the car fits what the customer asked for — year, make/model and price where you set them. Looser wants match more cars.\n- Sold or departed cars stop matching on the next sync."
+ },
+ {
+  "id": "guide:prospects",
+  "title": "Guide — Prospects",
+  "k": [
+   [
+    "prospects",
+    3
+   ],
+   [
+    "open",
+    1
+   ],
+   [
+    "marketplace",
+    1
+   ],
+   [
+    "chats",
+    1
+   ],
+   [
+    "luca",
+    1
+   ],
+   [
+    "helper",
+    1
+   ],
+   [
+    "conversation",
+    1
+   ],
+   [
+    "thread",
+    1
+   ],
+   [
+    "messenger",
+    1
+   ],
+   [
+    "card",
+    1
+   ],
+   [
+    "list",
+    1
+   ],
+   [
+    "captured",
+    1
+   ],
+   [
+    "automatically",
+    1
+   ]
+  ],
+  "text": "Prospects: Everyone who reached out about a car, and where they are in the process: New → Talking → Visit set → Came in → Sold / Not now. Deliberately NOT a CRM — no logging busywork, just the list, kept current. Luca fills it for you: Marketplace chats are captured automatically, and you can add anyone by hand.\nSteps:\n1. Marketplace chats appear on their own once the helper is running — opening a Marketplace conversation is enough; Luca saves the buyer and the thread.\n2. Chats that did NOT start on Marketplace are never added automatically. Add those yourself (Add Prospect), or use the 'Capture chat for Luca' button inside the Messenger thread.\n3. Open a card's conversation to read the whole thread, draft with Luca, or reply right from the card — the helper delivers your reply into Messenger for you.\n4. Move the stage as things progress. The ✕ Close chat buttons collapse an open conversation and take you back to the list.\nGood to know:\n- The sidebar number is an attention light, not a headcount: it only shows for updates you haven't seen — a new buyer message or a brand-new captured prospect — and clears when you open Prospects.\n- Replying from a card needs the helper hub running (PC awake, Chrome open, Messenger tab open) — same rule as posting.\n- Prospects are yours alone: chats are never shared between accounts."
+ },
+ {
+  "id": "guide:messages",
+  "title": "Guide — Get your messages flowing",
+  "k": [
+   [
+    "messages",
+    3
+   ],
+   [
+    "flowing",
+    3
+   ],
+   [
+    "chat",
+    1
+   ],
+   [
+    "facebook",
+    1
+   ],
+   [
+    "helper",
+    1
+   ],
+   [
+    "open",
+    1
+   ],
+   [
+    "messenger",
+    1
+   ],
+   [
+    "page",
+    1
+   ],
+   [
+    "marketplace",
+    1
+   ],
+   [
+    "capture",
+    1
+   ],
+   [
+    "button",
+    1
+   ],
+   [
+    "buyer",
+    1
+   ],
+   [
+    "prospects",
+    1
+   ],
+   [
+    "gets",
+    1
+   ]
+  ],
+  "text": "Get your messages flowing: When a buyer messages you about a vehicle on Marketplace, the chat shows up in Prospects on its own — a brand-new buyer gets a card created for them, no clicking, nothing to open. The helper does it by reading your Messenger inbox from your hub computer, so the setup below is what makes it work.\nSteps:\n1. Leave your hub computer AWAKE (a locked screen is fine), with Chrome open and the helper extension installed and current.\n2. Keep a tab open on the FULL Messenger page — facebook.com/messages — signed in to Facebook. The small chat pane on the regular Facebook page is not enough: the helper reads your inbox from the full page.\n3. In Chrome settings, exempt facebook.com from Memory Saver, so that tab never gets frozen.\n4. For a chat that did NOT start on Marketplace, open it on Facebook and click the floating '🌙 Capture chat for Luca' button — the helper puts it on the Messenger page (and on the small chat popup on listing pages) while a chat is open. One click pulls that chat into Prospects.\n5. Read and reply right from the prospect's card in AutoLaunch — the helper delivers your reply into the Facebook thread for you.\nGood to know:\n- Only Marketplace chats flow in by themselves. Plain Messenger chats are never auto-imported — that's what the Capture button is for.\n- The Capture button lives on Facebook, added by the helper — it is not inside AutoLaunch, so don't hunt for it here. …"
+ },
+ {
+  "id": "guide:luca",
+  "title": "Guide — Luca · AI Assistant",
+  "k": [
+   [
+    "luca",
+    3
+   ],
+   [
+    "assistant",
+    3
+   ],
+   [
+    "only",
+    1
+   ],
+   [
+    "drafts",
+    1
+   ],
+   [
+    "replies",
+    1
+   ],
+   [
+    "write",
+    1
+   ],
+   [
+    "live",
+    1
+   ],
+   [
+    "inventory",
+    1
+   ],
+   [
+    "rules",
+    1
+   ],
+   [
+    "send",
+    1
+   ],
+   [
+    "never",
+    1
+   ],
+   [
+    "name",
+    1
+   ],
+   [
+    "hours",
+    1
+   ],
+   [
+    "actually",
+    1
+   ]
+  ],
+  "text": "Luca · AI Assistant: Luca drafts your Marketplace replies the way YOU would write them — grounded in your live inventory, your schedule and your rules. He only ever drafts: you review and send every message yourself. He never invents a price, a payment or a promise, and he hands the chat back the moment it needs a human (haggling, financing specifics, trade values, an upset buyer).\nSteps:\n1. Set up his profile on the Luca · AI Assistant page: your name, your credit-app link, the store hours AND your own hours (he only offers times you'd actually be there).\n2. Set 'Your lot' — the location you sell from. If you combined rooftops in Settings → Location Groups, pick the combined name.\n3. Write in the 🎓 Teach Luca box, in your own words: your goals and house rules ('always get them to the lot', 'always ask for the appointment'). He follows it in every draft.\n4. On any Prospects card, tap 'Draft reply with Luca'. Edit freely — when you copy an edited version, he keeps both and learns how you phrase things.\nGood to know:\n- Luca learns your voice from the replies you actually send in chats — the more real conversations get captured, the more he sounds like you. Your voice is never shared with other accounts.\n- He answers about vehicles ONLY from your live inventory — misspellings and run-together words included — and when he says 'we don't have one', that's a search he just ran and verified, not a guess. …"
+ },
+ {
+  "id": "guide:channels",
+  "title": "Guide — Syndication channels (TikTok, Instagram, Facebook Pages)",
+  "k": [
+   [
+    "syndication",
+    3
+   ],
+   [
+    "channels",
+    3
+   ],
+   [
+    "tiktok",
+    3
+   ],
+   [
+    "instagram",
+    3
+   ],
+   [
+    "facebook",
+    3
+   ],
+   [
+    "pages",
+    3
+   ],
+   [
+    "channel",
+    1
+   ],
+   [
+    "marketplace",
+    1
+   ],
+   [
+    "posting",
+    1
+   ],
+   [
+    "settings",
+    1
+   ],
+   [
+    "same",
+    1
+   ],
+   [
+    "posts",
+    1
+   ],
+   [
+    "business",
+    1
+   ],
+   [
+    "verification",
+    1
+   ],
+   [
+    "account",
+    1
+   ],
+   [
+    "automation",
+    1
+   ],
+   [
+    "autolaunch",
+    1
+   ],
+   [
+    "platform",
+    1
+   ]
+  ],
+  "text": "Syndication channels (TikTok, Instagram, Facebook Pages): Marketplace is the home channel; the same cars can also go out as video and posts. TikTok posting is built and connects from Settings; Instagram follows once your business verification clears with Meta; your Facebook Page can carry listings alongside your personal Marketplace posts.\nSteps:\n1. Open Settings and find the channel connections (TikTok first).\n2. Connect the account you actually sell from — posting runs in that account's name.\n3. Turn channels on per automation in Settings → Automation → Syndication Channels.\n4. Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel.\nGood to know:\n- Channel rules differ (video-first on TikTok, business accounts on Instagram). AutoLaunch formats per channel — you write nothing per platform.\n- If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
+ },
+ {
+  "id": "guide:introvideos",
+  "title": "Guide — My Intro Videos",
+  "k": [
+   [
+    "intro",
+    3
+   ],
+   [
+    "videos",
+    3
+   ],
+   [
+    "introvideos",
+    3
+   ],
+   [
+    "clip",
+    1
+   ],
+   [
+    "clips",
+    1
+   ],
+   [
+    "channels",
+    1
+   ],
+   [
+    "seconds",
+    1
+   ],
+   [
+    "name",
+    1
+   ],
+   [
+    "buyers",
+    1
+   ],
+   [
+    "under",
+    1
+   ],
+   [
+    "ready",
+    1
+   ],
+   [
+    "channel",
+    1
+   ],
+   [
+    "posting",
+    1
+   ],
+   [
+    "short",
+    1
+   ],
+   [
+    "face",
+    1
+   ]
+  ],
+  "text": "My Intro Videos: A short clip of YOU — your face, your name, your lot — that can bookend your vehicle videos on channels like TikTok, so buyers meet the salesperson, not just the car. Filmed once on your phone, used everywhere.\nSteps:\n1. Open Settings → Dealership → My Intro Videos and upload (up to 6 clips, each under 50 MB and 90 seconds — under 30 seconds works best).\n2. Pick whether channels use one selected clip or rotate randomly.\n3. Flip the master toggle on so you're ready the day channels start using clips.\n4. Keep it simple: name, store, and one line about how you work. Buyers decide in the first three seconds.\nGood to know:\n- Not live yet: no channel attaches clips today. Uploading now means your clip is ready the moment channel support lands.\n- Intro videos never affect Marketplace posting — if a clip has any problem, posting carries on without it.\n- Clips are stored on your account only."
+ },
+ {
+  "id": "pricing",
+  "title": "Plan prices (from PLAN_DETAILS)",
+  "k": [
+   [
+    "price",
+    3
+   ],
+   [
+    "prices",
+    3
+   ],
+   [
+    "cost",
+    3
+   ],
+   [
+    "much",
+    3
+   ],
+   [
+    "plan",
+    3
+   ],
+   [
+    "plans",
+    3
+   ],
+   [
+    "subscription",
+    3
+   ],
+   [
+    "monthly",
+    3
+   ],
+   [
+    "seat",
+    3
+   ],
+   [
+    "seats",
+    3
+   ],
+   [
+    "dealership",
+    3
+   ],
+   [
+    "dealer",
+    3
+   ],
+   [
+    "prepaid",
+    3
+   ],
+   [
+    "discount",
+    3
+   ],
+   [
+    "billing",
+    3
+   ],
+   [
+    "year",
+    2
+   ],
+   [
+    "years",
+    2
+   ],
+   [
+    "buy",
+    2
+   ],
+   [
+    "support",
+    2
+   ],
+   [
+    "199",
+    3
+   ],
+   [
+    "75",
+    2
+   ],
+   [
+    "100",
+    2
+   ]
+  ],
+  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: 5 days, no card needed. Queued posts on the trial: 1 per day; inventory sync 1 sync per 24 hours. Automate features are locked on the trial.\n- Post — $75/month: queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no auto-post, no channels, no Luca.\n- Post + Automate (described in Settings -> Plans; the buy screens sell Post and Group): everything in Post plus auto-post new arrivals, auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Group — $100/month: everything in Post + Automate. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Post 1 year $855, 2 years $1,620, 3 years $2,295; Group 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
+ },
+ {
+  "id": "terms",
+  "title": "Terms of Service essentials",
+  "k": [
+   [
+    "refund",
+    3
+   ],
+   [
+    "refunds",
+    3
+   ],
+   [
+    "cancel",
+    3
+   ],
+   [
+    "cancelling",
+    3
+   ],
+   [
+    "cancellation",
+    3
+   ],
+   [
+    "terms",
+    3
+   ],
+   [
+    "policy",
+    3
+   ],
+   [
+    "final",
+    2
+   ],
+   [
+    "renew",
+    3
+   ],
+   [
+    "renews",
+    3
+   ],
+   [
+    "trial",
+    2
+   ],
+   [
+    "charge",
+    2
+   ],
+   [
+    "charged",
+    2
+   ],
+   [
+    "money",
+    2
+   ],
+   [
+    "back",
+    1
+   ]
+  ],
+  "text": "From the AutoLaunch Terms of Service (version 2026-10-26):\nREFUNDS: All sales are final. We do not offer refunds on any plan, including multi-year prepaid terms and the Support Plan. That includes partial periods: if you cancel mid-cycle, no amount is returned for the unused part of the period — your access simply continues until the paid period ends, as described above. Before you pay, the app shows this policy and asks you to confirm that you understand it, and checkout asks you to accept these Terms. If you are not willing to buy on a final-sale basis, please use the free trial first.\nCANCELLING: Monthly plans renew on the same day of the month the subscription started, charged automatically until cancelled. Cancel anytime in Settings -> Plans (\"Manage or cancel subscription\") — cancelling stops future charges and access continues until the end of the period already paid for.\nFREE TRIAL: New accounts may start one 5-day free trial: no card is required, you can pull inventory, and you can queue 1 post per day with an inventory sync once every 24 hours. Trials are limited to one per person and per network — additional accounts from the same person or network are not eligible for another trial. When the trial ends, a paid plan is required to keep using AutoLaunch.\nPREPAID TERMS: Solo plans can also be bought as prepaid terms: 1 year (5% off the monthly price), 2 years (10% off), or 3 years (15% off), paid in a single one-time payment. A prepaid term is not a subscription: it does not renew automatically. Your access runs until the term's end date, which is shown in Settings → Plans before and after you buy; buying another …"
+ }
+];
+
+// Keyword-match the conversation to at most the two most relevant
+// DOC_CHUNKS. Presence-based scoring; hits in the LATEST user turn
+// count double (question-relevant first, context second). Nothing is
+// injected below the threshold — the condensed KB still covers the
+// general case, so grounding stays lean on the slow free-tier chain.
+function matchDocs(messages: { role: string; body: string }[]): string {
+  const userTurns = messages.filter((m) => m.role === "user")
+    .map((m) => m.body.toLowerCase());
+  if (!userTurns.length) return "";
+  const last = userTurns[userTurns.length - 1];
+  const all = userTurns.join("\n");
+  const scored = DOC_CHUNKS.map((c, idx) => {
+    let score = 0;
+    for (const [w, weight] of c.k) {
+      if (all.includes(w)) score += weight;
+      if (last.includes(w)) score += weight;
+    }
+    return { c, idx, score };
+  }).filter((s) => s.score >= 3)
+    .sort((a, b) => b.score - a.score || a.idx - b.idx)
+    .slice(0, 2);
+  if (!scored.length) return "";
+  return scored.map((s) => `[${s.c.title}]\n${s.c.text}`).join("\n\n").slice(0, 3600);
+}
+
+function buildSystemPrompt(snap: Snapshot, docs = ""): string {
   const conversion = (() => {
     if (snap.billingState === "trialing") {
       return `
@@ -548,7 +1899,14 @@ ${conversion}
 
 KNOWLEDGE BASE:
 ${KB}
-
+${docs ? `
+APP DOCUMENTATION (passages from AutoLaunch's own guides, plan data and
+Terms of Service, matched to this conversation — verbatim app truth:
+when a passage covers the question, follow it exactly; its button
+names, menu paths and numbers beat the condensed knowledge base if
+they ever differ):
+${docs}
+` : ""}
 ${snap.text}`;
 }
 
@@ -597,6 +1955,7 @@ async function fileTicket(
       user_id: userId,
       transcript,
       snapshot_summary: snap.summary,
+      snapshot: snap.text,
       priority: snap.priority,
       suspected_defect: !!opts.suspectedDefect,
       defect_summary: opts.defectSummary ?? null,
@@ -682,7 +2041,7 @@ Deno.serve(async (req) => {
       .insert({ user_id: user.id, role: "user", body: latest.body });
 
     const snap = await buildSnapshot(supabase, user.id);
-    const system = buildSystemPrompt(snap);
+    const system = buildSystemPrompt(snap, matchDocs(messages));
 
     // Gemini contents: drop leading assistant turns (first content
     // must be a user turn), map roles to user/model.
