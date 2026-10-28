@@ -2988,7 +2988,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           <p class="text-sm text-slate-500">
             Photo preferences for your listings — the branding frame and
             auto-crop — live in the photo editor settings. Your photos
-            themselves post exactly as they come from your dealer's website.
+            themselves post exactly as they come from your dealer's website. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('photoedits')">How automatic photo edits work →</span>
           </p>
           <button onclick="closeModal('settingsModal'); openAutoPhotoEditsModal()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
             Open Photo Settings
@@ -3773,19 +3773,18 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
     <div id="guideVideoSlot" class="hidden"></div>
 
-    <div>
-      <h4 class="font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">What it does</h4>
-      <p id="guideWhat" class="text-xs text-slate-600 leading-relaxed"></p>
-    </div>
+    <!-- Slideshow viewport: at open time buildGuideSlides() derives the
+         slides from this guide's GUIDES entry and renderGuideSlide() fills
+         this one slide at a time. The guide text lives only in GUIDES. -->
+    <div id="guideSlides" class="min-h-[168px]"></div>
 
-    <div>
-      <h4 class="font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Set it up</h4>
-      <ol id="guideSteps" class="list-decimal list-outside pl-4 space-y-1.5 text-xs text-slate-600 leading-relaxed"></ol>
-    </div>
-
-    <div>
-      <h4 class="font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Good to know</h4>
-      <ul id="guideNotes" class="list-disc list-outside pl-4 space-y-1.5 text-xs text-slate-600 leading-relaxed"></ul>
+    <div id="guideNav" class="flex items-center justify-between">
+      <button type="button" id="guidePrevBtn" onclick="guideNavStep(-1)" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer flex items-center gap-1.5"><i class="fa-solid fa-chevron-left text-[10px]"></i> Back</button>
+      <div class="flex flex-col items-center gap-1.5">
+        <div id="guideDots" class="flex items-center gap-1.5"></div>
+        <span id="guideCounter" class="text-[10px] text-slate-400 font-semibold"></span>
+      </div>
+      <button type="button" id="guideNextBtn" onclick="guideNavStep(1)" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs cursor-pointer flex items-center gap-1.5">Next <i class="fa-solid fa-chevron-right text-[10px]"></i></button>
     </div>
 
     <div class="flex items-center justify-between pt-3 border-t border-slate-200">
@@ -14748,6 +14747,140 @@ const GUIDES = {
 
 let currentGuideKey = null;
 
+// ===================== GUIDE SLIDESHOW =======================================
+// The guide modal renders each guide as a slideshow. Slides are DERIVED
+// from the guide at open time — what/steps/notes are read straight from
+// GUIDES, never copied into markup — so editing a guide in the map updates
+// its slides automatically. Split rule: slide 1 is "What it does"; steps
+// and notes follow, chunked whole-item (never mid-step) at up to 4 items
+// or ~700 characters per slide. Step numbering runs continuously across
+// slides via the <ol start> attribute, as the old single list numbered.
+let guideSlideList = [];
+let guideSlideIdx = 0;
+const GUIDE_SLIDE_MAX_ITEMS = 4;
+const GUIDE_SLIDE_MAX_CHARS = 700;
+
+function chunkGuideItems(items) {
+  const chunks = [];
+  let cur = [];
+  let chars = 0;
+  (items || []).forEach((item) => {
+    if (cur.length && (cur.length >= GUIDE_SLIDE_MAX_ITEMS || chars + item.length > GUIDE_SLIDE_MAX_CHARS)) {
+      chunks.push(cur);
+      cur = [];
+      chars = 0;
+    }
+    cur.push(item);
+    chars += item.length;
+  });
+  if (cur.length) chunks.push(cur);
+  return chunks;
+}
+
+function buildGuideSlides(g) {
+  const slides = [{ kind: "what", heading: "What it does", items: [g.what] }];
+  let stepStart = 1;
+  chunkGuideItems(g.steps).forEach((chunk) => {
+    slides.push({ kind: "steps", heading: "Set it up", items: chunk, start: stepStart });
+    stepStart += chunk.length;
+  });
+  chunkGuideItems(g.notes).forEach((chunk) => {
+    slides.push({ kind: "notes", heading: "Good to know", items: chunk });
+  });
+  return slides;
+}
+
+function guideSlideHtml(slide) {
+  const head = "<h4 class=\"font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5\">" + slide.heading + "</h4>";
+  if (slide.kind === "what") {
+    return head + "<p class=\"text-xs text-slate-600 leading-relaxed\">" + slide.items[0] + "</p>";
+  }
+  if (slide.kind === "steps") {
+    return head + "<ol start=\"" + slide.start + "\" class=\"list-decimal list-outside pl-4 space-y-1.5 text-xs text-slate-600 leading-relaxed\">" + slide.items.map(s => "<li>" + s + "</li>").join("") + "</ol>";
+  }
+  return head + "<ul class=\"list-disc list-outside pl-4 space-y-1.5 text-xs text-slate-600 leading-relaxed\">" + slide.items.map(s => "<li>" + s + "</li>").join("") + "</ul>";
+}
+
+function renderGuideSlide() {
+  const vp = document.getElementById("guideSlides");
+  if (!vp) return;
+  const n = guideSlideList.length;
+  guideSlideIdx = Math.max(0, Math.min(guideSlideIdx, n - 1));
+  vp.innerHTML = n ? guideSlideHtml(guideSlideList[guideSlideIdx]) : "";
+  const dots = document.getElementById("guideDots");
+  if (dots) {
+    dots.innerHTML = guideSlideList.map((_, i) =>
+      "<button type=\"button\" onclick=\"guideGoTo(" + i + ")\" aria-label=\"Go to slide " + (i + 1) + "\" class=\"w-2 h-2 rounded-full cursor-pointer " + (i === guideSlideIdx ? "bg-blue-600" : "bg-slate-300 hover:bg-slate-400") + "\"></button>"
+    ).join("");
+  }
+  const counter = document.getElementById("guideCounter");
+  if (counter) counter.innerText = n ? (guideSlideIdx + 1) + " of " + n : "";
+  const atStart = guideSlideIdx <= 0;
+  const atEnd = guideSlideIdx >= n - 1;
+  const prev = document.getElementById("guidePrevBtn");
+  if (prev) {
+    prev.disabled = atStart;
+    prev.classList.toggle("opacity-40", atStart);
+    prev.classList.toggle("pointer-events-none", atStart);
+  }
+  const next = document.getElementById("guideNextBtn");
+  if (next) {
+    next.disabled = atEnd;
+    next.classList.toggle("opacity-40", atEnd);
+    next.classList.toggle("pointer-events-none", atEnd);
+  }
+  const nav = document.getElementById("guideNav");
+  if (nav) nav.classList.toggle("hidden", n <= 1);
+}
+
+function guideNavStep(delta) {
+  guideSlideIdx += delta;
+  renderGuideSlide();
+}
+
+function guideGoTo(i) {
+  guideSlideIdx = i;
+  renderGuideSlide();
+}
+
+// Arrow keys page the slideshow while the guide modal is open. Escape and
+// backdrop close are untouched — they still run through the global modal
+// handlers and closeModal, exactly as before. Form fields and the demo
+// video keep their own arrow-key behavior.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  const modal = document.getElementById("guideModal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.tagName === "VIDEO" || t.isContentEditable)) return;
+  e.preventDefault();
+  guideNavStep(e.key === "ArrowRight" ? 1 : -1);
+});
+
+// Horizontal swipe pages the slideshow on touch screens; the modal card's
+// vertical scroll is unaffected (only mostly-horizontal swipes count).
+let guideTouchStartX = null;
+let guideTouchStartY = null;
+const guideSlidesEl = document.getElementById("guideSlides");
+if (guideSlidesEl) {
+  guideSlidesEl.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      guideTouchStartX = e.touches[0].clientX;
+      guideTouchStartY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+  guideSlidesEl.addEventListener("touchend", (e) => {
+    if (guideTouchStartX === null || !e.changedTouches.length) return;
+    const dx = e.changedTouches[0].clientX - guideTouchStartX;
+    const dy = e.changedTouches[0].clientY - guideTouchStartY;
+    guideTouchStartX = null;
+    guideTouchStartY = null;
+    if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      guideNavStep(dx < 0 ? 1 : -1);
+    }
+  }, { passive: true });
+}
+
 function openGuide(key) {
   const g = GUIDES[key];
   if (!g) return;
@@ -14757,9 +14890,9 @@ function openGuide(key) {
   if (wrap) wrap.className = "w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold border " + g.iconClasses;
   const icon = document.getElementById("guideIcon");
   if (icon) icon.className = g.icon;
-  document.getElementById("guideWhat").innerText = g.what;
-  document.getElementById("guideSteps").innerHTML = g.steps.map(s => "<li>" + s + "</li>").join("");
-  document.getElementById("guideNotes").innerHTML = g.notes.map(s => "<li>" + s + "</li>").join("");
+  guideSlideList = buildGuideSlides(g);
+  guideSlideIdx = 0;
+  renderGuideSlide();
   const openBtn = document.getElementById("guideOpenBtn");
   if (openBtn) openBtn.classList.toggle("hidden", !g.modal);
   showDemoVideo("guideVideoSlot", g.video || null);
