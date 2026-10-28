@@ -1417,6 +1417,11 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </button>
     </div>
 
+    <p class="flex items-center gap-2 text-xs text-slate-500 -mt-2">
+      <span id="prospectsSyncStatusDot" class="w-2 h-2 rounded-full shrink-0 bg-slate-300"></span>
+      <span id="prospectsSyncStatus">Checking helper status…</span>
+    </p>
+
     <div id="prospectsStorageNotice" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed">
       📱 <strong>Saved on this device for now.</strong> Your prospects are stored in this browser until the prospects table is enabled in Supabase (applying <span class="font-mono">supabase/migrations_draft/ai_closer_migration_APPLIED_2026-10-25.sql</span>). Nothing is lost; they just won't sync to your other devices yet.
     </div>
@@ -4888,6 +4893,21 @@ let currentBilling = {
   supportPeriodEnd: null
 };
 
+// HELPER / SYNC STATE for the Prospects status line (2026-10-28):
+// what this account's user_settings row last recorded about the
+// helper (helper_version / helper_seen_at, filled by
+// loadUserStoreSettings), plus whether the helper answered THIS
+// tab during this session (helperPongAt — persistHelperVersion
+// is the funnel every bridge PONG passes through, so a call
+// there is a live sighting). prospectsLastBuyerAt is the newest
+// inbound buyer message the helper has landed in Prospects
+// (closer_messages.created_at via prospectChats.lastInboundAt),
+// recomputed by loadProspects(); null = nothing synced yet.
+let currentHelperInfo = { version: null, seenAt: null };
+let helperPongAt = 0;
+let helperPongVersion = null;
+let prospectsLastBuyerAt = null;
+
 // DEALERSHIP ACCOUNTS (Phases 1-2, 2026-10-26; see TIERS.md
 // "Dealership accounts"): this account's dealership membership,
 // resolved on load from dealership_account_members joined to
@@ -7374,6 +7394,10 @@ async function loadUserStoreSettings() {
       lifetimePurchasedAt: data ? (data.lifetime_purchased_at || null) : null,
       supportPlanStatus: data ? (data.support_plan_status || null) : null,
       supportPeriodEnd: data ? (data.support_period_end || null) : null
+    };
+    currentHelperInfo = {
+      version: data ? (data.helper_version || null) : null,
+      seenAt: data ? (data.helper_seen_at || null) : null
     };
     if (currentUser && !isOwnerUser(currentUser.id) && !isDealershipLeader() && !dealershipCovered() &&
         (currentBilling.status === null || currentBilling.status === "trialing")) {
@@ -10687,6 +10711,7 @@ const EXPECTED_EXT_VERSION = "2.1.51";
 // but write ONLY when the stored value differs, never on every ping.
 let helperVersionPersisted = null;
 async function persistHelperVersion(version) {
+  if (version) { helperPongAt = Date.now(); helperPongVersion = String(version); }
   if (!currentUser || !version || typeof supabaseClient === "undefined") return;
   const v = String(version);
   if (helperVersionPersisted === v) return;
@@ -11340,6 +11365,14 @@ async function loadProspects() {
       });
       // Conversation view reads oldest -> newest.
       Object.values(prospectMessages).forEach(list => list.reverse());
+      // Newest buyer message the helper has landed anywhere in
+      // Prospects — the status line's "last buyer synced" signal.
+      prospectsLastBuyerAt = null;
+      Object.values(prospectChats).forEach(slot => {
+        if (slot.lastInboundAt && (!prospectsLastBuyerAt || slot.lastInboundAt > prospectsLastBuyerAt)) {
+          prospectsLastBuyerAt = slot.lastInboundAt;
+        }
+      });
     } catch (e) { prospectChats = {}; }
   } catch (err) {
     if (isMissingTableError(err)) prospectsStorageMode = "local";
@@ -11865,9 +11898,85 @@ async function showProspectsPage() {
   document.getElementById("prospectsPage").classList.remove("hidden");
   await loadProspects();
   renderProspects();
+  updateProspectsSyncStatus();
   markProspectsSeen(); // he's looking at them now — badge clears
   syncQueuePoller();
   prospectsAutoSyncPageShown(); // Prospects syncs itself: poke the helper now, then every ~60s while open
+}
+
+// PROSPECTS SYNC STATUS LINE (2026-10-28, Rachel's support case):
+// an empty Prospects page used to give zero signal — dead helper,
+// stale Facebook tab, expired session and "no qualifying
+// conversation yet" all looked identical. This one line, under
+// the page header, says which it is, from data the app already
+// holds: the helper version recorded on user_settings, whether
+// the helper answered this tab during this session, and the
+// newest buyer message capture has landed.
+//
+// helper_seen_at is written ONLY when the recorded version
+// changes (see persistHelperVersion), so it means "this helper
+// build was confirmed on the account at that time" — not a
+// heartbeat. A present-tense "connected" is therefore claimed
+// only when the helper answered this session, or was confirmed
+// within PROSPECTS_HELPER_FRESH_MS; past that the line softens
+// to "last seen".
+const PROSPECTS_HELPER_FRESH_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// [sync-status-pure:start]
+function prospectsRelTime(iso, nowMs) {
+  const t = Date.parse(iso || "");
+  if (!isFinite(t)) return "";
+  const diff = Math.max(0, nowMs - t);
+  if (diff < 60 * 1000) return "just now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins + (mins === 1 ? " min ago" : " mins ago");
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + (hrs === 1 ? " hour ago" : " hours ago");
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return days + (days === 1 ? " day ago" : " days ago");
+  return "on " + new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function prospectsSyncStatus(input) {
+  const nowMs = input.nowMs;
+  const version = input.pongVersion || input.storedVersion || null;
+  const buyerSeg = input.lastBuyerAt
+    ? "last buyer synced " + prospectsRelTime(input.lastBuyerAt, nowMs)
+    : "no buyers synced yet — open a Marketplace conversation on Facebook to start";
+  if (!version) {
+    return { tone: "warn", text: "Helper not connected yet — open the Extension page to finish setup, then keep a Facebook tab open." };
+  }
+  if (!extVersionAtLeast(version, input.expectedVersion)) {
+    return { tone: "warn", text: "Helper out of date (v" + version + " — current is v" + input.expectedVersion + "). Update it from the Extension page. · " + buyerSeg };
+  }
+  const seenMs = Date.parse(input.storedSeenAt || "");
+  const fresh = !!input.pongAt || (isFinite(seenMs) && (nowMs - seenMs) <= PROSPECTS_HELPER_FRESH_MS);
+  if (fresh) {
+    return { tone: "ok", text: "Helper connected · v" + version + " · " + buyerSeg };
+  }
+  const seenRel = prospectsRelTime(input.storedSeenAt, nowMs);
+  if (seenRel) {
+    return { tone: "warn", text: "Helper last seen " + seenRel + " · v" + version + " · " + buyerSeg };
+  }
+  return { tone: "warn", text: "Helper v" + version + " — open the Extension page to check the connection. · " + buyerSeg };
+}
+// [sync-status-pure:end]
+
+function updateProspectsSyncStatus() {
+  const el = document.getElementById("prospectsSyncStatus");
+  if (!el) return;
+  const s = prospectsSyncStatus({
+    storedVersion: currentHelperInfo.version,
+    storedSeenAt: currentHelperInfo.seenAt,
+    pongAt: helperPongAt,
+    pongVersion: helperPongVersion,
+    expectedVersion: EXPECTED_EXT_VERSION,
+    lastBuyerAt: prospectsLastBuyerAt,
+    nowMs: Date.now()
+  });
+  el.textContent = s.text;
+  const dot = document.getElementById("prospectsSyncStatusDot");
+  if (dot) dot.className = "w-2 h-2 rounded-full shrink-0 " + (s.tone === "ok" ? "bg-emerald-500" : "bg-amber-500");
 }
 
 function renderProspects() {
@@ -12097,6 +12206,7 @@ async function refreshProspectsSoft() {
     const drafts = {};
     document.querySelectorAll('[id^="lucaReplyText-"]').forEach(ta => { if (ta.value) drafts[ta.id] = ta.value; });
     await loadProspects();
+    updateProspectsSyncStatus();
     const afterIds = prospects.map(p => String(p.id)).join(",");
     if (beforeIds !== afterIds) {
       renderProspects();
