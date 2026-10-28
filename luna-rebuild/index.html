@@ -2432,9 +2432,9 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
 <!-- 5. Settings Modal -->
 
-<div id="settingsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+<div id="settingsModal" class="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-2 sm:p-3 hidden">
 
-  <div class="glass-card w-full max-w-7xl rounded-3xl p-4 sm:p-8 space-y-6 max-h-[95vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
+  <div class="glass-card w-full max-w-7xl rounded-3xl p-4 sm:p-6 space-y-6 max-h-[96vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
 
     <!-- HEADER -->
 
@@ -2506,8 +2506,11 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
       <div id="settingsPanelDealership" class="space-y-6">
 
+
+
         <div class="grid gap-6 xl:grid-cols-2 items-start">
 
+        <div class="space-y-6">
         <!-- DEALERSHIP CARD -->
 
         <div class="glass-card rounded-2xl p-6">
@@ -2590,6 +2593,48 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         </div>
 
+        <!-- LOCATION GROUPS CARD -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <h3 class="font-bold text-lg mb-2">
+            Location Groups
+          </h3>
+
+          <p class="text-xs text-slate-400 mb-5">
+            Two stores in the same building? Merge their location names into one. Cars keep their original location in the data — a group only changes what's shown on the car cards and how the Location filter works. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('locations')">How location groups work →</span>
+          </p>
+
+          <div id="locationGroupsList" class="space-y-3 mb-6 max-h-60 overflow-y-auto pr-1"></div>
+
+          <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            New group name
+          </label>
+
+          <input
+            type="text"
+            id="newLocationGroupName"
+            placeholder="e.g. Moses Honda &amp; VW"
+            class="w-full border border-slate-300 rounded-xl px-4 py-3 mb-4">
+
+          <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+            Locations to merge
+          </label>
+
+          <div id="locationGroupMembers" class="space-y-2 mb-2 max-h-44 overflow-y-auto pr-1"></div>
+
+          <p class="text-xs text-slate-400 mb-4">
+            This list comes from your synced inventory and grows as more inventory syncs. Locations already in a group can't be picked again.
+          </p>
+
+          <button type="button" onclick="createLocationGroup()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl px-4 py-3 cursor-pointer">
+            Create group
+          </button>
+
+        </div>
+        </div>
+
+        <div class="space-y-6">
         <!-- INTRO VIDEOS CARD -->
 
         <div class="glass-card rounded-2xl p-6">
@@ -2664,45 +2709,6 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           </p>
 
         </div>
-
-        <!-- LOCATION GROUPS CARD -->
-
-        <div class="glass-card rounded-2xl p-6">
-
-          <h3 class="font-bold text-lg mb-2">
-            Location Groups
-          </h3>
-
-          <p class="text-xs text-slate-400 mb-5">
-            Two stores in the same building? Merge their location names into one. Cars keep their original location in the data — a group only changes what's shown on the car cards and how the Location filter works. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('locations')">How location groups work →</span>
-          </p>
-
-          <div id="locationGroupsList" class="space-y-3 mb-6"></div>
-
-          <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            New group name
-          </label>
-
-          <input
-            type="text"
-            id="newLocationGroupName"
-            placeholder="e.g. Moses Honda &amp; VW"
-            class="w-full border border-slate-300 rounded-xl px-4 py-3 mb-4">
-
-          <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
-            Locations to merge
-          </label>
-
-          <div id="locationGroupMembers" class="space-y-2 mb-2"></div>
-
-          <p class="text-xs text-slate-400 mb-4">
-            This list comes from your synced inventory and grows as more inventory syncs. Locations already in a group can't be picked again.
-          </p>
-
-          <button type="button" onclick="createLocationGroup()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl px-4 py-3 cursor-pointer">
-            Create group
-          </button>
-
         </div>
 
         </div>
@@ -3037,8 +3043,6 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
       <div id="settingsPanelPlan" class="space-y-6 hidden">
 
-        <div class="grid gap-6 xl:grid-cols-2 items-start">
-
         <!-- PLAN CARD -->
 
         <div id="planCard" class="glass-card rounded-2xl p-6">
@@ -3051,13 +3055,13 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             Your account is on the <span id="planCurrentTierName" class="font-bold text-slate-800">—</span> plan.
           </p>
 
-          <div id="planTierList" class="space-y-3"></div>
+          <div id="planTierList" class="grid gap-3 xl:grid-cols-3"></div>
 
           <!-- BILLING: status line, buy cards, subscription manager -->
-          <div id="planBillingBlock" class="mt-5 pt-4 border-t border-slate-200">
-            <p id="planBillingStatus" class="text-sm font-semibold text-slate-700"></p>
-            <p id="planBillingDetail" class="text-xs text-slate-400 mt-1"></p>
-            <div id="purchaseCards" class="grid sm:grid-cols-2 gap-3 mt-4"></div>
+          <div id="planBillingBlock" class="mt-5 pt-4 border-t border-slate-200 grid gap-x-4 lg:grid-cols-2">
+            <p id="planBillingStatus" class="text-sm font-semibold text-slate-700 lg:col-span-2"></p>
+            <p id="planBillingDetail" class="text-xs text-slate-400 mt-1 lg:col-span-2"></p>
+            <div id="purchaseCards" class="grid sm:grid-cols-2 gap-3 mt-4 lg:col-span-2"></div>
             <div id="planSupportWrap" class="hidden mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p class="text-sm font-bold text-slate-800">Priority Support — $199/year</p>
               <div id="planSupportBuy">
@@ -3073,10 +3077,12 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
               <button id="btnManageSubscription" onclick="openBillingPortal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm cursor-pointer">Manage or cancel subscription</button>
               <p class="text-xs text-slate-400 mt-2">Cancelling keeps your access until the end of the paid month.</p>
             </div>
-            <p id="planBillingMsg" class="text-xs font-medium mt-3 hidden"></p>
+            <p id="planBillingMsg" class="text-xs font-medium mt-3 hidden lg:col-span-2"></p>
           </div>
 
           <div id="ownerTierTools" class="hidden mt-5 pt-4 border-t border-slate-200">
+            <div class="lg:grid lg:grid-cols-2 lg:gap-x-5">
+            <div>
             <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
               Owner testing — preview plan gates as
             </label>
@@ -3089,7 +3095,9 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <p class="text-xs text-slate-400 mt-2">
               Owner accounts always keep full access. This preview only changes which gates you see on this device, so you can test them — it doesn't change your account.
             </p>
-            <label class="block text-xs font-bold text-slate-500 uppercase mb-2 mt-5">
+            </div>
+            <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
               Owner testing — preview billing state as
             </label>
             <select id="ownerBillingSelect" onchange="setOwnerBillingPreview(this.value)" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm bg-white">
@@ -3100,6 +3108,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <p class="text-xs text-slate-400 mt-2">
               Preview only, on this device — it never changes your account or your billing.
             </p>
+            </div>
+            </div>
           </div>
 
         </div>
@@ -3116,9 +3126,6 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <p class="text-xs text-slate-400">Loading your referral link…</p>
           </div>
         </div>
-
-        </div>
-
 
         <!-- OWNER TOOLS CARD — renders only for Matthew (OWNER_USER_IDS[0]);
              the owner-grant Edge Function enforces the same check server-side. -->
