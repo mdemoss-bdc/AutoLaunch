@@ -374,6 +374,30 @@
 //     relays the clip bytes to the content script (the AUTO
 //     LAUNCH_FETCH_VIDEO message), mirroring the photo relay:
 //     the page cannot fetch cross-origin itself.
+// 28. BOUNDED VIDEO FETCH + JOB LIVENESS (v2.54 — the
+//     2026-10-28 Accord wedge; content.js header note 28
+//     carries the composer side): the relay fetcher below ran
+//     a bare fetch + arrayBuffer() with no time limit, so a
+//     stalled download never settled, the content script's
+//     relay wait never answered, and the post wedged silently
+//     behind the previous banner step. fetchVideoForContent
+//     now aborts its fetch at 30s and answers the structured
+//     refusal video_fetch_timeout; the content side races the
+//     relay answer and bounds its own fallback, so a dead
+//     download becomes the ordinary intro_video_download_
+//     failed skip and the post proceeds without the clip.
+//     The worker also answers AUTOLAUNCH_JOB_LIVENESS: the
+//     content script asks, before filling, whether its stored
+//     job is still the live slot — the same incident's second
+//     half was a surviving tab re-driving a fill for a row
+//     this worker had already settled. The verdict is
+//     definitive-only: the slot holding a different job (or
+//     no job), a missing queue row, or a row already in a
+//     terminal state (or pending again, per reconcileActive
+//     Job's reading) answers { live: false }; a matching slot
+//     with a processing row answers { live: true }; and any
+//     lookup failure answers { live: true } too — uncertainty
+//     never blocks a fill.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1062,6 +1086,44 @@ async function startOrphanRecovery(job) {
   }
 }
 
+// Job liveness (v2.54, header note 28): the content script
+// asks, before filling, whether the job its tab loaded from
+// storage is still this worker's live job. Definitive-only:
+// "no" requires positive evidence — the slot holds a
+// different job (or no job), the queue row is gone, or the
+// row already sits in a state reconcileActiveJob would call
+// dead (terminal, or pending again). A matching slot over a
+// processing row is live, and ANY failure to check (storage
+// or database) answers live too — uncertainty never blocks.
+async function jobLivenessVerdict(queueId) {
+  if (!queueId) return { live: true };
+  let slot = null;
+  try {
+    const stored = await chrome.storage.local.get(["current_posting_job"]);
+    slot = stored && stored.current_posting_job;
+  } catch (e) {
+    return { live: true };
+  }
+  if (!slot || slot.queueId !== queueId) {
+    return { live: false, reason: "slot_moved_on" };
+  }
+  let rows;
+  try {
+    rows = await sbGet(`auto_posting_queue?id=eq.${queueId}&select=id,status`);
+  } catch (e) {
+    return { live: true };
+  }
+  const row = Array.isArray(rows) && rows.length ? rows[0] : null;
+  if (!row) return { live: false, reason: "row_missing" };
+  if (TERMINAL_ROW_STATUSES.includes(row.status)) {
+    return { live: false, reason: "row_" + row.status };
+  }
+  if (row.status === "pending") {
+    return { live: false, reason: "row_pending" };
+  }
+  return { live: true };
+}
+
 async function reconcileActiveJob(job) {
   const queueId = job && job.queueId;
   if (!queueId) {
@@ -1454,33 +1516,58 @@ async function fetchPhotoForContent(url) {
 // cap matches it; anything larger is a structured refusal, and
 // the content script skips the attach and posts without it.
 const VIDEO_MAX_BYTES = 50 * 1024 * 1024; // the app's intro upload cap
+const VIDEO_FETCH_TIMEOUT_MS = 30 * 1000; // abort budget (v2.54, note 28)
 
 async function fetchVideoForContent(url) {
   if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) {
     return { ok: false, error: "video_url_not_http" };
   }
-  let res;
+  // Bounded (v2.54, header note 28): the fetch and the body
+  // read share one 30s abort budget. In 2.53 this was a bare
+  // fetch whose promise could hang unsettled forever — and
+  // did, wedging a post behind the previous banner step. A
+  // stall now answers the structured refusal below.
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    try { controller.abort(); } catch (e) { /* no-op */ }
+  }, VIDEO_FETCH_TIMEOUT_MS);
   try {
-    res = await fetch(url);
-  } catch (e) {
-    return { ok: false, error: "video_fetch_threw" };
+    let res;
+    try {
+      res = await fetch(url, { signal: controller.signal });
+    } catch (e) {
+      if (controller.signal.aborted) {
+        return { ok: false, error: "video_fetch_timeout" };
+      }
+      return { ok: false, error: "video_fetch_threw" };
+    }
+    if (!res.ok) return { ok: false, error: `video_http_${res.status}` };
+    const contentType = res.headers.get("content-type") || "";
+    const ct = contentType.toLowerCase();
+    if (ct && !ct.startsWith("video/") && !ct.includes("octet-stream")) {
+      return { ok: false, error: "video_not_a_video" };
+    }
+    let buffer;
+    try {
+      buffer = await res.arrayBuffer();
+    } catch (e) {
+      if (controller.signal.aborted) {
+        return { ok: false, error: "video_fetch_timeout" };
+      }
+      throw e; // as before: the relay handler answers video_relay_failed
+    }
+    if (!buffer.byteLength) return { ok: false, error: "video_empty" };
+    if (buffer.byteLength > VIDEO_MAX_BYTES) {
+      return { ok: false, error: "video_too_large" };
+    }
+    return {
+      ok: true,
+      base64: arrayBufferToBase64(buffer),
+      contentType: contentType || "video/mp4"
+    };
+  } finally {
+    clearTimeout(timer);
   }
-  if (!res.ok) return { ok: false, error: `video_http_${res.status}` };
-  const contentType = res.headers.get("content-type") || "";
-  const ct = contentType.toLowerCase();
-  if (ct && !ct.startsWith("video/") && !ct.includes("octet-stream")) {
-    return { ok: false, error: "video_not_a_video" };
-  }
-  const buffer = await res.arrayBuffer();
-  if (!buffer.byteLength) return { ok: false, error: "video_empty" };
-  if (buffer.byteLength > VIDEO_MAX_BYTES) {
-    return { ok: false, error: "video_too_large" };
-  }
-  return {
-    ok: true,
-    base64: arrayBufferToBase64(buffer),
-    contentType: contentType || "video/mp4"
-  };
 }
 
 
@@ -2100,6 +2187,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     fetchVideoForContent(message.url)
       .then(result => sendResponse(result))
       .catch(() => sendResponse({ ok: false, error: "video_relay_failed" }));
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_JOB_LIVENESS") {
+    // Job liveness (v2.54, header note 28): same sender
+    // discipline as the relays above — only the Facebook
+    // content script may ask. The verdict is definitive-only
+    // (jobLivenessVerdict); even a handler-level failure
+    // answers live, never an abort.
+    const senderUrl = (sender && sender.url) ||
+      (sender && sender.tab && sender.tab.url) || "";
+    if (!senderUrl.startsWith("https://www.facebook.com/")) return;
+    jobLivenessVerdict(message.queueId)
+      .then(result => sendResponse(result))
+      .catch(() => sendResponse({ live: true }));
     return true;
   }
 

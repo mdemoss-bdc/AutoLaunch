@@ -412,6 +412,34 @@
 //     as before this version; a stalled processing state is
 //     REMOVED first, because the form will not proceed while
 //     a video is still loading.
+// 28. BOUNDED VIDEO FETCH + JOB LIVENESS (v2.54 — the
+//     2026-10-28 Accord wedge): the first live 2.53 post
+//     stalled forever at the note-27 attach. The clip download
+//     had NO time limit at any layer — the worker relay's bare
+//     fetch could hang unsettled, the content-side relay wait
+//     inherited the hang, and the banner only changed AFTER
+//     the download returned, so the wedge sat silently under
+//     "Uploading 20 photo(s)…" for ~55 minutes while the form
+//     looked like a photo problem. Three repairs, all
+//     fail-open: (a) every stage of the clip download is now
+//     bounded — the worker aborts its fetch at 30s (header
+//     note 28 there), this script races the relay answer at
+//     35s and bounds its direct-fetch fallback at 30s, and
+//     the duration probe gives up at 10s (unreadable = proceed,
+//     as before); a dead download lands in the EXISTING
+//     intro_video_download_failed skip and the post continues
+//     without the clip. (b) The banner and console announce
+//     "Adding your intro video…" BEFORE the download starts,
+//     so any future stall is visibly a video stall. (c) JOB
+//     LIVENESS: a tab can outlive its job — the same incident
+//     re-drove this fill from the stored job after the worker
+//     had already failed the row, because the fill never
+//     re-checked anything. Before filling, this script now
+//     asks the worker (AUTOLAUNCH_JOB_LIVENESS) whether its
+//     stored job is still the live one; ONLY a definitive
+//     "no" (the slot moved on, or the queue row is already
+//     settled) aborts the fill with a banner note. Any error,
+//     timeout or ambiguity proceeds exactly as before.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -2433,14 +2461,74 @@
   }
   // [PURE-INTRO-VIDEO-END]
 
+  // [PURE-LIVENESS-BEGIN] — extracted and unit-exercised by
+  // the test harness; keep these free of DOM/chrome references.
+  // Job-liveness verdict (v2.54, header note 28). The worker
+  // answers the AUTOLAUNCH_JOB_LIVENESS ask with { live: true }
+  // or { live: false, reason }. ONLY a well-formed, explicit
+  // "not live" verdict may abort a fill — a missing, malformed,
+  // errored or timed-out answer is uncertainty, and uncertainty
+  // always proceeds exactly as the fill did before this check
+  // existed. Returns the worker's reason string when the fill
+  // must abort, null when it may proceed.
+  function livenessAbortReason(resp) {
+    if (resp && resp.live === false &&
+        typeof resp.reason === "string" && resp.reason) {
+      return resp.reason;
+    }
+    return null;
+  }
+  // [PURE-LIVENESS-END]
+
+  // Every wait for the worker is raced against a clock
+  // (v2.54, header note 28): a service worker that never
+  // answers must read as an ordinary failure, never as a hang.
+  // The relay gets 35s — just past the worker's own 30s fetch
+  // abort, so a healthy-but-slow relay answer still lands.
+  const VIDEO_RELAY_TIMEOUT_MS = 35 * 1000;
+  const VIDEO_DIRECT_TIMEOUT_MS = 30 * 1000;
+  const JOB_LIVENESS_TIMEOUT_MS = 5 * 1000;
+
   function relayVideo(url) {
     return new Promise(resolve => {
+      let settled = false;
+      const finish = v => {
+        if (settled) return;
+        settled = true;
+        resolve(v);
+      };
+      const timer = setTimeout(() => finish(null), VIDEO_RELAY_TIMEOUT_MS);
       try {
         chrome.runtime.sendMessage({ type: "AUTOLAUNCH_FETCH_VIDEO", url }, resp => {
           void chrome.runtime.lastError;
-          resolve(resp || null);
+          clearTimeout(timer);
+          finish(resp || null);
         });
-      } catch (e) { resolve(null); }
+      } catch (e) { clearTimeout(timer); finish(null); }
+    });
+  }
+
+  // The job-liveness ask (v2.54, header note 28): is the job
+  // this tab loaded from storage still the worker's live job?
+  // Resolves with the worker's verdict object, or null on any
+  // transport failure/timeout — the caller treats null as
+  // "unknown", and unknown always proceeds (livenessAbortReason).
+  function askJobLiveness(queueId) {
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = v => {
+        if (settled) return;
+        settled = true;
+        resolve(v);
+      };
+      const timer = setTimeout(() => finish(null), JOB_LIVENESS_TIMEOUT_MS);
+      try {
+        chrome.runtime.sendMessage({ type: "AUTOLAUNCH_JOB_LIVENESS", queueId }, resp => {
+          void chrome.runtime.lastError;
+          clearTimeout(timer);
+          finish(resp || null);
+        });
+      } catch (e) { clearTimeout(timer); finish(null); }
     });
   }
 
@@ -2448,31 +2536,51 @@
   // first (no CORS wall), then a direct fetch — the intro bucket
   // is our own public storage, the one origin a page fetch may
   // legitimately reach. Throws only when both stages failed.
+  // Both stages are time-bounded (v2.54, header note 28): the
+  // relay answer is raced at 35s above, and the direct fetch
+  // aborts at 30s — a stall in either reads as the ordinary
+  // download failure the caller already skips on.
   async function fetchVideoBlob(url) {
     const relayed = await relayVideo(url);
     if (relayed && relayed.ok && relayed.base64) {
       return base64ToBlob(relayed.base64, relayed.contentType || "video/mp4");
     }
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("video_direct_" + res.status);
-    return res.blob();
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      try { controller.abort(); } catch (e) { /* no-op */ }
+    }, VIDEO_DIRECT_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error("video_direct_" + res.status);
+      return await res.blob();
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // Duration probe (mirrors the app's own upload probe): a
   // throwaway <video> reads metadata off an object URL. Answers
   // 0 when the browser won't say — introDurationSkip treats 0
-  // as "unproven", never as a conviction.
+  // as "unproven", never as a conviction. Bounded at 10s
+  // (v2.54, header note 28): metadata that never arrives
+  // answers 0 (proceed) instead of waiting forever.
+  const INTRO_PROBE_TIMEOUT_MS = 10 * 1000;
   function probeVideoDuration(blob) {
     return new Promise(resolve => {
       let url = null;
+      let finished = false;
       try {
         url = URL.createObjectURL(blob);
         const probe = document.createElement("video");
         probe.preload = "metadata";
         const done = d => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
           if (url) { try { URL.revokeObjectURL(url); } catch (e) { /* no-op */ } }
           resolve(isFinite(d) ? d : 0);
         };
+        const timer = setTimeout(() => done(0), INTRO_PROBE_TIMEOUT_MS);
         probe.onloadedmetadata = () => done(probe.duration);
         probe.onerror = () => done(0);
         probe.src = url;
@@ -2529,6 +2637,12 @@
   const INTRO_PROCESS_TIMEOUT_MS = 120 * 1000;
   async function attachIntroVideo() {
     if (!introVideo) return false;
+    // Announce BEFORE the download (v2.54, header note 28):
+    // in 2.53 the banner only changed after the fetch
+    // returned, so a stalled download sat silently under the
+    // photo banner and looked like a photo-upload hang.
+    say("Adding your intro video…");
+    console.log("[AutoLaunch] Intro video: downloading the clip…");
     const input = findVideoInput();
     if (!input) {
       console.log("[AutoLaunch] Intro video skipped (intro_video_input_not_found).");
@@ -2551,7 +2665,8 @@
       console.log(`[AutoLaunch] Intro video skipped (${durSkip}: ${Math.round(duration)}s > ${INTRO_VIDEO_MAX_SECONDS}s).`);
       return false;
     }
-    say("Adding your intro video…");
+    // (The banner already reads "Adding your intro video…" —
+    // it was set before the download, v2.54 header note 28.)
     const name = (introVideo.url.split("/").pop() || "intro.mp4").split("?")[0];
     const file = new File([blob], name, { type: blob.type || "video/mp4" });
     const dt = new DataTransfer();
@@ -4171,6 +4286,20 @@
     await escalateToSellingVerification();
     return;
   }
+  // Job liveness (v2.54, header note 28): this tab loaded its
+  // job from storage, and a tab can outlive the job — in the
+  // 2026-10-28 Accord incident a surviving tab re-drove this
+  // fill after the worker had already settled the row. Ask
+  // the worker whether this stored job is still the live one.
+  // ONLY a definitive "no" aborts; any error, timeout or
+  // ambiguity falls through and fills exactly as before.
+  const deadReason = livenessAbortReason(await askJobLiveness(queueId));
+  if (deadReason) {
+    console.log(`[AutoLaunch] Fill skipped — this tab's job is no longer live (${deadReason}).`);
+    say("This posting was already settled in your queue — this tab won't post it again.", "#b91c1c");
+    return;
+  }
+
   try {
     say("Preparing your listing…");
     await sleep(3500); // let Facebook render the form
