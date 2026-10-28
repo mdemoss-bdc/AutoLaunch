@@ -609,9 +609,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <p class="font-extrabold text-slate-900 text-sm">Post — <span class="text-blue-600">$75/mo</span></p>
             <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">The posting core: your cars on Marketplace, posted for you at a safe pace.</p>
             <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Your cars on Marketplace, posted for you at a safe pace.</p>
+            <p class="text-[13px] font-bold text-slate-700 leading-relaxed mt-1.5">You post each car yourself — no automation included.</p>
           </div>
           <div>
-            <p class="font-extrabold text-slate-900 text-sm">Group — <span class="text-blue-600">$100/mo</span></p>
+            <p class="font-extrabold text-slate-900 text-sm">Automate — <span class="text-blue-600">$100/mo</span></p>
             <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">Full automation: auto-post, auto delete &amp; repost, Luca drafting your replies, channels, trade appraisals + wishlist.</p>
             <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Full automation: auto-post, delete &amp; repost, Luca, channels, trade + wishlist.</p>
           </div>
@@ -3083,7 +3084,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
               <option value="">Owner — full access</option>
               <option value="post">Post</option>
               <option value="automate">Post + Automate</option>
-              <option value="group">Group</option>
+              <option value="group">Automate</option>
             </select>
             <p class="text-xs text-slate-400 mt-2">
               Owner accounts always keep full access. This preview only changes which gates you see on this device, so you can test them — it doesn't change your account.
@@ -4229,7 +4230,7 @@ const PLAN_DETAILS = {
     name: "Post",
     priceLabel: "$75/mo",
     price: 75,
-    tagline: "For one salesperson posting by hand.",
+    tagline: "For one salesperson posting by hand — no automation included.",
     features: [
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
@@ -4266,10 +4267,10 @@ const PLAN_DETAILS = {
     ]
   },
   group: {
-    name: "Group",
+    name: "Automate",
     priceLabel: "$100/mo",
     price: 100,
-    tagline: "Everything in Post + Automate.",
+    tagline: "Everything in Post + Automate, plus team features.",
     features: [
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
@@ -5359,10 +5360,10 @@ const CHECKOUT_PLAN_INFO = {
   post_1y:       { title: "AutoLaunch Post — 1-year term", price: "$855 one-time", years: 1, terms: "One year of access, paid up front — 5% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
   post_2y:       { title: "AutoLaunch Post — 2-year term", price: "$1,620 one-time", years: 2, terms: "Two years of access, paid up front — 10% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
   post_3y:       { title: "AutoLaunch Post — 3-year term", price: "$2,295 one-time", years: 3, terms: "Three years of access, paid up front — 15% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
-  group:         { title: "AutoLaunch Group", price: "$100/month",     terms: "Renews monthly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid period." },
-  group_1y:      { title: "AutoLaunch Group — 1-year term", price: "$1,140 one-time", years: 1, terms: "One year of access, paid up front — 5% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
-  group_2y:      { title: "AutoLaunch Group — 2-year term", price: "$2,160 one-time", years: 2, terms: "Two years of access, paid up front — 10% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
-  group_3y:      { title: "AutoLaunch Group — 3-year term", price: "$3,060 one-time", years: 3, terms: "Three years of access, paid up front — 15% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  group:         { title: "AutoLaunch Automate", price: "$100/month",     terms: "Renews monthly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; you keep access until the end of the paid period." },
+  group_1y:      { title: "AutoLaunch Automate — 1-year term", price: "$1,140 one-time", years: 1, terms: "One year of access, paid up front — 5% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  group_2y:      { title: "AutoLaunch Automate — 2-year term", price: "$2,160 one-time", years: 2, terms: "Two years of access, paid up front — 10% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
+  group_3y:      { title: "AutoLaunch Automate — 3-year term", price: "$3,060 one-time", years: 3, terms: "Three years of access, paid up front — 15% off monthly billing. One-time payment — access until {END}. It does not renew automatically; buy another term anytime and the time stacks on. Pay in full today, or with Affirm/Klarna at checkout where available." },
   support:       { title: "Priority Support", price: "$199/year",      terms: "Priority human help from the AutoLaunch team for one year. Bug reports are always free, with or without this plan. Renews yearly on the day you subscribe, until you cancel. Cancel anytime in Settings → Plans; priority support continues until the end of the paid year." },
 };
 let pendingCheckout = null;

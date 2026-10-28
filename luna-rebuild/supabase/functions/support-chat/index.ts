@@ -484,16 +484,18 @@ PLANS AND PRICES:
 - Post — $75/month: manual core (inventory, post queue, manual posting,
   AI listing copy). Cap: 5 queued posts per day. Sync every 18 hours.
 - Post + Automate — the middle tier, described in Settings -> Plans
-  (the buy screens sell Post and Group): everything in Post plus
+  (the buy screens sell Post and Automate): everything in Post plus
   auto-post new arrivals, auto delete & repost, channels, Luca +
   Prospects, Customer Wishlist, Trade Appraisals, intro videos. No plan
   cap on queued posts (the user's own daily safety limit applies).
   Sync every 12 hours.
-- Group — $100/month: everything in Post + Automate. Sync every 6 hours.
-- Multi-year prepaid terms (Post and Group): pay up front for 1, 2
-  or 3 years and save — 1 year saves 5% (Post $855, Group $1,140),
-  2 years saves 10% (Post $1,620, Group $2,160), 3 years saves 15%
-  (Post $2,295, Group $3,060). A term is a ONE-TIME payment, not a
+- Automate — $100/month: everything in Post + Automate, plus team
+  features. Sync every 6 hours. (Dealership accounts buy this same
+  top tier per seat as Dealership Group.)
+- Multi-year prepaid terms (Post and Automate): pay up front for 1, 2
+  or 3 years and save — 1 year saves 5% (Post $855, Automate $1,140),
+  2 years saves 10% (Post $1,620, Automate $2,160), 3 years saves 15%
+  (Post $2,295, Automate $3,060). A term is a ONE-TIME payment, not a
   subscription: it never renews automatically — access runs to the
   term's end date, and buying another term stacks more time on.
   There is no lifetime plan — it was retired before launch.
@@ -1899,7 +1901,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     2
    ]
   ],
-  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: 5 days, no card needed. Queued posts on the trial: 1 per day; inventory sync 1 sync per 24 hours. Automate features are locked on the trial.\n- Post — $75/month: queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no auto-post, no channels, no Luca.\n- Post + Automate (described in Settings -> Plans; the buy screens sell Post and Group): everything in Post plus auto-post new arrivals, auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Group — $100/month: everything in Post + Automate. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Post 1 year $855, 2 years $1,620, 3 years $2,295; Group 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
+  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: 5 days, no card needed. Queued posts on the trial: 1 per day; inventory sync 1 sync per 24 hours. Automate features are locked on the trial.\n- Post — $75/month: queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no auto-post, no channels, no Luca.\n- Post + Automate (described in Settings -> Plans; the buy screens sell Post and Automate): everything in Post plus auto-post new arrivals, auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Automate — $100/month: everything in Post + Automate. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Post 1 year $855, 2 years $1,620, 3 years $2,295; Automate 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
  },
  {
   "id": "terms",
@@ -2115,7 +2117,7 @@ TRIAL CONVERSION (this user is on the free trial — Matthew's rules):
   every 24 hours, Automate features locked), state the limit plainly,
   then weave in ONE line about what changes on a paid plan, with the
   real numbers: Post is $75/mo (5 queued posts a day, sync every 18
-  hours, listing copy included); Group is $100/mo (no plan cap on
+  hours, listing copy included); Automate is $100/mo (no plan cap on
   queued posts, sync every 6 hours, every feature including auto-post,
   Luca and the channels).
 ${snap.trialDaysLeft !== null && snap.trialDaysLeft <= 2
