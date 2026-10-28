@@ -4509,7 +4509,7 @@ function renderPlanPanel() {
     }
   }
   renderBillingPanel();
-  loadOwnerGrantTools();
+  if (typeof loadOwnerGrantTools === "function") loadOwnerGrantTools();
 }
 
 // ===== OWNER GRANT TOOL + SUGGESTIONS INBOX (Matthew only) =====
