@@ -1,0 +1,219 @@
+{
+ "platform:dealeron": {
+  "platform": "dealeron",
+  "platform_evidence": "signature 'dealeron.com' in page source",
+  "strategy_stats": {
+   "browser": {
+    "ms": 1966412,
+    "ok": 3,
+    "cars": 2347,
+    "empty": 0
+   }
+  },
+  "strategy_order": [
+   "browser",
+   "jsonld",
+   "embedded_json",
+   "dom_cards",
+   "text_patterns"
+  ],
+  "count_band": {
+   "samples": [
+    965,
+    65,
+    1317
+   ]
+  },
+  "price_band": {
+   "samples": [
+    31802.0,
+    38432.0,
+    50389.0
+   ]
+  },
+  "photo_norm": {
+   "median_photos": 20.0
+  },
+  "timings": [
+   {
+    "at": "2026-10-28T04:53:35.679695+00:00",
+    "cars": 965,
+    "pages": 81,
+    "seconds": 1090.68
+   },
+   {
+    "at": "2026-10-28T04:54:58.571464+00:00",
+    "cars": 65,
+    "pages": 6,
+    "seconds": 82.07
+   },
+   {
+    "at": "2026-10-28T05:20:02.158659+00:00",
+    "seconds": 1503.11,
+    "cars": 1317,
+    "pages": 110
+   }
+  ],
+  "rate_limit_hits": 0,
+  "concurrency_cap": null,
+  "needs": [],
+  "last_outcome": {
+   "at": "2026-10-28T05:20:02.158687+00:00",
+   "cars": 1317,
+   "written": 1312,
+   "quarantined": false,
+   "error": null
+  },
+  "_row_id": "24adf7cc-2d45-41ad-b2a0-aaa8d6f9d43a"
+ },
+ "www.mosescars.com|Used": {
+  "platform": "dealeron",
+  "platform_evidence": "signature 'dealeron.com' in page source",
+  "strategy_stats": {
+   "browser": {
+    "ok": 1,
+    "empty": 0,
+    "cars": 965,
+    "ms": 794791
+   }
+  },
+  "strategy_order": [
+   "browser",
+   "jsonld",
+   "embedded_json",
+   "dom_cards",
+   "text_patterns"
+  ],
+  "count_band": {
+   "samples": [
+    965
+   ]
+  },
+  "price_band": {
+   "samples": [
+    31802.0
+   ]
+  },
+  "photo_norm": {
+   "median_photos": 20.0
+  },
+  "timings": [
+   {
+    "at": "2026-10-28T04:53:35.358913+00:00",
+    "seconds": 1090.68,
+    "cars": 965,
+    "pages": 81
+   }
+  ],
+  "rate_limit_hits": 0,
+  "concurrency_cap": null,
+  "needs": [],
+  "last_outcome": {
+   "at": "2026-10-28T04:53:35.358938+00:00",
+   "cars": 965,
+   "written": 946,
+   "quarantined": false,
+   "error": null
+  }
+ },
+ "www.mosescars.com|Certified Pre-Owned": {
+  "platform": "dealeron",
+  "platform_evidence": "signature 'dealeron.com' in page source",
+  "strategy_stats": {
+   "browser": {
+    "ok": 1,
+    "empty": 0,
+    "cars": 65,
+    "ms": 53414
+   }
+  },
+  "strategy_order": [
+   "browser",
+   "jsonld",
+   "embedded_json",
+   "dom_cards",
+   "text_patterns"
+  ],
+  "count_band": {
+   "samples": [
+    65
+   ]
+  },
+  "price_band": {
+   "samples": [
+    38432.0
+   ]
+  },
+  "photo_norm": {
+   "median_photos": 20.0
+  },
+  "timings": [
+   {
+    "at": "2026-10-28T04:54:57.975751+00:00",
+    "seconds": 82.07,
+    "cars": 65,
+    "pages": 6
+   }
+  ],
+  "rate_limit_hits": 0,
+  "concurrency_cap": null,
+  "needs": [],
+  "last_outcome": {
+   "at": "2026-10-28T04:54:57.975776+00:00",
+   "cars": 65,
+   "written": 65,
+   "quarantined": false,
+   "error": null
+  }
+ },
+ "www.mosescars.com|New": {
+  "platform": "dealeron",
+  "platform_evidence": "signature 'dealeron.com' in page source",
+  "strategy_stats": {
+   "browser": {
+    "ok": 1,
+    "empty": 0,
+    "cars": 1317,
+    "ms": 1118207
+   }
+  },
+  "strategy_order": [
+   "browser",
+   "jsonld",
+   "embedded_json",
+   "dom_cards",
+   "text_patterns"
+  ],
+  "count_band": {
+   "samples": [
+    1317
+   ]
+  },
+  "price_band": {
+   "samples": [
+    50389.0
+   ]
+  },
+  "photo_norm": {
+   "median_photos": 20.0
+  },
+  "timings": [
+   {
+    "at": "2026-10-28T05:20:01.914948+00:00",
+    "seconds": 1503.11,
+    "cars": 1317,
+    "pages": 110
+   }
+  ],
+  "rate_limit_hits": 0,
+  "concurrency_cap": null,
+  "needs": [],
+  "last_outcome": {
+   "at": "2026-10-28T05:20:01.914973+00:00",
+   "cars": 1317,
+   "written": 1312,
+   "quarantined": false,
+   "error": null
+  }
+ }
+}
