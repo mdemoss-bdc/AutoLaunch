@@ -42,6 +42,33 @@
 //     accepted (verdict 'do') | denied (verdict 'no') | parked
 //     (verdict 'park') | all. Submitter email is resolved
 //     server-side from user_id. Read-only. Newest first, cap 100.
+//   users_list
+//     Every registered user for the Owner console's Users section:
+//     display name (auth metadata name, else the settings'
+//     dealership_name / store_name, else the email local part),
+//     email, user_id, plan/billing state, signup date. Read live
+//     from Auth + user_settings on every call (the panel fetches
+//     when the Owner tab opens, so new registrations appear).
+//     Newest first.
+//   force_scrape {target_user_id}
+//     Queue an inventory sync for another user — the EXACT row the
+//     app's own Sync Inventory button inserts (scrape_jobs,
+//     status 'pending', sync_mode 'full'), which the Refresh
+//     webhook dispatches to the scraper workflow for that user.
+//     The one honest limit: the production scraper's cadence guard
+//     enforces the plan sync window (trial 24h / Post 18h /
+//     Automate 12h / Group 6h) on user-requested jobs and there is
+//     no sanctioned force flag that skips it for a full scrape —
+//     so this action pre-checks the same cadence (mirroring the
+//     scraper's rules: owners exempt, 'test' rows never set the
+//     clock, a first sync is never blocked, dealership-covered
+//     members resolve to the dealership flavor) and refuses with
+//     the next-open time instead of queueing a job the scraper
+//     would fail. Refusals: no such user; account has no settings
+//     row (setup never finished — nothing to scrape); a sync is
+//     already pending for them. Every outcome (queued /
+//     already_pending / cadence_refused) is audit-logged in
+//     public.owner_actions.
 //
 // verify_jwt=false at the platform level; the caller's JWT is
 // verified manually (same pattern as trial-start / dealership-admin).
@@ -127,6 +154,158 @@ async function emailForUserId(svc: any, userId: string): Promise<string | null> 
     return data?.user?.email ?? null;
   } catch {
     return null;
+  }
+}
+
+// Page through every auth user (roster is small, but never trust a
+// single page).
+async function listAllUsers(svc: any): Promise<any[]> {
+  const out: any[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const { data, error } = await svc.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error || !data || !Array.isArray(data.users)) break;
+    out.push(...data.users);
+    if (data.users.length < 1000) break;
+  }
+  return out;
+}
+
+// Display-name precedence for the Users list: the name on the auth
+// account, else what they called their store in settings, else the
+// part of the email before the @.
+function displayNameFor(authUser: any, settings: any): string {
+  const meta = authUser?.user_metadata || {};
+  const candidates = [
+    meta.full_name,
+    meta.name,
+    settings?.dealership_name,
+    settings?.store_name,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  const email = typeof authUser?.email === "string" ? authUser.email : "";
+  return email.split("@")[0] || "Unknown";
+}
+
+// Audit for owner-console actions that are not grants (grants keep
+// their own owner_grants trail). Never blocks the action itself.
+async function auditOwnerAction(
+  svc: any,
+  actorId: string,
+  action: string,
+  targetId: string | null,
+  targetEmail: string | null,
+  detail: any,
+) {
+  try {
+    await svc.from("owner_actions").insert({
+      actor_user_id: actorId,
+      action,
+      target_user_id: targetId,
+      target_email: targetEmail,
+      detail: detail || {},
+    });
+  } catch (e) {
+    console.error("owner_actions audit failed:", e);
+  }
+}
+
+// ---- force_scrape cadence mirror ---------------------------------
+// Mirrors the production scraper's sync-cadence guard
+// (luna-rebuild/scraper.py, _sync_cooldown_hours /
+// _sync_cadence_block_reason / _dealership_covered) so a force
+// request can be answered truthfully BEFORE anything is queued.
+const SYNC_COOLDOWN_HOURS: Record<string, number> = {
+  trial: 24,
+  post: 18,
+  automate: 12,
+  group: 6,
+};
+
+function resolveTierScraper(raw: any): string {
+  if (raw === "post" || raw === "automate" || raw === "group") return raw;
+  if (raw === null || raw === undefined || raw === "") return "post";
+  return "automate";
+}
+
+// The coverage tier ('post'/'group') when this user is a covered
+// dealership MEMBER, else null. The dealership leader (role
+// 'admin') is never covered — same rule as the scraper.
+async function dealershipCoveredTier(svc: any, uid: string): Promise<string | null> {
+  try {
+    const { data: members } = await svc
+      .from("dealership_account_members")
+      .select("dealership_id, role")
+      .eq("user_id", uid);
+    for (const m of members || []) {
+      if (m.role !== "member") continue;
+      const { data: dealers } = await svc
+        .from("dealership_accounts")
+        .select("status, plan_flavor, trial_ends_at")
+        .eq("id", m.dealership_id);
+      const d = (dealers || [])[0];
+      if (!d) continue;
+      if (d.status === "active") return d.plan_flavor || "group";
+      if (d.status === "trial" && d.trial_ends_at) {
+        if (new Date(d.trial_ends_at).getTime() > Date.now()) return "group";
+      }
+    }
+  } catch {
+    // best-effort, like the scraper: any read problem answers null
+  }
+  return null;
+}
+
+// Returns { hours, lastSyncAt, nextAt } when a fresh user-requested
+// sync for this account would be cadence-refused right now, else
+// null (owners, first syncs, and elapsed windows all pass).
+async function cadenceBlock(
+  svc: any,
+  uid: string,
+  settings: any,
+): Promise<{ hours: number; lastSyncAt: string; nextAt: string } | null> {
+  if (OWNER_USER_IDS.indexOf(uid) !== -1) return null; // owners exempt
+  const covered = await dealershipCoveredTier(svc, uid);
+  let hours: number;
+  if (covered) hours = SYNC_COOLDOWN_HOURS[covered] ?? SYNC_COOLDOWN_HOURS.group;
+  else if (settings?.billing_status === "trialing") hours = SYNC_COOLDOWN_HOURS.trial;
+  else hours = SYNC_COOLDOWN_HOURS[resolveTierScraper(settings?.plan_tier)];
+  // The clock is the most recent NON-TEST job; 'test' rows never
+  // set it (scraper rule — filtered here in code, exactly like the
+  // scraper, so legacy rows with no mode still count). No prior
+  // non-test job -> the initial scrape never counts.
+  const { data: recent } = await svc
+    .from("scrape_jobs")
+    .select("started_at, sync_mode")
+    .eq("user_id", uid)
+    .order("started_at", { ascending: false })
+    .limit(50);
+  const last = (recent || []).find((j: any) => j.sync_mode !== "test");
+  if (!last || !last.started_at) return null;
+  const startedMs = new Date(last.started_at).getTime();
+  if (!isFinite(startedMs)) return null; // fail-open, like the scraper
+  const nextMs = startedMs + hours * 3600 * 1000;
+  if (Date.now() >= nextMs) return null;
+  return {
+    hours,
+    lastSyncAt: last.started_at,
+    nextAt: new Date(nextMs).toISOString(),
+  };
+}
+
+// "Oct 28, 2:14 PM" in Matthew's timezone, for plain result lines.
+function fmtET(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
   }
 }
 
@@ -296,6 +475,118 @@ Deno.serve(async (req) => {
       });
     }
     return json({ ok: true, suggestions: out });
+  }
+
+  // --------------------------------------------------------- users_list
+  if (action === "users_list") {
+    const users = await listAllUsers(svc);
+    // Plan/billing state lives on user_settings (one row per user).
+    // Page past the PostgREST row cap rather than trusting one read.
+    const settingsById = new Map<string, any>();
+    for (let from = 0; ; from += 1000) {
+      const { data: rows, error } = await svc
+        .from("user_settings")
+        .select("user_id, plan_tier, billing_status, trial_ends_at, current_period_end, dealership_name, store_name")
+        .order("user_id", { ascending: true })
+        .range(from, from + 999);
+      if (error) return refuse("list_failed", "Couldn't load the user list.");
+      for (const r of rows || []) settingsById.set(r.user_id, r);
+      if (!rows || rows.length < 1000) break;
+    }
+    const out = users.map((u: any) => {
+      const s = settingsById.get(u.id) || null;
+      return {
+        user_id: u.id,
+        email: u.email ?? null,
+        display_name: displayNameFor(u, s),
+        plan_tier: s?.plan_tier ?? null,
+        billing_status: s?.billing_status ?? null,
+        trial_ends_at: s?.trial_ends_at ?? null,
+        current_period_end: s?.current_period_end ?? null,
+        signed_up_at: u.created_at ?? null,
+      };
+    });
+    out.sort((a: any, b: any) =>
+      String(b.signed_up_at || "").localeCompare(String(a.signed_up_at || ""))
+    );
+    return json({ ok: true, users: out });
+  }
+
+  // ------------------------------------------------------- force_scrape
+  if (action === "force_scrape") {
+    const targetId = typeof body.target_user_id === "string" ? body.target_user_id.trim() : "";
+    if (!targetId) return refuse("invalid_target", "Missing the account to scrape for.");
+    let target: any = null;
+    try {
+      const { data } = await svc.auth.admin.getUserById(targetId);
+      target = data?.user ?? null;
+    } catch {
+      target = null;
+    }
+    if (!target) {
+      return refuse("user_not_found", "No AutoLaunch account has that user ID.");
+    }
+    const targetEmail = target.email ?? null;
+    const { data: settings } = await svc
+      .from("user_settings")
+      .select("user_id, plan_tier, billing_status")
+      .eq("user_id", targetId)
+      .maybeSingle();
+    if (!settings) {
+      await auditOwnerAction(svc, callerId, "force_scrape", targetId, targetEmail, { outcome: "no_settings" });
+      return refuse("no_settings", "That account hasn't finished setting up — there's no inventory to scrape yet.");
+    }
+    // Same dedupe the scraper itself applies (it serves the latest
+    // pending job): a second pending row would change nothing.
+    const { data: pending } = await svc
+      .from("scrape_jobs")
+      .select("id")
+      .eq("user_id", targetId)
+      .eq("status", "pending")
+      .limit(1);
+    if (pending && pending.length) {
+      await auditOwnerAction(svc, callerId, "force_scrape", targetId, targetEmail, { outcome: "already_pending", job_id: pending[0].id });
+      return refuse("already_pending", "A sync is already queued for " + (targetEmail || "that account") + " — it'll run next, no need to queue another.");
+    }
+    // The scraper's cadence guard would fail a full job queued
+    // inside the plan window. Answer truthfully instead of
+    // queueing a doomed row (see the cadence mirror above).
+    const block = await cadenceBlock(svc, targetId, settings);
+    if (block) {
+      await auditOwnerAction(svc, callerId, "force_scrape", targetId, targetEmail, {
+        outcome: "cadence_refused",
+        hours: block.hours,
+        last_sync_at: block.lastSyncAt,
+        next_at: block.nextAt,
+      });
+      return refuse(
+        "cadence_blocked",
+        "Can't force one yet — " + (targetEmail || "that account") + " synced " + fmtET(block.lastSyncAt) +
+          " and their plan's next sync opens " + fmtET(block.nextAt) + ". A forced sync uses the same path as their Sync button, and the plan cadence still applies.",
+      );
+    }
+    // The trigger artifact: the same row the app's Sync Inventory
+    // button inserts. Mode is deliberately 'full': the app's own
+    // button sends the capped 'test' mode only until an account's
+    // first successful sync (a setup proof), while an owner's force
+    // is a support action whose intent is a complete refresh —
+    // 'full' is the mode every set-up account's button sends.
+    const callerEmail = typeof user.email === "string" ? user.email : "";
+    const { data: job, error: jobErr } = await svc
+      .from("scrape_jobs")
+      .insert({
+        user_id: targetId,
+        status: "pending",
+        triggered_by: "owner-force" + (callerEmail ? ":" + callerEmail : ""),
+        sync_mode: "full",
+      })
+      .select("id")
+      .single();
+    if (jobErr || !job) {
+      return refuse("queue_failed", "The scrape didn't queue — try again.");
+    }
+    await auditOwnerAction(svc, callerId, "force_scrape", targetId, targetEmail, { outcome: "queued", job_id: job.id });
+    return json({ ok: true, target_email: targetEmail, job_id: job.id });
   }
 
   return json({ ok: false, error: "unknown_action" }, 400);
