@@ -702,7 +702,14 @@ Deno.serve(async (req) => {
       for (const r of vrows || []) {
         for (const s of [String((r as any).make || ""), String((r as any).model || "")]) {
           const parts = s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-          for (const w of parts) if (w.length >= 3) vocab.add(w);
+          // A vocabulary word must contain a letter: pure-numeric
+          // model fragments ("150" from F-150) fuzzy-match buyer
+          // MONEY tokens ("15k" -> "150", distance 1) and hijack
+          // the search — caught in the 2026-10-28 battery, where a
+          // "used SUV under $15k" ask searched F-150s instead of
+          // browsing. The fused form ("f150") still carries the
+          // model for real F-150 asks.
+          for (const w of parts) if (w.length >= 3 && /[a-z]/.test(w)) vocab.add(w);
           // Fused form (2026-10-28): buyers write "CRV"/"CR-Vs";
           // the split parts ("cr","v") are too short to match.
           // Carry the joined form in the vocabulary and remember
