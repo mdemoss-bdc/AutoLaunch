@@ -2689,8 +2689,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
           <div class="flex items-center justify-between mb-5">
             <div>
-              <p class="text-sm font-semibold text-slate-800">Attach an intro video to my posts — not live yet</p>
-              <p class="text-xs text-slate-500">Off by default. Your choice saves right away. Not live on any channel yet — uploading now means you're ready the day it lands.</p>
+              <p class="text-sm font-semibold text-slate-800">Attach an intro video to my posts</p>
+              <p class="text-xs text-slate-500">Off by default. Your choice saves right away. Live now on Facebook Marketplace — the helper attaches it to your Marketplace posts. Other channels are still to come.</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="chkIntroVideoEnabled" onchange="toggleIntroEnabled(this)" class="sr-only peer">
@@ -2720,7 +2720,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           <p id="introVideoStatus" class="text-xs text-slate-500 mt-3"></p>
 
           <p class="text-xs text-slate-400 mt-4">
-            Attaching goes live channel by channel — TikTok and Instagram first. Turning this on saves your preference now; posts are unchanged until the channel support lands.
+            Live on Facebook Marketplace now. Attaching on the other channels (TikTok, Instagram) is still to come — this same choice will cover them when they land.
           </p>
 
         </div>
@@ -10984,7 +10984,7 @@ let extPongListener = null;
 // self-reported version against it and calls out an out-of-date helper
 // instead of a bare "ready" (Matthew, 2026-10-25 — a v2.1.11 install
 // happily reported "ready" before the helper could report a version).
-const EXPECTED_EXT_VERSION = "2.1.52";
+const EXPECTED_EXT_VERSION = "2.1.53";
 // Stored helper version (2026-10-28): the PONG in checkExtensionStatus
 // and the sign-in probe below carry the helper's self-reported version.
 // Persist it on user_settings (helper_version / helper_seen_at) so Ask

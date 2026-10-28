@@ -395,6 +395,23 @@
 //     orphanRecovery): its "not there" outcomes collapse back
 //     to job_orphaned, shells stay duplicate_rejected, and a
 //     live card posts the job truthfully.
+// 27. INTRO VIDEO ATTACH (v2.1.53 — Intro Video Phase 4;
+//     background.js header note 27 carries the claim side):
+//     when the job carries a resolved introVideo (the worker
+//     looked it up in settings at claim time — nothing was
+//     added to queue rows), the fill attaches it AFTER the
+//     photos, through the composer's dedicated video input
+//     ("Add video", 1 max, 60 seconds max — proven on
+//     Matthew's account 2026-10-28), and waits for Facebook's
+//     processing to finish before the step walk continues.
+//     The clip's duration is probed from the downloaded bytes
+//     when the browser will say; over 60s is a skip, not a
+//     gamble. STRICTLY FAIL-OPEN: every failure — no input,
+//     download failure, over-length, processing timeout —
+//     logs a named intro_* skip and the post proceeds exactly
+//     as before this version; a stalled processing state is
+//     REMOVED first, because the form will not proceed while
+//     a video is still loading.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -420,6 +437,15 @@
   // buildDescription adds a "Stock #:" line under the VIN; off (or
   // absent on an older job), the description is unchanged.
   const includeStock = job.includeStock === true;
+
+  // Intro video (v2.1.53, header note 27): the worker resolved
+  // the user's preference at claim time and carried the clip on
+  // the job payload, exactly like the dealership identity above.
+  // Absent (preference off, library empty, lookup failed) means
+  // the fill below never touches the video control — the post is
+  // byte-identical to before this version.
+  const introVideo = (job.introVideo && typeof job.introVideo.url === "string" &&
+    job.introVideo.url) ? job.introVideo : null;
 
   // ---- job routing (v2.1.4, header notes 14–15) -----------------------
   // This script is injected on BOTH the create pages and the selling
@@ -2372,6 +2398,208 @@
     return result;
   }
 
+  // [PURE-INTRO-VIDEO-BEGIN] — extracted and unit-exercised by
+  // the test harness; keep these free of DOM/chrome references.
+  // Intro-video attach decisions (v2.1.53, header note 27).
+  // Facebook's vehicle composer caps a listing video at 60
+  // seconds; the duration probe answers in float seconds, and
+  // only a duration the browser actually reported can convict —
+  // an unreadable duration (0/NaN) proceeds and lets Facebook's
+  // own processing be the judge, exactly like the app's upload
+  // probe treats unreadable as 0.
+  const INTRO_VIDEO_MAX_SECONDS = 60;
+  function introDurationSkip(durationSec) {
+    if (typeof durationSec === "number" && isFinite(durationSec) &&
+        durationSec > INTRO_VIDEO_MAX_SECONDS) {
+      return "intro_video_too_long";
+    }
+    return null;
+  }
+  // One poll of the composer's video area, decided purely:
+  // stillLoading = the "must finish loading" notice is up;
+  // removePresent = the "Remove video" control exists (the
+  // processed state's signature); counterAttached = the Videos
+  // counter reads 1/1. Done requires the processed signature
+  // AND the loading notice gone. A video that vanishes on its
+  // own mid-wait (counter lost, nothing loading, nothing to
+  // remove) was rejected by Facebook — a skip, not a timeout.
+  function introProcessingVerdict(obs) {
+    const o = obs || {};
+    if (o.removePresent && !o.stillLoading) return "done";
+    if (!o.stillLoading && !o.removePresent && !o.counterAttached &&
+        o.everAttached) return "rejected";
+    if (o.elapsedMs >= o.timeoutMs) return "timeout";
+    return "wait";
+  }
+  // [PURE-INTRO-VIDEO-END]
+
+  function relayVideo(url) {
+    return new Promise(resolve => {
+      try {
+        chrome.runtime.sendMessage({ type: "AUTOLAUNCH_FETCH_VIDEO", url }, resp => {
+          void chrome.runtime.lastError;
+          resolve(resp || null);
+        });
+      } catch (e) { resolve(null); }
+    });
+  }
+
+  // The clip bytes, two stages like the photos: the worker relay
+  // first (no CORS wall), then a direct fetch — the intro bucket
+  // is our own public storage, the one origin a page fetch may
+  // legitimately reach. Throws only when both stages failed.
+  async function fetchVideoBlob(url) {
+    const relayed = await relayVideo(url);
+    if (relayed && relayed.ok && relayed.base64) {
+      return base64ToBlob(relayed.base64, relayed.contentType || "video/mp4");
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("video_direct_" + res.status);
+    return res.blob();
+  }
+
+  // Duration probe (mirrors the app's own upload probe): a
+  // throwaway <video> reads metadata off an object URL. Answers
+  // 0 when the browser won't say — introDurationSkip treats 0
+  // as "unproven", never as a conviction.
+  function probeVideoDuration(blob) {
+    return new Promise(resolve => {
+      let url = null;
+      try {
+        url = URL.createObjectURL(blob);
+        const probe = document.createElement("video");
+        probe.preload = "metadata";
+        const done = d => {
+          if (url) { try { URL.revokeObjectURL(url); } catch (e) { /* no-op */ } }
+          resolve(isFinite(d) ? d : 0);
+        };
+        probe.onloadedmetadata = () => done(probe.duration);
+        probe.onerror = () => done(0);
+        probe.src = url;
+      } catch (e) { resolve(0); }
+    });
+  }
+
+  // The composer's dedicated video input: an accept that names
+  // video wins outright; otherwise any file input whose accept
+  // mentions mp4/quicktime/webm, or whose nearby labelling says
+  // video.
+  function findVideoInput() {
+    const direct = document.querySelector('input[type="file"][accept*="video"]');
+    if (direct) return direct;
+    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+    return inputs.find(i => {
+      const accept = (i.getAttribute("accept") || "").toLowerCase();
+      if (accept.includes("mp4") || accept.includes("quicktime") ||
+          accept.includes("webm")) return true;
+      let node = i;
+      for (let d = 0; d < 4 && node; d++) {
+        node = node.parentElement;
+        const lab = (node && node.getAttribute &&
+          node.getAttribute("aria-label")) || "";
+        if (/add video|video/i.test(lab)) return true;
+      }
+      return false;
+    }) || null;
+  }
+
+  function videoLoadingNotice() {
+    const t = (document.body.innerText || "").toLowerCase();
+    return t.includes("must finish loading");
+  }
+
+  function removeVideoButton() {
+    const btns = Array.from(document.querySelectorAll('button, [role="button"]'));
+    return btns.find(b => {
+      const lab = ((b.getAttribute("aria-label") || "") + " " +
+        (b.textContent || "")).toLowerCase();
+      return lab.includes("remove") && lab.includes("video");
+    }) || null;
+  }
+
+  function videoCounterAttached() {
+    const t = (document.body.innerText || "");
+    return /videos?\s*[·•]\s*1\s*\/\s*1/i.test(t);
+  }
+
+  // Attach the job's intro video (v2.1.53). Returns true when
+  // the clip is on the listing and processed; false for EVERY
+  // skip — and each skip names itself in the console. The
+  // caller continues the post identically either way.
+  const INTRO_PROCESS_TIMEOUT_MS = 120 * 1000;
+  async function attachIntroVideo() {
+    if (!introVideo) return false;
+    const input = findVideoInput();
+    if (!input) {
+      console.log("[AutoLaunch] Intro video skipped (intro_video_input_not_found).");
+      return false;
+    }
+    let blob;
+    try {
+      blob = await fetchVideoBlob(introVideo.url);
+    } catch (e) {
+      console.log("[AutoLaunch] Intro video skipped (intro_video_download_failed).");
+      return false;
+    }
+    if (!blob || !blob.size) {
+      console.log("[AutoLaunch] Intro video skipped (intro_video_empty).");
+      return false;
+    }
+    const duration = await probeVideoDuration(blob);
+    const durSkip = introDurationSkip(duration);
+    if (durSkip) {
+      console.log(`[AutoLaunch] Intro video skipped (${durSkip}: ${Math.round(duration)}s > ${INTRO_VIDEO_MAX_SECONDS}s).`);
+      return false;
+    }
+    say("Adding your intro video…");
+    const name = (introVideo.url.split("/").pop() || "intro.mp4").split("?")[0];
+    const file = new File([blob], name, { type: blob.type || "video/mp4" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    // Wait for Facebook to take it, then to finish processing
+    // it: the form refuses to proceed while a video loads, so
+    // Publish must never race a half-processed clip. The wait
+    // is bounded — a stall costs the video (removed below),
+    // never the post.
+    const startedAt = Date.now();
+    let everAttached = false;
+    for (;;) {
+      await sleep(1500);
+      const obs = {
+        stillLoading: videoLoadingNotice(),
+        removePresent: !!removeVideoButton(),
+        counterAttached: videoCounterAttached(),
+        everAttached,
+        elapsedMs: Date.now() - startedAt,
+        timeoutMs: INTRO_PROCESS_TIMEOUT_MS
+      };
+      if (obs.removePresent || obs.counterAttached || obs.stillLoading) {
+        everAttached = true;
+        obs.everAttached = true;
+      }
+      const verdict = introProcessingVerdict(obs);
+      if (verdict === "done") {
+        console.log("[AutoLaunch] Intro video attached and processed.");
+        return true;
+      }
+      if (verdict === "rejected") {
+        console.log("[AutoLaunch] Intro video skipped (intro_video_rejected).");
+        return false;
+      }
+      if (verdict === "timeout") {
+        console.log("[AutoLaunch] Intro video skipped (intro_video_processing_timeout) — removing the half-attached clip.");
+        const rm = removeVideoButton();
+        if (rm) {
+          realisticClick(rm);
+          await sleep(1200);
+        }
+        return false;
+      }
+    }
+  }
+
   function publishButton() {
     const btns = Array.from(document.querySelectorAll('[role="button"], button'));
     return btns.find(b => {
@@ -3975,6 +4203,15 @@
         say(`Photos attached — Facebook is showing ${res.shownCount || res.count} (some duplicates from its uploader). Continuing…`);
         await sleep(2000);
       }
+      await humanPause();
+    }
+
+    // Intro video (v2.1.53, header note 27): after the photos,
+    // before the step walk — and only when the worker resolved
+    // one onto this job. Strictly fail-open: any skip leaves
+    // the post exactly as it was before this version.
+    if (introVideo) {
+      await attachIntroVideo();
       await humanPause();
     }
 

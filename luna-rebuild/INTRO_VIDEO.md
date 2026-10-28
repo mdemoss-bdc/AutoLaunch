@@ -87,7 +87,7 @@ Upload rules (enforced before upload, on the device):
 |---|---|---|
 | TikTok / Instagram | The intro is stitched as the **opener** of the auto-generated per-car video (car content follows) | The video-generation build (not built yet) |
 | Facebook Page posts | The video rides as the post's media alongside the listing text | The Page channel (Meta Advanced Access) |
-| Facebook Marketplace (extension) | **Unknown.** The vehicle composer's video support has never been tested. First step is a test, not a promise: if the composer takes a video, the helper attaches it; if not, this channel is formally dropped from the feature and the settings line says so | One composer test on Matthew's account |
+| Facebook Marketplace (extension) | The helper attaches the resolved clip through the composer's dedicated video control (1 video max, 60 seconds max), after the photos, and waits for processing to finish before Publish. Strictly fail-open: any video problem skips the clip and the post goes out exactly as before | ✅ Composer test passed 2026-10-28; attach built in ext v2.1.53 (Phase 4) — pending first live post confirmation on the new helper |
 | Everywhere, always | If anything about the video fails — missing, disabled, unreachable, too large — the post goes out **exactly as it does today**, with no video | — |
 
 ## Safety invariants (why this cannot mess up what we have)
@@ -122,7 +122,7 @@ Upload rules (enforced before upload, on the device):
 - **P2 — TikTok/IG bookend.** Lands with the generated-video build; also
   strengthens the TikTok sandbox demo (a real end-to-end flow to film).
 - **P3 — Facebook Page attach.** Lands with the Page channel.
-- **P4 — Marketplace test.** One composer test decides in or out.
+- **P4 — Marketplace. ✅ BUILT 2026-10-28 (ext v2.1.53).** The one composer test on Matthew's account passed — the vehicle composer takes one video (60 seconds max) through a dedicated control, alongside the photos — and the attach is wired: claim-time resolution in the worker ('selected' / 'random' per the preference, lookup-at-use, nothing added to queue rows), the content script downloads the clip, attaches it after the photos, probes its duration (over 60s = skip), and waits for processing to complete before Publish. Every failure is a named skip; the post is unchanged. Status: built, pending first live post confirmation on the new helper.
 
 ## Open decisions for Matthew
 

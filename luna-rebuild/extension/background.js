@@ -354,6 +354,27 @@
 //     evidence rides error_message like every other honest
 //     failure.
 
+// 27. INTRO VIDEO ON MARKETPLACE (v2.1.53 — Intro Video Phase 4;
+//     content.js header note 27 carries the composer side): the
+//     composer test on Matthew's account (2026-10-28) proved the
+//     vehicle composer takes ONE video (60 seconds max) through
+//     a dedicated control alongside the photos, so Marketplace
+//     is IN. userSettings now also reads intro_video_enabled /
+//     intro_video_mode / intro_selected_video_id, and checkQueue
+//     resolves the clip AT CLAIM TIME (resolveIntroVideo,
+//     [PURE-INTRO-RESOLVE]): 'selected' uses the pinned row,
+//     'random' picks one of the user's rows per post. The
+//     resolved { url, videoId } rides the stored job only —
+//     nothing is added to queue rows, per the spec's lookup-at-
+//     use design — so the toggle and Delete take effect from
+//     the very next post. STRICTLY FAIL-OPEN (spec invariant
+//     2): disabled, an empty library, a vanished selection, or
+//     a failed lookup each resolve to a named skip and the post
+//     proceeds exactly as before this version. The worker also
+//     relays the clip bytes to the content script (the AUTO
+//     LAUNCH_FETCH_VIDEO message), mirroring the photo relay:
+//     the page cannot fetch cross-origin itself.
+
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
 const POLL_ALARM = "autolaunch-queue-poll";
@@ -872,9 +893,11 @@ async function todaysPostCount(userId) {
 // for the description's closing block — see header note 19.
 // v2.1.43: it also carries include_stock for the description's
 // Stock # line — see header note 20.
+// v2.1.53: it also carries the intro-video preference trio
+// (enabled / mode / selected id) — see header note 27.
 async function userSettings(userId) {
   const rows = await sbGet(
-    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,include_stock`);
+    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,include_stock,intro_video_enabled,intro_video_mode,intro_selected_video_id`);
   const row = (rows && rows.length) ? rows[0] : {};
   return {
     limit: typeof row.daily_post_limit === "number" ? row.daily_post_limit : 10,
@@ -883,8 +906,64 @@ async function userSettings(userId) {
       ? row.post_delay_minutes : 0,
     dealershipName: typeof row.dealership_name === "string" ? row.dealership_name.trim() : "",
     dealershipAddress: typeof row.dealership_address === "string" ? row.dealership_address.trim() : "",
-    includeStock: row.include_stock === true
+    includeStock: row.include_stock === true,
+    introEnabled: row.intro_video_enabled === true,
+    introMode: typeof row.intro_video_mode === "string" ? row.intro_video_mode : "selected",
+    introSelectedId: typeof row.intro_selected_video_id === "string" ? row.intro_selected_video_id : null
   };
+}
+
+// [PURE-INTRO-RESOLVE-BEGIN] — extracted and unit-exercised by
+// the test harness; keep free of DOM/chrome references.
+// Intro-video claim-time resolution (v2.1.53, header note 27):
+// decide, from the settings trio and the user's video rows,
+// which single video (if any) rides this post. Every non-answer
+// is a NAMED skip — the caller logs it and posts exactly as
+// before this feature existed. rng is injectable so the harness
+// can pin 'random' mode; production passes Math.random. Any
+// mode other than 'random' follows the app's default semantics
+// ('selected'), exactly as the app's own reader normalizes it.
+function resolveIntroVideo(settings, rows, rng) {
+  if (!settings || settings.introEnabled !== true) {
+    return { skip: "intro_disabled" };
+  }
+  const list = (Array.isArray(rows) ? rows : []).filter(r =>
+    r && typeof r.video_url === "string" && r.video_url.trim());
+  if (!list.length) return { skip: "intro_library_empty" };
+  if (settings.introMode === "random") {
+    const roll = (typeof rng === "function" ? rng : Math.random)();
+    const idx = Math.min(list.length - 1, Math.max(0, Math.floor(roll * list.length)));
+    const pick = list[idx];
+    return { url: pick.video_url, videoId: pick.id || null, mode: "random" };
+  }
+  const wanted = settings.introSelectedId;
+  if (!wanted) return { skip: "intro_no_selection" };
+  const hit = list.find(r => r.id === wanted);
+  if (!hit) return { skip: "intro_selected_missing" };
+  return { url: hit.video_url, videoId: hit.id || null, mode: "selected" };
+}
+// [PURE-INTRO-RESOLVE-END]
+
+// Claim-time wrapper (v2.1.53): fetch the user's intro-video
+// rows ONLY when the preference is on (everyone else's claim
+// path is untouched), resolve, and log the outcome. Any failure
+// resolves to a named skip — never a throw into the claim loop.
+async function introVideoForJob(userId, settings) {
+  if (!settings || settings.introEnabled !== true) return null;
+  try {
+    const rows = await sbGet(
+      `user_intro_videos?user_id=eq.${userId}&select=id,video_url&order=created_at.asc`);
+    const resolved = resolveIntroVideo(settings, rows, Math.random);
+    if (resolved.skip) {
+      console.log(`[AutoLaunch] Intro video skipped at claim (${resolved.skip}).`);
+      return null;
+    }
+    console.log(`[AutoLaunch] Intro video resolved at claim (mode ${resolved.mode}, video ${resolved.videoId}).`);
+    return { url: resolved.url, videoId: resolved.videoId };
+  } catch (e) {
+    console.log("[AutoLaunch] Intro video skipped at claim (intro_resolve_failed).");
+    return null;
+  }
 }
 
 // Newest completed-post stamp for this user (v2.1.42): the pacing
@@ -1258,19 +1337,26 @@ async function checkQueue() {
       return;
     }
 
-    await chrome.storage.local.set({
-      current_posting_job: {
-        queueId: item.id,
-        userId,
-        car: jobCarWithStock(carRow, item),
-        action: isDelete ? "delete" : "post",
-        fullAuto: settings.fullAuto,
-        dealershipName: settings.dealershipName,
-        dealershipAddress: settings.dealershipAddress,
-        includeStock: settings.includeStock,
-        claimedAt: new Date().toISOString()
-      }
-    });
+    const jobPayload = {
+      queueId: item.id,
+      userId,
+      car: jobCarWithStock(carRow, item),
+      action: isDelete ? "delete" : "post",
+      fullAuto: settings.fullAuto,
+      dealershipName: settings.dealershipName,
+      dealershipAddress: settings.dealershipAddress,
+      includeStock: settings.includeStock,
+      claimedAt: new Date().toISOString()
+    };
+    // Intro video (v2.1.53, header note 27): resolved at claim
+    // time and carried on the job; posts only — a delete has no
+    // composer to attach to. Absent = the post runs exactly as
+    // before this version.
+    if (!isDelete) {
+      const intro = await introVideoForJob(userId, settings);
+      if (intro) jobPayload.introVideo = intro;
+    }
+    await chrome.storage.local.set({ current_posting_job: jobPayload });
 
     await jitter(1500, 4000); // human pacing, never machine-gun tabs
     // Background-tab rule (v2.1.12, extended v2.1.13): EVERY job now
@@ -1360,6 +1446,43 @@ async function fetchPhotoForContent(url) {
     contentType: contentType || "image/jpeg"
   };
 }
+
+// --- Video relay (v2.1.53, header note 27) ----------------------
+// The intro-video twin of the photo relay above: the content
+// script cannot fetch the storage URL itself (page CORS), this
+// worker can. The app's own upload cap is 50 MB, so the relay
+// cap matches it; anything larger is a structured refusal, and
+// the content script skips the attach and posts without it.
+const VIDEO_MAX_BYTES = 50 * 1024 * 1024; // the app's intro upload cap
+
+async function fetchVideoForContent(url) {
+  if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+    return { ok: false, error: "video_url_not_http" };
+  }
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    return { ok: false, error: "video_fetch_threw" };
+  }
+  if (!res.ok) return { ok: false, error: `video_http_${res.status}` };
+  const contentType = res.headers.get("content-type") || "";
+  const ct = contentType.toLowerCase();
+  if (ct && !ct.startsWith("video/") && !ct.includes("octet-stream")) {
+    return { ok: false, error: "video_not_a_video" };
+  }
+  const buffer = await res.arrayBuffer();
+  if (!buffer.byteLength) return { ok: false, error: "video_empty" };
+  if (buffer.byteLength > VIDEO_MAX_BYTES) {
+    return { ok: false, error: "video_too_large" };
+  }
+  return {
+    ok: true,
+    base64: arrayBufferToBase64(buffer),
+    contentType: contentType || "video/mp4"
+  };
+}
+
 
 // --- CDP trusted input (filler v3) ---------------------------------------
 // Minimal protocol the content script drives:
@@ -1965,6 +2088,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(() => sendResponse({ ok: false, error: "photo_relay_failed" }));
     return true;
   }
+
+  if (message.type === "AUTOLAUNCH_FETCH_VIDEO") {
+    // Intro-video relay (v2.1.53, header note 27): same sender
+    // discipline as the photo relay — only the Facebook content
+    // script may use it, and only real URLs (the http(s) check
+    // lives in fetchVideoForContent).
+    const senderUrl = (sender && sender.url) ||
+      (sender && sender.tab && sender.tab.url) || "";
+    if (!senderUrl.startsWith("https://www.facebook.com/")) return;
+    fetchVideoForContent(message.url)
+      .then(result => sendResponse(result))
+      .catch(() => sendResponse({ ok: false, error: "video_relay_failed" }));
+    return true;
+  }
+
 
   if (message.type === "AUTOLAUNCH_CDP") {
     // Only the Facebook content script may drive trusted input, and only
