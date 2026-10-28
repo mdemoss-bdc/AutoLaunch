@@ -3171,9 +3171,11 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </div><!-- /settingsPanelPlan -->
       <div id="settingsPanelOwner" class="space-y-6 hidden">
 
-        <!-- USERS CARD — every registered account, read live from the
-             owner-grant function each time this tab opens (plus the
-             Refresh button), so new signups show up on their own. -->
+        <!-- USERS CARD — every registered account (the function's
+             users_list already excludes the known test accounts),
+             picked from a dropdown; read live from the owner-grant
+             function each time this tab opens (plus the Refresh
+             button), so new signups show up on their own. -->
         <div class="glass-card rounded-2xl p-6">
           <div class="flex items-center justify-between gap-3 mb-2">
             <h3 class="font-bold text-lg">
@@ -3190,7 +3192,13 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             Everyone registered. Force scrape queues a fresh inventory sync for that account — the same sync their own Sync Inventory button runs.
           </p>
           <p id="ownerUsersMsg" class="text-xs font-medium mb-3 hidden"></p>
-          <div id="ownerUsersList" class="space-y-2">
+          <select
+            id="ownerUserSelect"
+            onchange="ownerUserSelectChanged()"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm bg-white cursor-pointer mb-3">
+            <option value="">Loading…</option>
+          </select>
+          <div id="ownerUserDetails">
             <p class="text-xs text-slate-400">Loading…</p>
           </div>
         </div>
@@ -4776,35 +4784,87 @@ function ownerUsersMsg(text, isError) {
   el.className = "text-xs font-medium mb-3 " + (isError ? "text-red-600" : "text-emerald-600");
 }
 
+// Rows from the last users_list read; the dropdown and the single
+// details card render from these, and a re-read (tab open / Refresh)
+// keeps the current pick selected when that user is still listed.
+let ownerUsersRows = [];
+
+function ownerUserOptionLabel(u) {
+  return (u.display_name || "") + " \u2014 " + (u.email || "");
+}
+
+// Build the dropdown options from rows (the function returns them
+// newest-first). previousId stays selected when it is still in the
+// list; otherwise the first (newest) user is the pick.
+function buildOwnerUserOptions(rows, previousId) {
+  let selectedId = "";
+  if (previousId && rows.some(function (u) { return u.user_id === previousId; })) selectedId = previousId;
+  else if (rows.length) selectedId = rows[0].user_id;
+  const optionsHtml = rows.map(function (u) {
+    return '<option value="' + escapeHtml(u.user_id) + '"' + (u.user_id === selectedId ? " selected" : "") + ">" + escapeHtml(ownerUserOptionLabel(u)) + "</option>";
+  }).join("");
+  return { optionsHtml: optionsHtml, selectedId: selectedId };
+}
+
+// The ONE details card for the selected user \u2014 the same card the
+// old per-user list rendered (name, email \u00b7 billing \u00b7 tier \u00b7
+// joined, click-to-copy user id, Force scrape), now for the pick.
+function ownerUserDetailsHtml(u) {
+  const stateBits = [];
+  if (u.billing_status) stateBits.push(u.billing_status);
+  if (u.plan_tier) stateBits.push(u.plan_tier);
+  const state = stateBits.length ? stateBits.join(" \u00b7 ") : "no settings yet";
+  const joined = u.signed_up_at ? new Date(u.signed_up_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+  return '<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">' +
+    '<div class="flex items-center justify-between gap-3">' +
+    '<p class="text-sm font-bold text-slate-800">' + escapeHtml(u.display_name || "") + '</p>' +
+    '<button type="button" onclick="ownerForceScrape(\'' + u.user_id + '\', this)" class="shrink-0 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">Force scrape</button>' +
+    '</div>' +
+    '<p class="text-xs text-slate-500 mt-0.5">' + escapeHtml(u.email || "") + " \u00b7 " + escapeHtml(state) + (joined ? " \u00b7 joined " + joined : "") + '</p>' +
+    '<p class="text-[11px] text-slate-400 font-mono mt-1 cursor-pointer" title="Click to copy the user ID" onclick="ownerCopyUserId(\'' + u.user_id + '\', this)">' + u.user_id + '</p>' +
+    "</div>";
+}
+
+function ownerSelectedUser() {
+  const sel = document.getElementById("ownerUserSelect");
+  const id = sel ? sel.value : "";
+  for (let i = 0; i < ownerUsersRows.length; i++) {
+    if (ownerUsersRows[i].user_id === id) return ownerUsersRows[i];
+  }
+  return ownerUsersRows.length ? ownerUsersRows[0] : null;
+}
+
+function renderOwnerUserDetails() {
+  const detailsEl = document.getElementById("ownerUserDetails");
+  if (!detailsEl) return;
+  const u = ownerSelectedUser();
+  detailsEl.innerHTML = u ? ownerUserDetailsHtml(u) : '<p class="text-xs text-slate-400">No users yet.</p>';
+}
+
+function ownerUserSelectChanged() {
+  renderOwnerUserDetails();
+}
+
 async function loadOwnerUsers() {
-  const listEl = document.getElementById("ownerUsersList");
-  if (!listEl || !isOwnerGrantUser()) return;
-  listEl.innerHTML = '<p class="text-xs text-slate-400">Loading\u2026</p>';
+  const detailsEl = document.getElementById("ownerUserDetails");
+  const sel = document.getElementById("ownerUserSelect");
+  if (!detailsEl || !isOwnerGrantUser()) return;
+  detailsEl.innerHTML = '<p class="text-xs text-slate-400">Loading\u2026</p>';
   const res = await ownerGrantInvoke({ action: "users_list" });
   if (!res.ok) {
-    listEl.innerHTML = '<p class="text-xs text-slate-400">Couldn\'t load the user list.</p>';
+    ownerUsersRows = [];
+    if (sel) sel.innerHTML = '<option value="">Couldn\'t load the user list</option>';
+    detailsEl.innerHTML = '<p class="text-xs text-slate-400">Couldn\'t load the user list.</p>';
     return;
   }
-  const rows = res.users || [];
-  if (!rows.length) {
-    listEl.innerHTML = '<p class="text-xs text-slate-400">No users yet.</p>';
-    return;
+  const previousId = sel ? sel.value : "";
+  ownerUsersRows = res.users || [];
+  if (sel) {
+    sel.innerHTML = ownerUsersRows.length
+      ? buildOwnerUserOptions(ownerUsersRows, previousId).optionsHtml
+      : '<option value="">No users yet</option>';
   }
-  listEl.innerHTML = rows.map(function (u) {
-    const stateBits = [];
-    if (u.billing_status) stateBits.push(u.billing_status);
-    if (u.plan_tier) stateBits.push(u.plan_tier);
-    const state = stateBits.length ? stateBits.join(" \u00b7 ") : "no settings yet";
-    const joined = u.signed_up_at ? new Date(u.signed_up_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
-    return '<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">' +
-      '<div class="flex items-center justify-between gap-3">' +
-      '<p class="text-sm font-bold text-slate-800">' + escapeHtml(u.display_name || "") + '</p>' +
-      '<button type="button" onclick="ownerForceScrape(\'' + u.user_id + '\', this)" class="shrink-0 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">Force scrape</button>' +
-      '</div>' +
-      '<p class="text-xs text-slate-500 mt-0.5">' + escapeHtml(u.email || "") + " \u00b7 " + escapeHtml(state) + (joined ? " \u00b7 joined " + joined : "") + '</p>' +
-      '<p class="text-[11px] text-slate-400 font-mono mt-1 cursor-pointer" title="Click to copy the user ID" onclick="ownerCopyUserId(\'' + u.user_id + '\', this)">' + u.user_id + '</p>' +
-      "</div>";
-  }).join("");
+  renderOwnerUserDetails();
 }
 
 async function ownerForceScrape(targetUserId, btn) {

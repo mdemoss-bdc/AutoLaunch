@@ -49,7 +49,9 @@
 //     email, user_id, plan/billing state, signup date. Read live
 //     from Auth + user_settings on every call (the panel fetches
 //     when the Owner tab opens, so new registrations appear).
-//     Newest first.
+//     Newest first. The known test accounts in
+//     OWNER_LIST_HIDDEN_USER_IDS are excluded server-side, so
+//     they never reach the panel at all.
 //   force_scrape {target_user_id}
 //     Queue an inventory sync for another user — the EXACT row the
 //     app's own Sync Inventory button inserts (scrape_jobs,
@@ -90,6 +92,16 @@ const cors = {
 const OWNER_USER_IDS = [
   "40a95557-504a-460f-a891-462bb2b4f25c", // Matthew
   "9cdba37e-ac31-464d-92b9-0745772fbf00", // Jourdan
+];
+
+// Accounts hidden from the Owner console's Users list: test and
+// review fixtures, not customers — Matthew asked (2026-10-28) not
+// to see them in the list. Add future test accounts here, one line
+// each; everyone else stays listed.
+const OWNER_LIST_HIDDEN_USER_IDS = [
+  "5f972cd9-0e17-41ef-9d83-c54b4aae55e7", // Luna test (luna-test@autolaunch.org)
+  "0e3d831b-b090-4b09-9562-c272425a8acb", // test@test.com
+  "29265328-5d3f-4c13-8168-aeb418a96270", // TikTok reviewer (matthewdemoss+tiktokreview@gmail.com)
 ];
 
 const SUGGESTION_LIMIT = 100;
@@ -479,7 +491,10 @@ Deno.serve(async (req) => {
 
   // --------------------------------------------------------- users_list
   if (action === "users_list") {
-    const users = await listAllUsers(svc);
+    // Server-side: hidden test accounts never leave this function.
+    const users = (await listAllUsers(svc)).filter(
+      (u: any) => OWNER_LIST_HIDDEN_USER_IDS.indexOf(u.id) === -1,
+    );
     // Plan/billing state lives on user_settings (one row per user).
     // Page past the PostgREST row cap rather than trusting one read.
     const settingsById = new Map<string, any>();
