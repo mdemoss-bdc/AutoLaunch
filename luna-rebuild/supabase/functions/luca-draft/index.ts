@@ -1005,7 +1005,15 @@ Deno.serve(async (req) => {
   // Regenerate once with the rule named; if the rewrite still
   // claims, a check-the-lot line stands in. Runs only when the
   // draft would otherwise be sent as a normal answer.
-  if (!needsHuman && draft && !verifiedNone.length && !filterNone && unavailabilityClaim(draft)) {
+  // Scope (tightened after the first battery): the guard polices
+  // ONLY the no-basis case — nothing was retrieved for the ask at
+  // all. When results WERE retrieved (invMatches non-empty), an
+  // unavailability phrasing is the model summarizing a real block
+  // (e.g. "I don't have one here under $15k, but a sister lot has
+  // the RAV4") — true, useful, and grounded in the search the
+  // function itself ran; the first cut of this guard replaced
+  // those correct drafts with a check-the-lot line.
+  if (!needsHuman && draft && !invMatches.length && !verifiedNone.length && !filterNone && unavailabilityClaim(draft)) {
     console.log("[luca-draft] claim guard: unverified unavailability claim (prospect " + prospectId + ") — regenerating once");
     let fixed = "";
     try {
