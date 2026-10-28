@@ -9,13 +9,18 @@
 //
 // Actions:
 //   grant {email}
-//     Comp a TRIALING user to full Automate until their trial ends —
-//     exactly the transformation Luna applied by hand for Rachel
-//     Mallory (2026-10-28): user_settings.billing_status -> 'active',
-//     current_period_end -> the user's own trial_ends_at, nothing
-//     else on the row. The app's own term machinery then self-expires
-//     the grant at trial end (active + no subscription + a period
-//     end -> the standard purchase gate), so no revert job exists.
+//     Comp a TRIALING user to the full sold "Automate" tier — the
+//     $100 shape (internal plan_tier 'group': every feature incl.
+//     teams, 6-hour sync cadence) — until their trial ends. Writes
+//     exactly three fields on user_settings: billing_status ->
+//     'active', current_period_end -> the user's own trial_ends_at,
+//     plan_tier -> 'group'. (v1, earlier on 2026-10-28, wrote only
+//     the first two fields and left plan_tier at 'trial', which
+//     resolved to the legacy 12h/no-teams shape; v2 makes the grant
+//     the real tier at Matthew's direction.) The app's own term
+//     machinery then self-expires the grant at trial end (active +
+//     no subscription + a period end -> the standard purchase gate),
+//     so no revert job exists.
 //     Refusals (200, {ok:false, error, message} — plain reason for
 //     the UI): no such user; target is an owner account; target has
 //     a stripe_subscription_id (paying customer — never disturb);
@@ -23,9 +28,10 @@
 //     successful grant writes an owner_grants audit row.
 //   revoke {target_user_id}
 //     Only against a LIVE grant (billing_status 'active' AND no
-//     subscription AND an open audit row): restores billing_status
-//     -> 'trialing', current_period_end -> NULL, closes the audit
-//     row. Anything else refuses — a real subscriber can never be
+//     subscription AND an open audit row): restores all three grant
+//     fields — billing_status -> 'trialing', current_period_end ->
+//     NULL, plan_tier -> 'trial' — and closes the audit row.
+//     Anything else refuses — a real subscriber can never be
 //     "revoked" through here.
 //   list
 //     All grant audit rows, newest first.
@@ -164,7 +170,7 @@ Deno.serve(async (req) => {
     }
     const { data: settings } = await svc
       .from("user_settings")
-      .select("user_id, billing_status, trial_ends_at, stripe_subscription_id")
+      .select("user_id, billing_status, trial_ends_at, stripe_subscription_id, plan_tier, current_period_end")
       .eq("user_id", target.id)
       .maybeSingle();
     if (!settings) {
@@ -181,10 +187,11 @@ Deno.serve(async (req) => {
       return refuse("trial_ended", "That account's trial has already ended.");
     }
 
-    // The Rachel transformation — exactly two fields.
+    // The grant — exactly three fields: an active term ending at
+    // the trial's end, on the full 'group' tier shape.
     const { error: updErr } = await svc
       .from("user_settings")
-      .update({ billing_status: "active", current_period_end: trialEndsAt })
+      .update({ billing_status: "active", current_period_end: trialEndsAt, plan_tier: "group" })
       .eq("user_id", target.id);
     if (updErr) {
       return refuse("update_failed", "The grant didn't save — try again.");
@@ -196,10 +203,16 @@ Deno.serve(async (req) => {
       ends_at: trialEndsAt,
     });
     if (auditErr) {
-      // Compensate: never leave a grant with no audit trail.
+      // Compensate: never leave a grant with no audit trail —
+      // restore the row's captured pre-grant values on all three
+      // grant fields.
       await svc
         .from("user_settings")
-        .update({ billing_status: "trialing", current_period_end: null })
+        .update({
+          billing_status: settings.billing_status,
+          current_period_end: settings.current_period_end ?? null,
+          plan_tier: settings.plan_tier,
+        })
         .eq("user_id", target.id);
       return refuse("audit_failed", "The grant didn't save — try again.");
     }
@@ -231,7 +244,7 @@ Deno.serve(async (req) => {
     }
     const { error: updErr } = await svc
       .from("user_settings")
-      .update({ billing_status: "trialing", current_period_end: null })
+      .update({ billing_status: "trialing", current_period_end: null, plan_tier: "trial" })
       .eq("user_id", targetId);
     if (updErr) {
       return refuse("update_failed", "The revoke didn't save — try again.");
