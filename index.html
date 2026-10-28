@@ -2497,6 +2497,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             Plans
           </button>
 
+          <button data-settings-tab="owner" id="settingsTabOwnerBtn" onclick="switchSettingsTab('owner')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer hidden">
+            Owner
+          </button>
+
         </div>
 
       </div>
@@ -3128,9 +3132,37 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           </div>
         </div>
 
-        <!-- OWNER TOOLS CARD — renders only for Matthew (OWNER_USER_IDS[0]);
-             the owner-grant Edge Function enforces the same check server-side. -->
-        <div id="ownerGrantCard" class="glass-card rounded-2xl p-6 hidden">
+      </div><!-- /settingsPanelPlan -->
+      <div id="settingsPanelOwner" class="space-y-6 hidden">
+
+        <!-- USERS CARD — every registered account, read live from the
+             owner-grant function each time this tab opens (plus the
+             Refresh button), so new signups show up on their own. -->
+        <div class="glass-card rounded-2xl p-6">
+          <div class="flex items-center justify-between gap-3 mb-2">
+            <h3 class="font-bold text-lg">
+              Users
+            </h3>
+            <button
+              type="button"
+              onclick="loadOwnerUsers()"
+              class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">
+              Refresh
+            </button>
+          </div>
+          <p class="text-sm text-slate-500 mb-4">
+            Everyone registered. Force scrape queues a fresh inventory sync for that account — the same sync their own Sync Inventory button runs.
+          </p>
+          <p id="ownerUsersMsg" class="text-xs font-medium mb-3 hidden"></p>
+          <div id="ownerUsersList" class="space-y-2">
+            <p class="text-xs text-slate-400">Loading…</p>
+          </div>
+        </div>
+
+        <!-- OWNER TOOLS CARD — lives in the Owner tab (the rail entry renders
+             only for Matthew, OWNER_USER_IDS[0]); the owner-grant Edge Function
+             enforces the same check server-side. -->
+        <div id="ownerGrantCard" class="glass-card rounded-2xl p-6">
           <h3 class="font-bold text-lg mb-2">
             Owner tools
           </h3>
@@ -3171,7 +3203,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           </div>
         </div>
 
-      </div><!-- /settingsPanelPlan -->
+      </div><!-- /settingsPanelOwner -->
+
 
         <!-- SAVE -->
 
@@ -4550,7 +4583,7 @@ function renderPlanPanel() {
 }
 
 // ===== OWNER GRANT TOOL + SUGGESTIONS INBOX (Matthew only) =====
-// The Owner tools card (Settings → Plans) renders only for Matthew's
+// The Owner tools (Settings → Owner tab) render only for Matthew's
 // account (OWNER_USER_IDS[0]). The owner-grant Edge Function checks
 // the caller again server-side against its OWNER_GRANT_USER_ID secret
 // and refuses everyone else — this gate is courtesy, not security.
@@ -4581,13 +4614,33 @@ function ownerGrantMsg(text, isError) {
   el.className = "text-xs font-medium mt-3 " + (isError ? "text-red-600" : "text-emerald-600");
 }
 
+// The Owner tab's rail entry renders only for Matthew's account;
+// every loader below re-checks isOwnerGrantUser() before touching
+// data, and the function refuses everyone else regardless.
+function syncOwnerTabVisibility() {
+  const btn = document.getElementById("settingsTabOwnerBtn");
+  if (btn) btn.classList.toggle("hidden", !isOwnerGrantUser());
+}
+
+function loadOwnerPanel() {
+  syncOwnerTabVisibility();
+  const panel = document.getElementById("settingsPanelOwner");
+  if (!isOwnerGrantUser()) {
+    if (panel) panel.classList.add("hidden");
+    return;
+  }
+  loadOwnerGrantTools();
+  loadOwnerUsers();
+}
+
 function loadOwnerGrantTools() {
-  const card = document.getElementById("ownerGrantCard");
-  if (!card) return;
-  if (!isOwnerGrantUser()) { card.classList.add("hidden"); return; }
-  card.classList.remove("hidden");
-  refreshOwnerGrantList();
-  loadOwnerSuggestions();
+  syncOwnerTabVisibility();
+  if (!isOwnerGrantUser()) return;
+  const panel = document.getElementById("settingsPanelOwner");
+  if (panel && !panel.classList.contains("hidden")) {
+    refreshOwnerGrantList();
+    loadOwnerSuggestions();
+  }
 }
 
 async function refreshOwnerGrantList() {
@@ -4674,6 +4727,77 @@ async function loadOwnerSuggestions() {
       '<p class="text-[11px] text-slate-400 mt-1.5">' + escapeHtml(s.submitter_email || "Unknown sender") + (when ? " · " + when : "") + '</p>' +
       noteLine + "</div>";
   }).join("");
+}
+
+// ===== OWNER CONSOLE — USERS LIST + FORCE SCRAPE (Matthew only) =====
+// The list is read live from the owner-grant function every time
+// the Owner tab opens (users_list), so new registrations appear
+// without any refresh job; the Refresh button re-reads on demand.
+function ownerUsersMsg(text, isError) {
+  const el = document.getElementById("ownerUsersMsg");
+  if (!el) return;
+  el.innerText = text;
+  el.className = "text-xs font-medium mb-3 " + (isError ? "text-red-600" : "text-emerald-600");
+}
+
+async function loadOwnerUsers() {
+  const listEl = document.getElementById("ownerUsersList");
+  if (!listEl || !isOwnerGrantUser()) return;
+  listEl.innerHTML = '<p class="text-xs text-slate-400">Loading\u2026</p>';
+  const res = await ownerGrantInvoke({ action: "users_list" });
+  if (!res.ok) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">Couldn\'t load the user list.</p>';
+    return;
+  }
+  const rows = res.users || [];
+  if (!rows.length) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">No users yet.</p>';
+    return;
+  }
+  listEl.innerHTML = rows.map(function (u) {
+    const stateBits = [];
+    if (u.billing_status) stateBits.push(u.billing_status);
+    if (u.plan_tier) stateBits.push(u.plan_tier);
+    const state = stateBits.length ? stateBits.join(" \u00b7 ") : "no settings yet";
+    const joined = u.signed_up_at ? new Date(u.signed_up_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+    return '<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">' +
+      '<div class="flex items-center justify-between gap-3">' +
+      '<p class="text-sm font-bold text-slate-800">' + escapeHtml(u.display_name || "") + '</p>' +
+      '<button type="button" onclick="ownerForceScrape(\'' + u.user_id + '\', this)" class="shrink-0 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">Force scrape</button>' +
+      '</div>' +
+      '<p class="text-xs text-slate-500 mt-0.5">' + escapeHtml(u.email || "") + " \u00b7 " + escapeHtml(state) + (joined ? " \u00b7 joined " + joined : "") + '</p>' +
+      '<p class="text-[11px] text-slate-400 font-mono mt-1 cursor-pointer" title="Click to copy the user ID" onclick="ownerCopyUserId(\'' + u.user_id + '\', this)">' + u.user_id + '</p>' +
+      "</div>";
+  }).join("");
+}
+
+async function ownerForceScrape(targetUserId, btn) {
+  if (!isOwnerGrantUser()) return;
+  if (btn) btn.disabled = true;
+  const res = await ownerGrantInvoke({ action: "force_scrape", target_user_id: targetUserId });
+  if (btn) btn.disabled = false;
+  if (res.ok) {
+    ownerUsersMsg("Scrape queued for " + (res.target_email || "that account") + " \u2014 their inventory will begin updating shortly, same as their Sync Inventory button.", false);
+  } else {
+    ownerUsersMsg(res.message || "Couldn\'t queue that scrape.", true);
+  }
+}
+
+async function ownerCopyUserId(id, el) {
+  try { await navigator.clipboard.writeText(id); }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = id;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e2) {}
+    ta.remove();
+  }
+  if (el) {
+    const old = el.textContent;
+    el.textContent = "Copied \u2713";
+    setTimeout(() => { el.textContent = old; }, 1500);
+  }
 }
 
 // Owner-only: preview the gates as another tier (this device only).
@@ -12647,7 +12771,7 @@ async function showCloserPage() {
   syncQueuePoller();
 }
 
-function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); renderLocationGroupsSettings(); renderThemePicker(); refreshTikTokStatus(); safeLoadIntroVideos(); }
+function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); if (typeof syncOwnerTabVisibility === "function") syncOwnerTabVisibility(); renderLocationGroupsSettings(); renderThemePicker(); refreshTikTokStatus(); safeLoadIntroVideos(); }
 function renderUserId() { const el = document.getElementById("settingsUserId"); if (el) el.textContent = (currentUser && currentUser.id) ? currentUser.id : "—"; }
 async function copyUserId() {
   const id = (currentUser && currentUser.id) ? currentUser.id : "";
@@ -12663,7 +12787,7 @@ async function copyUserId() {
 }
 // Luna: Settings left-menu tabs (Dealership / Facebook / Automation / AI Settings)
 function switchSettingsTab(tab) {
-  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", tiktok: "settingsPanelTiktok", automation: "settingsPanelAutomation", ai: "settingsPanelAi", appearance: "settingsPanelAppearance", plan: "settingsPanelPlan" };
+  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", tiktok: "settingsPanelTiktok", automation: "settingsPanelAutomation", ai: "settingsPanelAi", appearance: "settingsPanelAppearance", plan: "settingsPanelPlan", owner: "settingsPanelOwner" };
   Object.entries(panels).forEach(([key, id]) => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("hidden", key !== tab);
@@ -12673,6 +12797,8 @@ function switchSettingsTab(tab) {
     btn.className = "w-full text-left px-4 py-3 rounded-xl cursor-pointer " + (active ? "bg-blue-600 text-white font-bold" : "bg-slate-100 text-slate-600 font-semibold");
   });
   if (tab === "dealership") safeLoadIntroVideos();
+  if (tab === "owner" && typeof loadOwnerPanel === "function") loadOwnerPanel();
+  if (typeof syncOwnerTabVisibility === "function") syncOwnerTabVisibility();
 }
 // ==============================================================================
 // ====================== TIKTOK CONNECT (SANDBOX) START ========================
