@@ -7800,6 +7800,16 @@ function isSold(car) {
   return !!car && (car.status || "").toLowerCase() === "sold";
 }
 
+// POSTED-BUT-EXITED (Matthew, 2026-10-28): the scraper marks a car
+// is_active=false when it leaves the dealer feed, but a car whose
+// Marketplace listing is still live (marketplace_posted_at set) stays
+// visible (see fetchLiveInventory) and is badged "Exited feed" in the
+// row status chips, so a sold-and-gone car never masquerades as a
+// normal live listing. Display only — the database row is untouched.
+function isExitedPosted(car) {
+  return !!car && car.is_active === false && !!car.marketplace_posted_at;
+}
+
 async function fetchLiveInventory(isManual) {
   if (!currentUser) return;
   const tbody = document.getElementById("inventoryTableBody");
@@ -7828,7 +7838,7 @@ async function fetchLiveInventory(isManual) {
       }
     }
 
-    rawInventory = allCars.filter(c => c.is_active !== false);
+    rawInventory = allCars.filter(c => c.is_active !== false || !!c.marketplace_posted_at);
     populateFilterDropdowns();
     renderLocationGroupsSettings();
     // Phase B: counts use the SAME predicates as applyFilters' pill
@@ -8713,6 +8723,8 @@ function gridCardHtml(car) {
       ? '<span class="px-3 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold shadow-sm">Sold</span>'
       : isPosted && removalPending
       ? '<span class="px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold shadow-sm">Removal queued</span>'
+      : isPosted && isExitedPosted(car)
+      ? '<span class="px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-semibold shadow-sm">Exited feed</span>'
       : isPosted
       ? '<span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold shadow-sm">Posted</span>'
       : isQueued
@@ -8918,6 +8930,12 @@ ${car.location_name ? `
       ? `
         <span class="px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold">
           Removal queued
+        </span>
+      `
+      : isPosted && isExitedPosted(car)
+      ? `
+        <span class="px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-semibold">
+          Exited feed
         </span>
       `
       : isPosted
