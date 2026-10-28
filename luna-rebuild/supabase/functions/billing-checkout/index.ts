@@ -88,6 +88,25 @@
 // recommended so Checkout's Terms link points at AutoLaunch's own
 // terms page. See TIERS.md "Refund policy".
 //
+// PLAN SWITCH — { action: "change_plan", plan: "post"|"group" }
+// (Matthew, 2026-10-28, after the billing audit): a REAL
+// upgrade/downgrade for an existing monthly subscriber. Before this,
+// the only "upgrade" path was a fresh checkout, which minted a
+// SECOND subscription (+ a duplicate Stripe customer) and never
+// cancelled the first — the old sub kept billing invisibly. Now the
+// price on the caller's EXISTING subscription is swapped in place
+// with proration_behavior "always_invoice": an upgrade charges the
+// prorated difference for the rest of the current period
+// immediately; a downgrade yields a prorated credit against future
+// invoices. Same subscription, same customer, same billing-cycle
+// anchor — the renewal day never moves. Solo monthly prices only in
+// v1; every refusal is a plain error code (no_subscription /
+// already_on_plan / unsupported_subscription /
+// subscription_not_active) and NOTHING falls through to checkout.
+// The same audit fixed ordinary checkout to reuse the caller's
+// stored Stripe customer when one exists (duplicate-customer fix
+// below), so repeat buyers stop spawning fresh customers.
+//
 // Config comes from function secrets only (never the app, never code):
 //   STRIPE_SECRET_KEY, STRIPE_PRICE_POST, STRIPE_PRICE_GROUP,
 //   STRIPE_PRICE_POST_1Y, STRIPE_PRICE_POST_2Y, STRIPE_PRICE_POST_3Y,
@@ -389,6 +408,93 @@ async function finishCheckout(
   return json({ ok: true, url: session.url });
 }
 
+// ---- Plan switch (change_plan) --------------------------------------
+// See the header note. The caller's OWN subscription is identified
+// from their settings row (never from a client-supplied id), its
+// current price must be one of the two solo monthly prices, and the
+// swap is a single Stripe subscription update. plan_tier on the row
+// is NOT written here — the webhook's customer.subscription.updated
+// handler re-derives it from the new price id when the event lands,
+// exactly as it already did for portal-driven changes.
+const SOLO_MONTHLY_PRICE_ENVS: Record<string, string> = {
+  post: "STRIPE_PRICE_POST",
+  group: "STRIPE_PRICE_GROUP",
+};
+
+async function changePlan(user: any, body: any): Promise<Response> {
+  const target = String(body?.plan || "");
+  const targetEnv = SOLO_MONTHLY_PRICE_ENVS[target];
+  if (!targetEnv) return json({ ok: false, error: "invalid_plan" }, 400);
+
+  const secretKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
+  const targetPriceId = Deno.env.get(targetEnv) || "";
+  const postPriceId = Deno.env.get("STRIPE_PRICE_POST") || "";
+  const groupPriceId = Deno.env.get("STRIPE_PRICE_GROUP") || "";
+  if (!secretKey || !targetPriceId || !postPriceId || !groupPriceId) {
+    return json({ ok: false, error: "billing_not_configured" }, 503);
+  }
+
+  const rowRes = await svcRest(
+    "user_settings?user_id=eq." + encodeURIComponent(user.id) +
+      "&select=stripe_subscription_id",
+  );
+  const row = Array.isArray(rowRes.data) ? rowRes.data[0] : null;
+  const subId = row?.stripe_subscription_id
+    ? String(row.stripe_subscription_id)
+    : "";
+  if (!rowRes.ok || !subId) {
+    // Term holders (paid up front — no subscription exists) and
+    // trial accounts land here: there is nothing to switch. The app
+    // tells them to buy through checkout instead; this function
+    // never routes them into a checkout silently.
+    return json({ ok: false, error: "no_subscription" }, 409);
+  }
+
+  const sub = await stripeGet(
+    secretKey,
+    "/subscriptions/" + encodeURIComponent(subId),
+  );
+  if (!sub?.id) return json({ ok: false, error: "stripe_error" }, 502);
+  if (!["active", "trialing", "past_due"].includes(String(sub.status || ""))) {
+    return json({ ok: false, error: "subscription_not_active" }, 409);
+  }
+  const item = Array.isArray(sub.items?.data) ? sub.items.data[0] : null;
+  const currentPriceId = item?.price?.id ? String(item.price.id) : "";
+  if (!item?.id || !currentPriceId) {
+    return json({ ok: false, error: "stripe_error" }, 502);
+  }
+  if (currentPriceId === targetPriceId) {
+    return json({ ok: false, error: "already_on_plan" }, 409);
+  }
+  if (currentPriceId !== postPriceId && currentPriceId !== groupPriceId) {
+    // Dealership seat subscriptions and the Support Plan ride on
+    // different prices — v1 switches solo monthly plans only.
+    return json({ ok: false, error: "unsupported_subscription" }, 409);
+  }
+
+  // The swap itself: same subscription, same customer, and NO
+  // billing_cycle_anchor parameter — the renewal day is untouched.
+  // always_invoice settles the proration NOW (charge on upgrade,
+  // credit on downgrade) instead of netting it into the next cycle.
+  const updated = await stripePost(
+    secretKey,
+    "/subscriptions/" + encodeURIComponent(subId),
+    {
+      "items[0][id]": String(item.id),
+      "items[0][price]": targetPriceId,
+      "proration_behavior": "always_invoice",
+      "metadata[plan]": target,
+    },
+  );
+  if (!updated?.id) return json({ ok: false, error: "stripe_error" }, 502);
+  return json({
+    ok: true,
+    plan: target,
+    subscription_id: subId,
+    status: String(updated.status || sub.status),
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ ok: false, error: "POST only" }, 405);
@@ -405,6 +511,13 @@ Deno.serve(async (req) => {
   if (body?.action === "lifetime_status") {
     const sold = await countLifetimeBuyers();
     return json({ ok: true, sold, cap: LIFETIME_CAP, available: false });
+  }
+
+  // Plan switch for an existing monthly subscriber (see the
+  // changePlan note above). Handled before the plan dispatch: it
+  // never creates a session.
+  if (body?.action === "change_plan") {
+    return await changePlan(user, body);
   }
 
   const plan = String(body?.plan || "");
@@ -590,7 +703,40 @@ Deno.serve(async (req) => {
   if ((Deno.env.get("STRIPE_TAX_ENABLED") || "") === "true") {
     form.set("automatic_tax[enabled]", "true");
   }
-  if (user.email) form.set("customer_email", String(user.email));
+  // Duplicate-customer fix (2026-10-28 audit): a repeat buyer who
+  // already has a Stripe customer on file gets the session attached
+  // to THAT customer — passing only customer_email made Stripe mint
+  // a fresh customer for every checkout, which is also what hid an
+  // "upgrade" checkout's orphaned first subscription from the
+  // in-app portal. The stored customer is re-read from Stripe
+  // first; if it no longer exists there, fall back to the email
+  // exactly as before.
+  let attachedCustomer = false;
+  const crow = await svcRest(
+    "user_settings?user_id=eq." + encodeURIComponent(user.id) +
+      "&select=stripe_customer_id",
+  );
+  const storedCustomer = Array.isArray(crow.data) && crow.data[0]?.stripe_customer_id
+    ? String(crow.data[0].stripe_customer_id)
+    : "";
+  if (storedCustomer) {
+    const cust = await stripeGet(
+      secretKey,
+      "/customers/" + encodeURIComponent(storedCustomer),
+    );
+    if (cust?.id && !cust.deleted) {
+      form.set("customer", storedCustomer);
+      attachedCustomer = true;
+    } else {
+      console.warn(
+        "billing-checkout: stored customer " + storedCustomer +
+          " not usable in Stripe — falling back to customer_email",
+      );
+    }
+  }
+  if (!attachedCustomer && user.email) {
+    form.set("customer_email", String(user.email));
+  }
   // NOTE: no billing_cycle_anchor — Stripe's default anchors the
   // monthly renewal to the subscription's start day, per spec.
 

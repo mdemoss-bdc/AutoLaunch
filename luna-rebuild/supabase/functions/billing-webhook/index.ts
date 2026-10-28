@@ -33,8 +33,12 @@
 // only as harmless history for events that can no longer occur:
 //   checkout.session.completed, kind post/group → billing_status
 //     'active', plan_tier from the session metadata plan, stripe ids
-//     + current_period_end stored. The subscription itself carries
-//     the user_id/plan in its metadata too (set by billing-checkout).
+//     + current_period_end stored — with one protection: the stored
+//     end is max(existing end, the new subscription's end), so a
+//     monthly checkout can never shorten a prepaid term the account
+//     already holds (2026-10-28 audit fix). The subscription itself
+//     carries the user_id/plan in its metadata too (set by
+//     billing-checkout).
 //   checkout.session.completed, kind lifetime_* → billing_status
 //     'active' PERMANENTLY for that tier: plan_tier + lifetime_tier
 //     set, lifetime_purchased_at stamped, stripe_customer_id stored.
@@ -1007,12 +1011,35 @@ Deno.serve(async (req) => {
             stripe_customer_id: obj.customer ? String(obj.customer) : null,
           };
         } else {
+          // TERM PROTECTION (2026-10-28 audit): this generic branch
+          // must never SHORTEN a stored current_period_end. A
+          // prepaid-term holder who also starts a monthly
+          // subscription keeps whichever end is LATER — the term
+          // they already paid for outlives the subscription's first
+          // period, and the subscription lifecycle below already
+          // refuses to expire a term-protected row. For an ordinary
+          // subscriber the row end equals their old sub's end, which
+          // the new sub's end replaces as before.
+          const { data: grow } = await svc
+            .from("user_settings")
+            .select("current_period_end")
+            .eq("user_id", userId)
+            .maybeSingle();
+          const subEndIso = periodEndIso(sub);
+          const existingEndMs = grow?.current_period_end
+            ? Date.parse(grow.current_period_end)
+            : NaN;
+          const subEndMs = subEndIso ? Date.parse(subEndIso) : NaN;
+          const keepExistingEnd = Number.isFinite(existingEndMs) &&
+            (!Number.isFinite(subEndMs) || existingEndMs > subEndMs);
           update = {
             user_id: userId,
             billing_status: "active",
             stripe_customer_id: obj.customer ? String(obj.customer) : null,
             stripe_subscription_id: subId || null,
-            current_period_end: periodEndIso(sub),
+            current_period_end: keepExistingEnd
+              ? grow.current_period_end
+              : subEndIso,
           };
           if (plan === "post" || plan === "group") update.plan_tier = plan;
         }

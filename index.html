@@ -781,6 +781,33 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
 
   <!-- CHECKOUT CONFIRM (final-sale consent — acceptance recorded in terms_acceptances before Stripe) -->
+  <div id="planSwitchModal" class="fixed inset-0 z-[80] hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden">
+      <div class="bg-slate-900 px-6 py-4 text-white">
+        <h3 class="text-lg font-bold">Switch your plan</h3>
+        <p class="text-sm text-slate-300">Same subscription — no new checkout, no second bill.</p>
+      </div>
+      <div class="px-6 py-5 space-y-3 text-sm text-slate-700">
+        <div class="flex items-baseline justify-between gap-3">
+          <span id="planSwitchPlan" class="font-bold text-slate-900"></span>
+          <span id="planSwitchPrice" class="font-bold text-slate-900 whitespace-nowrap"></span>
+        </div>
+        <p id="planSwitchTerms" class="leading-relaxed"></p>
+        <p class="font-bold text-slate-900">All sales are final — no refunds.</p>
+        <p>Full terms: <a href="terms.html" target="_blank" rel="noopener" class="text-indigo-600 font-semibold underline">AutoLaunch Terms of Service</a>.</p>
+        <label class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 cursor-pointer">
+          <input type="checkbox" id="planSwitchConsent" onchange="onPlanSwitchConsentChange()" class="mt-0.5 h-4 w-4 shrink-0 accent-indigo-600">
+          <span class="font-semibold text-slate-800">I understand all sales are final and there are no refunds.</span>
+        </label>
+        <p id="planSwitchMsg" class="hidden text-sm"></p>
+        <div class="flex gap-3 pt-1">
+          <button id="planSwitchBtn" onclick="confirmPlanSwitch()" disabled class="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed">Switch plan</button>
+          <button onclick="closeModal('planSwitchModal')" class="px-4 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50">Not now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="checkoutConfirmModal" class="fixed inset-0 z-[80] hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
     <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden">
       <div class="bg-slate-900 px-6 py-4 text-white">
@@ -3077,6 +3104,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
                 <p id="planSupportActiveText" class="text-xs text-slate-500 leading-relaxed mt-1"></p>
                 <button onclick="openBillingPortal()" class="mt-3 px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm cursor-pointer">Manage support plan</button>
               </div>
+            </div>
+            <div id="planSwitchWrap" class="hidden mt-4">
+              <button id="btnPlanSwitch" onclick="startPlanSwitch()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Upgrade to Automate</button>
+              <p id="planSwitchNote" class="text-xs text-slate-400 mt-2"></p>
             </div>
             <div id="manageSubWrap" class="hidden mt-4">
               <button id="btnManageSubscription" onclick="openBillingPortal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm cursor-pointer">Manage or cancel subscription</button>
@@ -5838,6 +5869,107 @@ async function proceedToCheckout(plan, msgId, extra) {
   }
 }
 
+// ---- Plan switch (billing-checkout change_plan) ----------------------
+// A monthly subscriber moving between Self Post and Automate does NOT
+// check out again: billing-checkout swaps the price on their EXISTING
+// subscription with the proration settled immediately (charged on an
+// upgrade, credited toward future bills on a downgrade). One
+// subscription throughout, and the billing day never changes. The
+// confirm modal mirrors the purchase confirm (consent + a recorded
+// terms acceptance) because a switch is a new charge agreement.
+let pendingPlanSwitch = null;
+
+function planSwitchTarget() {
+  if (currentUserTier === "post") return "group";
+  if (currentUserTier === "group") return "post";
+  return null;
+}
+
+function startPlanSwitch() {
+  const target = planSwitchTarget();
+  if (!target) return;
+  const upgrade = target === "group";
+  pendingPlanSwitch = { plan: target };
+  document.getElementById('planSwitchPlan').innerText = upgrade ? "AutoLaunch Automate" : "AutoLaunch Self Post";
+  document.getElementById('planSwitchPrice').innerText = upgrade ? "$100/month" : "$75/month";
+  document.getElementById('planSwitchTerms').innerText = upgrade
+    ? "Your plan switches today. You are charged the difference between the two plans for the rest of this paid period \u2014 prorated to today \u2014 right away. From your next renewal you pay $100/month, on the same billing day as now. One subscription throughout: nothing is cancelled and nothing starts over."
+    : "Your plan switches today. The difference between the two plans for the rest of this paid period comes back as a credit toward your future bills \u2014 no charge today. From your next renewal you pay $75/month, on the same billing day as now. One subscription throughout: nothing is cancelled and nothing starts over.";
+  const box = document.getElementById('planSwitchConsent');
+  box.checked = false;
+  document.getElementById('planSwitchBtn').disabled = true;
+  const msg = document.getElementById('planSwitchMsg');
+  msg.classList.add('hidden');
+  msg.innerText = "";
+  openModal('planSwitchModal');
+}
+
+function onPlanSwitchConsentChange() {
+  const box = document.getElementById('planSwitchConsent');
+  document.getElementById('planSwitchBtn').disabled = !box.checked;
+}
+
+async function confirmPlanSwitch() {
+  if (!pendingPlanSwitch) return;
+  const target = pendingPlanSwitch.plan;
+  const btn = document.getElementById('planSwitchBtn');
+  const msg = document.getElementById('planSwitchMsg');
+  btn.disabled = true;
+  msg.classList.add('hidden');
+  const fail = (text) => {
+    msg.innerText = text;
+    msg.className = "text-sm text-red-600";
+    msg.classList.remove('hidden');
+    btn.disabled = false;
+  };
+  try {
+    const { error } = await supabaseClient.from('terms_acceptances').insert({
+      user_id: currentUser.id, plan_key: "switch_" + target, terms_version: TERMS_VERSION
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.error("confirmPlanSwitch: acceptance record failed:", e);
+    fail("We couldn't record your acceptance just now \u2014 please check your connection and try again. Nothing has changed.");
+    return;
+  }
+  let data = null;
+  try {
+    const res = await supabaseClient.functions.invoke("billing-checkout", { body: { action: "change_plan", plan: target } });
+    if (res.error) {
+      const code = await billingFunctionErrorCode(res.error);
+      if (code === "no_subscription") {
+        fail("There's no monthly subscription on this account to switch \u2014 pick a plan from the buy cards instead.");
+      } else if (code === "already_on_plan") {
+        fail("You're already on that plan \u2014 nothing to switch.");
+      } else if (code === "billing_not_configured") {
+        fail("Billing is being switched on \u2014 plan changes open once it's live.");
+      } else {
+        fail("The switch didn't go through \u2014 please try again. Nothing has changed.");
+      }
+      return;
+    }
+    data = res.data;
+  } catch (e) {
+    console.error("confirmPlanSwitch failed:", e);
+    fail("The switch didn't go through \u2014 please try again. Nothing has changed.");
+    return;
+  }
+  if (!data || !data.ok) {
+    fail("The switch didn't go through \u2014 please try again. Nothing has changed.");
+    return;
+  }
+  pendingPlanSwitch = null;
+  closeModal('planSwitchModal');
+  showBillingMsg("planBillingMsg", target === "group"
+    ? "You're on Automate now \u2014 the prorated difference was charged today. Your billing day hasn't changed."
+    : "You're on Self Post now \u2014 the difference was credited toward your future bills. Your billing day hasn't changed.", false);
+  // The webhook flips plan_tier from the subscription event a moment
+  // later; reload now and once more shortly so the panel lands on
+  // the new tier.
+  setTimeout(() => { loadUserStoreSettings(); }, 1200);
+  setTimeout(() => { loadUserStoreSettings(); }, 4500);
+}
+
 async function openBillingPortal() {
   try {
     const { data, error } = await supabaseClient.functions.invoke("billing-portal", { body: {} });
@@ -5980,6 +6112,28 @@ function renderBillingPanel() {
           if (t) t.innerText = "Support plan active until " + fmtBillingDate(Date.parse(currentBilling.supportPeriodEnd)) + ". Bug reports are always free.";
         }
       }
+    }
+  }
+  // Plan switch (2026-10-28): a full monthly subscriber holding a
+  // real subscription gets the switch control — the buy cards stay
+  // hidden for them, so this is their door between Self Post and
+  // Automate. Term holders keep the cards (they stack terms);
+  // owners, dealership accounts and trial/gate states never see it.
+  const switchWrap = document.getElementById("planSwitchWrap");
+  if (switchWrap) {
+    const switchTarget = (access.mode === "full" && !access.termActive &&
+      currentBilling.hasSubscription && !(isOwner && !ownerBillingPreview) &&
+      !isDealershipLeader() && !dealershipCovered())
+      ? (currentUserTier === "post" ? "group" : currentUserTier === "group" ? "post" : null)
+      : null;
+    switchWrap.classList.toggle("hidden", !switchTarget);
+    if (switchTarget) {
+      const switchBtn = document.getElementById("btnPlanSwitch");
+      const switchNote = document.getElementById("planSwitchNote");
+      if (switchBtn) switchBtn.innerText = switchTarget === "group" ? "Upgrade to Automate \u2014 $100/mo" : "Switch to Self Post \u2014 $75/mo";
+      if (switchNote) switchNote.innerText = switchTarget === "group"
+        ? "Charged the difference today, prorated \u2014 your billing day doesn't change."
+        : "The difference is credited toward your future bills \u2014 your billing day doesn't change.";
     }
   }
   // The portal button only makes sense with a Stripe customer on
