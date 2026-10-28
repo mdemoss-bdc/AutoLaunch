@@ -1391,6 +1391,118 @@ def _auto_post_allowed_locations(settings_row: dict):
     return allowed
 
 
+def _teammate_blocked_vins(uid: str) -> set:
+    """DEALERSHIP DUPLICATE GUARD (Matthew, 2026-10-27): the set of
+    VINs this user's auto-post pass must not queue because a TEAMMATE
+    in the same dealership already has the car on Marketplace, or is
+    about to put it there.
+
+    "Live on Marketplace" is the app's own derivation: the
+    teammate's inventory row carries marketplace_posted_at — the
+    helper stamps it when a post completes and CLEARS it when a
+    delete completes, so a car a teammate posted and later took down
+    is free again. A teammate's live (pending/processing)
+    marketplace queue row blocks too, so two members whose passes
+    run in the same window can't both queue the same car.
+
+    Scope: OTHER members of the user's own dealership only, and
+    only while the dealership's block_teammate_autopost toggle is
+    ON (the default; the leader can turn it off). The user's OWN
+    posts and queue rows never enter the set — auto delete & repost
+    of one's own listings is untouched, and manual posting never
+    comes through this pass at all. Solo users (no membership row)
+    return an empty set after a single read, so their pass behaves
+    exactly as before. Fail-open throughout, like the rest of this
+    pass: any read error logs and returns the empty set — the guard
+    must never break or shrink a pass it couldn't check.
+    """
+    try:
+        m = (
+            db.table("dealership_account_members")
+            .select("dealership_id")
+            .eq("user_id", uid)
+            .limit(1)
+            .execute()
+        ).data or []
+        if not m:
+            return set()
+        dealer_id = m[0].get("dealership_id")
+        if not dealer_id:
+            return set()
+        d = (
+            db.table("dealership_accounts")
+            .select("block_teammate_autopost")
+            .eq("id", dealer_id)
+            .limit(1)
+            .execute()
+        ).data or []
+        if not d or d[0].get("block_teammate_autopost") is False:
+            return set()
+        mates = (
+            db.table("dealership_account_members")
+            .select("user_id")
+            .eq("dealership_id", dealer_id)
+            .execute()
+        ).data or []
+        mate_ids = [
+            r["user_id"] for r in mates
+            if r.get("user_id") and r["user_id"] != uid
+        ]
+        if not mate_ids:
+            return set()
+        blocked = set()
+        # Teammates' live listings: posted and not since deleted
+        # (a completed delete cleared the stamp). Paginated like
+        # every wide read in this pass — past 1,000 rows the silent
+        # PostgREST cap would hide live cars.
+        _off = 0
+        while True:
+            _page = (
+                db.table("scraped_inventory")
+                .select("vin, marketplace_posted_at")
+                .in_("user_id", mate_ids)
+                .order("user_id")
+                .order("vin")
+                .range(_off, _off + 999)
+                .execute()
+            ).data or []
+            for r in _page:
+                if r.get("vin") and r.get("marketplace_posted_at"):
+                    blocked.add(r["vin"])
+            if len(_page) < 1000:
+                break
+            _off += 1000
+        # Teammates' live marketplace queue rows: the same-window
+        # race guard, mirroring the per-user live-job guard above
+        # widened to the dealership.
+        _off = 0
+        while True:
+            _page = (
+                db.table("auto_posting_queue")
+                .select("vin")
+                .in_("user_id", mate_ids)
+                .eq("target_channel", "marketplace")
+                .in_("status", ["pending", "processing"])
+                .order("vin")
+                .order("id")
+                .range(_off, _off + 999)
+                .execute()
+            ).data or []
+            for r in _page:
+                if r.get("vin"):
+                    blocked.add(r["vin"])
+            if len(_page) < 1000:
+                break
+            _off += 1000
+        return blocked
+    except Exception as e:
+        print(
+            f"[!] Dealership duplicate guard read failed for user "
+            f"{uid[:8]} (non-fatal; guard off for this pass): {e}"
+        )
+        return set()
+
+
 def _auto_post_filtered(uid: str) -> int:
     """Queue post jobs for every unposted car matching the user's
     location x condition filter, up to today's remaining daily
@@ -1531,6 +1643,14 @@ def _auto_post_filtered(uid: str) -> int:
             f"unposted active cars in inventory={len(inv)}."
         )
 
+        # DEALERSHIP DUPLICATE GUARD: VINs a teammate already posted
+        # (or is about to post) are off-limits to this pass while the
+        # dealership's guard is on. Computed once, at pass time, so a
+        # leader's toggle flip applies to the very next run. Solo
+        # users get an empty set — see _teammate_blocked_vins.
+        blocked_vins = _teammate_blocked_vins(uid) if inv else set()
+        guard_skipped = 0
+
         channels = ["marketplace"]
         if s.get("channel_instagram_enabled") is True:
             channels.append("instagram")
@@ -1567,6 +1687,9 @@ def _auto_post_filtered(uid: str) -> int:
             vin = car.get("vin")
             if not vin:
                 continue
+            if vin in blocked_vins:
+                guard_skipped += 1
+                continue
             new_rows = []
             for ch in channels:
                 if (vin, ch) in live_keys:
@@ -1586,6 +1709,12 @@ def _auto_post_filtered(uid: str) -> int:
             if new_rows:
                 queue_rows.extend(new_rows)
                 cars_queued += 1
+        if guard_skipped:
+            print(
+                f"[*] Auto-post for user {uid[:8]}: dealership guard "
+                f"skipped {guard_skipped} car(s) a teammate already "
+                f"posted or has queued."
+            )
         if not queue_rows:
             print(f"[*] Auto-post for user {uid[:8]}: no unposted cars match the filter right now.")
             return 0

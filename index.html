@@ -1290,6 +1290,17 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           <p id="dealerPortalMsg" class="text-xs font-medium mt-2 hidden"></p>
         </div>
       </div>
+      <div class="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <div>
+          <p class="text-sm font-bold text-slate-800">Prevent duplicate auto-posts across your team</p>
+          <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">AutoLaunch won't auto-post a car a teammate already posted. Anyone can still post any car by hand.</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input type="checkbox" id="dealerGuardToggle" onchange="toggleDealerAutopostGuard(this)" class="sr-only peer">
+          <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+      <p id="dealerGuardMsg" class="text-xs font-medium mt-2 hidden"></p>
       <div id="dealerMembersList" class="space-y-2">
         <p class="text-sm text-slate-400">Loading members…</p>
       </div>
@@ -4493,7 +4504,7 @@ let currentBilling = {
 // "Dealership accounts"): this account's dealership membership,
 // resolved on load from dealership_account_members joined to
 // dealership_accounts. Shape: { id, name, role, status, seatLimit,
-// planKey, planFlavor, trialEndsAt, billingStatus, periodEnd } or
+// planKey, planFlavor, trialEndsAt, billingStatus, periodEnd, blockTeammateAutopost } or
 // null when the account belongs to no dealership.
 // A member of a COVERED dealership gets their access through the
 // dealership at the dealership's flavor, and their own billing row
@@ -5656,7 +5667,7 @@ async function resolveDealershipMembership() {
   try {
     const { data, error } = await supabaseClient
       .from("dealership_account_members")
-      .select("role, dealership_id, dealership_accounts ( id, name, status, seat_limit, plan_key, plan_flavor, trial_ends_at, billing_status, current_period_end )")
+      .select("role, dealership_id, dealership_accounts ( id, name, status, seat_limit, plan_key, plan_flavor, trial_ends_at, billing_status, current_period_end, block_teammate_autopost )")
       .eq("user_id", currentUser.id)
       .maybeSingle();
     if (error) throw error;
@@ -5671,7 +5682,8 @@ async function resolveDealershipMembership() {
         planFlavor: data.dealership_accounts.plan_flavor,
         trialEndsAt: data.dealership_accounts.trial_ends_at,
         billingStatus: data.dealership_accounts.billing_status,
-        periodEnd: data.dealership_accounts.current_period_end
+        periodEnd: data.dealership_accounts.current_period_end,
+        blockTeammateAutopost: data.dealership_accounts.block_teammate_autopost !== false
       };
     }
   } catch (e) {
@@ -5803,6 +5815,8 @@ async function renderDealershipPage() {
   const nameEl = document.getElementById("dealerName");
   if (nameEl) nameEl.innerText = currentDealership.name || "Dealership";
   renderDealerStatusLines();
+  const guardToggleEl = document.getElementById("dealerGuardToggle");
+  if (guardToggleEl) guardToggleEl.checked = currentDealership.blockTeammateAutopost !== false;
   if (currentDealership.status === "trial") {
     renderDealerBuyPanel("Buy seats before your trial ends",
       "Your trial runs at the full Group flavor. Pick the flavor and seat count your store keeps when it converts — buying now means no interruption.");
@@ -5860,6 +5874,8 @@ function renderDealerMembers(data) {
   const members = data.members || [];
   const limit = (dealer.seat_limit === null || dealer.seat_limit === undefined) ? null : dealer.seat_limit;
   const memberCountOnly = members.filter(function (m) { return m.role !== "admin"; }).length;
+  const guardToggle = document.getElementById("dealerGuardToggle");
+  if (guardToggle) guardToggle.checked = dealer.block_teammate_autopost !== false;
   const seatsLine = document.getElementById("dealerSeatsLine");
   if (seatsLine) {
     seatsLine.innerText = limit === null
@@ -5892,6 +5908,31 @@ function renderDealerMembers(data) {
       "</div>" +
     "</div>";
   }).join("");
+}
+
+// Dealership duplicate guard (2026-10-27): the leader's switch for
+// whether members' auto-post passes skip cars a teammate already
+// posted (or is about to post). The write goes through the
+// dealership-admin function like every management write — the
+// server re-checks the leader role; if it refuses, the switch
+// flips back and the leader sees a note. Manual posting is never
+// touched by the guard: it lives in the auto-post pass, not here.
+async function toggleDealerAutopostGuard(el) {
+  if (!currentDealership || !el) return;
+  const enabled = !!el.checked;
+  const { data, code } = await dealerInvoke("set_autopost_guard", { dealership_id: currentDealership.id, enabled: enabled });
+  if (!data || code) {
+    el.checked = !enabled;
+    dealerMsg("dealerGuardMsg", "Couldn't save that — reopen this page and try again.", true);
+    return;
+  }
+  currentDealership.blockTeammateAutopost = data.dealership
+    ? data.dealership.block_teammate_autopost !== false
+    : enabled;
+  el.checked = currentDealership.blockTeammateAutopost;
+  dealerMsg("dealerGuardMsg", enabled
+    ? "Duplicate guard on — auto-post will skip cars your team already posted."
+    : "Duplicate guard off — auto-post can queue any car, even one a teammate posted.", false);
 }
 
 // ---- Buy seats (Phase 2) ---------------------------------------------

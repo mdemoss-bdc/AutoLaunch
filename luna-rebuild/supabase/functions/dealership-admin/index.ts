@@ -61,6 +61,15 @@
 //   reset_member_password {dealership_id, user_id, new_password}
 //     Caller must be an admin member; the target must belong to the
 //     dealership. Admin API updateUserById.
+//   set_autopost_guard {dealership_id, enabled}
+//     The dealership duplicate guard (2026-10-27): while ON (the
+//     column default), a member's auto-post pass never queues a car
+//     another member already posted to Marketplace or is about to
+//     post — the scraper's pass reads block_teammate_autopost fresh
+//     every run. The leader (admin member) flips it here; a plain
+//     member gets 403 like every other management write. Manual
+//     posting is never affected: the guard lives in the auto-post
+//     pass, not in the queue.
 //
 // verify_jwt=false at the platform level; the caller's JWT is
 // verified manually (same pattern as trial-start). Browser-invoked
@@ -90,7 +99,7 @@ const SEAT_TIERS = [10, 20, 50, 100];
 // Phase 2: the columns every dealership read in this function
 // returns — includes the trial + Stripe state the app renders.
 const DEALER_SELECT =
-  "id, name, created_by, seat_limit, plan_key, status, created_at, plan_flavor, trial_ends_at, stripe_customer_id, stripe_subscription_id, current_period_end, billing_status" as const;
+  "id, name, created_by, seat_limit, plan_key, status, created_at, plan_flavor, trial_ends_at, stripe_customer_id, stripe_subscription_id, current_period_end, billing_status, block_teammate_autopost" as const;
 
 // Seat-powered states (Phase 2): member management (create / delete
 // / reset) is allowed while the dealership is trialing or active.
@@ -491,6 +500,30 @@ Deno.serve(async (req) => {
     });
     if (error) return json({ ok: false, error: "password_update_failed" }, 500);
     return json({ ok: true });
+  }
+
+  // ------------------------------------------------ set_autopost_guard
+  if (action === "set_autopost_guard") {
+    const dealershipId = typeof body.dealership_id === "string" ? body.dealership_id : "";
+    if (!dealershipId) return json({ ok: false, error: "dealership_required" }, 400);
+    if (typeof body.enabled !== "boolean") {
+      return json({ ok: false, error: "enabled_required" }, 400);
+    }
+    if (!(await requireAdmin(svc, dealershipId, callerId))) {
+      return json({ ok: false, error: "forbidden" }, 403);
+    }
+    const dealer = await getDealership(svc, dealershipId);
+    if (!dealer) return json({ ok: false, error: "dealership_not_found" }, 404);
+    const { data: updated, error } = await svc
+      .from("dealership_accounts")
+      .update({ block_teammate_autopost: body.enabled })
+      .eq("id", dealershipId)
+      .select(DEALER_SELECT)
+      .single();
+    if (error || !updated) {
+      return json({ ok: false, error: "guard_update_failed" }, 500);
+    }
+    return json({ ok: true, dealership: updated });
   }
 
   return json({ ok: false, error: "unknown_action" }, 400);
