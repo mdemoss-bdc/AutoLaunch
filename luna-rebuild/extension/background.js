@@ -330,6 +330,29 @@
 //     answered, so an errored pass (e.g. not_signed_in during a
 //     session handover) silenced that thread until its text
 //     changed; the hash now survives only a confirmed outcome.
+// 26. OUTCOME TRUTH (v2.52 — the 2026-10-28 Passport incident;
+//     content.js header note 26 carries the scan side): the
+//     worker half of the same repairs. (a) CLAIM-TIME STAMP
+//     CHECK: a POST row whose inventory record already carries
+//     marketplace_posted_at is completed as posted at claim —
+//     no tab, no second post; the existing stamp is the truth
+//     and is left untouched, and the row's executed_at
+//     fingerprints the path (applyPosted rows carry none).
+//     (b) ORPHAN RECOVERY: a stale (>45 min) processing POST
+//     row is no longer failed blind — the worker first arms
+//     the stored job for Selling-page verification
+//     (verifyPublished with orphanRecovery) and opens a
+//     Selling tab to run the status-aware scan; the scan's
+//     ordinary finish settles the row (live → posted, shells
+//     → duplicate_rejected, nothing → job_orphaned). Only
+//     when the scan cannot start, or produces no verdict
+//     within 6 minutes, does the old blind fail land — with
+//     the recovery outcome named in its diagnostics. Delete
+//     rows keep the blind fail exactly as before. (c)
+//     finishJobFailed now compacts diagnostics for
+//     duplicate_rejected and job_orphaned too, so the scan
+//     evidence rides error_message like every other honest
+//     failure.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -911,6 +934,13 @@ const jitter = (min, max) => sleep(min + Math.random() * (max - min));
 // but no legitimate run approaches 45 minutes, so a "processing"
 // row older than that has no living content script behind it.
 const JOB_STALE_MS = 45 * 60 * 1000;
+// Orphan recovery (v2.52, header note 26): how long a stale POST
+// row's recovery scan may run before the watchdog falls back to
+// the blind fail. The scan's own budget is ~4 minutes of rescans
+// (verifyPublished's wall-clock cap) plus render patience — six
+// minutes leaves honest headroom without wedging the slot.
+const ORPHAN_RECOVERY_TIMEOUT_MS = 6 * 60 * 1000;
+const SELLING_PAGE_URL = "https://www.facebook.com/marketplace/you/selling";
 const TERMINAL_ROW_STATUSES = ["posted", "failed", "completed"];
 
 // Returns true when the stored job slot must be KEPT (a run is
@@ -919,6 +949,40 @@ const TERMINAL_ROW_STATUSES = ["posted", "failed", "completed"];
 // caller then falls through and claims fresh work in the same
 // pass. Runs at most one lightweight queue-row read per cycle,
 // and only when a slot is occupied.
+// Arm a stale POST job for orphan-recovery verification and
+// open the Selling tab that runs the scan (v2.52, header
+// note 26). The stored job gains verifyPublished with
+// orphanRecovery set — the content script's existing routing
+// takes it from there — plus an orphanRecovery bookkeeping
+// record the watchdog reads on later cycles. Returns false
+// when the tab could not be opened; the caller then fails
+// blind, exactly as before this fix.
+async function startOrphanRecovery(job) {
+  try {
+    const nowIso = new Date().toISOString();
+    const armed = Object.assign({}, job, {
+      verifyPublished: { tries: 0, startedAt: nowIso, orphanRecovery: true },
+      orphanRecovery: { requestedAt: nowIso, tabId: null }
+    });
+    await chrome.storage.local.set({ current_posting_job: armed });
+    const tab = await chrome.tabs.create({ active: false, url: SELLING_PAGE_URL });
+    if (!tab || tab.id == null) return false;
+    try {
+      await chrome.tabs.update(tab.id, { autoDiscardable: false });
+    } catch (e) { /* non-fatal: the scan still runs, just unprotected */ }
+    const { current_posting_job: cur } =
+      await chrome.storage.local.get(["current_posting_job"]);
+    if (cur && cur.queueId === job.queueId && cur.orphanRecovery) {
+      cur.orphanRecovery.tabId = tab.id;
+      await chrome.storage.local.set({ current_posting_job: cur });
+    }
+    console.log(`[AutoLaunch] Orphan recovery: verifying queue item ${job.queueId} on the Selling page before failing it.`);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function reconcileActiveJob(job) {
   const queueId = job && job.queueId;
   if (!queueId) {
@@ -967,6 +1031,30 @@ async function reconcileActiveJob(job) {
     // claimedAt) does not get to wedge the queue forever.
     const ageMs = isFinite(claimedAtMs) ? Date.now() - claimedAtMs : Infinity;
     if (ageMs <= JOB_STALE_MS) return true; // genuinely running
+    // Orphan recovery (v2.52, header note 26): a stale POST row
+    // is verified against Facebook BEFORE it may be failed —
+    // the Prius lesson (2026-10-28) is that "processing" past
+    // the watchdog can mean the Publish already landed and
+    // only the bookkeeping died. The recovery scan settles the
+    // row through the ordinary finish messages; while it is in
+    // flight the slot is KEPT (returning true). Only a scan
+    // that cannot start, or that produces no verdict within
+    // ORPHAN_RECOVERY_TIMEOUT_MS, falls through to the blind
+    // fail below — with the recovery outcome in its detail.
+    let recoveryNote = "";
+    if (job.action === "post") {
+      const rec = job.orphanRecovery;
+      if (!rec) {
+        if (await startOrphanRecovery(job)) return true;
+        recoveryNote = " Orphan recovery scan could not be started (no Selling tab) — failed blind.";
+      } else {
+        const recAgeMs = Date.now() - (Date.parse(rec.requestedAt || "") || 0);
+        if (isFinite(recAgeMs) && recAgeMs <= ORPHAN_RECOVERY_TIMEOUT_MS) {
+          return true; // scan in flight — its finish settles the row
+        }
+        recoveryNote = " Orphan recovery scan produced no verdict within 6 min — failed blind.";
+      }
+    }
     // Orphaned: still "processing" far beyond any legitimate
     // run, so the content script is certainly dead (its tab was
     // closed, or it crashed). Fail the row honestly — the
@@ -976,7 +1064,7 @@ async function reconcileActiveJob(job) {
     const errorMessage = compactDiagError([{
       field: "Job",
       note: "job_orphaned",
-      detail: `claimed ${job.claimedAt || "unknown"}, still "processing" after 45+ min — content script presumed dead (tab closed or crashed)`
+      detail: `claimed ${job.claimedAt || "unknown"}, still "processing" after 45+ min — content script presumed dead (tab closed or crashed).${recoveryNote}`
     }]);
     try {
       await applyFailed(queueId, errorMessage);
@@ -1154,6 +1242,21 @@ async function checkQueue() {
       { status: "processing" }
     );
     if (!claimed.length) return; // someone/something else took it
+
+    // Claim-time stamp check (v2.52, header note 26): the car
+    // already carries marketplace_posted_at — an earlier run
+    // reached Facebook and only its bookkeeping was lost (the
+    // false-failure class behind the 2026-10-28 Passport
+    // duplicates). Complete the row as posted WITHOUT storing
+    // a job or opening a tab, and WITHOUT touching the stamp:
+    // the existing value is the truth. The row's executed_at
+    // fingerprints this path (applyPosted rows carry none).
+    if (!isDelete && carRow.marketplace_posted_at) {
+      await sbPatch(`auto_posting_queue?id=eq.${item.id}`,
+        { status: "posted", executed_at: new Date().toISOString() });
+      console.log(`[AutoLaunch] already_posted_at_claim: queue item ${item.id} (VIN ${item.vin}) already carries marketplace_posted_at ${carRow.marketplace_posted_at} — completed without posting.`);
+      return;
+    }
 
     await chrome.storage.local.set({
       current_posting_job: {
@@ -1548,14 +1651,23 @@ async function flushPendingFinish() {
 // it (a failed job's tab stays open as evidence), and a tab the
 // user already closed is a silent no-op.
 function scheduleJobTabClose(job) {
-  const tabId = job && job.tabId;
-  if (tabId == null) return;
   if (!chrome.tabs || typeof chrome.tabs.remove !== "function") return;
+  // The job's own tab, plus the orphan-recovery tab when this
+  // finish came from a recovery scan (v2.52, header note 26).
+  const ids = [];
+  if (job && job.tabId != null) ids.push(job.tabId);
+  if (job && job.orphanRecovery && job.orphanRecovery.tabId != null &&
+      !ids.includes(job.orphanRecovery.tabId)) {
+    ids.push(job.orphanRecovery.tabId);
+  }
+  if (!ids.length) return;
   setTimeout(() => {
-    try {
-      const p = chrome.tabs.remove(tabId);
-      if (p && typeof p.catch === "function") p.catch(() => {});
-    } catch (e) { /* the tab is already gone — nothing to do */ }
+    for (const tabId of ids) {
+      try {
+        const p = chrome.tabs.remove(tabId);
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch (e) { /* the tab is already gone — nothing to do */ }
+    }
   }, 4000);
 }
 
@@ -1630,11 +1742,16 @@ async function finishJobFailed(queueId, reason, diags) {
   // delete step notes (match scan, outcome), the evidence that says
   // WHY nothing was deleted. A publish_unverified failure (v2.1.7)
   // compacts as well: its records are the Selling-page verify scans,
-  // the evidence that the listing truly was not there.
+  // the evidence that the listing truly was not there. v2.52:
+  // duplicate_rejected and job_orphaned (the orphan-recovery
+  // verdicts) compact too — the same scan records are the evidence
+  // for those honest failures.
   const errorMessage =
     ((typeof reason === "string" && reason.startsWith("fields_unfilled")) ||
      reason === "publish_unverified" ||
      reason === "publish_button_not_found" ||
+     reason === "duplicate_rejected" ||
+     reason === "job_orphaned" ||
      (job && job.action === "delete"))
       ? compactDiagError(diags)
       : null;

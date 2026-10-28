@@ -373,6 +373,28 @@
 //     which signals fired, final verdict) BEFORE deciding, so
 //     the branch decision itself is diagnosable from
 //     error_message alone if it ever misjudges again.
+// 26. OUTCOME TRUTH (v2.52 — the 2026-10-28 Passport incident):
+//     a post job's recorded outcome disagreed with Facebook three
+//     times in three days (failed-but-live Bronco and Passport,
+//     orphaned-but-live Prius), and the Passport was then posted
+//     TWICE more into "Needs attention" duplicate shells, which
+//     the old existence scan cheerfully verified as "posted".
+//     Four repairs: (a) verification is STATUS-AWARE — strict-
+//     match cards are classified live vs shell (listingCardIs
+//     Shell), only a live card satisfies posted, shells alone
+//     fail honestly as duplicate_rejected; (b) a persisted
+//     publishAttemptedAt marker is stamped before the first
+//     Publish click — any flow re-entry with it set skips the
+//     fill and goes straight to Selling-page verification, so
+//     one job can never submit twice; (c) the Full Auto CDP
+//     retry click now requires positive evidence the first
+//     click did not submit (publishRetryEvidence: button idle,
+//     no navigation, no dialog) — "button still present" alone
+//     no longer earns a second click; (d) this same scan serves
+//     the worker's orphan recovery (verifyPublished carries
+//     orphanRecovery): its "not there" outcomes collapse back
+//     to job_orphaned, shells stay duplicate_rejected, and a
+//     live card posts the job truthfully.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -880,6 +902,40 @@
       `${carLike.year || ""} ${carLike.make || ""} ${carLike.model || ""}`);
     return t.includes(joined) ||
       (t.includes(year) && t.includes(make) && t.includes(model));
+  }
+  // Shell classification (v2.52, header note 26): a strict-match
+  // card is NOT necessarily a listing. When Facebook refuses a
+  // duplicate submission it still renders a card for the car on
+  // the Selling page — under "Needs attention", carrying the
+  // banner "This looks like a duplicate so we didn't post it.
+  // Delete it and try again." (screenshot-verified 2026-10-28,
+  // the Passport incident). The card's own status line still
+  // reads "Active · Listed on …", so the rejection wording is
+  // the only truthful discriminator. A card is a SHELL when its
+  // text carries any of these signals; verification may only
+  // ever be satisfied by a NON-shell card.
+  const SHELL_TEXT_SIGNALS = [
+    "looks like a duplicate",
+    "didn't post it",
+    "did not post it",
+    "delete it and try again",
+    "needs attention"
+  ];
+  function listingCardIsShell(text) {
+    if (!text) return false;
+    const t = normText(text).replace(/[\u2019\u2018]/g, "'");
+    return SHELL_TEXT_SIGNALS.some(sig => t.includes(sig));
+  }
+  // Split strict-match cards into live listings vs rejected
+  // shells (element-likes in, element-likes out; reads only
+  // textContent, which the scan already relies on).
+  function classifyListingCards(cards) {
+    const live = [], shells = [];
+    for (const el of cards || []) {
+      const text = (el && el.textContent) || "";
+      (listingCardIsShell(text) ? shells : live).push(el);
+    }
+    return { live, shells };
   }
   // [PURE-DELETE-END]
 
@@ -2324,6 +2380,35 @@
     }) || null;
   }
 
+  // May the Full Auto tail click Publish a SECOND time? (v2.52,
+  // header note 26). The old rule — "the button is still there"
+  // — clicked again even when Facebook had accepted the first
+  // click and was merely still rendering it, manufacturing the
+  // duplicate shells of 2026-10-28. A retry now requires
+  // POSITIVE evidence the first click never submitted: the page
+  // never navigated, the button is enabled and carries no busy
+  // state or spinner, and no dialog is up. Anything unknown
+  // answers no — the Selling-page verification is the arbiter,
+  // never a second blind click.
+  function publishRetryEvidence(urlBefore, btn) {
+    try {
+      if (!btn) return false;
+      if (window.location.href !== urlBefore) return false;
+      if (btn.disabled) return false;
+      if (typeof btn.getAttribute === "function") {
+        if (btn.getAttribute("aria-disabled") === "true") return false;
+        if (btn.getAttribute("aria-busy") === "true") return false;
+      }
+      if (typeof btn.querySelector === "function" &&
+          btn.querySelector('[role="progressbar"], [aria-busy="true"]')) return false;
+      const dialog = document.querySelector('[role="dialog"], [role="alertdialog"]');
+      if (dialog && isVisibleEl(dialog)) return false;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function nextButton() {
     const btns = Array.from(document.querySelectorAll('[role="button"], button'));
     return btns.find(b => {
@@ -3682,6 +3767,24 @@
   // restarts this script; the finish reports are the ordinary
   // JOB_POSTED / JOB_FAILED the worker already knows.
   const SELLING_PAGE_URL = "https://www.facebook.com/marketplace/you/selling";
+  // Stamp the publish attempt on the stored job BEFORE the first
+  // Publish click (v2.52, header note 26). The marker is the
+  // flow's memory across page lifetimes: any later re-entry of
+  // this script for the same job sees it and goes straight to
+  // Selling-page verification instead of filling and publishing
+  // a second time. Fail-open: if the write is lost, the retry
+  // evidence guard (publishRetryEvidence) is still standing.
+  async function markPublishAttempted() {
+    try {
+      const cur = await chrome.storage.local.get(["current_posting_job"]);
+      const j = cur && cur.current_posting_job;
+      if (j && j.queueId === queueId && !j.publishAttemptedAt) {
+        j.publishAttemptedAt = new Date().toISOString();
+        await chrome.storage.local.set({ current_posting_job: j });
+      }
+    } catch (e) { /* the evidence guard still applies */ }
+  }
+
   async function escalateToSellingVerification() {
     recordStepNote("Verify", "posted_verify_escalated",
       "passive success signals did not fire — verifying on the Selling page", "");
@@ -3699,6 +3802,23 @@
   }
 
   async function runVerifyPublished() {
+    // Orphan recovery (v2.52, header note 26): when the worker
+    // armed this scan to settle a stale job, the scan is the
+    // same but its "not there" outcomes collapse back to
+    // job_orphaned — the failure the watchdog would have
+    // written — while a shells-only verdict stays the honest
+    // duplicate_rejected in both modes, and a live card posts
+    // the job truthfully in both modes.
+    const inOrphanRecovery = !!(job.verifyPublished && job.verifyPublished.orphanRecovery);
+    const failUnverified = async (bannerText, storedReason) => {
+      if (!inOrphanRecovery) { await fail(bannerText, storedReason); return; }
+      recordStepNote("Verify", "orphan_recovery_scan_inconclusive",
+        `recovery scan ended ${storedReason || "error"} — the orphan failure stands`,
+        storedReason || "");
+      await fail(
+        "An earlier post run was interrupted and its listing could not be verified on the Selling page — marked failed (job_orphaned).",
+        "job_orphaned");
+    };
     try {
       // Routed here from any page the job's tab sits on; the scan
       // itself only ever runs on the Selling page.
@@ -3714,7 +3834,7 @@
           pageText.includes("checkpoint") ||
           pageText.includes("confirm your identity") ||
           pageText.includes("log in to facebook")) {
-        await fail(
+        await failUnverified(
           "Facebook is asking for login or an identity check — the post could not be verified.",
           "facebook_checkpoint");
         return;
@@ -3722,21 +3842,39 @@
 
       const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() || "vehicle";
       let cards = findListingCards();
+      let scan = classifyListingCards(cards);
       // The selling page lazy-loads its cards; give them a moment
-      // (the same patience the delete scan uses).
-      for (let i = 0; i < 4 && !cards.length; i++) {
+      // (the same patience the delete scan uses). The patience
+      // now runs until a LIVE card appears — a shell rendered
+      // early must not cut the wait for a live twin still
+      // loading (v2.52, header note 26).
+      for (let i = 0; i < 4 && !scan.live.length; i++) {
         await sleep(1500);
         cards = findListingCards();
+        scan = classifyListingCards(cards);
       }
       recordStepNote("Verify", "posted_verify_scan",
-        `strict matches: ${cards.length} for ${title} @ $${Number(car.price || 0).toLocaleString()}`,
+        `strict matches: ${cards.length} (live ${scan.live.length}, shells ${scan.shells.length}) for ${title} @ $${Number(car.price || 0).toLocaleString()}`,
         String(cards.length));
-      if (cards.length) {
+      if (scan.live.length) {
         recordStepNote("Verify", "posted_verified_on_selling_page",
           `${title} found live on the Selling page after Publish`,
-          String(cards.length));
+          String(scan.live.length));
         say("Listing confirmed live ✓", "#15803d");
         await report("AUTOLAUNCH_JOB_POSTED", { listingUrl: window.location.href });
+        return;
+      }
+      if (scan.shells.length) {
+        // Facebook's duplicate verdict is definitive for this
+        // submission — no rescan patience applies. Fail honestly
+        // and DO NOT stamp: a shell is proof the post was
+        // REFUSED, never that it landed (v2.52, header note 26).
+        recordStepNote("Verify", "posted_verify_shells_only",
+          `only duplicate shells found for ${title} — Facebook rejected the submission`,
+          String(scan.shells.length));
+        await fail(
+          "Facebook rejected this post as a duplicate of a listing that is already live — NOT marked posted.",
+          "duplicate_rejected");
         return;
       }
 
@@ -3762,12 +3900,12 @@
         try { window.location.reload(); } catch (e) { /* no-op */ }
         return;
       }
-      await fail(
+      await failUnverified(
         "Publish was clicked but the listing could not be found on your Selling page — NOT marked posted.",
         "publish_unverified");
     } catch (err) {
       console.error("[AutoLaunch] verify error:", err);
-      await fail("Unexpected error while verifying the post: " + (err && err.message ? err.message : "unknown"));
+      await failUnverified("Unexpected error while verifying the post: " + (err && err.message ? err.message : "unknown"), "verify_error");
     }
   }
 
@@ -3792,6 +3930,17 @@
   }
   if (jobAction === "post" && job.verifyPublished) {
     await runVerifyPublished();
+    return;
+  }
+  if (jobAction === "post" && job.publishAttemptedAt) {
+    // A Publish click already happened for this job in an
+    // earlier life of this script (v2.52, header note 26): the
+    // page reloaded or navigated mid-verification and the flow
+    // would otherwise restart from an empty form and publish
+    // AGAIN — the double-submission half of the 2026-10-28
+    // Passport incident. Never fill or publish twice for one
+    // job: settle it on the Selling page instead.
+    await escalateToSellingVerification();
     return;
   }
   try {
@@ -3984,14 +4133,30 @@
       return;
     }
     await humanPause();
+    // The attempt marker lands BEFORE the click (v2.52, header
+    // note 26): from this moment, any re-entry of this flow —
+    // reload, navigation, crash — verifies on the Selling page
+    // instead of ever submitting this job a second time.
+    await markPublishAttempted();
+    const preClickUrl = window.location.href;
     realisticClick(btn);
     let hit = await watchForPublish(15000);
-    if (!hit && publishButton()) {
-      // The click didn't take (React shrugged it off) — one trusted
-      // retry, then the session closes again before the watch.
-      await cdpClickEl(publishButton());
-      await cdpDetach();
-      hit = await watchForPublish(45000);
+    if (!hit) {
+      const retryBtn = publishButton();
+      if (retryBtn && publishRetryEvidence(preClickUrl, retryBtn)) {
+        // Positive evidence the first click never submitted
+        // (button idle, no navigation, no dialog): the one
+        // trusted retry, then the session closes before the
+        // watch — the same shape as before, now earned.
+        recordStepNote("Publish", "publish_retry_click",
+          "first Publish click evidently never submitted — one trusted CDP retry", "");
+        await cdpClickEl(retryBtn);
+        await cdpDetach();
+        hit = await watchForPublish(45000);
+      } else if (retryBtn) {
+        recordStepNote("Publish", "publish_retry_withheld",
+          "Publish button still present but the submission state is ambiguous — no second click; Selling-page verification decides", "");
+      }
     }
     if (hit) {
       say("Listing confirmed live ✓", "#15803d");

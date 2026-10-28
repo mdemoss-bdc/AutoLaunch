@@ -84,7 +84,7 @@ function json(body: unknown, status = 200) {
 }
 
 // Keep in step with EXPECTED_EXT_VERSION in luna-rebuild/index.html.
-const EXPECTED_EXT_VERSION = "2.1.51";
+const EXPECTED_EXT_VERSION = "2.1.52";
 
 // Inventory sync cadence (hours between syncs) by access level — the
 // same map as SYNC_COOLDOWN_HOURS in luna-rebuild/index.html (see
