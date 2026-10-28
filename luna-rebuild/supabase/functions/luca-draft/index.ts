@@ -629,17 +629,31 @@ Deno.serve(async (req) => {
           .ilike("model", "%" + modelWord + "%").limit(25);
         let rows = data || [];
         if (!rows.length) {
-          // Hyphenated/short-token models ("CR-V" tokenizes to "cr"
-          // + "v", neither long enough to survive the word filter,
-          // so the "model word" degenerates to the make) — fall
-          // back to make+year candidates; pickThreadCar still
-          // requires a unique pick (exact price) before any fact
-          // is used.
-          for (const w of words.slice(0, -1)) {
-            const { data: byMake } = await supabase.from("scraped_inventory").select("*")
+          // Hyphenated/short-token models: "CR-V" splits into "cr"
+          // + "v", both too short for the word filter, so the
+          // "model word" degenerates to the make ("honda") and the
+          // model query finds nothing. Two fallbacks, in order:
+          // (1) the hyphen-join of the label's last two raw words
+          // ("cr-v") as the model word; (2) EVERY label word as a
+          // make+year candidate (the surviving word may BE the
+          // make). pickThreadCar still requires a unique pick
+          // (exact price) before any fact is used.
+          const rawWords = label.replace(/\$\s*[\d,]+/, " ").replace(/\b(?:19|20)\d{2}\b/, " ")
+            .replace(/[^A-Za-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+          if (rawWords.length >= 2) {
+            const joined = rawWords.slice(-2).join("-").toLowerCase();
+            const { data: byJoined } = await supabase.from("scraped_inventory").select("*")
               .eq("is_active", true).eq("year", parseInt(yearM[0], 10))
-              .ilike("make", "%" + w.toLowerCase() + "%").limit(25);
-            if (byMake && byMake.length) { rows = byMake; break; }
+              .ilike("model", "%" + joined + "%").limit(25);
+            if (byJoined && byJoined.length) rows = byJoined;
+          }
+          if (!rows.length) {
+            for (const w of words) {
+              const { data: byMake } = await supabase.from("scraped_inventory").select("*")
+                .eq("is_active", true).eq("year", parseInt(yearM[0], 10))
+                .ilike("make", "%" + w.toLowerCase() + "%").limit(25);
+              if (byMake && byMake.length) { rows = byMake; break; }
+            }
           }
         }
         // The make word: a label word (other than the model word)
