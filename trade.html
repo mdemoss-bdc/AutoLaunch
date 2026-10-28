@@ -50,6 +50,7 @@
   .upload { border: 1.5px dashed rgba(88,166,255,.4); border-radius: 14px; padding: 16px; text-align: center; margin-top: 10px; }
   .upload input { display: none; }
   .upload .pick { display: inline-block; padding: 10px 18px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; border: none; }
+  .upload .pick.alt { background: var(--field); border: 1px solid var(--edge); color: var(--h); margin-left: 8px; }
   .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: center; }
   .thumbs figure { margin: 0; position: relative; }
   .thumbs img { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; border: 1px solid var(--edge); display: block; }
@@ -91,7 +92,7 @@
       <label for="fVin">VIN <span class="opt">(optional — but it helps us value it faster)</span></label>
       <input type="text" id="fVin" maxlength="17" placeholder="17-character VIN" style="text-transform:uppercase">
       <p class="soft">You&rsquo;ll find it on the driver&rsquo;s side dash (through the windshield) or the driver&rsquo;s door jamb sticker. If you add it, we&rsquo;ll fill in the vehicle details for you.</p>
-      <button type="button" id="decodeBtn" class="pick" style="background:var(--field);border:1px solid var(--edge);color:var(--h);padding:10px 18px;border-radius:12px;font-weight:700;cursor:pointer">Look up my VIN</button>
+      <button type="button" id="decodeBtn" class="pick" style="background:var(--field);border:1px solid var(--edge);color:var(--h);padding:10px 18px;border-radius:12px;font-weight:700;cursor:pointer">Decode VIN</button>
       <span id="decodeStatus" class="soft" style="margin-left:10px"></span>
       <div class="row2">
         <div><label for="fYear">Year</label><input type="number" id="fYear" inputmode="numeric" placeholder="e.g. 2019"></div>
@@ -121,22 +122,31 @@
       </ul>
       <div class="upload">
         <button type="button" class="pick" id="galleryPick">Add photos</button>
+        <button type="button" class="pick alt" id="galleryCamPick">Take a photo</button>
         <input type="file" id="galleryInput" accept="image/*" multiple>
+        <input type="file" id="galleryCamInput" accept="image/*" capture="environment">
         <div class="thumbs" id="galleryThumbs"></div>
+        <p class="count" id="galleryCount"></p>
       </div>
       <label>REQUIRED: photo of the VIN plate / sticker <span class="req">*</span></label>
       <p class="soft">Driver&rsquo;s door jamb sticker, or the plate at the base of the windshield.</p>
       <div class="upload">
         <button type="button" class="pick" id="vinPick">Add VIN photo</button>
+        <button type="button" class="pick alt" id="vinCamPick">Take a photo</button>
         <input type="file" id="vinInput" accept="image/*">
+        <input type="file" id="vinCamInput" accept="image/*" capture="environment">
         <div class="thumbs" id="vinThumbs"></div>
+        <p class="count" id="vinCount"></p>
       </div>
       <label>REQUIRED: photo of the dash, vehicle started &amp; running <span class="req">*</span></label>
       <p class="soft">Start the vehicle, then photograph the dash — this shows the odometer reading and any warning lights.</p>
       <div class="upload">
         <button type="button" class="pick" id="dashPick">Add dash photo</button>
+        <button type="button" class="pick alt" id="dashCamPick">Take a photo</button>
         <input type="file" id="dashInput" accept="image/*">
+        <input type="file" id="dashCamInput" accept="image/*" capture="environment">
         <div class="thumbs" id="dashThumbs"></div>
+        <p class="count" id="dashCount"></p>
       </div>
       <p class="count" id="photoCount"></p>
     </div>
@@ -263,9 +273,17 @@ async function handleFiles(input, kind) {
   if (!files.length) return;
   try {
     if (kind === "gallery") {
-      for (const f of files) {
+      // The page promises 8–12 photos in total, and the two required
+      // single photos (VIN + dash) always keep their slots — so the
+      // gallery can hold at most 10, whichever way photos are added.
+      const room = Math.max(0, 10 - photos.gallery.length);
+      const accepted = files.slice(0, room);
+      for (const f of accepted) {
         const url = await uploadPhoto(f, "gallery", photos.gallery.length + 1);
         photos.gallery.push(url);
+      }
+      if (accepted.length < files.length) {
+        alert("That's the 12-photo maximum — extra photos weren't added. Remove one to swap it.");
       }
     } else {
       const url = await uploadPhoto(files[0], kind, 1);
@@ -283,6 +301,12 @@ document.getElementById("dashPick").onclick = () => document.getElementById("das
 document.getElementById("galleryInput").onchange = (e) => handleFiles(e.target, "gallery");
 document.getElementById("vinInput").onchange = (e) => handleFiles(e.target, "vin");
 document.getElementById("dashInput").onchange = (e) => handleFiles(e.target, "dash");
+document.getElementById("galleryCamPick").onclick = () => document.getElementById("galleryCamInput").click();
+document.getElementById("vinCamPick").onclick = () => document.getElementById("vinCamInput").click();
+document.getElementById("dashCamPick").onclick = () => document.getElementById("dashCamInput").click();
+document.getElementById("galleryCamInput").onchange = (e) => handleFiles(e.target, "gallery");
+document.getElementById("vinCamInput").onchange = (e) => handleFiles(e.target, "vin");
+document.getElementById("dashCamInput").onchange = (e) => handleFiles(e.target, "dash");
 
 // ---- VIN decode (free NHTSA vPIC, same source the app uses) ----
 document.getElementById("decodeBtn").onclick = async () => {
@@ -345,6 +369,15 @@ function refresh() {
   renderThumbs("galleryThumbs", photos.gallery);
   renderThumbs("vinThumbs", photos.vin ? [photos.vin] : []);
   renderThumbs("dashThumbs", photos.dash ? [photos.dash] : []);
+  const gc = document.getElementById("galleryCount");
+  gc.textContent = photos.gallery.length + " of 6 photos";
+  gc.classList.toggle("done", photos.gallery.length >= 6);
+  const vc = document.getElementById("vinCount");
+  vc.textContent = photos.vin ? "VIN photo added \u2713" : "VIN photo still needed";
+  vc.classList.toggle("done", !!photos.vin);
+  const dc = document.getElementById("dashCount");
+  dc.textContent = photos.dash ? "Dash photo added \u2713" : "Dash photo still needed";
+  dc.classList.toggle("done", !!photos.dash);
   const total = photoTotal();
   const pc = document.getElementById("photoCount");
   pc.textContent = total + " of 8–12 photos added" + (photos.vin ? "" : " · VIN photo still needed") + (photos.dash ? "" : " · dash photo still needed");
