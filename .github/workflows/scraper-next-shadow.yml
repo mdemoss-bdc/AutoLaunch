@@ -1,0 +1,105 @@
+name: AutoLaunch Scraper-Next SHADOW (step 2)
+
+# SHADOW WEEK — scraper_next promotion step 2 (Matthew approved
+# 2026-10-28). Runs scraper_next's FULL pipeline (incl. the Chromium
+# browser leg) in SHADOW mode via luna-rebuild/scraper_next_shadow.py:
+# inventory push is a recorder (ZERO writes to scraped_inventory), no
+# stale pass, no auto-post, no scrape_jobs writes. The only possible
+# DB writes are scraper_next's own learning tables (scraper_playbooks,
+# scraper_uncertain, scraper_run_log).
+#
+# This workflow does NOT touch the production scraper workflow
+# (.github/workflows/scraper.yml) or production scraper.py.
+#
+# Scheduled window: daily 08:00 UTC from 2026-10-29 through
+# 2026-11-04 (7 runs). The guard step self-skips scheduled runs
+# outside that window, so the cron can be left in place harmlessly
+# after the week ends; manual workflow_dispatch runs always proceed.
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'User UUID to shadow-crawl for'
+        required: true
+        default: '40a95557-504a-460f-a891-462bb2b4f25c'
+
+permissions:
+  contents: write
+
+jobs:
+  shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Shadow-week window guard (scheduled runs only)
+        id: guard
+        run: |
+          go=true
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            today=$(date -u +%F)
+            if [[ "$today" < "2026-10-29" || "$today" > "2026-11-04" ]]; then
+              echo "Outside the shadow week ($today) — skipping."
+              go=false
+            fi
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout code
+        if: steps.guard.outputs.go == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: steps.guard.outputs.go == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        if: steps.guard.outputs.go == 'true'
+        run: |
+          pip install playwright supabase
+          playwright install --with-deps chromium
+
+      - name: Run scraper_next SHADOW (full pipeline, recorder push)
+        if: steps.guard.outputs.go == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          USER_ID: ${{ github.event.inputs.user_id || '40a95557-504a-460f-a891-462bb2b4f25c' }}
+          SCRAPER_NEXT_SHADOW: '1'
+          SHADOW_OUT: ${{ github.workspace }}/shadow-out
+        run: python luna-rebuild/scraper_next_shadow.py
+
+      - name: Upload shadow artifacts
+        if: always() && steps.guard.outputs.go == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-next-shadow-${{ github.run_id }}
+          path: shadow-out/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Commit digest to luna-rebuild/shadow-reports
+        if: steps.guard.outputs.go == 'true'
+        run: |
+          if [ ! -f shadow-out/digest.md ]; then
+            echo "No digest produced — nothing to commit."
+            exit 0
+          fi
+          run_id=$(cat shadow-out/run_id.txt)
+          dest="luna-rebuild/shadow-reports/$run_id"
+          mkdir -p "$dest"
+          cp shadow-out/digest.md shadow-out/outcomes.json \
+             shadow-out/uncertain.json shadow-out/cars.json "$dest/"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$dest"
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "scraper_next shadow digest $run_id (step 2)"
+          git push
