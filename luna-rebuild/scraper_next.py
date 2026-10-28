@@ -560,6 +560,34 @@ def evaluate_lot(cars: list, pb: dict) -> dict:
                           f"price far outside the lot's median (${int(run_median_price):,}) — possible wrong-car or stale price",
                           f"lot median ${int(run_median_price):,} across {len(prices)} priced cars")
                 continue
+        # Mileage sanity (2026-10-28, step-2 condition 1): a USED car
+        # whose model year is 3+ years behind the current year cannot
+        # plausibly show single-digit miles — that is the fallback
+        # leg's old CSS-hex artifact class (mileage "5" on 99.9% of
+        # step-1 cars), never a real odometer. Hold + review, never
+        # guess a value. Current/recent model years and New cars are
+        # exempt: a brand-new car with 5 miles is legitimate, and a
+        # newer used car can honestly be near-zero. New-car placeholder
+        # figures (production stamps 1,000) are untouched: 1,000 is
+        # not single-digit.
+        miles = car.get("mileage")
+        if (car.get("condition") == "Used" and miles is not None
+                and 0 <= miles < 10):
+            yr = car.get("year") or vin_year_code(car.get("vin") or "")
+            try:
+                yr = int(yr) if yr else None
+            except (TypeError, ValueError):
+                yr = None
+            if yr and yr <= datetime.now(timezone.utc).year - 3:
+                held_ids.add(id(car))
+                verdict["held"].append({
+                    "vin": car.get("vin"),
+                    "why": f"mileage {miles} is implausible for a {yr} used car",
+                })
+                uncertain(car, "mileage", miles,
+                          f"single-digit mileage on a {yr} used car — extraction artifact, not an odometer reading",
+                          "step-1 artifact class: fallback regex read a CSS hex digit as mileage")
+                continue
         # VIN year-code vs extracted year: flag, don't hold — a
         # one-year model/calendar offset is common and legitimate.
         yc = vin_year_code(car.get("vin") or "")

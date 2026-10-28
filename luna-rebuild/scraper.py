@@ -944,10 +944,25 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     # block's "MILEAGE 442" has no "miles" suffix at all). First
     # label occurrence wins: the subject car's spec block precedes
     # the "Vehicles You Might Like" cross-sell.
+    #
+    # FIX (2026-10-28, REBUILD TREE ONLY — production root scraper.py
+    # still carries the bug): the old pattern ran over RAW html, so
+    # its first "MILEAGE" hit was the CSS selector `.mileage-icon`
+    # inside the DealerOn <style> block, and the [^0-9]{0,120} bridge
+    # landed on the "5" of the hex color #c5c5c5 in that rule —
+    # mileage came out as 5 on ~99.9% of fallback-leg cars (proven
+    # in scraper_next's step-1 shadow run, 2,322 of 2,324 cars).
+    # The fallback now searches VISIBLE TEXT ONLY (script/style
+    # stripped, tags flattened — same treatment as scraper_next's
+    # _strip_to_text) with a tight label-to-value bridge, so the
+    # match can only be the printed spec block.
     if out["mileage"] is None:
+        vis = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
+        vis = re.sub(r"<[^>]+>", " ", vis)
+        vis = " ".join(vis.replace("&nbsp;", " ").split())
         mm = re.search(
-            r"(?:MILEAGE|ODOMETER)[^0-9]{0,120}([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})",
-            html, re.I)
+            r"(?:MILEAGE|ODOMETER)[^0-9]{0,20}([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})",
+            vis, re.I)
         if mm:
             out["mileage"] = int(mm.group(1).replace(",", ""))
 
