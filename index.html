@@ -2433,7 +2433,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
 <div id="settingsModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 hidden">
 
-  <div class="glass-card w-full max-w-6xl rounded-3xl p-8 space-y-6 max-h-[95vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
+  <div class="glass-card w-full max-w-7xl rounded-3xl p-4 sm:p-8 space-y-6 max-h-[95vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
 
     <!-- HEADER -->
 
@@ -2459,11 +2459,11 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
     </div>
 
-    <div class="grid grid-cols-12 gap-8">
+    <div class="grid grid-cols-12 gap-6 lg:gap-8">
 
       <!-- LEFT MENU -->
 
-      <div class="col-span-3">
+      <div class="col-span-12 md:col-span-3">
 
         <div class="space-y-2">
 
@@ -2501,9 +2501,11 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
       <!-- RIGHT CONTENT -->
 
-      <div class="col-span-9 space-y-6">
+      <div class="col-span-12 md:col-span-9 space-y-6">
 
       <div id="settingsPanelDealership" class="space-y-6">
+
+        <div class="grid gap-6 xl:grid-cols-2 items-start">
 
         <!-- DEALERSHIP CARD -->
 
@@ -2702,9 +2704,13 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         </div>
 
+        </div>
+
       </div><!-- /settingsPanelDealership -->
 
       <div id="settingsPanelAutomation" class="space-y-6 hidden">
+
+        <div class="grid gap-6 xl:grid-cols-2 items-start">
 
         <!-- AUTOMATION CARD -->
 
@@ -2861,6 +2867,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         </div>
 
+        </div>
+
       </div><!-- /settingsPanelAutomation -->
 
       <div id="settingsPanelFacebook" class="space-y-6 hidden">
@@ -2926,6 +2934,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
       <div id="settingsPanelAi" class="space-y-6 hidden">
 
+        <div class="grid gap-6 xl:grid-cols-2 items-start">
+
         <div class="glass-card rounded-2xl p-6 space-y-4">
           <h3 class="font-bold text-lg">Photo Tools</h3>
           <p class="text-sm text-slate-500">
@@ -2949,6 +2959,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           </button>
         </div>
 
+        </div>
+
       </div><!-- /settingsPanelAi -->
 
       <div id="settingsPanelAppearance" class="space-y-6 hidden">
@@ -2969,7 +2981,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             Presets
           </label>
 
-          <div id="themePresetGrid" class="grid grid-cols-4 gap-3 mb-6"></div>
+          <div id="themePresetGrid" class="grid grid-cols-4 xl:grid-cols-8 gap-3 mb-6"></div>
 
           <label class="block text-xs font-bold text-slate-500 uppercase mb-3">
             Custom Colors
@@ -3023,6 +3035,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </div><!-- /settingsPanelAppearance -->
 
       <div id="settingsPanelPlan" class="space-y-6 hidden">
+
+        <div class="grid gap-6 xl:grid-cols-2 items-start">
 
         <!-- PLAN CARD -->
 
@@ -3090,7 +3104,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         </div>
 
         <!-- REFERRALS CARD -->
-        <div id="referralCard" class="glass-card rounded-2xl p-6 mt-6">
+        <div id="referralCard" class="glass-card rounded-2xl p-6">
           <h3 class="font-bold text-lg mb-2">
             Referrals
           </h3>
@@ -3100,6 +3114,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           <div id="referralBody">
             <p class="text-xs text-slate-400">Loading your referral link…</p>
           </div>
+        </div>
+
         </div>
 
       </div><!-- /settingsPanelPlan -->
