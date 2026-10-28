@@ -7872,6 +7872,201 @@ function setPillFilter(filter) {
 
   applyFilters();
 }
+// ==============================================================================
+// ==================== BASE COLOR MAPPING (FILTER ONLY) ========================
+// ==============================================================================
+// [PURE-BASECOLOR-BEGIN] — filter-only color normalization (2026-10-28).
+// The Dashboard color filter used to list raw manufacturer strings —
+// hundreds of near-duplicates on one account ("Summit White", "Ice Cap"
+// and "Wind Chill Pearl" are all just WHITE; "Caviar", "Onyx Black" and
+// "Crystal Black Pearl" are all just BLACK). This block maps any dealer
+// color string to a small base palette so the filter groups by base
+// color. Row display keeps the full manufacturer name everywhere; ONLY
+// the filter groups.
+//
+// The hue token rules are PORTED from the poster's [PURE-COLOR] block in
+// extension/content.js (COLOR_RULES): same tokens, same rule order, same
+// word-boundary / 4+-char-prefix token matching (the colorTokenHit
+// semantics). Each rule's FIRST Facebook preference becomes the base
+// color, folded into the palette below: Tan -> Beige, Teal -> Blue, the
+// charcoal family -> Gray. Two deliberate differences from the poster,
+// both about honesty over helpfulness:
+//   1. The poster's finish-only rule (a metallic/pearl string with NO
+//      hue word ranks Gray/Silver there) is NOT applied here: a filter
+//      must not invent a color, so a hue-less string is "Other".
+//   2. An explicit lookup table (BASE_COLOR_LOOKUP) wins over the token
+//      rules for no-keyword OEM names and the few names the rule order
+//      gets wrong. It was built from the REAL distinct color strings in
+//      production inventory (all users, 2026-10-28); rows marked
+//      "judgment" are best-judgment calls documented in the build notes.
+// NOTHING here touches posting: the poster keeps using its own
+// [PURE-COLOR] ranking against the options Facebook offers at runtime.
+const BASE_COLOR_PALETTE = ["Black", "White", "Silver", "Gray", "Red", "Blue", "Green", "Brown", "Beige", "Orange", "Yellow", "Purple", "Pink", "Gold", "Other"];
+const BASE_COLOR_LOOKUP = {
+  // White — no hue keyword the rules can see
+  "ice cap": "White",              // Toyota Ice Cap is a white
+  "wind chill pearl": "White",     // Toyota's white pearl (no "white" in the name)
+  "windchill pearl": "White",
+  "blizzard pearl": "White",       // Toyota's white pearl
+  "iridescent pearl tricoat": "White", // Lexus white pearl (judgment)
+  "fresh powder": "White",         // Nissan white (feed-verified: Sentra/Kicks)
+  "ice": "White",                  // Toyota "Ice" (judgment: the Ice Cap family white)
+  "2t prl wht": "White",           // Nissan feed code: two-tone Pearl White
+  "platinum white pearl": "White", // rule order would say Silver (platinum); it is white
+  // Black
+  "caviar": "Black",               // Lexus Caviar is a black
+  "nightfall mica": "Black",       // Toyota/Lexus black mica (judgment)
+  "inked": "Black",                // Toyota Inked is a black
+  "carbon black metallic": "Black", // "carbon" would hit the Gray rule first; it is black
+  // Silver
+  "iridium": "Silver",             // Lexus Iridium is a silver
+  "cutting edge": "Silver",        // Toyota Cutting Edge is a silver (feed-verified: 4Runner/Prius)
+  "fluid metal": "Silver",         // Hyundai Fluid Metal is a silver-gray (judgment)
+  "quicksilver metallic": "Silver", // one word; the "silver" token can't prefix-match it
+  // Gray
+  "underground": "Gray",           // Toyota Underground is a gray
+  "storm cloud": "Gray",           // Toyota Storm Cloud is a gray
+  "lunar rock": "Gray",            // Toyota Lunar Rock is a gray
+  "celestite": "Gray",             // Toyota Celestite is a light gray
+  "avalanche": "Gray",             // Ford Avalanche = Avalanche Gray (feed-verified: F-150/Explorer)
+  "gun metallic": "Gray",          // Nissan gunmetal gray
+  "sterling metallic": "Gray",     // GMC Sterling is a gray (feed-verified: Sierra/Yukon)
+  "sterling": "Gray",
+  "heavy metal": "Gray",           // Toyota Heavy Metal is a dark gray
+  "magnetic": "Gray",              // Ford Magnetic is a gray
+  "cement": "Gray",                // Toyota Cement is a gray
+  "pavement": "Gray",              // Toyota Pavement is a gray (judgment)
+  "incognito": "Gray",             // Lexus Incognito is a gray
+  "urban rock": "Gray",            // Toyota Urban Rock is a gray (judgment)
+  "meteor shower": "Gray",         // Toyota Meteor Shower is a gray (feed-verified: RAV4)
+  "cactus": "Gray",                // Ford Cactus = Cactus Gray (feed-verified: Maverick)
+  "anvil clearcoat": "Gray",       // Jeep Anvil is a gray (judgment)
+  "electric shadow": "Gray",       // Hyundai Electric Shadow is a gray (judgment)
+  "titanium rush metallic": "Gray", // GMC Titanium Rush is a gray (judgment)
+  "platinum gray metallic": "Gray", // rule order would say Silver (platinum); it is gray
+  "steel gray": "Gray",            // rule order would say Silver (steel); it is gray
+  "modern steel metallic": "Gray", // Honda Modern Steel is a gray; steel rule says Silver
+  "earl clearcoat": "Gray",        // Jeep Earl is a gray
+  "dune grey metallic": "Gray",    // "dune" would hit the Beige rule first; it is a grey
+  // Red
+  "scarlet ember tintcoat": "Red", // "scarlet"/"ember" are not rule tokens
+  "redline pearlcoat": "Red",      // one word; the "red" token can't prefix-match it
+  "rosewood metallic": "Red",      // "rose" prefix would say Pink; Rosewood is a dark red-brown
+  "solar octane": "Red",           // Toyota Solar Octane is a red (judgment)
+  // Orange
+  "inferno": "Orange",             // Toyota Inferno is the TRD orange
+  "afterburn": "Orange",           // Nissan Afterburn = Afterburn Orange family
+  "afterburn orang": "Orange",     // feed-truncated "Afterburn Orange"
+  "energetic ember": "Orange",     // ember = glowing orange (judgment)
+  // Blue
+  "blueprint": "Blue",             // Toyota Blueprint is a dark blue
+  "ocean": "Blue",                 // Lincoln Ocean is a blue (judgment)
+  "ocean gem": "Blue",             // Toyota Ocean Gem is a blue-teal
+  "glacier blue metallic": "Blue", // "glacier" would hit the White rule first; it is blue
+  "arctic ice blue metallic": "Blue", // "arctic" would hit the White rule first; it is blue
+  "arctic race blue metallic": "Blue",
+  "slate blue metallic": "Blue",   // "slate" would hit the Gray rule first; it is blue
+  "blue slate": "Blue",            // name leads with Blue (judgment: blue-gray, filed under Blue)
+  "downpour metallic": "Blue",     // GMC Downpour is a dark blue (feed-verified: Sierra)
+  "marine metallic": "Blue",       // GMC Marine is a blue (judgment)
+  "rapids metallic": "Blue",       // GMC Rapids is a blue (judgment)
+  "wave metallic": "Blue",         // Cadillac Wave is a blue (judgment)
+  "moonlight cloud": "Blue",       // Hyundai Moonlight Cloud is a dark blue (judgment)
+  // Green
+  "everest": "Green",              // Toyota Everest is a green (feed-verified: 4Runner)
+  "cypress": "Green",              // Toyota Cypress is a green (feed-verified)
+  "ash green metallic": "Green",   // "ash" would hit the Gray rule first; it is green
+  "obsidian green": "Green",       // "obsidian" would hit the Black rule first; it is green
+  "obsidian green pearl": "Green",
+  "alumina jade metallic": "Green", // jade is green; not a rule token
+  "ivy metallic": "Green",         // ivy is green; not a rule token
+  // Brown
+  "terra": "Brown",                // Toyota Terra is a brown
+  "baja storm": "Brown",           // Nissan Baja Storm is a bronze-brown (judgment)
+  "baja storm metallic": "Brown",
+  "smoked mesquite": "Brown",      // GMC Smoked Mesquite is a brown (judgment)
+  // Beige
+  "white sands": "Beige",          // Chevy White Sands is a sandy beige (feed-verified: Silverado)
+  "mudbath": "Beige",              // Toyota Mudbath is a khaki tan (khaki family = Beige)
+  // Gold
+  "desert gold": "Gold",           // beige rule (desert) would win on order; the name is a gold
+  // Purple
+  "passion berry pearl": "Purple", // Honda Passion Berry is a purple (feed-verified: Fit)
+  "thundernight metallic": "Purple", // BMW Thundernight is a purple (feed-verified: 2 Series)
+  // Gray (tail additions)
+  "storm bay metallic": "Gray",    // BMW Storm Bay is a gray (feed-verified: X1)
+  "riverstone metallic": "Gray"    // stone gray; "stone" is a suffix here, the prefix rule can't see it
+};
+// Hue rules in the poster's COLOR_RULES order; base = first preference,
+// folded (Tan -> Beige, Teal -> Blue). The poster's finish-only rule is
+// deliberately absent (see header note 1).
+const BASE_COLOR_RULES = [
+  { tokens: ["mojave", "sandstone", "sand", "desert", "khaki", "tan", "beige", "cashmere", "almond", "dune", "sahara", "camel", "parchment"], base: "Beige" },
+  { tokens: ["charcoal", "graphite", "granite", "carbon", "slate", "gunmetal", "anthracite", "magnetic", "ash", "stone", "flint", "boulder", "grigio", "pebble"], base: "Gray" },
+  { tokens: ["silver", "platinum", "chrome", "steel", "pewter", "tungsten"], base: "Silver" },
+  { tokens: ["gray", "grey"], base: "Gray" },
+  { tokens: ["white", "ivory", "cream", "arctic", "alpine", "glacier", "snow", "frost", "linen", "bone"], base: "White" },
+  { tokens: ["black", "onyx", "ebony", "jet", "obsidian"], base: "Black" },
+  { tokens: ["crimson", "burgundy", "maroon", "ruby", "wine", "cherry", "garnet", "claret", "red"], base: "Red" },
+  { tokens: ["navy", "sapphire", "cobalt", "azure", "aqua", "sky", "royal", "blue"], base: "Blue" },
+  { tokens: ["teal"], base: "Blue" },
+  { tokens: ["emerald", "forest", "olive", "sage", "mint", "green"], base: "Green" },
+  { tokens: ["chocolate", "espresso", "mocha", "coffee", "walnut", "cocoa", "bronze", "copper", "brown", "cognac", "truffle", "mahogany"], base: "Brown" },
+  { tokens: ["champagne", "gold"], base: "Gold" },
+  { tokens: ["tangerine", "sunset", "orange"], base: "Orange" },
+  { tokens: ["violet", "plum", "lavender", "eggplant", "purple"], base: "Purple" },
+  { tokens: ["magenta", "fuchsia", "rose", "pink"], base: "Pink" },
+  { tokens: ["lemon", "yellow"], base: "Yellow" }
+];
+// Normalize a raw dealer color string to its lookup/matching key:
+// lowercase, bracketed feed tags ("[Extra_Cost_Color]") stripped,
+// two-tone strings reduced to the BODY color (the part before the
+// roof clause: "Aspen White And Super Black" -> "aspen white",
+// "Pure White W/Deep Black Roof" -> "pure white"), punctuation
+// collapsed to single spaces ("Mosaic_Black" -> "mosaic black").
+function baseColorKey(rawColor) {
+  let s = String(rawColor == null ? "" : rawColor).toLowerCase();
+  s = s.replace(/\[[^\]]*\]/g, " ");
+  s = s.replace(/_/g, " ");
+  const seps = [" w and ", " and ", " with ", " w/", " / ", " w "];
+  for (const sep of seps) {
+    const i = s.indexOf(sep);
+    if (i > 0) { s = s.slice(0, i); break; }
+  }
+  return s.replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+w$/, "");
+}
+// The poster's colorTokenHit semantics: a token hits when it equals a
+// word, or (for tokens of 4+ chars) is a prefix of a word — "sand"
+// hits "sandstone", but "tan" (3 chars) never hits "titanium", and
+// multi-word tokens match as a phrase.
+function baseColorTokenHit(key, token) {
+  const tok = String(token || "").toLowerCase().trim();
+  if (!tok || !key) return false;
+  if (tok.includes(" ")) return key.includes(tok);
+  return key.split(" ").some(w =>
+    w === tok || (tok.length >= 4 && w.startsWith(tok)));
+}
+const _baseColorCache = new Map();
+// Map any raw dealer color string to its base palette color.
+// Unmapped / hue-less / missing -> "Other" (never a guess).
+function baseColorFor(rawColor) {
+  const raw = String(rawColor == null ? "" : rawColor);
+  if (_baseColorCache.has(raw)) return _baseColorCache.get(raw);
+  const key = baseColorKey(raw);
+  let base = "Other";
+  if (key) {
+    if (Object.prototype.hasOwnProperty.call(BASE_COLOR_LOOKUP, key)) {
+      base = BASE_COLOR_LOOKUP[key];
+    } else {
+      for (const rule of BASE_COLOR_RULES) {
+        if (rule.tokens.some(tok => baseColorTokenHit(key, tok))) { base = rule.base; break; }
+      }
+    }
+  }
+  _baseColorCache.set(raw, base);
+  return base;
+}
+// [PURE-BASECOLOR-END]
 function populateFilterDropdowns() {
 
     const locationSelect = document.getElementById("filterLocation");
@@ -7919,11 +8114,17 @@ function populateFilterDropdowns() {
         )
 )].sort();
 
-    const colors = [...new Set(
-        rawInventory
-            .map(c => c.color)
-            .filter(Boolean)
-    )].sort();
+    // The color dropdown groups by BASE color (see baseColorFor):
+    // raw dealer strings run to hundreds of near-duplicates, so the
+    // options are base colors only, busiest first. Other dropdowns
+    // keep raw values; only color is grouped.
+    const colorCounts = new Map();
+    rawInventory.forEach(c => {
+        const base = baseColorFor(c.color);
+        colorCounts.set(base, (colorCounts.get(base) || 0) + 1);
+    });
+    const colors = [...colorCounts.keys()].sort((a, b) =>
+        (colorCounts.get(b) - colorCounts.get(a)) || a.localeCompare(b));
 
     locationSelect.innerHTML =
         '<option value="">All Locations</option>' +
@@ -8094,7 +8295,7 @@ function applyFilters() {
     ) return false;
     if (
     filterColor &&
-    car.color !== filterColor
+    baseColorFor(car.color) !== filterColor
 ) return false;
 
 if (filterPriceRange) {
