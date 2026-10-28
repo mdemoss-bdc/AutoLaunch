@@ -51,6 +51,39 @@
 //      built from only the first 1,000 cars, so models stocked only
 //      beyond that window never became searchable words.
 // Grounding behavior (v24) is unchanged. This is platform v25.
+//
+// STRENGTHENING (2026-10-28, overnight mandate — battery-driven, free
+// tier only; battery: 20 live scenarios on a test account, baseline
+// 13/20 with one invented-availability claim and one missed
+// hand-back):
+//   4. Hyphenated model names resolve: the vocabulary also carries
+//      the fused form ("CR-V" -> "crv") plus a fused->original map,
+//      resolveTerm tries the dehyphenated token, and searchTerm
+//      searches the original hyphenated spelling too. The thread-car
+//      label match falls back to make+year when the model word finds
+//      nothing. ("CR-Vs" previously resolved NOTHING — the stocked
+//      car read as unsearchable and spec questions went unanswered.)
+//   5. Category/ceiling browse fallback: an ask with a condition,
+//      a price ceiling, or a vehicle-category word but NO matched
+//      term now browses the lot by those filters instead of leaving
+//      Luca to improvise; zero browse hits is a VERIFIED none for
+//      that filter combination.
+//   6. Availability-claim guard: an unavailability claim ("we don't
+//      have any", "out of stock", "I checked the lot") with no
+//      verified-none basis is regenerated once, then replaced with
+//      a check-the-lot line. The claim is a fact; it needs a search.
+//   7. Hand-back guard: the latest buyer message is classified
+//      deterministically (payment / APR / trade value / haggle /
+//      upset); if the model answered instead of handing back, one
+//      corrective regeneration runs, then needs_human is forced
+//      with a safe holding draft. Hard floor, enforced in code.
+//   8. Voice pairs ranked for teaching quality (substantive replies
+//      with a question, an invitation, times, or specifics outrank
+//      recency alone) and normalized-deduped; top 8 delivered.
+//   9. Trade-in link: when the account has a trade_token, trade
+//      value asks hand back AND offer the intake link (never a
+//      number). Transfer asks get the price-confirmation draft
+//      instead of a manager punt.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -141,7 +174,7 @@ function lev(a: string, b: string): number {
 
 // Per-user make/model vocabulary cache (10 min, warm instances): the
 // lot's own words are the dictionary buyer text is matched against.
-const vocabCache = new Map<string, { at: number; words: Set<string> }>();
+const vocabCache = new Map<string, { at: number; words: Set<string>; fused: Map<string, string[]> }>();
 const TERM_ALIAS: Record<string, string> = { chevy: "chevrolet", vw: "volkswagen" };
 
 // Models occasionally wrap or pad the JSON despite responseMimeType;
@@ -283,6 +316,75 @@ async function enforceFactGuard(
   return stripped || "Let me double-check that for you and get right back to you.";
 }
 
+// ---- Strengthening helpers (2026-10-28) — pure, harness-tested.
+
+// Voice-pair quality: a pair teaches voice when the rep's reply has
+// substance — length in the working range, a question or invitation,
+// real times, or concrete specifics. Trivial replies ("Ok", "Yes
+// sir") score below zero so recency alone can't crowd out the best
+// teaching material with the newest filler.
+function normVoiceKey(rep: string): string {
+  return String(rep || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function voicePairScore(p: { rep: string }): number {
+  const rep = String(p.rep || "");
+  const L = rep.length;
+  let s = 0;
+  if (L < 12) s -= 50;
+  else if (L < 25) s -= 10;
+  else s += Math.min(20, Math.floor(L / 12));
+  if (/\?/.test(rep)) s += 6;
+  if (/\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?|today|tomorrow|morning|afternoon|evening|\d{1,2}(:\d{2})?\s?(am|pm))\b/i.test(rep)) s += 4;
+  if (/\b(come|swing by|stop by|test drive|drive it|take a look|check it out|bring it)\b/i.test(rep)) s += 4;
+  if (/\$\s?\d|\d{3,}|\bstock\b/i.test(rep)) s += 3;
+  return s;
+}
+function rankVoicePairs<T extends { rep: string; at: string }>(pairs: T[]): T[] {
+  return pairs.slice().sort((a, b) => {
+    const d = voicePairScore(b) - voicePairScore(a);
+    if (d) return d;
+    return a.at < b.at ? 1 : -1; // recency breaks ties
+  });
+}
+
+// Unavailability claims are FACTS and need a verified-none basis (a
+// completed search that came back empty). Patterns for a draft
+// asserting them — including the fabricated "I checked the lot".
+const UNAVAILABILITY_RES: RegExp[] = [
+  /\bdon'?t have\b/i,
+  /\bdo not have\b/i,
+  /\bnot in stock\b/i,
+  /\bout of stock\b/i,
+  /\bnone in stock\b/i,
+  /\bsold out\b/i,
+  /\bcurrently out of\b/i,
+  /\bwe have no\b/i,
+  /\bi checked (the lot|our inventory|on that)\b/i,
+  /\bchecked (the lot|our inventory)\b/i,
+];
+function unavailabilityClaim(draft: string): boolean {
+  const t = String(draft || "");
+  return UNAVAILABILITY_RES.some((re) => re.test(t));
+}
+
+// Hand-back classification of the buyer's LATEST message. The hard
+// floor categories, matched conservatively so process questions
+// ("do you take trades?") don't fire — only value/specifics asks do.
+function baitCategory(latest: string): { cat: string; label: string; reason: string } | null {
+  const t = String(latest || "").toLowerCase();
+  if (/\bapr\b|interest rate|finance rate|what rate/.test(t))
+    return { cat: "apr", label: "APR / interest-rate specifics", reason: "buyer asked about APR/rates — financing specifics for the salesperson" };
+  if (/monthly payment|payment (would|will|might) be|payments? on (this|it|that car)|how much[^.?!]*\b(a month|per month|monthly)\b|\bper month\b/.test(t))
+    return { cat: "payment", label: "monthly-payment specifics", reason: "buyer asked for a monthly payment — financing specifics for the salesperson" };
+  if (/what[^.?!]*(worth|give|get|offer)[^.?!]*(trade|my (car|truck|suv|van|vehicle))|trade[- ]?in value|give me for my|how much[^.?!]*for my (car|truck|suv|van|vehicle)/.test(t))
+    return { cat: "trade", label: "a trade-in value", reason: "buyer asked for a trade-in value — never quoted by Luca" };
+  if (/take it or leave it|best price|lowest (price|you('ll| will) go)|come down (on|in) (the )?price|\$\s?[\d,]+\s*(cash|firm|out the door)|offer you \$/.test(t))
+    return { cat: "haggle", label: "price haggling", reason: "buyer is haggling on price — the salesperson's call" };
+  if (/\bcrook|\bscam|rip ?off|lawsuit|attorney|better business bureau|report you/.test(t))
+    return { cat: "upset", label: "an upset buyer", reason: "buyer is upset/threatening — the salesperson should take over" };
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ ok: false, error: "POST only" }, 405);
@@ -332,10 +434,12 @@ Deno.serve(async (req) => {
   // groups. The saved home value may be a group's display name OR a
   // raw rooftop inside it — normalize it through the same mapping.
   let locGroups: any[] = [];
+  let tradeTokenVal = "";
   try {
     const { data: settingsRow } = await supabase
-      .from("user_settings").select("location_groups").eq("user_id", user.id).maybeSingle();
+      .from("user_settings").select("location_groups, trade_token").eq("user_id", user.id).maybeSingle();
     if (settingsRow && Array.isArray((settingsRow as any).location_groups)) locGroups = (settingsRow as any).location_groups;
+    if (settingsRow) tradeTokenVal = String((settingsRow as any).trade_token || "").trim();
   } catch (_) { /* no settings row -> raw names, no groups */ }
   const displayLoc = (raw: string | null | undefined): string => {
     if (!raw) return "";
@@ -344,6 +448,7 @@ Deno.serve(async (req) => {
     }
     return String(raw);
   };
+  const tradeUrl = tradeTokenVal ? "https://autolaunch.org/trade.html?t=" + encodeURIComponent(tradeTokenVal) : "";
   const homeRaw = String((profile as any).home_location || "").trim();
   const homeLabel = homeRaw ? displayLoc(homeRaw) : "";
 
@@ -386,12 +491,18 @@ Deno.serve(async (req) => {
   }
   allPairs.sort((a, b) => (a.at < b.at ? 1 : -1)); // most recent first
   const seenRep = new Set<string>();
-  const voicePairs = allPairs.filter(p => {
-    const k = p.rep.toLowerCase();
-    if (seenRep.has(k)) return false;
+  const dedupedPairs = allPairs.filter(p => {
+    // Normalized dedupe (2026-10-28): case/punctuation variants of
+    // the same reply are one lesson, not three.
+    const k = normVoiceKey(p.rep);
+    if (!k || seenRep.has(k)) return false;
     seenRep.add(k);
     return true;
-  }).slice(0, 10);
+  });
+  // Quality-ranked (2026-10-28): the best teaching material must
+  // not be crowded out by the newest filler — score substance first,
+  // recency breaks ties. Top 8 (was 10 by recency alone).
+  const voicePairs = rankVoicePairs(dedupedPairs).slice(0, 8);
 
   // Corrections (draft -> what the rep actually sent) remain the
   // strongest signal when they exist — the rep explicitly fixed Luca.
@@ -516,7 +627,21 @@ Deno.serve(async (req) => {
         const { data } = await supabase.from("scraped_inventory").select("*")
           .eq("is_active", true).eq("year", parseInt(yearM[0], 10))
           .ilike("model", "%" + modelWord + "%").limit(25);
-        const rows = data || [];
+        let rows = data || [];
+        if (!rows.length) {
+          // Hyphenated/short-token models ("CR-V" tokenizes to "cr"
+          // + "v", neither long enough to survive the word filter,
+          // so the "model word" degenerates to the make) — fall
+          // back to make+year candidates; pickThreadCar still
+          // requires a unique pick (exact price) before any fact
+          // is used.
+          for (const w of words.slice(0, -1)) {
+            const { data: byMake } = await supabase.from("scraped_inventory").select("*")
+              .eq("is_active", true).eq("year", parseInt(yearM[0], 10))
+              .ilike("make", "%" + w.toLowerCase() + "%").limit(25);
+            if (byMake && byMake.length) { rows = byMake; break; }
+          }
+        }
         // The make word: a label word (other than the model word)
         // that some candidate's make actually carries — used only
         // as a tiebreak inside pickThreadCar.
@@ -559,10 +684,12 @@ Deno.serve(async (req) => {
   // inventory is searched ONLY with confirmed vehicle words, spelled
   // the inventory's way. Filler can never flood anything again.
   let vocab = new Set<string>();
+  let fusedMap = new Map<string, string[]>();
   try {
     const cached = vocabCache.get(user.id);
     if (cached && Date.now() - cached.at < 600000) {
       vocab = cached.words;
+      fusedMap = cached.fused;
     } else {
       // v13: paginate — .limit(4000) silently capped at 1,000 rows.
       const vrows: any[] = [];
@@ -574,44 +701,69 @@ Deno.serve(async (req) => {
       }
       for (const r of vrows || []) {
         for (const s of [String((r as any).make || ""), String((r as any).model || "")]) {
-          for (const w of s.toLowerCase().split(/[^a-z0-9]+/)) if (w.length >= 3) vocab.add(w);
+          const parts = s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+          for (const w of parts) if (w.length >= 3) vocab.add(w);
+          // Fused form (2026-10-28): buyers write "CRV"/"CR-Vs";
+          // the split parts ("cr","v") are too short to match.
+          // Carry the joined form in the vocabulary and remember
+          // which original spellings it stands for, so searchTerm
+          // can query the hyphenated inventory spelling too.
+          if (parts.length > 1) {
+            const f = parts.join("");
+            if (f.length >= 3) {
+              vocab.add(f);
+              if (!fusedMap.has(f)) fusedMap.set(f, []);
+              const orig = s.trim();
+              if (orig && !fusedMap.get(f)!.includes(orig)) fusedMap.get(f)!.push(orig);
+            }
+          }
         }
       }
-      if (vocab.size) vocabCache.set(user.id, { at: Date.now(), words: vocab });
+      if (vocab.size) vocabCache.set(user.id, { at: Date.now(), words: vocab, fused: fusedMap });
     }
   } catch { /* fail-open: resolveTerm falls back to the raw word */ }
   const resolveTerm = (t: string): string | null => {
     if (!vocab.size) return t; // no vocabulary available — old behavior
     if (vocab.has(t)) return t;
+    // Dehyphenated twin (2026-10-28): "cr-vs" never equals the
+    // vocabulary word "crv" until the hyphen (and plural) come off.
+    const dehyph = t.replace(/-/g, "");
+    if (dehyph !== t && vocab.has(dehyph)) return dehyph;
     const alias = TERM_ALIAS[t];
     if (alias && vocab.has(alias)) return alias;
-    if (t.endsWith("es") && vocab.has(t.slice(0, -2))) return t.slice(0, -2);
-    if (t.endsWith("s") && vocab.has(t.slice(0, -1))) return t.slice(0, -1);
-    for (const w of vocab) if (w.length >= 4 && t.length > w.length && t.includes(w)) return w; // fused: "usedcivics" -> "civic"
+    const forms = dehyph !== t ? [t, dehyph] : [t];
+    for (const f of forms) {
+      if (f.endsWith("es") && vocab.has(f.slice(0, -2))) return f.slice(0, -2);
+      if (f.endsWith("s") && vocab.has(f.slice(0, -1))) return f.slice(0, -1);
+    }
+    for (const f of forms) for (const w of vocab) if (w.length >= 4 && f.length > w.length && f.includes(w)) return w; // fused: "usedcivics" -> "civic"
     // Fused AND misspelled (v8): "anyexpeditons" contains no exact
     // vocab word and is too long for the plain fuzzy pass — slide
     // windows of the vocab word's length across the token and take
     // a near-enough window. Caught live 2026-10-25: 18 Expeditions
     // in stock read as "don't have any" on exactly this input.
-    for (const w of vocab) {
-      if (w.length < 5 || t.length <= w.length + 1) continue;
-      const maxD = w.length >= 8 ? 2 : 1;
-      for (let s = 0; s + w.length - 1 <= t.length; s++) {
-        for (const L of [w.length - 1, w.length, w.length + 1]) {
-          if (s + L > t.length) continue;
-          if (lev(t.slice(s, s + L), w) <= maxD) return w;
+    const fuzzyPass = (x: string): string | null => {
+      for (const w of vocab) {
+        if (w.length < 5 || x.length <= w.length + 1) continue;
+        const maxDw = w.length >= 8 ? 2 : 1;
+        for (let s = 0; s + w.length - 1 <= x.length; s++) {
+          for (const L of [w.length - 1, w.length, w.length + 1]) {
+            if (s + L > x.length) continue;
+            if (lev(x.slice(s, s + L), w) <= maxDw) return w;
+          }
         }
       }
-    }
-    let best: string | null = null;
-    let bestD = 99;
-    const maxD = t.length <= 4 ? 1 : 2;
-    for (const w of vocab) {
-      if (Math.abs(w.length - t.length) > maxD) continue;
-      const d = lev(t, w);
-      if (d < bestD) { bestD = d; best = w; }
-    }
-    return bestD <= maxD ? best : null;
+      let best: string | null = null;
+      let bestD = 99;
+      const maxD = x.length <= 4 ? 1 : 2;
+      for (const w of vocab) {
+        if (Math.abs(w.length - x.length) > maxD) continue;
+        const d = lev(x, w);
+        if (d < bestD) { bestD = d; best = w; }
+      }
+      return bestD <= maxD ? best : null;
+    };
+    return fuzzyPass(t) || (dehyph !== t ? fuzzyPass(dehyph) : null);
   };
   const resolveAll = (text: string) => Array.from(new Set(
     tokensOf(text).map(resolveTerm).filter((x): x is string => !!x),
@@ -624,11 +776,17 @@ Deno.serve(async (req) => {
   {
     const seenKey = new Set<string>();
     const searchTerm = async (t: string, focus: boolean) => {
+      // A fused vocabulary word ("crv") must also search the
+      // original inventory spelling ("CR-V") — ILIKE on "crv"
+      // alone would never substring-match the hyphenated model.
+      const pats = Array.from(new Set([t, ...((fusedMap.get(t) || []))]))
+        .map(p => String(p).replace(/[,()%]/g, "").trim()).filter(Boolean);
+      const orExpr = pats.map(p => `model.ilike.%${p}%,make.ilike.%${p}%`).join(",");
       const { data: rows } = await supabase
         .from("scraped_inventory")
         .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin, location_name, marketplace_posted_at")
         .eq("is_active", true)
-        .or(`model.ilike.%${t}%,make.ilike.%${t}%`)
+        .or(orExpr)
         .limit(25);
       if (focus) focusCounts.set(t, (rows || []).length);
       for (const r of rows || []) {
@@ -657,6 +815,28 @@ Deno.serve(async (req) => {
     return wantsUsed ? (cd.includes("used") || cd.includes("certified")) : wantsNew ? cd.includes("new") : true;
   };
   const byPrice = (a: any, b: any) => (a.price || 1e12) - (b.price || 1e12);
+  // Category/ceiling browse fallback (2026-10-28): a buyer asking
+  // "any used SUVs under $15k" names no make/model word, so the
+  // term search above never runs and the model used to improvise
+  // ("currently out of SUVs under $15k" — while a $13,995 RAV4 sat
+  // in stock). When the ask carries a condition, a price ceiling,
+  // or a vehicle-category word but no term matched anything, browse
+  // the lot by those filters instead: hits become the grounded
+  // results, and zero hits is a VERIFIED none for that exact filter
+  // combination (it is the only basis for a "nothing matches" claim).
+  let filterNone = false;
+  if (!invMatches.length && (wantsUsed || wantsNew || ceiling ||
+      /\b(suv|suvs|truck|trucks|sedan|sedans|van|vans|coupe|coupes|hatchback|car|cars|vehicle|vehicles)\b/.test(buyerText))) {
+    const { data: browsed } = await supabase
+      .from("scraped_inventory")
+      .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin, location_name, marketplace_posted_at")
+      .eq("is_active", true).not("price", "is", null)
+      .order("price", { ascending: true }).limit(60);
+    const hits = (browsed || []).filter((c: any) => condOk(c) && (!ceiling || (c.price && c.price <= ceiling)));
+    if (hits.length) {
+      for (const r of hits) { (r as any)._focus = true; invMatches.push(r); }
+    } else filterNone = true;
+  }
   const focusMatches = invMatches.filter(c => (c as any)._focus);
   const primaryPool = focusMatches.length ? focusMatches : invMatches;
   const invPrimary = primaryPool.filter(c => condOk(c) && (!ceiling || (c.price && c.price <= ceiling))).sort(byPrice).slice(0, 5);
@@ -678,12 +858,16 @@ Deno.serve(async (req) => {
     "It is currently: " + now + " (salesperson's local time).",
     "Availability rules: only suggest coming in on days the STORE is open AND the salesperson works (profile.store_schedule / profile.schedule). Suggest the salesperson's own hours, never store hours they are not there for.",
     "If the buyer wants to apply for financing or asks for the credit application, include the credit-app link from the profile — that hand-off is allowed and encouraged. Do not discuss rates, approvals, or terms.",
+    ...(tradeUrl ? [
+      "If the buyer asks what their current vehicle is worth in trade: never give a number or range (hard rule). Set needs_human to true, and make the draft warmly offer the salesperson's trade-in link so the team can work a real value from the buyer's answers and photos: " + tradeUrl,
+    ] : []),
     ...(homeLabel ? [
       "",
       "LOCATION & TRANSFERS — the salesperson works at " + homeLabel + ". Each vehicle fact line ends with where that vehicle sits: '(the salesperson's own lot)' or '(a sister lot)'. Combined rooftops the salesperson grouped together all count as their own lot:",
       "- A vehicle at the salesperson's own lot is HERE — talk about it normally.",
       "- A vehicle at a SISTER lot is not here, but the group can bring it to the salesperson's lot for the buyer. Present it warmly and be upfront: it's at a sister location, and we can have it brought over for them.",
       "- Moving a vehicle is a commitment, so BEFORE promising any transfer, get the buyer comfortable with the PRICE as it stands: the move makes sense once they agree the price works for them, assuming they like how it drives and it checks out when it's here. Ask for that confirmation naturally. Never promise the transfer itself, an arrival day/time, or any transfer fee — those are the salesperson's call.",
+      "- If the buyer asks for a sister-lot car to be brought over (or demands it by a day/time), do NOT punt to a manager and do NOT promise the move or a time: use the price-confirmation reply above — it's at a sister lot, and if the price works for them as it stands, you'll ask to have it brought over.",
     ] : []),
     "",
     "HARD RULES — never break these:",
@@ -717,6 +901,11 @@ Deno.serve(async (req) => {
   const noneBlock = verifiedNone.length ? [
     "",
     "VERIFIED — NONE IN STOCK: an inventory search just confirmed there are currently NO vehicles matching: " + verifiedNone.join(", ") + ". For these you MAY tell the buyer plainly that you don't have one on the lot right now (and offer to keep an eye out).",
+  ] : [];
+
+  const filterNoneBlock = filterNone ? [
+    "",
+    "VERIFIED — NONE MATCHING THE ASK: a live inventory search just confirmed the lot currently has NO vehicles matching the condition/price the buyer asked for. You may say plainly that you don't have one matching that right now (and offer to keep an eye out). Do not name a specific alternative vehicle that is not in a block above.",
   ] : [];
 
   const invBlock = invMatches.length ? [
@@ -755,6 +944,7 @@ Deno.serve(async (req) => {
     ...corrBlock,
     ...invBlock,
     ...noneBlock,
+    ...filterNoneBlock,
     "",
     "Write the salesperson's next reply.",
   ].filter(Boolean).join("\n");
@@ -768,17 +958,17 @@ Deno.serve(async (req) => {
   }
   let draft = String(parsed?.draft || "").trim();
   if (!draft) return json({ ok: false, error: "Luca returned an empty draft" }, 502);
-  const needsHuman = !!parsed?.needs_human;
-  const reason = String(parsed?.reason || "");
+  let needsHuman = !!parsed?.needs_human;
+  let reason = String(parsed?.reason || "");
 
   // ---- Post-draft fact guard (grounding hardening): every price /
   // mileage figure in the draft must trace to a verified source —
   // the resolved thread car, a retrieved row actually shown in the
   // prompt, the listing label itself, or a figure the buyer stated.
   // Anything else is treated as invented and never reaches the rep.
+  const allowedMiles = new Set<number>();
+  const allowedPrices = new Set<number>();
   {
-    const allowedMiles = new Set<number>();
-    const allowedPrices = new Set<number>();
     const allowCar = (c: any) => {
       if (!c) return;
       const fm = factMileage(c);
@@ -804,6 +994,70 @@ Deno.serve(async (req) => {
       return String(parseDraftText(raw2)?.draft || "").trim();
     }, prospectId);
     if (!draft) return json({ ok: false, error: "Luca returned an empty draft" }, 502);
+  }
+
+  // ---- Post-draft availability-claim guard (2026-10-28): an
+  // unavailability claim is a FACT, and its only basis is a
+  // completed search that came back empty — verifiedNone (asked
+  // term) or filterNone (asked filter). Without that basis the
+  // claim is invented (caught live in the battery: "I checked the
+  // lot and we don't have any Beetles" with no search ever run).
+  // Regenerate once with the rule named; if the rewrite still
+  // claims, a check-the-lot line stands in. Runs only when the
+  // draft would otherwise be sent as a normal answer.
+  if (!needsHuman && draft && !verifiedNone.length && !filterNone && unavailabilityClaim(draft)) {
+    console.log("[luca-draft] claim guard: unverified unavailability claim (prospect " + prospectId + ") — regenerating once");
+    let fixed = "";
+    try {
+      const rawC = await callGemini(apiKey, system, userPrompt +
+        "\n\nCORRECTION — your previous draft claimed a vehicle is unavailable, or that you checked the lot, but NO completed inventory search in this request backs that claim. Rewrite honestly: if no block above covers the vehicle the buyer asked about, say you'll check the lot and get right back to them. Never claim to have checked, and never say you have or don't have a vehicle the blocks above don't cover.");
+      fixed = String(parseDraftText(rawC)?.draft || "").trim();
+    } catch { /* fall through to the replacement */ }
+    if (fixed && !unavailabilityClaim(fixed) && !factViolations(fixed, allowedMiles, allowedPrices).length) {
+      draft = fixed;
+    } else {
+      console.log("[luca-draft] claim guard: fallback replacement (prospect " + prospectId + ")");
+      draft = "Let me check the lot on that one and get right back to you.";
+    }
+  }
+
+  // ---- Post-draft hand-back guard (2026-10-28): the hard floor
+  // says haggling / financing specifics / trade value / an upset
+  // buyer go to the salesperson — but the model sometimes answers
+  // anyway (battery: a monthly-payment question got a sales reply).
+  // The buyer's latest message is classified deterministically; if
+  // it is a hand-back category and the model did not hand back, one
+  // corrective regeneration runs; if that still answers, force
+  // needs_human with a safe holding draft (trade asks offer the
+  // intake link when the account has one — never a number).
+  {
+    const bait = baitCategory(latestBuyer);
+    if (bait && !needsHuman && draft) {
+      console.log("[luca-draft] hand-back guard: " + bait.cat + " ask not handed back (prospect " + prospectId + ") — regenerating once");
+      let recovered = false;
+      try {
+        const rawB = await callGemini(apiKey, system, userPrompt +
+          "\n\nCORRECTION — the buyer's latest message is about " + bait.label + ", which the HARD RULES hand to the salesperson. Set needs_human to true and make the draft a short, polite holding reply" +
+          (bait.cat === "trade" && tradeUrl ? " that offers the trade-in link given in the system instructions" : "") +
+          ". Do not answer the question yourself, and do not state any number.");
+        const pB: any = parseDraftText(rawB);
+        const dB = String(pB?.draft || "").trim();
+        if (pB?.needs_human && dB && !factViolations(dB, allowedMiles, allowedPrices).length && !unavailabilityClaim(dB)) {
+          draft = dB;
+          needsHuman = true;
+          reason = String(pB?.reason || bait.reason);
+          recovered = true;
+        }
+      } catch { /* force below */ }
+      if (!recovered) {
+        console.log("[luca-draft] hand-back guard: forcing needs_human (prospect " + prospectId + ")");
+        needsHuman = true;
+        reason = bait.reason;
+        draft = bait.cat === "trade" && tradeUrl
+          ? "I can't put a number on a trade sight unseen — but start here and we'll work a real value from your answers and photos: " + tradeUrl
+          : "Let me check on that for you and get right back to you.";
+      }
+    }
   }
 
   // Save the draft so the corrections/outcome loop can learn from it.
