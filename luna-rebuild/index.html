@@ -6587,6 +6587,12 @@ async function saveAccountPassword() {
 let lunaSupportHistory = [];
 let lunaSupportBusy = false;
 const LUNA_SUPPORT_GREETING = "Hi, I'm Luna — I can look at your account and help with anything in AutoLaunch.";
+// The support-chat function's Gemini chain can take ~38s on the free
+// tier, so the client waits up to 90s (AbortController) for a slow
+// reply to still land; a "thinking" row shows while the reply is in
+// flight, and past the bound a clear timeout line replaces silence.
+const LUNA_SUPPORT_TIMEOUT_MS = 90000;
+const LUNA_SUPPORT_TIMEOUT_MSG = "That took too long — try sending that again.";
 
 function lunaSupportRender(role, body) {
   const box = document.getElementById("lunaSupportMessages");
@@ -6601,6 +6607,25 @@ function lunaSupportRender(role, body) {
   row.appendChild(bubble);
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
+}
+
+function lunaSupportShowThinking() {
+  const box = document.getElementById("lunaSupportMessages");
+  if (!box || document.getElementById("lunaSupportThinking")) return;
+  const row = document.createElement("div");
+  row.id = "lunaSupportThinking";
+  row.className = "flex justify-start";
+  const bubble = document.createElement("div");
+  bubble.className = "max-w-[85%] rounded-2xl rounded-bl-md bg-slate-100 text-slate-500 px-3.5 py-2 text-xs leading-relaxed";
+  bubble.innerHTML = "<i class=\"fa-solid fa-circle-notch fa-spin mr-1.5\"></i>Luna is thinking…";
+  row.appendChild(bubble);
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function lunaSupportHideThinking() {
+  const row = document.getElementById("lunaSupportThinking");
+  if (row) row.remove();
 }
 
 function openLunaSupport() {
@@ -6672,23 +6697,39 @@ async function sendLunaSupport() {
   input.value = "";
   lunaSupportBusy = true;
   if (btn) { btn.disabled = true; btn.classList.add("opacity-60"); }
+  lunaSupportShowThinking();
+  const lunaCtrl = new AbortController();
+  const lunaKiller = setTimeout(() => lunaCtrl.abort(), LUNA_SUPPORT_TIMEOUT_MS);
   try {
     const { data, error } = await supabaseClient.functions.invoke("support-chat", {
       body: { action: "chat", messages: lunaSupportHistory },
+      signal: lunaCtrl.signal,
     });
-    if (error || !data || data.ok === false) {
+    lunaSupportHideThinking();
+    if (!error && data && data.ok !== false) {
+      lunaSupportHistory.push({ role: "assistant", body: data.reply });
+      lunaSupportRender("assistant", data.reply);
+    } else if (lunaCtrl.signal.aborted) {
+      lunaSupportHistory.push({ role: "assistant", body: LUNA_SUPPORT_TIMEOUT_MSG });
+      lunaSupportRender("assistant", LUNA_SUPPORT_TIMEOUT_MSG);
+    } else {
       const calm = "I'm having trouble answering right now — give it a moment and try again, or use \"Send to support\" below and a person will pick it up.";
       lunaSupportHistory.push({ role: "assistant", body: calm });
       lunaSupportRender("assistant", calm);
-    } else {
-      lunaSupportHistory.push({ role: "assistant", body: data.reply });
-      lunaSupportRender("assistant", data.reply);
     }
   } catch (e) {
+    lunaSupportHideThinking();
+    if (lunaCtrl.signal.aborted) {
+      lunaSupportHistory.push({ role: "assistant", body: LUNA_SUPPORT_TIMEOUT_MSG });
+      lunaSupportRender("assistant", LUNA_SUPPORT_TIMEOUT_MSG);
+    } else {
     const calm = "I'm having trouble answering right now — give it a moment and try again, or use \"Send to support\" below and a person will pick it up.";
-    lunaSupportHistory.push({ role: "assistant", body: calm });
-    lunaSupportRender("assistant", calm);
+      lunaSupportHistory.push({ role: "assistant", body: calm });
+      lunaSupportRender("assistant", calm);
+    }
   } finally {
+    clearTimeout(lunaKiller);
+    lunaSupportHideThinking();
     lunaSupportBusy = false;
     if (btn) { btn.disabled = false; btn.classList.remove("opacity-60"); }
   }
