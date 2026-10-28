@@ -136,7 +136,14 @@
       </div>
 
       <p class="mt-4 text-[22px] leading-snug font-extrabold text-white">&asymp; <span id="totalH">5h</span> a month working Facebook by hand.</p>
+
+      <div class="mt-4 rounded-2xl border border-[rgba(59,130,246,0.35)] bg-[rgba(46,124,246,0.12)] px-4 py-3">
+        <p class="text-[15px] text-slate-100"><i class="fa-solid fa-hourglass-half text-[#58A6FF] w-5 text-center mr-1"></i>With AutoLaunch: &asymp; <strong class="text-white" id="autoVal">15 min</strong> a month of your time &mdash; you save &asymp; <strong class="text-white" id="savedH">5h</strong>.</p>
+        <p id="workdayLine" class="hidden mt-1 text-[15px] font-bold text-white"></p>
+      </div>
+
       <p class="mt-2 text-[13px] text-[#9FB0C7]">Estimates from your answers &mdash; about <span id="carsEcho">15</span> cars a month. Adjust the slider to your real pace.</p>
+      <p class="mt-1 text-[12px] text-[#5B6B82]">Savings figure assumes about a minute a car of your time to review and approve &mdash; AutoLaunch does the posting and the freshness upkeep.</p>
     </div>
 
     <div id="painLines" class="mt-4 space-y-3"></div>
@@ -172,7 +179,18 @@ function computeResult(q1key, minutes) {
   const fresh = posting;
   const total = posting + fresh;
   const breakeven = Math.round(75 / Math.max(total, 1));
-  return { cars: cars, posting: posting, fresh: fresh, total: total, breakeven: breakeven };
+  /* Time back with AutoLaunch: the user's own hands-on time is ~1 min per car
+     (a glance / approve); posting runs without them and freshness is automated.
+     autoExact = cars x 1 min in hours. savedExact is measured against the exact
+     (unrounded) manual total so the savings figure tracks the slider honestly. */
+  const autoExact = cars / 60;
+  const savedExact = (cars * minutes * 2 / 60) - autoExact;
+  return { cars: cars, posting: posting, fresh: fresh, total: total, breakeven: breakeven,
+           autoExact: autoExact, savedExact: savedExact,
+           saved: Math.round(savedExact), workdays: Math.round(savedExact / 8) };
+}
+function fmtAuto(autoExact, cars) {
+  return autoExact < 1 ? (cars + " min") : (Math.round(autoExact) + "h");
 }
 function ctaUrl(a) {
   return "https://autolaunch.org/?src=quiz&cars=" + a.cars + "&method=" + a.method + "&pain=" + a.pain;
@@ -211,6 +229,14 @@ function renderResult() {
   document.getElementById("postH").textContent = fmtHours(r.posting) + "h";
   document.getElementById("freshH").textContent = fmtHours(r.fresh) + "h";
   document.getElementById("totalH").textContent = fmtHours(r.total) + "h";
+  document.getElementById("autoVal").textContent = fmtAuto(r.autoExact, r.cars);
+  document.getElementById("savedH").textContent = r.saved + "h";
+  const workdayLine = document.getElementById("workdayLine");
+  const showWorkdays = r.savedExact >= 8;
+  workdayLine.classList.toggle("hidden", !showWorkdays);
+  if (showWorkdays) {
+    workdayLine.textContent = "That\u2019s about " + r.workdays + (r.workdays === 1 ? " workday" : " workdays") + " back every month.";
+  }
   document.getElementById("carsEcho").textContent = r.cars;
   document.getElementById("beVal").textContent = "$" + r.breakeven;
   document.getElementById("barelyLine").classList.toggle("hidden", state.method !== "barely");
