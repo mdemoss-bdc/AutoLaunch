@@ -13084,6 +13084,7 @@ function renderProspects() {
         ${followDue ? `<button data-prospect-action="draft" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold cursor-pointer shadow-sm">⏰ Draft follow-up with Luca</button>` : ""}
         <div id="lucaDraft-${escapeHtml(String(p.id))}"></div>
         <button data-prospect-action="toggle-thread" data-prospect-id="${escapeHtml(String(p.id))}" class="ml-2 px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">💬 View conversation (${prospectChats[p.id].count}) ▾</button>
+        <button data-prospect-action="trade-link" data-prospect-id="${escapeHtml(String(p.id))}" class="ml-2 px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">🔗 Trade appraisal</button>
         ${p.thread_ref ? `<a href="${escapeHtml(p.thread_ref)}" target="_blank" rel="noopener" class="ml-2 inline-block px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">↗ Open chat</a>` : ""}
         <div id="lucaThreadWrap-${escapeHtml(String(p.id))}" class="hidden mt-3 rounded-2xl bg-slate-50 border border-slate-200 overflow-hidden">
           <div class="flex items-center justify-between gap-2 px-3 py-2 bg-white border-b border-slate-200">
@@ -13102,7 +13103,11 @@ function renderProspects() {
       </div>` : ""}
       ${!prospectChats[p.id] && p.thread_ref ? `<div class="mt-3 pt-3 border-t border-slate-100 flex items-center gap-3 flex-wrap">
         <a href="${escapeHtml(p.thread_ref)}" target="_blank" rel="noopener" class="inline-block px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">↗ Open chat</a>
+        <button data-prospect-action="trade-link" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">🔗 Trade appraisal</button>
         <p class="text-xs text-slate-500">No messages yet — open the chat and Luca will pull them in.</p>
+      </div>` : ""}
+      ${!prospectChats[p.id] && !p.thread_ref ? `<div class="mt-3 pt-3 border-t border-slate-100">
+        <button data-prospect-action="trade-link" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">🔗 Trade appraisal</button>
       </div>` : ""}
     </div>`;
   }).join("");
@@ -13134,6 +13139,7 @@ document.addEventListener("click", function (e) {
   else if (act === "crm") openProspectCrm(id);
   else if (act === "draft") draftLucaReply(id, el);
   else if (act === "copy-draft") copyLucaDraft(id, el);
+  else if (act === "trade-link") copyProspectTradeLink(id, el);
   else if (act === "reply") sendLucaReply(id, el);
   else if (act === "toggle-thread") toggleThread(id, el);
   else if (act === "close-thread") closeThread(id);
@@ -13231,6 +13237,44 @@ function copyProspectMsg(msgId, btn) {
     ta.remove();
     done();
   }
+}
+
+// TRADE LINK ON THE PROSPECT CARD (Matthew's ask, 2026-10-29): one
+// tap copies the rep's OWN trade appraisal intake link, ready to
+// paste into the buyer's chat. The link is the Trade page's link —
+// TRADE_PAGE_URL + the signed-in user's trade_token, resolved (and
+// lazily created) by ensureTradeToken, the exact path the Trade
+// Appraisals page itself uses; nothing is hard-coded per user. The
+// feedback is honest: the button says "Link copied ✓" only after a
+// copy actually landed — clipboard API first, the execCommand
+// fallback second, decided by its return value. When no link can be
+// formed or both copy routes fail, the button says so instead; a
+// broken or empty link is never reported as copied.
+async function copyProspectTradeLink(id, btn) {
+  const flash = (label) => {
+    if (!btn) return;
+    const o = btn.innerHTML;
+    btn.innerHTML = label;
+    setTimeout(() => { btn.innerHTML = o; }, 2000);
+  };
+  try { if (!tradeToken) await ensureTradeToken(); } catch (e) { /* ensureTradeToken is fail-soft; the token check below decides */ }
+  if (!tradeToken) { flash("⚠ Link unavailable"); return; }
+  const link = TRADE_PAGE_URL + "?t=" + tradeToken;
+  let ok = false;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try { await navigator.clipboard.writeText(link); ok = true; } catch (e) { ok = false; }
+  }
+  if (!ok) {
+    const ta = document.createElement("textarea");
+    ta.value = link;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { ok = !!document.execCommand("copy"); } catch (e) { ok = false; }
+    ta.remove();
+  }
+  flash(ok ? "Link copied ✓" : "⚠ Copy failed");
 }
 
 // SOFT REALTIME (2026-10-25): while the Prospects page is on screen,
