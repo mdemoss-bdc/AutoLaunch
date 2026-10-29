@@ -62,7 +62,6 @@
   "permissions": [
     "storage",
     "tabs",
-    "scripting",
     "alarms",
     "debugger"
   ],
