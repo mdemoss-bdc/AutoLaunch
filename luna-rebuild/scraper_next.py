@@ -862,6 +862,8 @@ def save_playbook(scope: str, site_key: str, user_id, platform, pb: dict):
 
 
 def heartbeat(run_id: str, event: str, user_id=None, site_key=None, detail=None):
+    if event == "started":
+        _tally_note_run_start(run_id)
     try:
         db.table("scraper_run_log").insert({
             "run_id": run_id, "user_id": user_id, "site_key": site_key,
@@ -869,6 +871,12 @@ def heartbeat(run_id: str, event: str, user_id=None, site_key=None, detail=None)
         }).execute()
     except Exception as e:
         print(f"[!] Heartbeat warning ({event}): {e}")
+    if event == "finished":
+        # Sync-summary recording (app popup): both entry points emit
+        # 'finished' only after the crawl AND the digest are complete,
+        # and the flush is gated on the shadow contract + fail-open —
+        # see the SYNC SUMMARIES section below.
+        _flush_sync_summaries(run_id)
 
 
 def log_uncertain(run_id: str, user_id, site_key: str, rows: list):
@@ -891,6 +899,185 @@ def recent_run_totals(limit: int = 5) -> list:
         return [r["detail"] for r in rows if isinstance(r.get("detail"), dict)]
     except Exception:
         return []
+
+
+# =============================================================================
+# SYNC SUMMARIES — per-user run tallies for the app's sync-summary popup
+# =============================================================================
+# After a SHADOW run (SCRAPER_NEXT_SHADOW=1 — the scraper_next_shadow
+# contract), one row per user lands in sync_summaries: how many vehicles
+# the run checked, how many were new, how many changed, how many had
+# exited. The tally is computed from the run's own data — the VINs each
+# feed saw plus the exact rows it handed to its push function —
+# compared against the stored inventory at flush time. In shadow mode
+# the run writes no inventory, so the stored rows are the pre-run
+# baseline.
+#
+# Placement is deliberate: registration inside process_feed is pure
+# in-memory bookkeeping (no I/O, no output, no return-value change),
+# and the flush hangs off the 'finished' heartbeat, which both entry
+# points (run_next and the shadow driver) emit only after the crawl
+# AND the digest are complete. Crawl, extraction and digest outputs
+# are identical with or without this section, and every step is
+# fail-open: a tally or insert failure logs a warning and the run
+# finishes exactly as before.
+#
+# queued_posts / queued_deletes are written NULL: a shadow run never
+# queues real jobs and computes no would-queue numbers (the auto-post
+# pass is production's and never runs in shadow mode). NULL renders as
+# "—" in the app rather than a fabricated zero.
+
+_SYNC_TALLY = {}           # run_id -> {"started_at": iso, "users": {uid: acc}}
+_LAST_SYNC_SUMMARIES = {}  # run_id -> [row, ...] exactly as computed at flush
+
+
+def _tally_note_run_start(run_id):
+    try:
+        _SYNC_TALLY.setdefault(run_id, {"started_at": _now_iso(), "users": {}})
+    except Exception:
+        pass
+
+
+def _tally_acc(run_id, uid):
+    entry = _SYNC_TALLY.setdefault(run_id, {"started_at": None, "users": {}})
+    acc = entry["users"].get(uid)
+    if acc is None:
+        acc = {"seen": set(), "written": {}, "feeds": {},
+               "failed_feeds": set(), "capped": False}
+        entry["users"][uid] = acc
+    return acc
+
+
+def _tally_register(run_id, uid, site_key, seen_vins, written_rows,
+                    capped=False, trusted=True):
+    """In-memory only. Records what one finished feed saw and the exact
+    rows it handed to its push_fn. A later registration for the same
+    site_key overwrites that feed's trust flag, so a healed re-crawl
+    wins — mirroring how run_next replaces the outcome."""
+    try:
+        if not uid:
+            return
+        acc = _tally_acc(run_id, uid)
+        acc["seen"] |= {v for v in (seen_vins or set()) if v}
+        for r in written_rows or []:
+            vin = r.get("vin")
+            if vin:
+                acc["written"][vin] = {
+                    "price": r.get("price"),
+                    "status": r.get("status"),
+                    "photos": list(r.get("photos") or []),
+                }
+        acc["feeds"][site_key] = bool(trusted)
+        acc["capped"] = acc["capped"] or bool(capped)
+    except Exception:
+        pass
+
+
+def _tally_mark_feed_failed(run_id, uid, site_key):
+    try:
+        if uid:
+            _tally_acc(run_id, uid)["failed_feeds"].add(site_key)
+    except Exception:
+        pass
+
+
+def _tally_baseline(uid):
+    """The user's stored inventory right now, paginated — the
+    PostgREST 1,000-row cap must never silently truncate this. In
+    shadow mode the run wrote none of it, so this is the pre-run
+    baseline the tally compares against."""
+    base = {}
+    start = 0
+    while True:
+        chunk = (db.table("scraped_inventory")
+                 .select("vin, price, status, photos, is_active")
+                 .eq("user_id", uid)
+                 .range(start, start + 999)
+                 .execute()).data or []
+        for r in chunk:
+            if r.get("vin"):
+                base[r["vin"]] = r
+        if len(chunk) < 1000:
+            return base
+        start += 1000
+
+
+def _tally_field_changed(written, stored):
+    """A field counts as changed only when the run produced a value
+    for it and it differs from the stored one. A missing value on the
+    run's side preserves the stored one in production's writer, so it
+    is never evidence of change."""
+    if written.get("price") is not None and written["price"] != stored.get("price"):
+        return True
+    if written.get("status") is not None and written["status"] != stored.get("status"):
+        return True
+    w_photos = written.get("photos") or []
+    if w_photos and w_photos != (stored.get("photos") or []):
+        return True
+    return False
+
+
+def _tally_compute(uid, acc, started_at, finished_at):
+    base = _tally_baseline(uid)
+    seen = acc["seen"]
+    written = acc["written"]
+    new_added = updated = exited = None
+    if base:
+        new_added = sum(1 for vin in written if vin not in base)
+        updated = sum(1 for vin, w in written.items()
+                      if vin in base and _tally_field_changed(w, base[vin]))
+        # Exits are only honest on a complete, trusted, uncapped
+        # crawl — the same gate production's stale pass uses.
+        complete = (not acc["capped"] and not acc["failed_feeds"]
+                    and bool(acc["feeds"]) and all(acc["feeds"].values()))
+        if complete:
+            exited = sum(1 for vin, r in base.items()
+                         if r.get("is_active") and vin not in seen)
+    # An empty baseline means the stored inventory is not visible to
+    # this run's key at all: every comparison count would be invented
+    # (all-written "new", zero exits), so they stay NULL ("—").
+    # vehicles_checked still stands — it comes from the run itself.
+    return {
+        "user_id": uid,
+        "run_started_at": started_at,
+        "run_finished_at": finished_at,
+        "vehicles_checked": len(seen),
+        "new_added": new_added,
+        "updated": updated,
+        "exited_removed": exited,
+        "queued_posts": None,
+        "queued_deletes": None,
+        "source": "shadow",
+    }
+
+
+def _flush_sync_summaries(run_id):
+    """Insert one sync_summaries row per user of a finished shadow
+    run. Fully fail-open: any failure becomes a printed warning, never
+    an exception, and each user is isolated from the others."""
+    try:
+        entry = _SYNC_TALLY.pop(run_id, None)
+        if not entry:
+            return
+        if os.environ.get("SCRAPER_NEXT_SHADOW") != "1":
+            return
+        finished_at = _now_iso()
+        rows = []
+        for uid, acc in (entry.get("users") or {}).items():
+            try:
+                row = _tally_compute(uid, acc, entry.get("started_at"),
+                                     finished_at)
+                rows.append(row)
+                try:
+                    db.table("sync_summaries").insert(row).execute()
+                except Exception as e:
+                    print(f"[!] Sync summary insert warning ({uid}): {e}")
+            except Exception as e:
+                print(f"[!] Sync summary tally warning ({uid}): {e}")
+        if rows:
+            _LAST_SYNC_SUMMARIES[run_id] = rows
+    except Exception as e:
+        print(f"[!] Sync summary flush warning: {e}")
 
 
 # =============================================================================
@@ -1015,13 +1202,19 @@ async def process_feed(feed: dict, ctx_base: dict, fetcher, eff_pb: dict,
 
     log_uncertain(run_id, uid, site_key, verdict["uncertain"])
 
+    tally_rows = []
     if verdict["quarantine"]:
         outcome["trusted"] = False
     else:
-        write_rows = [_strip_private(c) for c in verdict["write_cars"]]
-        if write_rows:
-            outcome["cars_written"] = opts["push_fn"](write_rows)
+        tally_rows = [_strip_private(c) for c in verdict["write_cars"]]
+        if tally_rows:
+            outcome["cars_written"] = opts["push_fn"](tally_rows)
         outcome["trusted"] = True
+    # Bookkeeping only (sync-summary popup): remember what this feed
+    # saw and the exact rows it handed to its push function. Pure
+    # in-memory, never raises, changes nothing above.
+    _tally_register(run_id, uid, site_key, outcome["seen_vins"], tally_rows,
+                    capped=bool(opts.get("limit")), trusted=outcome["trusted"])
     outcome["seconds"] = round(time.monotonic() - t_start, 2)
     return outcome
 
@@ -1094,6 +1287,7 @@ async def crawl_feed(feed: dict, ctx_base: dict, fetcher_factory, eff_pb: dict,
                 print(f"[!] Feed {feed['url']} attempt {attempt + 1} failed ({e}); retrying in {delay:.1f}s")
                 await sleep_fn(delay)
     site_key = site_key_for(feed["url"], feed["condition"])
+    _tally_mark_feed_failed(run_id, ctx_base.get("uid"), site_key)
     return {
         "site_key": site_key, "host": urlparse(feed["url"]).netloc.lower(),
         "condition": feed["condition"], "platform": None, "platform_evidence": None,
