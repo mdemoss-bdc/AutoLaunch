@@ -557,6 +557,62 @@
 //     placed text, no share — and it is what stopped the
 //     2.1.56 incident from becoming a second wrong-car
 //     share: the job failed with the Sentra unshared.
+// 32. COMPOSER PLACEMENT, ROUND THREE (v2.1.58 — the
+//     2.1.57 live proof of note 31 got the BUTTON right:
+//     share_button_found recorded "Share 2014 Volkswagen
+//     Beetle", verdict match, and that button was clicked.
+//     The dialog that opened carried the caption placeholder
+//     in its own text — "Share Matthew DeMoss Feed Public
+//     Say something about this... Share now Send in
+//     Messenger ..." — yet placeShareText found nothing
+//     placeable and the job failed share_text_unplaced
+//     again, safely, nothing shared. Two defects, both
+//     fixed here):
+//     (a) THE FINDER ONLY RECOGNISED LIVE EDITORS. The
+//     caption surface in this dialog variant is a
+//     placeholder shell: an element carrying the hint in
+//     an aria-placeholder / data-placeholder attribute
+//     (or wearing the placeholder line as its own text)
+//     that is NOT yet an editable — Facebook's Lexical
+//     editor wakes on a click, or the editable root is
+//     the shell's ancestor with the placeholder rendered
+//     inside it. The candidate selector now includes
+//     placeholder-attribute bearers, and the finder
+//     separates INVITING from EDITABLE: an inviting
+//     element that is not editable is an ACTIVATION
+//     target, never an insert target (writing textContent
+//     into a shell would read back as placed while
+//     nothing real happened — a false placement, worse
+//     than an honest failure). placeShareText's new
+//     activation arm resolves the placeholder's editable
+//     host (the element itself, else the nearest editable
+//     ancestor) and places the text there directly; with
+//     no host it clicks the placeholder realistically and
+//     re-polls (≤1.5s) for an editable — or the element
+//     the click focused — to take the text. And the
+//     contenteditable INSERT gains the posting ladder's
+//     rung-2 edit: when a raw textContent assignment does
+//     not read back (a React/Lexical editor can reconcile
+//     it away), the text goes in through execCommand
+//     insertText, the browser's real editing pipeline.
+//     Read-back still decides every rung.
+//     (b) THE 2.1.57 EVIDENCE DIED IN COMPACTION.
+//     shareComposerDiag packed the dialog excerpt (≤600
+//     chars) and the field inventory into ONE ~1100-char
+//     step-note detail, excerpt first — but the worker's
+//     compactDiagError slices every record's detail at
+//     200 chars, so the stored row kept the excerpt's
+//     first ~187 chars and the inventory after them was
+//     amputated whole. The diag is now emitted as step
+//     notes chunked to ≤185 chars per record (dialog text
+//     chunks, then candidate-field chunks), each safely
+//     inside the per-record budget; the placeholder
+//     element and the post-click focused element join the
+//     inventory. The compaction budget is a global
+//     contract the other flows' diagnostics are tuned
+//     around, so the fix lives here at the producer, not
+//     in the worker — the control delta stays content.js
+//     + manifest.
 
 
 (async function () {
@@ -3693,31 +3749,67 @@
         { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
     } catch (e) { /* best-effort */ }
   }
-  // The share composer's text field inside ONE dialog: a
-  // visible textarea / contenteditable / textbox, preferring
-  // one whose placeholder or label invites the caption
-  // ("Say something…"). v2.1.57 (header note 31): the
-  // contenteditable arm no longer demands the exact ="true"
-  // value (Facebook also ships bare and plaintext-only
-  // variants), "What's on your mind" joins the inviting
-  // hints, and invitingOnly lets the stack-wide search below
-  // prefer a caption field over a bare one anywhere.
+  // The caption hints, one matcher (v2.1.58, header note
+  // 32): the vocabulary that marks the share composer's
+  // caption field — or the placeholder line standing in
+  // for it before the editor wakes.
+  function shareHintMatches(s) {
+    return /say something|write something|what['’]s on your mind|say anything|add a caption|share your thoughts/i
+      .test(String(s || ""));
+  }
+  // Is this element itself a surface the details text may
+  // be inserted into? A textarea, or an element Facebook
+  // has made editable — a contenteditable attribute with
+  // any value but "false" (Facebook ships bare and
+  // plaintext-only variants), the textbox role, or the
+  // live isContentEditable property. Elements failing this
+  // test may still be placeholder shells: ACTIVATION
+  // targets (note 32), never insert targets.
+  function isShareEditableEl(el) {
+    if (!el || typeof el.getAttribute !== "function") return false;
+    if (String(el.tagName || "").toUpperCase() === "TEXTAREA") return true;
+    const ce = el.getAttribute("contenteditable");
+    if (ce !== null && ce !== "false") return true;
+    if (el.getAttribute("role") === "textbox") return true;
+    if (el.isContentEditable === true) return true;
+    return false;
+  }
+  // The share composer's text field inside ONE dialog,
+  // preferring one whose placeholder or label invites the
+  // caption ("Say something…"). v2.1.57 (header note 31):
+  // the contenteditable arm no longer demands the exact
+  // ="true" value, and "What's on your mind" joins the
+  // inviting hints. v2.1.58 (header note 32): the
+  // candidate selector also admits elements bearing a
+  // caption placeholder ATTRIBUTE (aria-placeholder /
+  // data-placeholder) with no editor surface at all —
+  // the click-to-wake shells — and the priority separates
+  // inviting from editable: an inviting EDITABLE wins;
+  // an inviting shell comes next (placeShareText routes
+  // it to activation, never to insertion); then any
+  // editable; invitingOnly still lets the stack-wide
+  // search below prefer a caption field over a bare one
+  // anywhere.
   function findShareTextField(dialog, invitingOnly) {
     if (!dialog) return null;
     const els = Array.from(dialog.querySelectorAll(
-      'textarea, [contenteditable], [contenteditable="true"], [role="textbox"]'))
+      'textarea, [contenteditable], [contenteditable="true"], [role="textbox"], ' +
+      '[aria-placeholder], [data-placeholder]'))
       .filter(isVisibleEl);
     if (!els.length) return null;
-    const invites = els.find(elm => {
-      const hint = ((typeof elm.getAttribute === "function" &&
-        (elm.getAttribute("placeholder") || elm.getAttribute("aria-label") ||
-         elm.getAttribute("aria-placeholder") ||
-         elm.getAttribute("data-placeholder"))) || "") +
-        " " + fieldLabel(elm);
-      return /say something|write something|what['’]s on your mind|say anything|add a caption|share your thoughts/i.test(hint);
-    });
-    if (invites) return invites;
-    return invitingOnly ? null : els[0];
+    const hintOf = elm => {
+      const g = n => (typeof elm.getAttribute === "function" && elm.getAttribute(n)) || "";
+      return g("placeholder") + " " + g("aria-label") + " " +
+        g("aria-placeholder") + " " + g("data-placeholder") + " " + fieldLabel(elm);
+    };
+    const inviting = els.filter(elm => shareHintMatches(hintOf(elm)));
+    const invitingEditable = inviting.find(isShareEditableEl);
+    if (invitingEditable) return invitingEditable;
+    if (inviting.length) return inviting[0];
+    if (invitingOnly) return null;
+    const editable = els.find(isShareEditableEl);
+    if (editable) return editable;
+    return els[0];
   }
   // The composer may live in ANY open dialog — in the
   // 2026-10-29 v2.1.56 live run the search only ever looked
@@ -3740,72 +3832,251 @@
   // whole-value assignment, never per-character typing, so a
   // full description lands in one step). True only when the
   // field reads back carrying the text's opening line.
+  // v2.1.58 (header note 32): a contenteditable whose raw
+  // textContent assignment does not read back gets a second
+  // rung — execCommand insertText, the browser's real
+  // editing pipeline (the posting ladder's rung-2 edit) —
+  // because a React/Lexical editor can reconcile the raw
+  // assignment out of its model while adopting text that
+  // arrives as a genuine edit. Read-back decides both rungs.
   function insertShareTextIntoField(field, text) {
     if (!field) return false;
     const snippet = normText(String(text).split("\n")[0]);
+    const readsBack = () => {
+      try { return normText(extractValue(field)).includes(snippet); }
+      catch (e) { return false; }
+    };
+    if (readsBack()) return true;
     try {
-      if (!normText(extractValue(field)).includes(snippet)) {
-        if (field.tagName === "TEXTAREA" || field.tagName === "INPUT") {
-          nativeSetValue(field, text);
-        } else {
-          field.focus();
-          field.textContent = text;
-          field.dispatchEvent(new Event("input", { bubbles: true }));
-          field.dispatchEvent(new Event("change", { bubbles: true }));
-        }
+      if (field.tagName === "TEXTAREA" || field.tagName === "INPUT") {
+        nativeSetValue(field, text);
+      } else {
+        field.focus();
+        field.textContent = text;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
       }
     } catch (e) { return false; }
-    return normText(extractValue(field)).includes(snippet);
+    if (readsBack()) return true;
+    try {
+      if (field.tagName !== "TEXTAREA" && field.tagName !== "INPUT") {
+        field.focus();
+        try { document.execCommand("selectAll"); } catch (e) {}
+        try { document.execCommand("delete"); } catch (e) {}
+        let ok = false;
+        try { ok = document.execCommand("insertText", false, text); } catch (e) {}
+        if (ok) field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } catch (e) { /* read-back decides */ }
+    return readsBack();
+  }
+  // The element whose OWN text is the caption placeholder
+  // line ("Say something about this...") — the visible
+  // shell Facebook renders before (or inside) the real
+  // editor (v2.1.58, header note 32). Manual walk over
+  // element children: the shortest visible element whose
+  // whole text is short and matches a caption hint wins;
+  // a large container that merely CONTAINS the line among
+  // other text (the whole dialog, an attachment block)
+  // never qualifies.
+  function findSharePlaceholderEl(dialog) {
+    if (!dialog) return null;
+    let best = null;
+    const walk = (node, depth) => {
+      if (!node || depth > 8) return;
+      const kids = node.children ? Array.from(node.children) : [];
+      for (const k of kids) {
+        const t = normText(k.textContent);
+        if (t && t.length <= 80 && shareHintMatches(t) && isVisibleEl(k)) {
+          if (!best || t.length < best.len) best = { el: k, len: t.length };
+        }
+        walk(k, depth + 1);
+      }
+    };
+    walk(dialog, 0);
+    return best ? best.el : null;
+  }
+  // The editable host for a placeholder element: itself
+  // when editable, else the nearest editable ancestor —
+  // the Lexical pattern, the placeholder rendered INSIDE
+  // the editor root — else null (a click must wake the
+  // editor first).
+  function shareEditableHost(ph) {
+    if (!ph) return null;
+    if (isShareEditableEl(ph)) return ph;
+    let node = ph.parentElement;
+    for (let i = 0; i < 6 && node; i++) {
+      if (isShareEditableEl(node)) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
+  function safeActiveElement() {
+    try {
+      const a = document.activeElement;
+      return (a && a !== document.body &&
+        typeof a.getAttribute === "function") ? a : null;
+    } catch (e) { return null; }
+  }
+  // PLACEHOLDER ACTIVATION (v2.1.58, header note 32): the
+  // dialog shows the caption placeholder but no editable
+  // surface. Resolve the placeholder (by its own text, or
+  // the finder's non-editable inviting candidate), place
+  // the text in its editable HOST when it already has one,
+  // else click it realistically and re-poll (≤1.5s) for an
+  // editable — or the element the click focused — to take
+  // the text. Returns the dialog the text landed in, or
+  // null; every step leaves a step note, and the
+  // placeholder element / focused element ride the notes'
+  // element snapshots into the failure evidence.
+  async function trySharePlaceholderActivation(text) {
+    let target = null, targetDlg = null;
+    const stack = openShareDialogs().slice().reverse();
+    for (const d of stack) {
+      const ph = findSharePlaceholderEl(d);
+      if (ph) { target = ph; targetDlg = d; break; }
+    }
+    if (!target) {
+      const found = findShareComposerField();
+      if (found && !isShareEditableEl(found.field)) {
+        target = found.field; targetDlg = found.dialog;
+      }
+    }
+    if (!target) return null;
+    const phHint = (typeof target.getAttribute === "function" &&
+      (target.getAttribute("aria-placeholder") ||
+       target.getAttribute("data-placeholder") ||
+       target.getAttribute("placeholder"))) ||
+      normText(target.textContent).slice(0, 60);
+    recordStepNote("Share", "share_placeholder_found",
+      `caption placeholder "${String(phHint).slice(0, 60)}" — waking its editor`.slice(0, 200),
+      "", target);
+    const host = shareEditableHost(target);
+    if (host && insertShareTextIntoField(host, text)) {
+      recordStepNote("Share", "share_placeholder_host",
+        "the placeholder's editable host took the text without a click", "1", host);
+      return targetDlg;
+    }
+    realisticClick(target);
+    recordStepNote("Share", "share_placeholder_clicked",
+      "clicked the caption placeholder to wake the composer; re-polling for its editor",
+      "", target);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 1500) {
+      await sleep(250);
+      const f2 = findShareComposerField();
+      if (f2 && isShareEditableEl(f2.field) &&
+          insertShareTextIntoField(f2.field, text)) {
+        recordStepNote("Share", "share_placeholder_activated",
+          "an editable composer appeared after the placeholder click and took the text",
+          "1", safeActiveElement() || f2.field);
+        return f2.dialog;
+      }
+      const foc = safeActiveElement();
+      if (foc && isShareEditableEl(foc) &&
+          openShareDialogs().some(d => typeof d.contains === "function" && d.contains(foc)) &&
+          insertShareTextIntoField(foc, text)) {
+        recordStepNote("Share", "share_placeholder_activated",
+          "the element focused by the placeholder click took the text", "1", foc);
+        return targetDlg;
+      }
+    }
+    recordStepNote("Share", "share_placeholder_no_editor",
+      "no editable composer appeared within 1.5s of the placeholder click",
+      "0", safeActiveElement() || target);
+    return null;
   }
   // Place the job's details text in the share composer,
   // polling the open-dialog stack for a bounded settle window
   // — the composer can render a beat after the destination
   // click, or inside a dialog stacked over the share sheet.
-  // Returns the dialog the text landed in, or null.
+  // Only an EDITABLE field is ever inserted into (v2.1.58:
+  // a non-editable inviting element routes to the
+  // activation arm instead — once per call). Returns the
+  // dialog the text landed in, or null.
   async function placeShareText(budgetMs) {
     const text = String(shareText || "");
     if (!text.trim()) return null;
     const budget = budgetMs == null ? 3500 : budgetMs;
     const t0 = Date.now();
+    let activationTried = false;
     for (;;) {
       const found = findShareComposerField();
-      if (found && insertShareTextIntoField(found.field, text)) return found.dialog;
+      if (found && isShareEditableEl(found.field) &&
+          insertShareTextIntoField(found.field, text)) return found.dialog;
+      if (!activationTried && Date.now() - t0 < budget) {
+        activationTried = true;
+        const viaActivation = await trySharePlaceholderActivation(text);
+        if (viaActivation) return viaActivation;
+      }
       if (Date.now() - t0 >= budget) return null;
       await sleep(300);
     }
   }
-  // The share_text_unplaced evidence (v2.1.57): when the
-  // composer cannot be placed, the failure row must say what
-  // the dialog stack actually contained — the topmost
-  // dialog's own text (≤600 chars) plus an inventory of
-  // every candidate field in every open dialog (tag, role,
-  // contenteditable, aria-label, placeholder) — so the next
-  // live miss is diagnosable in ONE round.
+  // The share_text_unplaced evidence (v2.1.57 design,
+  // v2.1.58 emission — header note 32): when the composer
+  // cannot be placed, the failure row must say what the
+  // dialog stack actually contained — the topmost dialog's
+  // own text plus an inventory of every candidate field in
+  // every open dialog (tag, role, contenteditable,
+  // aria-label, placeholder) — so the next live miss is
+  // diagnosable in ONE round. v2.1.57 returned all of it as
+  // ONE detail string (~1100 chars, excerpt first); the
+  // worker's compactDiagError slices every record's detail
+  // at 200 chars, so the stored row kept the excerpt's
+  // opening and the field inventory after it was amputated
+  // whole. The parts are therefore emitted as step notes
+  // chunked to ≤185 chars per record — each comfortably
+  // inside the per-record budget — and the placeholder
+  // element plus the post-click focused element join the
+  // inventory (v2.1.58).
   function describeShareField(f) {
     const g = n => (typeof f.getAttribute === "function" && f.getAttribute(n)) || "";
     const bits = [String(f.tagName || "?").toLowerCase()];
     if (g("role")) bits.push("role=" + g("role"));
-    if (g("contenteditable")) bits.push("ce=" + g("contenteditable"));
+    const ce = typeof f.getAttribute === "function" ? f.getAttribute("contenteditable") : null;
+    if (ce !== null && ce !== undefined) bits.push("ce=" + (ce === "" ? "(bare)" : ce));
     if (g("aria-label")) bits.push('aria="' + String(g("aria-label")).slice(0, 40) + '"');
     const ph = g("placeholder") || g("aria-placeholder") || g("data-placeholder");
     if (ph) bits.push('ph="' + String(ph).slice(0, 40) + '"');
     return bits.join(" ");
   }
-  function shareComposerDiag() {
+  function shareComposerDiagParts() {
     const dialogs = openShareDialogs();
-    if (!dialogs.length) return "no dialogs open when the composer search gave up";
+    if (!dialogs.length) {
+      return { excerpt: "no dialogs open when the composer search gave up", fields: [] };
+    }
     const top = dialogs[dialogs.length - 1];
     const excerpt = String(top.innerText || top.textContent || "")
-      .replace(/\s+/g, " ").trim().slice(0, 600);
+      .replace(/\s+/g, " ").trim().slice(0, 560);
     const fields = [];
     for (const d of dialogs) {
       const els = Array.from(d.querySelectorAll(
-        'textarea, input, [contenteditable], [role="textbox"]'));
+        'textarea, input, [contenteditable], [role="textbox"], ' +
+        '[aria-placeholder], [data-placeholder]'));
       for (const f of els) fields.push(describeShareField(f));
     }
-    return ("dialog text: " + excerpt + " ;; candidate fields (" +
-      fields.length + "): " +
-      (fields.length ? fields.join(" | ") : "(none)")).slice(0, 1100);
+    for (const d of dialogs) {
+      const ph = findSharePlaceholderEl(d);
+      if (ph) { fields.push("placeholder " + describeShareField(ph)); break; }
+    }
+    const foc = safeActiveElement();
+    if (foc) fields.push("focused " + describeShareField(foc));
+    return { excerpt, fields };
+  }
+  function recordShareComposerDiag() {
+    const { excerpt, fields } = shareComposerDiagParts();
+    const bodies = [
+      "dialog text: " + (excerpt || "(empty)"),
+      `candidate fields (${fields.length}): ` +
+        (fields.length ? fields.join(" | ") : "(none)")
+    ];
+    for (const body of bodies) {
+      for (let i = 0; i < body.length; i += 185) {
+        recordStepNote("Share", "share_composer_diag",
+          body.slice(i, i + 185), "0");
+      }
+    }
   }
 
   // ---- delete stage helpers (v2.1.9, header note 19) ---------------------
@@ -4396,7 +4667,10 @@
     }
     if (!textPlaced) {
       recordStepNote("Share", "share_text_unplaced",
-        shareComposerDiag(), "0", activeDlg);
+        "no editable in the share dialog stack took the details text — " +
+        "the stack's contents ride the share_composer_diag notes after this one",
+        "0", activeDlg);
+      recordShareComposerDiag();
       dismissShareDialog(activeDlg);
       await fail(
         "Facebook's share dialog had nowhere to put the vehicle details, so nothing was shared.",
