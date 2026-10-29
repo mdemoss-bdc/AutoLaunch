@@ -9510,6 +9510,48 @@ async function queueListingRemoval(car) {
   return "queued";
 }
 
+// The details text a feed share carries (helper v2.1.56): the
+// same description the Marketplace listing itself carries,
+// rebuilt here from the car's row + saved settings. The app
+// mirrors the helper composer's builder (extension content.js
+// buildDescription / listingMileage) from the same inputs:
+// brandingState carries the dealership identity the settings
+// load read, and the stock line follows the Posting Preferences
+// checkbox — the same source its save handler uses.
+function buildShareDetailsText(car) {
+  const norm = v => String(v == null ? "" : v).trim().toLowerCase().replace(/\s+/g, " ");
+  const stored = car.mileage != null && car.mileage !== "" ? Number(car.mileage) : null;
+  const isNew = /^new$/i.test(String(car.condition || "").trim());
+  let miles = 1000, defaulted = true;
+  if (stored !== null && stored >= 300) {
+    miles = stored;
+    defaulted = isNew && stored === 1000;
+  }
+  const title = `${car.year || ""} ${car.make || ""} ${car.model || "Vehicle"} ${car.trim || ""}`.trim();
+  const stockRaw = (car.stock_num != null && String(car.stock_num).trim()) ? car.stock_num : car.stock_number;
+  const stock = stockRaw != null ? String(stockRaw).trim() : "";
+  const stockEl = document.getElementById("prefStockNum");
+  const includeStock = !!(stockEl && stockEl.checked);
+  let desc =
+    `${title}\n` +
+    `Price: $${(car.price || 0).toLocaleString()}\n` +
+    `Mileage: ${miles.toLocaleString()} miles\n` +
+    (car.color && norm(car.color) !== "standard" ? `Exterior: ${car.color}\n` : "") +
+    (car.transmission ? `Transmission: ${car.transmission}\n` : "") +
+    (car.vin ? `VIN: ${car.vin}\n` : "") +
+    (includeStock && stock ? `Stock #: ${stock}\n` : "") +
+    (defaulted
+      ? (isNew
+        ? `\nBrand new vehicle — the mileage shown is a listing default; actual miles may be less.`
+        : `\nMileage shown is a listing default — exact miles were not published for this vehicle; ask us for the current odometer reading.`)
+      : "") +
+    `\nInspected and frontline ready. Message to set up a test drive!`;
+  const dealerLines = [brandingState.name, brandingState.address]
+    .map(s => String(s || "").trim()).filter(s => s);
+  if (dealerLines.length) desc += `\n\n${dealerLines.join("\n")}`;
+  return desc;
+}
+
 // SHARE TO FEED — producer for feed-share jobs (helper v2.1.55).
 // Mirrors queueListingRemoval exactly (same double dedupe, same
 // stamped row shape) with action "share": the extension claims the
@@ -9517,6 +9559,10 @@ async function queueListingRemoval(car) {
 // listing, and shares it to the user's personal feed. The car's
 // marketplace_posted_at is NOT touched — the listing stays posted.
 // Returns "queued" | "already". Throws on a failed insert.
+// v2.1.56: the row also carries share_text — the listing's
+// description (buildShareDetailsText above) — which the helper
+// places into the share composer so the feed post carries the
+// vehicle's details, not just the listing attachment.
 async function queueFeedShare(car) {
   const vin = car.vin;
   const alreadyQueued = postingQueue.some(i =>
@@ -9554,6 +9600,8 @@ async function queueFeedShare(car) {
       // The price rides the row on purpose: the helper's strict
       // matcher needs year/make/model AND price.
       price: car.price ?? null,
+      // v2.1.56: the details text the feed post will carry.
+      share_text: buildShareDetailsText(car),
       created_at: new Date().toISOString()
     });
   if (error) throw error;

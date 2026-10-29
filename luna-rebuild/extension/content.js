@@ -460,6 +460,50 @@
 //     fails share_item_not_found with menu_items_seen as the
 //     evidence — the listing itself is never touched, and the
 //     car's posted stamp is never this job's business.
+// 30. SHARE HARDENING (v2.1.56 — the 2026-10-29 live proof of
+//     note 29 failed two ways; both are fixed here):
+//     (a) WRONG LISTING SHARED. Matthew queued a share for a
+//     2014 Beetle; his feed received a 2022 Sentra. The strict
+//     card match was not the hole — everything after it was:
+//     listingMenuButton climbs ancestors, and its per-level
+//     trust check counts cards matching THIS job's car, not
+//     cards in total, so a wrapper holding several listings
+//     passes with the target's neighbours inside it, and the
+//     first menu-ish button in document order at that level
+//     can be a NEIGHBOUR's ⋯. findShareMenuItem then searches
+//     the whole document unanchored, and the share dialog's
+//     listing identity was never read at all — "dialog
+//     closed" proved A share happened, never WHICH listing
+//     was shared. Two gates now stand in the way: before the
+//     Share entry is clicked, the strict scan is re-run and
+//     the menu button must re-resolve, from the freshly
+//     matched card, to the very element this run clicked
+//     (menu_anchor_recheck); and inside the dialog phase
+//     (driveShareDialog), the identity the dialog itself
+//     presents — title tokens + price — is compared with the
+//     job's stamped year/make/model + price BEFORE any
+//     destination or confirm click, and again on the dialog
+//     that reaches the confirm. ANY readable mismatch aborts
+//     with share_target_mismatch, the dialog closed
+//     unconfirmed. A dialog presenting no readable identity
+//     is recorded (share_identity_unreadable) and the share
+//     rides on the pre-dialog anchor gate alone — the honest
+//     boundary of the guarantee.
+//     (b) NO DETAILS IN THE FEED POST. The shared post carried
+//     only the listing attachment (photos, price, city,
+//     title). The share row now carries the listing's
+//     description text (auto_posting_queue.share_text,
+//     stamped by both producers from the same builder inputs
+//     the posting composer uses), the worker carries it on
+//     the job as shareText, and the dialog phase places it in
+//     the share composer's text field BEFORE any destination
+//     or confirm click, verified by read-back. No text on the
+//     job, no field in the dialog, or a failed read-back
+//     fails the share share_text_unplaced — a bare share is
+//     the bug, never a fallback. The submenu variant (the
+//     Share entry opening destination entries directly — no
+//     dialog, no identity to verify, no composer) can no
+//     longer complete a share, for the same reason.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -494,6 +538,14 @@
   // byte-identical to before this version.
   const introVideo = (job.introVideo && typeof job.introVideo.url === "string" &&
     job.introVideo.url) ? job.introVideo : null;
+
+  // Share details text (v2.1.56, header note 30): the worker
+  // carries the queue row's share_text on share jobs, and the
+  // share flow must place it in the share composer before
+  // confirming. Absent (a row queued before the column
+  // existed, or a producer that could not build it) the share
+  // fails honestly rather than posting a bare listing.
+  const shareText = typeof job.shareText === "string" ? job.shareText : "";
 
   // ---- job routing (v2.1.4, header notes 14–15) -----------------------
   // This script is injected on BOTH the create pages and the selling
@@ -3478,6 +3530,121 @@
     return null;
   }
 
+  // ---- share identity + details-text gates (v2.1.56, note 30) --------
+  // The listing identity a share DIALOG presents, read from its
+  // own text: every $ amount it shows, whether any year shows,
+  // and the normalized text the token checks run against.
+  function shareIdentityFromText(rawText) {
+    const text = normText(rawText || "");
+    const prices = [];
+    const re = /\$\s?(\d[\d,]*(?:\.\d{2})?)/g;
+    let m;
+    while ((m = re.exec(String(rawText || ""))) !== null) {
+      const n = moneyNumber(m[1]);
+      if (n != null && !prices.includes(n)) prices.push(n);
+    }
+    return { text, prices, hasYear: /\b(?:19|20)\d\d\b/.test(text) };
+  }
+  // The verdict on the dialog's identity vs the job's stamped
+  // car. "match": the dialog presents this car's year + make +
+  // model token + price. "mismatch": the dialog DID present a
+  // readable identity (a price, or any year) and it is not this
+  // car — the Sentra case; the share aborts before any confirm.
+  // "unreadable": no price and no year anywhere — the dialog
+  // shows nothing to compare, and the share rides on the
+  // pre-dialog anchor gate alone (note 30 states the boundary).
+  function shareIdentityVerdict(dialog) {
+    const seen = { prices: [], yearHit: false, makeHit: false, modelHit: false, priceHit: false };
+    if (!dialog) return { status: "unreadable", seen };
+    const info = shareIdentityFromText(dialog.textContent || "");
+    seen.prices = info.prices;
+    seen.yearHit = !!car.year && info.text.includes(String(car.year));
+    seen.makeHit = !!car.make && info.text.includes(normText(car.make));
+    const modelToken = normText(car.model || "").split(" ")[0];
+    seen.modelHit = !!modelToken && info.text.includes(modelToken);
+    const expPrice = car.price != null && car.price !== "" ? Number(car.price) : null;
+    seen.priceHit = expPrice != null && info.prices.some(p => Math.abs(p - expPrice) < 1);
+    const readable = info.prices.length > 0 || info.hasYear;
+    if (!readable) return { status: "unreadable", seen };
+    const match = seen.yearHit && seen.makeHit && seen.modelHit &&
+      (expPrice == null || seen.priceHit);
+    return { status: match ? "match" : "mismatch", seen };
+  }
+  // Seen-vs-expected, in the field_diag detail style — this is
+  // the evidence a share_target_mismatch row carries.
+  function shareIdentityDetail(verdict) {
+    const exp = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() +
+      (car.price != null ? ` @ $${Number(car.price).toLocaleString()}` : "");
+    const s = (verdict && verdict.seen) || {};
+    const seenPrices = (s.prices || []).map(p => "$" + Number(p).toLocaleString()).join(", ") || "(none)";
+    return `expected [${exp}]; dialog showed prices [${seenPrices}], ` +
+      `year:${s.yearHit ? "hit" : "miss"} make:${s.makeHit ? "hit" : "miss"} ` +
+      `model:${s.modelHit ? "hit" : "miss"} price:${s.priceHit ? "hit" : "miss"}`;
+  }
+  // Close a dialog WITHOUT confirming (the mismatch / no-text
+  // abort): its own Close control when one exists, else an
+  // Escape key. Best-effort and never throws — the abort's
+  // honesty lives in the failure record, not in whether
+  // Facebook tidied up after it.
+  function dismissShareDialog(dialog) {
+    try {
+      if (dialog) {
+        const btns = Array.from(dialog.querySelectorAll('[role="button"], button'));
+        const close = btns.find(b => isVisibleEl(b) &&
+          /^(close|dismiss|cancel)$/i.test(String(
+            (typeof b.getAttribute === "function" && b.getAttribute("aria-label")) ||
+            b.textContent || "").trim()));
+        if (close) { realisticClick(close); return; }
+      }
+      document.dispatchEvent(new KeyboardEvent("keydown",
+        { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+    } catch (e) { /* best-effort */ }
+  }
+  // The share composer's text field inside the dialog: a
+  // visible textarea / contenteditable / textbox, preferring
+  // one whose placeholder or label invites the caption
+  // ("Say something…").
+  function findShareTextField(dialog) {
+    if (!dialog) return null;
+    const els = Array.from(dialog.querySelectorAll(
+      'textarea, [contenteditable="true"], [role="textbox"]'))
+      .filter(isVisibleEl);
+    if (!els.length) return null;
+    const invites = els.find(elm => {
+      const hint = ((typeof elm.getAttribute === "function" &&
+        (elm.getAttribute("placeholder") || elm.getAttribute("aria-label") ||
+         elm.getAttribute("data-placeholder"))) || "") +
+        " " + fieldLabel(elm);
+      return /say something|write something|say anything|add a caption|share your thoughts/i.test(hint);
+    });
+    return invites || els[0];
+  }
+  // Place the details text in the dialog's composer with the
+  // posting composer's own insertion discipline (fillDescription:
+  // whole-value assignment, never per-character typing, so a
+  // full description lands in one step). True only when the
+  // field reads back carrying the text's opening line.
+  function placeShareText(dialog) {
+    const text = String(shareText || "");
+    if (!text.trim()) return false;
+    const field = findShareTextField(dialog);
+    if (!field) return false;
+    const snippet = normText(text.split("\n")[0]);
+    try {
+      if (!normText(extractValue(field)).includes(snippet)) {
+        if (field.tagName === "TEXTAREA" || field.tagName === "INPUT") {
+          nativeSetValue(field, text);
+        } else {
+          field.focus();
+          field.textContent = text;
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+    } catch (e) { return false; }
+    return normText(extractValue(field)).includes(snippet);
+  }
+
   // ---- delete stage helpers (v2.1.9, header note 19) ---------------------
   // How the menu button was found, for the menu_button_found note:
   // the ancestor depth at which listingMenuButton's search level
@@ -3957,6 +4124,177 @@
     return false;
   }
 
+  // The share DIALOG phase (v2.1.56, header note 30), factored
+  // out of runShareListing so the harness can drive it directly:
+  // identity gate FIRST, details text SECOND, destination +
+  // confirm LAST. No path through here can click a confirm (or
+  // a completing destination) before the dialog has proven it
+  // is this car's dialog and the details text is sitting in its
+  // composer. Returns true when the share completed (reported
+  // here), false when the job was failed here.
+  async function driveShareDialog(dlg) {
+    // Identity gate on the dialog as opened.
+    let verdict = shareIdentityVerdict(dlg);
+    if (verdict.status === "mismatch") {
+      recordStepNote("Share", "share_target_mismatch",
+        shareIdentityDetail(verdict).slice(0, 200), "0", dlg);
+      dismissShareDialog(dlg);
+      await fail(
+        "Facebook's share dialog was for a different listing (" +
+          shareIdentityDetail(verdict) + ") — nothing was shared.",
+        "share_target_mismatch");
+      return false;
+    }
+    recordStepNote("Share",
+      verdict.status === "match" ? "share_identity_verified" : "share_identity_unreadable",
+      shareIdentityDetail(verdict).slice(0, 200),
+      verdict.status === "match" ? "1" : "");
+
+    // Details text: the job must carry it, and the dialog must
+    // take it — placed BEFORE any destination click, because a
+    // destination click can complete the share on some layouts.
+    if (!String(shareText || "").trim()) {
+      recordStepNote("Share", "share_text_missing",
+        "the queue row carried no share_text — a bare share is not acceptable", "0", dlg);
+      dismissShareDialog(dlg);
+      await fail(
+        "This share carried no vehicle details text, so nothing was shared. Queue the share again from the app to pick up the details.",
+        "share_text_unplaced");
+      return false;
+    }
+    let textPlaced = placeShareText(dlg);
+    if (textPlaced) {
+      recordStepNote("Share", "share_text_placed",
+        `${String(shareText).length} chars placed in the share composer`, "1");
+    }
+
+    // Destination: choose the FEED when the dialog offers a
+    // choice. Some share sheets also complete on the
+    // destination click itself — dialog gone = shared, but only
+    // when the details text was already placed above.
+    const feedOpt = findShareFeedOption(dlg);
+    if (feedOpt) {
+      realisticClick(feedOpt);
+      recordStepNote("Share", "share_feed_option_clicked",
+        normText(feedOpt.textContent).slice(0, 60), "", feedOpt);
+      await sleep(1200);
+      if (!findShareDialog()) {
+        if (checkpointShowing()) {
+          await fail("Facebook showed an identity check during the share.",
+            "facebook_checkpoint");
+          return false;
+        }
+        if (!textPlaced) {
+          // The click closed the share UI with no details in
+          // it — never claim that as a good share.
+          recordStepNote("Share", "share_text_unplaced",
+            "the share UI closed on the destination click before the details text could be placed", "0");
+          await fail(
+            "Facebook closed the share before the vehicle details could be added, so the share was NOT marked shared. Check your feed, then share again.",
+            "share_text_unplaced");
+          return false;
+        }
+        recordStepNote("Share", "share_completed",
+          "dialog closed after the feed destination click, details text placed", "1");
+        say("Shared to your feed ✓", "#15803d");
+        await report("AUTOLAUNCH_JOB_SHARED", {});
+        return true;
+      }
+      // The dialog that reaches the confirm — the same element
+      // transitioned to the feed composer, or a fresh one —
+      // is re-gated and the text re-placed if it isn't there.
+      const dlg2 = findShareDialog() || dlg;
+      verdict = shareIdentityVerdict(dlg2);
+      if (verdict.status === "mismatch") {
+        recordStepNote("Share", "share_target_mismatch",
+          shareIdentityDetail(verdict).slice(0, 200), "0", dlg2);
+        dismissShareDialog(dlg2);
+        await fail(
+          "Facebook's share dialog was for a different listing (" +
+            shareIdentityDetail(verdict) + ") — nothing was shared.",
+          "share_target_mismatch");
+        return false;
+      }
+      if (placeShareText(dlg2)) {
+        textPlaced = true;
+        recordStepNote("Share", "share_text_placed",
+          `${String(shareText).length} chars in the composer at the confirm step`, "1");
+      }
+      dlg = dlg2;
+    }
+    if (!textPlaced) {
+      recordStepNote("Share", "share_text_unplaced",
+        "no composer text field in the share dialog, or the text did not read back", "0", dlg);
+      dismissShareDialog(dlg);
+      await fail(
+        "Facebook's share dialog had nowhere to put the vehicle details, so nothing was shared.",
+        "share_text_unplaced");
+      return false;
+    }
+
+    const confirmBtn = findShareConfirmButton(findShareDialog() || dlg);
+    if (!confirmBtn) {
+      recordStepNote("Share", "share_dialog_dump",
+        describeOpenDialogs(), "0");
+      await fail("Facebook's share dialog offered no Post/Share button to confirm with — the listing was NOT shared.",
+        "share_confirm_not_found");
+      return false;
+    }
+    recordStepNote("Share", "share_confirm_found",
+      `confirm "${normText(confirmBtn.textContent)}" located`, "", confirmBtn);
+    // Click-target audit (the delete confirm's v2.1.17
+    // discipline): never fire the confirming click at
+    // coordinates whose topmost element is something else.
+    const cr = confirmBtn.getBoundingClientRect();
+    const cx = Math.round(cr.left + cr.width / 2);
+    const cy = Math.round(cr.top + cr.height / 2);
+    const topEl = document.elementFromPoint(cx, cy);
+    const topOk = !!topEl && (topEl === confirmBtn ||
+      (typeof confirmBtn.contains === "function" && confirmBtn.contains(topEl)) ||
+      (typeof topEl.contains === "function" && topEl.contains(confirmBtn)));
+    recordStepNote("Share", "share_confirm_click_target",
+      `at (${cx},${cy}): ${topEl
+        ? topEl.tagName + " " + String(topEl.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40)
+        : "(nothing)"} — aligned:${topOk}`,
+      topOk ? "1" : "0");
+    if (!topOk) {
+      await fail("Something was covering Facebook's share confirmation, so the click was withheld — the listing was NOT shared.",
+        "share_confirm_occluded");
+      return false;
+    }
+    realisticClick(confirmBtn);
+    recordStepNote("Share", "share_confirm_clicked",
+      "strategy realistic", "", confirmBtn);
+
+    // Honest success signal: DIALOG COMPLETION. The dialog must
+    // close after the confirm; one still open when the bounded
+    // wait ends means Facebook wants something else (a caption
+    // decision, an error) — not a share this helper may claim.
+    const t0 = Date.now();
+    let closed = false;
+    while (Date.now() - t0 < 12000) {
+      await sleep(600);
+      if (checkpointShowing()) {
+        await fail("Facebook showed an identity check during the share.",
+          "facebook_checkpoint");
+        return false;
+      }
+      if (!findShareDialog()) { closed = true; break; }
+    }
+    if (!closed) {
+      recordStepNote("Share", "share_dialog_dump",
+        describeOpenDialogs(), "0");
+      await fail("Facebook's share dialog stayed open after confirming — the share was NOT confirmed, so nothing was marked shared.",
+        "share_unverified");
+      return false;
+    }
+    recordStepNote("Share", "share_completed",
+      "share dialog closed after the confirm click", "1");
+    say("Shared to your feed ✓", "#15803d");
+    await report("AUTOLAUNCH_JOB_SHARED", {});
+    return true;
+  }
+
   // SHARE TO FEED (v2.1.55, header note 29): find this car's
   // listing on the Selling page with the delete flow's strict
   // matcher, open its menu, and share it to the user's personal
@@ -4076,6 +4414,33 @@
         return;
       }
 
+      // MENU ANCHOR RE-CHECK (v2.1.56, header note 30): the menu
+      // that opened must be THIS car's menu. The strict scan is
+      // re-run on the settled page and the menu button must
+      // re-resolve — from the freshly matched card — to the
+      // very element this run clicked. Anything else (a list
+      // that re-rendered mid-flow, a neighbour's button caught
+      // by listingMenuButton's ancestor climb) aborts the share
+      // before any entry in whatever menu is open gets clicked.
+      {
+        const freshCards = findListingCards();
+        const anchorBtn = freshCards.length === 1 ? listingMenuButton(freshCards[0]) : null;
+        const anchored = freshCards.length === 1 && anchorBtn === menuBtn;
+        recordStepNote("Share", "menu_anchor_recheck",
+          `fresh strict matches: ${freshCards.length}; menu button re-resolves to the clicked element: ${anchorBtn === menuBtn}`,
+          anchored ? "1" : "0");
+        if (!anchored) {
+          try {
+            document.dispatchEvent(new KeyboardEvent("keydown",
+              { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+          } catch (e) { /* best-effort menu close */ }
+          await fail(
+            `The listing's menu could not be re-verified as ${title}'s own menu — nothing was shared.`,
+            "share_target_mismatch");
+          return;
+        }
+      }
+
       say("Sharing the listing to your feed…");
       await humanPause();
       realisticClick(shareItem);
@@ -4083,37 +4448,26 @@
         "strategy realistic", "", shareItem);
       let dlg = await pollForShareDialog(4000);
       if (!dlg.dialog) {
-        // Submenu style: the Share entry may open a destination
-        // submenu instead of the dialog — click its FEED entry.
-        const sub = findShareFeedOptionInMenus();
-        if (sub) {
-          realisticClick(sub);
-          recordStepNote("Share", "share_feed_option_clicked",
-            "submenu: " + normText(sub.textContent).slice(0, 50), "", sub);
-          await sleep(1200);
-          if (!findShareDialog() && !findVisibleMenu()) {
-            if (checkpointShowing()) {
-              await fail("Facebook showed an identity check during the share.",
-                "facebook_checkpoint");
-              return;
-            }
-            // The submenu click itself completed the share.
-            recordStepNote("Share", "share_completed",
-              "share UI closed after the submenu feed click", "1");
-            say("Shared to your feed ✓", "#15803d");
-            await report("AUTOLAUNCH_JOB_SHARED", {});
-            return;
-          }
-          dlg = await pollForShareDialog(4000);
-        }
-      }
-      if (!dlg.dialog) {
         await cdpClickEl(shareItem); // trusted click fallback, as elsewhere
         recordStepNote("Share", "share_item_clicked",
           "strategy cdpClick (fallback — no dialog after the realistic click)", "", shareItem);
         dlg = await pollForShareDialog(5000);
       }
       if (!dlg.dialog) {
+        // No dialog on either click strategy. The remaining
+        // possibility is the submenu variant: the Share entry
+        // opened destination entries directly, with no dialog.
+        // v2.1.56 (note 30): that variant offers no identity to
+        // verify and no composer for the details text, so it
+        // can no longer complete a share — nothing is clicked.
+        const sub = findShareFeedOptionInMenus();
+        if (sub) {
+          recordStepNote("Share", "share_submenu_no_dialog",
+            "Share opened destination entries with no dialog — no identity check or details text is possible there", "0", sub);
+          await fail("Facebook offered a quick-share menu with no place to verify the listing or add the vehicle details — nothing was shared.",
+            "share_text_unplaced");
+          return;
+        }
         recordStepNote("Share", "share_dialog_dump",
           describeOpenDialogs(), "0");
         await fail("Facebook's share dialog did not appear — the listing was NOT shared.",
@@ -4122,90 +4476,10 @@
       }
       recordStepNote("Share", "share_dialog_found",
         `dialog located after poll ${dlg.elapsed}ms`, "");
-
-      // Destination: choose the FEED when the dialog offers a
-      // choice. Some share sheets also complete on the
-      // destination click itself — dialog gone = shared.
-      const feedOpt = findShareFeedOption(dlg.dialog);
-      if (feedOpt) {
-        realisticClick(feedOpt);
-        recordStepNote("Share", "share_feed_option_clicked",
-          normText(feedOpt.textContent).slice(0, 60), "", feedOpt);
-        await sleep(1200);
-        if (!findShareDialog()) {
-          if (checkpointShowing()) {
-            await fail("Facebook showed an identity check during the share.",
-              "facebook_checkpoint");
-            return;
-          }
-          recordStepNote("Share", "share_completed",
-            "dialog closed after the feed destination click", "1");
-          say("Shared to your feed ✓", "#15803d");
-          await report("AUTOLAUNCH_JOB_SHARED", {});
-          return;
-        }
-      }
-
-      const confirmBtn = findShareConfirmButton(findShareDialog() || dlg.dialog);
-      if (!confirmBtn) {
-        recordStepNote("Share", "share_dialog_dump",
-          describeOpenDialogs(), "0");
-        await fail("Facebook's share dialog offered no Post/Share button to confirm with — the listing was NOT shared.",
-          "share_confirm_not_found");
-        return;
-      }
-      recordStepNote("Share", "share_confirm_found",
-        `confirm "${normText(confirmBtn.textContent)}" located`, "", confirmBtn);
-      // Click-target audit (the delete confirm's v2.1.17
-      // discipline): never fire the confirming click at
-      // coordinates whose topmost element is something else.
-      const cr = confirmBtn.getBoundingClientRect();
-      const cx = Math.round(cr.left + cr.width / 2);
-      const cy = Math.round(cr.top + cr.height / 2);
-      const topEl = document.elementFromPoint(cx, cy);
-      const topOk = !!topEl && (topEl === confirmBtn ||
-        (typeof confirmBtn.contains === "function" && confirmBtn.contains(topEl)) ||
-        (typeof topEl.contains === "function" && topEl.contains(confirmBtn)));
-      recordStepNote("Share", "share_confirm_click_target",
-        `at (${cx},${cy}): ${topEl
-          ? topEl.tagName + " " + String(topEl.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40)
-          : "(nothing)"} — aligned:${topOk}`,
-        topOk ? "1" : "0");
-      if (!topOk) {
-        await fail("Something was covering Facebook's share confirmation, so the click was withheld — the listing was NOT shared.",
-          "share_confirm_occluded");
-        return;
-      }
-      realisticClick(confirmBtn);
-      recordStepNote("Share", "share_confirm_clicked",
-        "strategy realistic", "", confirmBtn);
-
-      // Honest success signal: DIALOG COMPLETION. The dialog must
-      // close after the confirm; one still open when the bounded
-      // wait ends means Facebook wants something else (a caption
-      // decision, an error) — not a share this helper may claim.
-      const t0 = Date.now();
-      let closed = false;
-      while (Date.now() - t0 < 12000) {
-        await sleep(600);
-        if (checkpointShowing()) {
-          await fail("Facebook showed an identity check during the share.",
-            "facebook_checkpoint");
-          return;
-        }
-        if (!findShareDialog()) { closed = true; break; }
-      }
-      if (!closed) {
-        recordStepNote("Share", "share_dialog_dump",
-          describeOpenDialogs(), "0");
-        await fail("Facebook's share dialog stayed open after confirming — the share was NOT confirmed, so nothing was marked shared.",
-          "share_unverified");
-        return;
-      }
-      recordStepNote("Share", "share_completed",
-        "share dialog closed after the confirm click", "1");
-      say("Shared to your feed ✓", "#15803d");
-      await report("AUTOLAUNCH_JOB_SHARED", {});
+      // The dialog phase (v2.1.56): identity gate, details
+      // text, destination, confirm — in that order, and the
+      // phase itself reports or fails the job.
+      await driveShareDialog(dlg.dialog);
     } catch (err) {
       console.error("[AutoLaunch] share error:", err);
       await fail("Unexpected error while sharing the listing: " + (err && err.message ? err.message : "unknown"), "share_error");

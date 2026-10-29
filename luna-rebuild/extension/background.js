@@ -424,6 +424,28 @@
 //     'failed' with field_diag evidence, exactly like a delete.
 //     Post failure never reaches finishJobPosted, so a failed
 //     post never queues a share; toggle off queues nothing.
+// 30. SHARE HARDENING (v2.1.56 — content.js header note 30
+//     carries the incident and the two gates): share rows now
+//     carry the listing's description text in the new
+//     auto_posting_queue.share_text column, and the worker
+//     carries it on share jobs as job.shareText for the
+//     content script's composer placement. The worker-side
+//     producer (maybeQueueFeedShare) stamps it with
+//     buildShareTextForCar — a rebuild of the listing
+//     description from the same inputs the posting composer
+//     uses: the description TEXT is built in the content
+//     script at post time and never reported back to the
+//     worker, so the worker reconstructs it from the job's
+//     car row plus the claim-time settings (dealership
+//     identity + include_stock ride every job payload). The
+//     auth-stash replay builds the same text: the stash's
+//     shareCar now also carries trim / mileage / color /
+//     transmission / condition and the stash carries the
+//     identity + stock settings, so a replayed insert is
+//     identical to the direct one. A claimed share whose row
+//     predates the column simply carries shareText "" and the
+//     content side fails it share_text_unplaced — a bare
+//     share is never an acceptable outcome.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1442,6 +1464,12 @@ async function checkQueue() {
       dealershipAddress: settings.dealershipAddress,
       includeStock: settings.includeStock,
       shareToFeed: settings.shareToFeed === true,
+      // Share details text (v2.1.56, header note 30): the row's
+      // share_text rides SHARE jobs only; the content script
+      // places it in the share composer before confirming.
+      // Absent (a pre-column row) the job carries "" and the
+      // share fails honestly rather than posting bare.
+      shareText: isShare && typeof item.share_text === "string" ? item.share_text : "",
       claimedAt: new Date().toISOString()
     };
     // Intro video (v2.1.53, header note 27): resolved at claim
@@ -1859,6 +1887,50 @@ async function applyShared(queueId) {
     { status: "completed", executed_at: new Date().toISOString() });
 }
 
+// The share row's details text (v2.1.56, header note 30): a
+// worker-side rebuild of the listing description from the same
+// inputs the posting composer's buildDescription uses — the
+// description TEXT itself is built in the content script at
+// post time and never reported back to the worker, so the
+// worker reconstructs it from the job's car row and the
+// claim-time settings riding the job (dealership identity,
+// include_stock). Mirrors buildDescription + listingMileage
+// line for line; the app carries the third copy of this
+// builder (buildShareDetailsText) — keep all three in step.
+function buildShareTextForCar(car, job) {
+  if (!car) return "";
+  const norm = v => String(v == null ? "" : v).trim().toLowerCase().replace(/\s+/g, " ");
+  const stored = car.mileage != null && car.mileage !== "" ? Number(car.mileage) : null;
+  const isNew = /^new$/i.test(String(car.condition || "").trim());
+  const lm = (stored !== null && stored >= 300)
+    ? { miles: stored, defaulted: isNew && stored === 1000, isNew }
+    : { miles: 1000, defaulted: true, isNew };
+  const title = `${car.year || ""} ${car.make || ""} ${car.model || "Vehicle"} ${car.trim || ""}`.trim();
+  const stockRaw = (car.stock_num != null && String(car.stock_num).trim())
+    ? car.stock_num : car.stock_number;
+  const stock = stockRaw != null ? String(stockRaw).trim() : "";
+  let desc =
+    `${title}\n` +
+    `Price: $${(car.price || 0).toLocaleString()}\n` +
+    (lm.miles != null ? `Mileage: ${lm.miles.toLocaleString()} miles\n` : "") +
+    (car.color && norm(car.color) !== "standard" ? `Exterior: ${car.color}\n` : "") +
+    (car.transmission ? `Transmission: ${car.transmission}\n` : "") +
+    (car.vin ? `VIN: ${car.vin}\n` : "") +
+    (job && job.includeStock === true && stock ? `Stock #: ${stock}\n` : "") +
+    (lm.defaulted
+      ? (lm.isNew
+        ? `\nBrand new vehicle — the mileage shown is a listing default; actual miles may be less.`
+        : `\nMileage shown is a listing default — exact miles were not published for this vehicle; ask us for the current odometer reading.`)
+      : "") +
+    `\nInspected and frontline ready. Message to set up a test drive!`;
+  const dealerLines = [
+    job && typeof job.dealershipName === "string" ? job.dealershipName.trim() : "",
+    job && typeof job.dealershipAddress === "string" ? job.dealershipAddress.trim() : ""
+  ].filter(s => s);
+  if (dealerLines.length) desc += `\n\n${dealerLines.join("\n")}`;
+  return desc;
+}
+
 // Post-success feed share (v2.1.55, header note 29): when the
 // job's claim-time settings carried shareToFeed, queue ONE share
 // row for the just-posted car — the producer contract the app's
@@ -1891,6 +1963,10 @@ async function maybeQueueFeedShare(job) {
       model: car.model || null,
       stock_num: car.stock_num || car.stock_number || null,
       price: car.price != null ? Number(car.price) : null,
+      // The details text (v2.1.56, header note 30) rides the
+      // row so the share can carry the listing's description
+      // into the feed post.
+      share_text: buildShareTextForCar(car, job) || null,
       created_at: new Date().toISOString()
     });
     console.log(`[AutoLaunch] share_to_feed: queued a feed share for VIN ${car.vin} (posted car, toggle on).`);
@@ -1926,7 +2002,7 @@ async function flushPendingFinish() {
       await applyPosted(pending.queueId, pending.vin, pending.userId);
       // The share the post earned rides the stash (v2.1.55):
       // queued on replay, still fail-open.
-      await maybeQueueFeedShare({ userId: pending.userId, shareToFeed: pending.shareToFeed, car: pending.shareCar });
+      await maybeQueueFeedShare({ userId: pending.userId, shareToFeed: pending.shareToFeed, car: pending.shareCar, includeStock: pending.includeStock === true, dealershipName: pending.dealershipName || "", dealershipAddress: pending.dealershipAddress || "" });
     } else if (pending.outcome === "shared") {
       await applyShared(pending.queueId);
     } else if (pending.outcome === "deleted") {
@@ -1987,13 +2063,26 @@ async function finishJobPosted(queueId, listingUrl) {
           vin: job.car.vin, userId: job.userId,
           listingUrl: listingUrl || null,
           shareToFeed: job.shareToFeed === true,
+          // v2.1.56: the settings the share text is built from
+          // ride the stash too, so a replayed share row is
+          // identical to the direct one.
+          includeStock: job.includeStock === true,
+          dealershipName: job.dealershipName || "",
+          dealershipAddress: job.dealershipAddress || "",
           shareCar: {
             vin: job.car.vin,
             year: job.car.year != null ? job.car.year : null,
             make: job.car.make || null,
             model: job.car.model || null,
             stock_num: job.car.stock_num || job.car.stock_number || null,
-            price: job.car.price != null ? Number(job.car.price) : null
+            price: job.car.price != null ? Number(job.car.price) : null,
+            // v2.1.56: the remaining buildShareTextForCar
+            // inputs, so the replay builds the same text.
+            trim: job.car.trim || null,
+            mileage: job.car.mileage != null ? job.car.mileage : null,
+            color: job.car.color || null,
+            transmission: job.car.transmission || null,
+            condition: job.car.condition || null
           }
         }
       });
