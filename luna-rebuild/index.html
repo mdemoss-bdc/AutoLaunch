@@ -5616,7 +5616,7 @@ async function getTrialQueueUsedToday() {
       .gte("created_at", startISO);
     if (error) throw error;
     (data || []).forEach(r => {
-      if (r.status === "failed" || r.action === "delete" || r.action === "share") return;
+      if (r.status === "failed" || r.action === "delete") return;
       if (r.vin) vins.add(r.vin); else unidentified++;
     });
   } catch (err) {
