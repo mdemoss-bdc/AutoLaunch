@@ -446,6 +446,22 @@
 //     predates the column simply carries shareText "" and the
 //     content side fails it share_text_unplaced — a bare
 //     share is never an acceptable outcome.
+//
+// 31. DEALERSHIP TAG ON FEED SHARES (v2.1.59 — content.js
+//     header note 33 carries the design): the content
+//     script now appends a best-effort Facebook @mention
+//     of the dealership Page to the share composer's
+//     details text. NO worker change was needed: the
+//     dealership name has ridden every claimed job since
+//     the description's closing block existed —
+//     jobPayload sets dealershipName from the claim-time
+//     settings (user_settings.dealership_name, read with
+//     the settings block at claim) unconditionally, share
+//     rows included, and the content script already binds
+//     it at the top of every job. Both share producers
+//     (app button + auto-share) claim through the same
+//     path, so both arrive tagged-capable. This note is
+//     the whole worker-side delta: comment only.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";

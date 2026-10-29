@@ -613,6 +613,56 @@
 //     around, so the fix lives here at the producer, not
 //     in the worker — the control delta stays content.js
 //     + manifest.
+//
+// 33. DEALERSHIP @MENTION TAG ON FEED SHARES (v2.1.59 —
+//     Matthew approved 2026-10-29, after 2.1.58 live-
+//     proved the details text): with the proven details
+//     text placed and read back, driveShareDialog makes
+//     ONE best-effort attempt to append a REAL Facebook
+//     mention of the user's dealership Page as the
+//     composer's final line, so the shared post carries
+//     a clickable tag, not plain text. The name needs no
+//     new plumbing: the worker has always carried
+//     user_settings.dealership_name on EVERY claimed job
+//     (job.dealershipName, line ~1463 — the description's
+//     closing block reads it), so share jobs from both
+//     producers arrive with it; an empty name means NO
+//     tag attempt and a byte-identical 2.1.58 share.
+//     Mechanics: the composer field already holding the
+//     details text is re-located by content, then the
+//     mention line is TYPED through the trusted CDP key
+//     pipeline (Ctrl+End, Enter, then "@" + name one real
+//     key event per character) — Facebook's mention
+//     typeahead only wakes for genuinely typed input,
+//     never for whole-value assignment. The typeahead is
+//     polled for up to ~2.5s; an option is clicked ONLY
+//     when its visible name (its own text or any
+//     descendant's, whitespace-normalized, case-
+//     insensitive) is an EXACT full-name match — a near
+//     match like "Moses Honda" for "Moses Auto Group" is
+//     never clicked. The options seen ride the step
+//     notes either way. Conversion is verified honestly:
+//     a mention/link-marked element inside the composer
+//     whose whole text is the name (mention_node), or —
+//     the honest fallback for an editor that hides the
+//     node shape — the name occurring once MORE than the
+//     details text alone contains it, with no raw
+//     "@name" residue and the typeahead closed
+//     (text_state). Anything else — no typeahead, no
+//     exact match, a failed click, unverifiable
+//     conversion, trusted typing unavailable, any
+//     exception — restores the composer to exactly the
+//     proven details text (insertShareTextIntoField
+//     gains an optional force flag that skips its
+//     already-placed early exit) and the share confirms
+//     untagged, exactly like 2.1.58. The tag is garnish:
+//     tryShareDealershipTag NEVER calls fail/report, is
+//     fully fail-open, and the share's outcome never
+//     depends on it. Notes: share_tag_placed /
+//     share_tag_option_clicked / share_tag_unmatched /
+//     share_tag_skipped, details ≤185 chars like the
+//     2.1.58 diag chunks. CDP attach discipline: the
+//     attempt detaches only a session it attached.
 
 
 (async function () {
@@ -3839,14 +3889,19 @@
   // because a React/Lexical editor can reconcile the raw
   // assignment out of its model while adopting text that
   // arrives as a genuine edit. Read-back decides both rungs.
-  function insertShareTextIntoField(field, text) {
+  function insertShareTextIntoField(field, text, force) {
     if (!field) return false;
     const snippet = normText(String(text).split("\n")[0]);
     const readsBack = () => {
       try { return normText(extractValue(field)).includes(snippet); }
       catch (e) { return false; }
     };
-    if (readsBack()) return true;
+    // force (v2.1.59): the dealership-tag cleanup restores
+    // the details text over a field that still CONTAINS
+    // it (plus the raw mention tail) — the already-placed
+    // early exit would keep the tail, so the tag cleanup
+    // passes force to run the real rungs.
+    if (!force && readsBack()) return true;
     try {
       if (field.tagName === "TEXTAREA" || field.tagName === "INPUT") {
         nativeSetValue(field, text);
@@ -4011,6 +4066,275 @@
       }
       if (Date.now() - t0 >= budget) return null;
       await sleep(300);
+    }
+  }
+  // ---------- dealership @mention tag (v2.1.59) ---------
+  // Best-effort garnish on the proven details text (header
+  // note 33): append a REAL Facebook mention of the user's
+  // dealership Page as the composer's final line. Every
+  // failure restores the details-only text and the share
+  // proceeds exactly like 2.1.58; nothing in this section
+  // may throw out of tryShareDealershipTag, fail the job,
+  // or report an outcome.
+  //
+  // The editable composer field that currently HOLDS the
+  // details text: scan the dialog stack topmost-first and
+  // require the details text's first line in the field's
+  // own value, so the mention is typed into the proven
+  // composer and never into some other editor on the page.
+  function shareTagFieldHoldingDetails() {
+    const snippet = normText(String(shareText || "").split("\n")[0]);
+    const stack = openShareDialogs().slice().reverse();
+    for (const d of stack) {
+      const cands = Array.from(d.querySelectorAll(
+        'textarea, [contenteditable], [contenteditable="true"], ' +
+        '[role="textbox"], [aria-placeholder], [data-placeholder]'))
+        .filter(isVisibleEl).filter(isShareEditableEl);
+      for (const f of cands) {
+        if (!snippet) return { field: f, dialog: d };
+        let v = "";
+        try { v = normText(extractValue(f)); } catch (e) {}
+        if (v.includes(snippet)) return { field: f, dialog: d };
+      }
+    }
+    const found = findShareComposerField();
+    return found && isShareEditableEl(found.field)
+      ? { field: found.field, dialog: found.dialog } : null;
+  }
+  // Every name a typeahead option presents: the option's
+  // full text (avatar + name + subtitle aggregated) plus
+  // each descendant's own text — the Page name is its own
+  // node in the row, and matching runs against all of them.
+  function shareTagOptionNames(opt) {
+    const names = new Set();
+    const add = s => { const n = normText(s); if (n) names.add(n); };
+    add(opt && opt.textContent);
+    const walk = (node, depth) => {
+      if (!node || depth > 5) return;
+      const kids = node.children ? Array.from(node.children) : [];
+      for (const k of kids) { add(k.textContent); walk(k, depth + 1); }
+    };
+    walk(opt, 0);
+    return names;
+  }
+  // The name a note reports for an option: its shortest
+  // candidate (the name line, not the aggregated row).
+  function shareTagOptionDisplayName(opt) {
+    const names = Array.from(shareTagOptionNames(opt));
+    if (!names.length) return "";
+    names.sort((a, b) => a.length - b.length);
+    return names[0];
+  }
+  // Visible mention-typeahead options anywhere on the
+  // page: Facebook renders the typeahead as a listbox of
+  // option rows, often in a portal outside the dialog.
+  function shareTagVisibleOptions() {
+    const boxes = Array.from(document.querySelectorAll('[role="listbox"]'))
+      .filter(isVisibleEl);
+    const out = [];
+    for (const b of boxes) {
+      const opts = Array.from(b.querySelectorAll('[role="option"]'))
+        .filter(isVisibleEl);
+      for (const o of opts) out.push(o);
+    }
+    return out;
+  }
+  // Poll for the typeahead: exit early only on an EXACT
+  // match (results can stream in, so a non-matching first
+  // paint is not final); otherwise ride out the window
+  // and return the last options seen.
+  async function pollShareTagOptions(timeoutMs, wantedNorm) {
+    const t0 = Date.now();
+    let last = [];
+    for (;;) {
+      const opts = shareTagVisibleOptions();
+      if (opts.length) {
+        last = opts;
+        if (opts.some(o => shareTagOptionNames(o).has(wantedNorm))) {
+          return last;
+        }
+      }
+      if (Date.now() - t0 >= timeoutMs) return last;
+      await sleep(200);
+    }
+  }
+  // A CONVERTED mention inside the composer: an element
+  // whose whole text is exactly the dealership name and
+  // which Facebook marks as a mention or link — an
+  // anchor, a link role, an href, or any mention-named
+  // attribute. A plain text run of the same words is the
+  // details text's own closing block, never a tag.
+  function shareTagMentionNode(field, nameNorm) {
+    let hit = null;
+    const walk = (node, depth) => {
+      if (!node || depth > 8 || hit) return;
+      const kids = node.children ? Array.from(node.children) : [];
+      for (const k of kids) {
+        if (normText(k.textContent) === nameNorm) {
+          const tag = String(k.tagName || "").toUpperCase();
+          let marked = tag === "A";
+          if (!marked && typeof k.getAttribute === "function") {
+            if (k.getAttribute("role") === "link" ||
+                k.getAttribute("href")) {
+              marked = true;
+            } else if (typeof k.getAttributeNames === "function" &&
+                k.getAttributeNames().some(a => /mention/i.test(a))) {
+              marked = true;
+            } else if (/mention/i.test(k.getAttribute("data-testid") || "")) {
+              marked = true;
+            }
+          }
+          if (marked) { hit = k; return; }
+        }
+        walk(k, depth + 1);
+      }
+    };
+    walk(field, 0);
+    return hit;
+  }
+  function shareTagNameCount(haystackNorm, nameNorm) {
+    if (!haystackNorm || !nameNorm) return 0;
+    let n = 0, i = haystackNorm.indexOf(nameNorm);
+    while (i >= 0) {
+      n++;
+      i = haystackNorm.indexOf(nameNorm, i + nameNorm.length);
+    }
+    return n;
+  }
+  // Conversion verdict, from what the DOM honestly
+  // exposes. mention_node: a mention/link-marked element
+  // carries the name. text_state fallback: no marked node
+  // is visible, but the name occurs once MORE in the
+  // composer than the details text alone contains, no
+  // raw "@name" residue remains, and the typeahead has
+  // closed — the shape of a converted mention whose node
+  // the editor does not expose.
+  function shareTagConversion(field, name) {
+    const nameNorm = normText(name);
+    if (shareTagMentionNode(field, nameNorm)) {
+      return { converted: true, via: "mention_node" };
+    }
+    let raw = "";
+    try { raw = String(extractValue(field) || ""); } catch (e) {}
+    const inComposer = shareTagNameCount(normText(raw), nameNorm);
+    const inDetails = shareTagNameCount(
+      normText(String(shareText || "")), nameNorm);
+    if (inComposer >= inDetails + 1 && !raw.includes("@" + name) &&
+        !shareTagVisibleOptions().length) {
+      return { converted: true, via: "text_state" };
+    }
+    return { converted: false, via: "" };
+  }
+  // Restore the composer to exactly the proven details
+  // text (force past the already-placed early exit) and
+  // verify: details present, raw mention tail gone.
+  async function restoreShareDetailsText(field, name) {
+    try {
+      insertShareTextIntoField(field, String(shareText || ""), true);
+    } catch (e) { /* the read-back below reports the outcome */ }
+    let val = "";
+    try { val = String(extractValue(field) || ""); } catch (e) {}
+    const firstLine = normText(String(shareText || "").split("\n")[0]);
+    return !!firstLine && normText(val).includes(firstLine) &&
+      !val.includes("@" + name);
+  }
+  // Type the mention line through the trusted CDP key
+  // pipeline: focus the composer, caret to the very end
+  // (Ctrl+End, the same rung the poster uses for Ctrl+A),
+  // a fresh line, then "@" + name one real key event per
+  // character — the only input Facebook's mention
+  // typeahead wakes for. Returns false when trusted
+  // typing is unavailable or any key is refused.
+  async function typeShareTagKeys(field, name) {
+    if (!(await cdpEnsure("Share"))) return false;
+    try { realisticClick(field); } catch (e) {}
+    try { field.focus(); } catch (e) {}
+    await sleep(150);
+    const endRes = await cdpRequest(
+      buildCdpKey("End", "End", { modifiers: 2 }));
+    if (!endRes || !endRes.ok) return false;
+    const enterRes = await cdpRequest(buildCdpKey("Enter", "Enter"));
+    if (!enterRes || !enterRes.ok) return false;
+    for (const ch of "@" + name) {
+      const init = keyEventInitForChar(ch);
+      const r = await cdpRequest(
+        buildCdpKey(init.key, init.code, { text: ch }));
+      if (!r || !r.ok) return false;
+      await sleep(35);
+    }
+    return true;
+  }
+  // The one entry point driveShareDialog awaits. NEVER
+  // throws, NEVER fails or reports the share; an empty
+  // dealership name returns silently so the share is
+  // byte-identical to 2.1.58.
+  async function tryShareDealershipTag() {
+    const name = String(dealershipName || "").trim();
+    if (!name) return;
+    const wasAttached = cdpAttached;
+    let field = null;
+    try {
+      const loc = shareTagFieldHoldingDetails();
+      if (!loc) {
+        recordStepNote("Share", "share_tag_skipped",
+          "no editable composer field holding the details text could be re-located; share proceeds untagged", "0");
+        return;
+      }
+      field = loc.field;
+      const typed = await typeShareTagKeys(field, name);
+      if (!typed) {
+        const restored = await restoreShareDetailsText(field, name);
+        recordStepNote("Share", "share_tag_skipped",
+          `trusted typing unavailable for the dealership tag (cdp: ${(attemptsFor("Share").cdpError || "key_failed")}); details-only text ${restored ? "restored" : "NOT restored"}; share proceeds untagged`.slice(0, 185),
+          "0", field);
+        return;
+      }
+      const wanted = normText(name);
+      const options = await pollShareTagOptions(2500, wanted);
+      const seenNames = options.map(shareTagOptionDisplayName)
+        .filter(Boolean);
+      const seenDetail = `options seen (${options.length}): ${seenNames.join(" | ") || "(none)"}`;
+      const matches = options.filter(
+        o => shareTagOptionNames(o).has(wanted));
+      if (!matches.length) {
+        const restored = await restoreShareDetailsText(field, name);
+        recordStepNote("Share", "share_tag_unmatched",
+          `no exact typeahead match for "${name}"; ${seenDetail}; details-only text ${restored ? "restored" : "NOT restored"}`.slice(0, 185),
+          "0", field);
+        return;
+      }
+      realisticClick(matches[0]);
+      recordStepNote("Share", "share_tag_option_clicked",
+        `exact match "${name}" (${matches.length} exact of ${options.length} options)`.slice(0, 185),
+        "", matches[0]);
+      await sleep(800);
+      let conv = shareTagConversion(field, name);
+      if (!conv.converted) {
+        await sleep(600);
+        conv = shareTagConversion(field, name);
+      }
+      if (conv.converted) {
+        recordStepNote("Share", "share_tag_placed",
+          `dealership tag "@${name}" converted (${conv.via}); ${seenDetail}`.slice(0, 185),
+          "1", field);
+        return;
+      }
+      const restored = await restoreShareDetailsText(field, name);
+      recordStepNote("Share", "share_tag_unmatched",
+        `the typeahead pick did not convert to a mention; ${seenDetail}; details-only text ${restored ? "restored" : "NOT restored"}`.slice(0, 185),
+        "0", field);
+    } catch (err) {
+      try {
+        if (field) await restoreShareDetailsText(field, name);
+      } catch (e) { /* best-effort cleanup; the share proceeds */ }
+      try {
+        recordStepNote("Share", "share_tag_skipped",
+          `dealership tag attempt errored and was skipped: ${err && err.message ? err.message : "unknown"}`.slice(0, 185), "0");
+      } catch (e) { /* notes are best-effort too */ }
+    } finally {
+      if (!wasAttached && cdpAttached) {
+        try { await cdpDetach(); } catch (e) {}
+      }
     }
   }
   // The share_text_unplaced evidence (v2.1.57 design,
@@ -4677,6 +5001,15 @@
         "share_text_unplaced");
       return false;
     }
+
+    // Dealership @mention tag (v2.1.59, header note 33):
+    // best-effort garnish on the proven details text. The
+    // attempt is fully fail-open — every failure inside it
+    // restores the details-only text and notes what the
+    // typeahead offered — so the confirm below runs on
+    // either the tagged or the proven untagged composer,
+    // and the share's outcome never depends on the tag.
+    await tryShareDealershipTag();
 
     // The confirm lives in the composer's dialog when the
     // text landed in a stacked one; fall back to the rest of
