@@ -440,6 +440,26 @@
 //     "no" (the slot moved on, or the queue row is already
 //     settled) aborts the fill with a banner note. Any error,
 //     timeout or ambiguity proceeds exactly as before.
+// 29. SHARE TO FEED (v2.1.55 — Matthew's spec, 2026-10-29;
+//     background.js header note 29 carries the worker side):
+//     a job with action 'share' runs ONLY on the Selling page
+//     and reuses the delete flow's machinery wholesale — the
+//     same strict title+price matcher (findListingCards), the
+//     same settled-list scan, the same card-menu ladder, the
+//     same click-target audit before the confirming click, the
+//     same recordStepNote evidence trail (field "Share"). The
+//     share itself: open the matched card's menu, click its
+//     Share entry, drive Facebook's share dialog — choosing
+//     the FEED destination when the dialog offers destinations
+//     (a submenu-style feed entry gets the same treatment) —
+//     and confirm with the dialog's Post / Share now / Share
+//     button. The honest success signal is DIALOG COMPLETION:
+//     the dialog must close after the confirm; a dialog still
+//     open when the bounded wait ends is share_unverified,
+//     never a claimed share. A menu offering no Share entry
+//     fails share_item_not_found with menu_items_seen as the
+//     evidence — the listing itself is never touched, and the
+//     car's posted stamp is never this job's business.
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -480,9 +500,10 @@
   // page now. A delete job runs only on the selling page; a post job
   // runs only on the create pages. Without the guards, a leftover job
   // of one kind would fire its routine on the other kind's page.
-  const jobAction = job.action === "delete" ? "delete" : "post";
+  const jobAction = job.action === "delete" ? "delete"
+    : job.action === "share" ? "share" : "post";
   const pageUrl = window.location.href;
-  if (jobAction === "delete" &&
+  if ((jobAction === "delete" || jobAction === "share") &&
       !/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(pageUrl)) return;
   // A post job normally lives only on the create pages — EXCEPT a
   // job in post-publish verification (v2.1.7, header note 18): its
@@ -3348,6 +3369,115 @@
     return null;
   }
 
+  // ---- share-to-feed finders (v2.1.55, header note 29) ------------------
+  // The card menu's Share entry, with the same container-scoping
+  // discipline as findDeleteMenuItem: menu/listbox/dialog
+  // containers first, then anywhere. An entry qualifies only
+  // when it is the generic Share action ("share" exactly, or
+  // "share listing…") — a destination-specific entry ("Share to
+  // a group") must NEVER be clicked directly: destinations are
+  // chosen inside the share dialog, where the feed can be told
+  // apart from a story or a group.
+  function findShareMenuItem() {
+    const inContainers = [];
+    for (const c of Array.from(document.querySelectorAll(
+        '[role="menu"], [role="listbox"], [role="dialog"]'))) {
+      inContainers.push(...Array.from(
+        c.querySelectorAll ? c.querySelectorAll('[role="menuitem"], [role="option"], [role="button"], button, a') : []));
+    }
+    const isShareEntry = el => {
+      const t = normText(el.textContent);
+      return t === "share" || t.startsWith("share listing");
+    };
+    const scoped = inContainers.filter(el => isVisibleEl(el) && isShareEntry(el));
+    if (scoped.length) return scoped[0];
+    const anywhere = Array.from(document.querySelectorAll(
+      '[role="menuitem"], [role="option"], [role="button"], button, a'));
+    return anywhere.filter(el => isVisibleEl(el) && isShareEntry(el))[0] || null;
+  }
+  // Poll (never a fixed sleep) for the card menu to open, share
+  // edition: a visible menu OR a locatable share item ends it.
+  async function pollForShareMenuOpen(timeoutMs) {
+    const t0 = Date.now();
+    for (;;) {
+      const menu = findVisibleMenu();
+      const item = findShareMenuItem();
+      if (menu || item) return { menu, item, elapsed: Date.now() - t0 };
+      if (Date.now() - t0 >= timeoutMs) return { menu: null, item: null, elapsed: Date.now() - t0 };
+      await sleep(275);
+    }
+  }
+  // Facebook's share dialog: a visible dialog whose text is about
+  // sharing to a destination (feed / timeline / story / group) or
+  // posting the share. A bare dialog that never mentions any of
+  // it is not assumed to be the share sheet.
+  function findShareDialog() {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"]'));
+    for (const d of dialogs) {
+      if (!isVisibleEl(d)) continue;
+      if (typeof d.getAttribute === "function" &&
+          d.getAttribute("aria-hidden") === "true") continue;
+      const t = normText(d.textContent);
+      if (t.includes("share") &&
+          (t.includes("feed") || t.includes("post") ||
+           t.includes("your timeline") || t.includes("story") ||
+           t.includes("group"))) return d;
+    }
+    return null;
+  }
+  async function pollForShareDialog(timeoutMs) {
+    const t0 = Date.now();
+    for (;;) {
+      const d = findShareDialog();
+      if (d) return { dialog: d, elapsed: Date.now() - t0 };
+      if (Date.now() - t0 >= timeoutMs) return { dialog: null, elapsed: Date.now() - t0 };
+      await sleep(300);
+    }
+  }
+  const isFeedDestination = el => {
+    const t = normText(el.textContent);
+    return t === "your feed" || t === "feed" || t === "share to your feed" ||
+      t === "your timeline" || t.startsWith("your feed ");
+  };
+  // A FEED destination inside the share dialog, when the dialog
+  // offers destinations at all. The composer may preselect the
+  // feed (then nothing matches and the confirm is the whole
+  // flow); a story/group choice is NEVER clicked.
+  function findShareFeedOption(dialog) {
+    if (!dialog) return null;
+    const els = Array.from(dialog.querySelectorAll(
+      '[role="radio"], [role="option"], [role="button"], button, label'));
+    return els.find(el => isVisibleEl(el) && isFeedDestination(el)) || null;
+  }
+  // The same feed destination rendered as a SUBMENU off the card
+  // menu (Share → destinations, no dialog): menu/listbox-scoped.
+  function findShareFeedOptionInMenus() {
+    const containers = Array.from(document.querySelectorAll(
+      '[role="menu"], [role="listbox"]')).filter(isVisibleEl);
+    for (const c of containers) {
+      const els = Array.from(c.querySelectorAll
+        ? c.querySelectorAll('[role="menuitem"], [role="option"], [role="button"], button, a') : []);
+      const hit = els.find(el => isVisibleEl(el) && isFeedDestination(el));
+      if (hit) return hit;
+    }
+    return null;
+  }
+  // The share dialog's confirm: a usable button whose text is an
+  // explicit commit — "Post" (the feed composer's wording),
+  // "Share now", or "Share" (the share sheet's), in that
+  // preference order, so a stray Share label elsewhere in the
+  // dialog never wins over the real commit.
+  function findShareConfirmButton(dialog) {
+    if (!dialog) return null;
+    const btns = Array.from(dialog.querySelectorAll('[role="button"], button'));
+    const usable = btns.filter(b => isUsableConfirmButton(b));
+    for (const want of ["post", "share now", "share"]) {
+      const hit = usable.find(b => normText(b.textContent) === want);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
   // ---- delete stage helpers (v2.1.9, header note 19) ---------------------
   // How the menu button was found, for the menu_button_found note:
   // the ancestor depth at which listingMenuButton's search level
@@ -3794,6 +3924,291 @@
     } catch (err) {
       console.error("[AutoLaunch] delete proof error:", err);
       await fail("Unexpected error while confirming the removal: " + (err && err.message ? err.message : "unknown"));
+    }
+  }
+
+  // Share edition of recoverToSellingPage (v2.1.55): same bounded
+  // self-navigation back to the Selling page, share-worded
+  // evidence and failure — the delete helper's wording ("the
+  // removal was NOT confirmed") would lie about a share.
+  async function recoverToSellingPageForShare(stage) {
+    if (onSellingPage()) return true;
+    let n = 0;
+    try {
+      const cur = await chrome.storage.local.get(["current_posting_job"]);
+      const j = cur && cur.current_posting_job;
+      if (j && j.queueId === queueId) {
+        n = (j.shareNavRecoveries || 0) + 1;
+        j.shareNavRecoveries = n;
+        await chrome.storage.local.set({ current_posting_job: j });
+      }
+    } catch (e) { /* the counter is best-effort */ }
+    recordStepNote("Share", "share_wrong_page",
+      `stage:${stage} url:${window.location.href.slice(0, 80)} recovery:${n}`, String(n));
+    if (n > 3) {
+      await fail(
+        "The helper's tab kept leaving the Selling page, so the share was NOT confirmed. The listing was not shared — try the Share button again.",
+        "share_wrong_page");
+      return false;
+    }
+    say("Returning to your Selling page to finish the share…");
+    await sleep(400);
+    try { window.location.href = "https://www.facebook.com/marketplace/you/selling"; } catch (e) { /* no-op */ }
+    return false;
+  }
+
+  // SHARE TO FEED (v2.1.55, header note 29): find this car's
+  // listing on the Selling page with the delete flow's strict
+  // matcher, open its menu, and share it to the user's personal
+  // feed through Facebook's share dialog. Success is reported
+  // (AUTOLAUNCH_JOB_SHARED) only when the dialog COMPLETES —
+  // closes after the confirming click. The listing itself is
+  // never modified and the car's posted stamp is never touched.
+  async function runShareListing() {
+    try {
+      say("Sharing your listing to your feed…");
+      await sleep(3000); // let the selling page render
+
+      const pageText = (document.body.innerText || "").toLowerCase();
+      if (window.location.href.includes("/login") ||
+          pageText.includes("checkpoint") ||
+          pageText.includes("confirm your identity") ||
+          pageText.includes("log in to facebook")) {
+        await fail(
+          "Facebook is asking for login or an identity check — the listing was NOT shared. Sign in normally in this browser, then share it again.",
+          "facebook_checkpoint");
+        return;
+      }
+
+      if (!(await recoverToSellingPageForShare("attempt_start"))) return;
+
+      const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() || "vehicle";
+      if (!car.price) {
+        // Strict matching needs the price — without it there is
+        // no safe way to tell this car from a twin. Share nothing.
+        recordStepNote("Share", "share_price_unavailable",
+          "no price on the job payload — a strict title+price match is impossible", "");
+        await fail(
+          `Could not verify the exact ${title} listing (no price to match it by) — nothing was shared.`,
+          "listing_not_found");
+        return;
+      }
+
+      say(`Looking for your ${title} listing…`);
+      await settleSellingList();
+      const cards = findListingCards();
+      recordStepNote("Share", "share_match_scan",
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()}`,
+        String(cards.length));
+      if (!cards.length) {
+        await fail(
+          `Could not find the ${title} listing on your selling page — nothing was shared. It may have been removed.`,
+          "listing_not_found");
+        return;
+      }
+      if (cards.length > 1) {
+        await fail(
+          `Found ${cards.length} listings matching ${title} at that price — sharing none rather than risk the wrong car. Share the right one from Facebook's Your listings page.`,
+          "listing_ambiguous");
+        return;
+      }
+
+      const card = cards[0];
+      say("Found it — opening its menu…");
+      try { card.scrollIntoView({ block: "center" }); } catch (e) {}
+      await sleep(600);
+      await humanPause();
+      const menuBtn = listingMenuButton(card);
+      if (!menuBtn) {
+        recordStepNote("Share", "menu_button_not_found",
+          "listingMenuButton returned null for the matched card", "0", card);
+        await fail("Found the listing but not its options (⋯) menu — nothing was shared.",
+          "share_menu_not_found");
+        return;
+      }
+      const btnInfo = menuButtonInfo(card, menuBtn);
+      recordStepNote("Share", "menu_button_found",
+        `ancestor depth ${btnInfo.depth}; ${btnInfo.descriptor}`.slice(0, 200),
+        "", menuBtn);
+
+      // Menu-opening ladder: the delete flow's three strategies,
+      // polling after each — a slow menu caught by polling must
+      // not be re-clicked shut by the next rung.
+      const menuStrategies = [
+        { name: "realistic", run: async () => { realisticClick(menuBtn); } },
+        { name: "cdpClick", run: async () => { await cdpClickEl(menuBtn); } },
+        { name: "cdpClickSeq", run: async () => { await cdpMouseSeqClickEl(menuBtn); } }
+      ];
+      let menuOpenedBy = null;
+      let menuPollMs = 0;
+      let shareItem = null;
+      for (const strat of menuStrategies) {
+        await strat.run();
+        const res = await pollForShareMenuOpen(3000);
+        menuPollMs = res.elapsed;
+        if (res.menu || res.item) {
+          menuOpenedBy = strat.name;
+          shareItem = res.item || findShareMenuItem();
+          break;
+        }
+      }
+      if (!menuOpenedBy) {
+        recordStepNote("Share", "menu_never_opened",
+          "realistic, cdpClick and cdpClickSeq each polled ~3s — no visible menu, no share item",
+          "0", menuBtn);
+        await fail("The listing's menu did not open — nothing was shared.",
+          "share_menu_not_found");
+        return;
+      }
+      recordStepNote("Share", "menu_opened",
+        `strategy ${menuOpenedBy}; poll ${menuPollMs}ms`, "", menuBtn);
+      const itemTexts = menuItemTexts();
+      recordStepNote("Share", "menu_items_seen",
+        (itemTexts.length ? itemTexts.join(" | ") : "(no visible item texts)").slice(0, 200),
+        String(itemTexts.length));
+      if (!shareItem) shareItem = findShareMenuItem();
+      if (!shareItem) {
+        // The menu IS open — it simply offers no Share entry.
+        // menu_items_seen above is the evidence; the honest
+        // failure is share_item_not_found.
+        await fail("The listing's menu did not offer a Share entry — nothing was shared.",
+          "share_item_not_found");
+        return;
+      }
+
+      say("Sharing the listing to your feed…");
+      await humanPause();
+      realisticClick(shareItem);
+      recordStepNote("Share", "share_item_clicked",
+        "strategy realistic", "", shareItem);
+      let dlg = await pollForShareDialog(4000);
+      if (!dlg.dialog) {
+        // Submenu style: the Share entry may open a destination
+        // submenu instead of the dialog — click its FEED entry.
+        const sub = findShareFeedOptionInMenus();
+        if (sub) {
+          realisticClick(sub);
+          recordStepNote("Share", "share_feed_option_clicked",
+            "submenu: " + normText(sub.textContent).slice(0, 50), "", sub);
+          await sleep(1200);
+          if (!findShareDialog() && !findVisibleMenu()) {
+            if (checkpointShowing()) {
+              await fail("Facebook showed an identity check during the share.",
+                "facebook_checkpoint");
+              return;
+            }
+            // The submenu click itself completed the share.
+            recordStepNote("Share", "share_completed",
+              "share UI closed after the submenu feed click", "1");
+            say("Shared to your feed ✓", "#15803d");
+            await report("AUTOLAUNCH_JOB_SHARED", {});
+            return;
+          }
+          dlg = await pollForShareDialog(4000);
+        }
+      }
+      if (!dlg.dialog) {
+        await cdpClickEl(shareItem); // trusted click fallback, as elsewhere
+        recordStepNote("Share", "share_item_clicked",
+          "strategy cdpClick (fallback — no dialog after the realistic click)", "", shareItem);
+        dlg = await pollForShareDialog(5000);
+      }
+      if (!dlg.dialog) {
+        recordStepNote("Share", "share_dialog_dump",
+          describeOpenDialogs(), "0");
+        await fail("Facebook's share dialog did not appear — the listing was NOT shared.",
+          "share_dialog_not_found");
+        return;
+      }
+      recordStepNote("Share", "share_dialog_found",
+        `dialog located after poll ${dlg.elapsed}ms`, "");
+
+      // Destination: choose the FEED when the dialog offers a
+      // choice. Some share sheets also complete on the
+      // destination click itself — dialog gone = shared.
+      const feedOpt = findShareFeedOption(dlg.dialog);
+      if (feedOpt) {
+        realisticClick(feedOpt);
+        recordStepNote("Share", "share_feed_option_clicked",
+          normText(feedOpt.textContent).slice(0, 60), "", feedOpt);
+        await sleep(1200);
+        if (!findShareDialog()) {
+          if (checkpointShowing()) {
+            await fail("Facebook showed an identity check during the share.",
+              "facebook_checkpoint");
+            return;
+          }
+          recordStepNote("Share", "share_completed",
+            "dialog closed after the feed destination click", "1");
+          say("Shared to your feed ✓", "#15803d");
+          await report("AUTOLAUNCH_JOB_SHARED", {});
+          return;
+        }
+      }
+
+      const confirmBtn = findShareConfirmButton(findShareDialog() || dlg.dialog);
+      if (!confirmBtn) {
+        recordStepNote("Share", "share_dialog_dump",
+          describeOpenDialogs(), "0");
+        await fail("Facebook's share dialog offered no Post/Share button to confirm with — the listing was NOT shared.",
+          "share_confirm_not_found");
+        return;
+      }
+      recordStepNote("Share", "share_confirm_found",
+        `confirm "${normText(confirmBtn.textContent)}" located`, "", confirmBtn);
+      // Click-target audit (the delete confirm's v2.1.17
+      // discipline): never fire the confirming click at
+      // coordinates whose topmost element is something else.
+      const cr = confirmBtn.getBoundingClientRect();
+      const cx = Math.round(cr.left + cr.width / 2);
+      const cy = Math.round(cr.top + cr.height / 2);
+      const topEl = document.elementFromPoint(cx, cy);
+      const topOk = !!topEl && (topEl === confirmBtn ||
+        (typeof confirmBtn.contains === "function" && confirmBtn.contains(topEl)) ||
+        (typeof topEl.contains === "function" && topEl.contains(confirmBtn)));
+      recordStepNote("Share", "share_confirm_click_target",
+        `at (${cx},${cy}): ${topEl
+          ? topEl.tagName + " " + String(topEl.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40)
+          : "(nothing)"} — aligned:${topOk}`,
+        topOk ? "1" : "0");
+      if (!topOk) {
+        await fail("Something was covering Facebook's share confirmation, so the click was withheld — the listing was NOT shared.",
+          "share_confirm_occluded");
+        return;
+      }
+      realisticClick(confirmBtn);
+      recordStepNote("Share", "share_confirm_clicked",
+        "strategy realistic", "", confirmBtn);
+
+      // Honest success signal: DIALOG COMPLETION. The dialog must
+      // close after the confirm; one still open when the bounded
+      // wait ends means Facebook wants something else (a caption
+      // decision, an error) — not a share this helper may claim.
+      const t0 = Date.now();
+      let closed = false;
+      while (Date.now() - t0 < 12000) {
+        await sleep(600);
+        if (checkpointShowing()) {
+          await fail("Facebook showed an identity check during the share.",
+            "facebook_checkpoint");
+          return;
+        }
+        if (!findShareDialog()) { closed = true; break; }
+      }
+      if (!closed) {
+        recordStepNote("Share", "share_dialog_dump",
+          describeOpenDialogs(), "0");
+        await fail("Facebook's share dialog stayed open after confirming — the share was NOT confirmed, so nothing was marked shared.",
+          "share_unverified");
+        return;
+      }
+      recordStepNote("Share", "share_completed",
+        "share dialog closed after the confirm click", "1");
+      say("Shared to your feed ✓", "#15803d");
+      await report("AUTOLAUNCH_JOB_SHARED", {});
+    } catch (err) {
+      console.error("[AutoLaunch] share error:", err);
+      await fail("Unexpected error while sharing the listing: " + (err && err.message ? err.message : "unknown"), "share_error");
     }
   }
 
@@ -4269,6 +4684,10 @@
       return;
     }
     await runDeleteListing();
+    return;
+  }
+  if (jobAction === "share") {
+    await runShareListing();
     return;
   }
   if (jobAction === "post" && job.verifyPublished) {

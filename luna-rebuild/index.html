@@ -2975,6 +2975,40 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         </div>
 
+        <!-- SHARE TO FEED (helper v2.1.55) -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Share posts to my feed
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                After a car posts to Marketplace, your helper also shares it to your personal feed.
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkShareToFeed"
+                onchange="toggleShareToFeedSetting(this)"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
         <!-- SYNDICATION CHANNELS (Phase 6) -->
 
         <div class="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
@@ -4092,6 +4126,8 @@ document.addEventListener("click", function (e) {
     openChangeMilesModal(vin, car ? car.mileage : null);
   } else if (action === "remove-fb") {
     removeVehicleFromFacebook(vin);
+  } else if (action === "share-feed") {
+    shareVehicleToFeed(vin);
   } else if (action === "listing-copy") {
     const car = rawInventory.find(c => c.vin === vin);
     if (car) openListingCopyModal(car);
@@ -4326,6 +4362,13 @@ let autoDeleteOnExitEnabled = true;
 // AUTO runs for users who turned it off; manual syncs (pending
 // scrape_jobs rows) are never affected.
 let autoSyncEnabled = true;
+// Share posts to my feed (helper v2.1.55): user_settings
+// .share_to_feed. DEFAULT OFF — the feature is opt-in, so an absent
+// column or an unreadable value means no sharing; only an explicit
+// saved true turns it on. The helper reads the same column at claim
+// time; the per-car "Share to my feed" button queues a share job
+// regardless of this switch.
+let shareToFeedEnabled = false;
 let userDailyPostLimit = 10;
 // The account's stored time-between-posts (user_settings.post_delay_minutes),
 // kept RAW here — the tier clamp lives in postDelayState, never in this value.
@@ -5573,7 +5616,7 @@ async function getTrialQueueUsedToday() {
       .gte("created_at", startISO);
     if (error) throw error;
     (data || []).forEach(r => {
-      if (r.status === "failed" || r.action === "delete") return;
+      if (r.status === "failed" || r.action === "delete" || r.action === "share") return;
       if (r.vin) vins.add(r.vin); else unidentified++;
     });
   } catch (err) {
@@ -7705,6 +7748,12 @@ updateLastSyncDisplay();
         const chkAutoSync = document.getElementById("chkAutoSync");
         if (chkAutoSync) chkAutoSync.checked = autoSyncEnabled;
       }
+      // Share to feed: absent column leaves the default (OFF — opt-in).
+      if (data.share_to_feed !== undefined && data.share_to_feed !== null) {
+        shareToFeedEnabled = !!data.share_to_feed;
+        const chkShareFeed = document.getElementById("chkShareToFeed");
+        if (chkShareFeed) chkShareFeed.checked = shareToFeedEnabled;
+      }
       if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
 
@@ -9016,6 +9065,7 @@ function gridCardHtml(car) {
     const isPosted = !!car.marketplace_posted_at;
     const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
     const removalPending = postingQueue.some(i => i.vin === car.vin && i.action === 'delete' && (i.status === 'pending' || i.status === 'processing'));
+    const sharePending = postingQueue.some(i => i.vin === car.vin && i.action === 'share' && (i.status === 'pending' || i.status === 'processing'));
 
     const isSold = (car.status || "").toLowerCase() === "sold";
     const statusChip = isSold && removalPending
@@ -9042,6 +9092,13 @@ function gridCardHtml(car) {
               </button>`
            : `<button data-action="remove-fb" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
                 <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
+              </button>`}
+         ${sharePending
+           ? `<button disabled class="flex-1 px-3 py-2 rounded-xl bg-sky-50 text-sky-400 font-bold text-xs flex items-center justify-center gap-1.5 border border-sky-200 cursor-not-allowed">
+                <i class="fa-solid fa-hourglass-half text-xs"></i> Share queued
+              </button>`
+           : `<button data-action="share-feed" data-vin="${vinAttr}" class="flex-1 px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-sky-200 shadow-sm transition">
+                <i class="fa-solid fa-share-nodes text-xs"></i> Share to my feed
               </button>`}`
       : isSold
       ? `<span class="flex-1 px-4 py-2 rounded-xl bg-violet-50 text-violet-500 border border-violet-200 font-bold text-xs flex items-center justify-center gap-2 cursor-not-allowed">
@@ -9161,6 +9218,7 @@ function renderTableRows(cars) {
     // still live until the helper verifies it gone, so the truthful
     // state is "Removal queued" — not Posted, not Not Posted.
     const removalPending = postingQueue.some(i => i.vin === car.vin && i.action === 'delete' && (i.status === 'pending' || i.status === 'processing'));
+    const sharePending = postingQueue.some(i => i.vin === car.vin && i.action === 'share' && (i.status === 'pending' || i.status === 'processing'));
 
     html += `<tr class="table-row-vibrant transition border-b border-slate-100 group">
       <td class="py-4 px-4 text-center">
@@ -9271,6 +9329,13 @@ ${car.location_name ? `
                     </button>`
                  : `<button data-action="remove-fb" data-vin="${vinAttr}" id="btnRemoveFb_${vinAttr}" class="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-sm transition">
                       <i class="fa-solid fa-trash-can text-xs"></i> Remove from Facebook
+                    </button>`}
+               ${sharePending
+                 ? `<button disabled class="px-3.5 py-1.5 rounded-xl bg-sky-50 text-sky-400 font-bold text-xs flex items-center gap-1.5 border border-sky-200 cursor-not-allowed">
+                      <i class="fa-solid fa-hourglass-half text-xs"></i> Share queued
+                    </button>`
+                 : `<button data-action="share-feed" data-vin="${vinAttr}" class="px-3.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-sky-200 shadow-sm transition">
+                      <i class="fa-solid fa-share-nodes text-xs"></i> Share to my feed
                     </button>`}`
             : isSold
             ? `<span class="px-4 py-2 rounded-xl bg-violet-50 text-violet-500 border border-violet-200 font-bold text-xs inline-flex items-center gap-2 cursor-not-allowed">
@@ -9443,6 +9508,96 @@ async function queueListingRemoval(car) {
     });
   if (error) throw error;
   return "queued";
+}
+
+// SHARE TO FEED — producer for feed-share jobs (helper v2.1.55).
+// Mirrors queueListingRemoval exactly (same double dedupe, same
+// stamped row shape) with action "share": the extension claims the
+// row, opens the Facebook selling page, strictly matches this car's
+// listing, and shares it to the user's personal feed. The car's
+// marketplace_posted_at is NOT touched — the listing stays posted.
+// Returns "queued" | "already". Throws on a failed insert.
+async function queueFeedShare(car) {
+  const vin = car.vin;
+  const alreadyQueued = postingQueue.some(i =>
+    i.vin === vin && i.action === 'share' &&
+    (i.status === 'pending' || i.status === 'processing'));
+  if (alreadyQueued) return "already";
+
+  // Fresh dedupe, same stale-copy lesson as queueListingRemoval:
+  // check the table itself before inserting; if the check fails,
+  // fall through to the insert (the local check already ran).
+  try {
+    const { data, error } = await supabaseClient
+      .from("auto_posting_queue")
+      .select("id")
+      .eq("user_id", currentUser.id)
+      .eq("vin", vin)
+      .eq("action", "share")
+      .in("status", ["pending", "processing"])
+      .limit(1);
+    if (!error && data && data.length) return "already";
+  } catch (e) { /* fall through to the insert */ }
+
+  const { error } = await supabaseClient
+    .from("auto_posting_queue")
+    .insert({
+      user_id: currentUser.id,
+      vin: vin,
+      target_channel: "facebook",
+      action: "share",
+      status: "pending",
+      year: car.year ?? null,
+      make: car.make || null,
+      model: car.model || null,
+      stock_num: car.stock_num || car.stock_number || null,
+      // The price rides the row on purpose: the helper's strict
+      // matcher needs year/make/model AND price.
+      price: car.price ?? null,
+      created_at: new Date().toISOString()
+    });
+  if (error) throw error;
+  return "queued";
+}
+
+// "Share to my feed" button on a posted car: queues ONE share job
+// for the helper. The decision (is it really still posted?) is made
+// from the car's fresh database row, per the FRESH-READ RULE above.
+async function shareVehicleToFeed(vin) {
+  if (!currentUser) return;
+  const car = rawInventory.find(c => c.vin === vin);
+  const title = car ? `${car.year || ''} ${car.make || ''} ${car.model || 'Vehicle'}`.trim() : vin;
+
+  const alreadyQueued = postingQueue.some(i =>
+    i.vin === vin && i.action === 'share' &&
+    (i.status === 'pending' || i.status === 'processing'));
+  if (alreadyQueued) {
+    alert(`A feed share for "${title}" is already queued — the helper will share it shortly. You can watch it in the Post Queue.`);
+    return;
+  }
+
+  const decisionCar = await freshCarForDecision(vin, car);
+  if (!decisionCar || !decisionCar.marketplace_posted_at) {
+    alert(`"${title}" is not posted on Facebook right now, so there is no live listing to share.`);
+    return;
+  }
+
+  if (!confirm(`Share "${title}" to your personal feed?\n\nThe AutoLaunch helper will open Facebook and share this car's Marketplace listing to your feed — this can take a minute.`)) {
+    return;
+  }
+
+  try {
+    const queued = await queueFeedShare(decisionCar);
+    if (queued === "already") {
+      alert(`A feed share for "${title}" is already queued — the helper will share it shortly. You can watch it in the Post Queue.`);
+      return;
+    }
+    await loadPostingQueue();
+    applyFilters();
+    alert(`Share queued for "${title}".\n\nThe helper will share the listing to your personal feed. Watch the Post Queue for the result.`);
+  } catch (err) {
+    alert("Could not queue the share: " + err.message);
+  }
 }
 
 // MARK SOLD (auto-delete trigger 1): flips the car's status to Sold
@@ -10067,7 +10222,7 @@ function paintQueueRowPending(id) {
         for (const span of spans) {
             if (span.className && span.className.indexOf("rounded-full") !== -1) {
                 span.className = "px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold";
-                span.textContent = item && item.action === "delete" ? "🟡 Removal queued" : "🟡 Pending";
+                span.textContent = item && item.action === "delete" ? "🟡 Removal queued" : item && item.action === "share" ? "🟡 Share queued" : "🟡 Pending";
                 break;
             }
         }
@@ -10263,9 +10418,9 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 // left is blocked — it renders as "No photos — won't post" and the
 // extension fails it rather than handing it to the poster. Delete
 // jobs are exempt: they remove a listing, photos are irrelevant.
-const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && !!car && !hasRealPhoto(car);
-const blockedNoPrice = item.status === "pending" && item.action !== "delete" && !!car && hasRealPhoto(car) && !hasPrice(car);
-const blockedInfo = item.status === "pending" && item.action !== "delete" && !!car && hasRealPhoto(car) && hasPrice(car) && postingGaps(car).length > 0;
+const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && item.action !== "share" && !!car && !hasRealPhoto(car);
+const blockedNoPrice = item.status === "pending" && item.action !== "delete" && item.action !== "share" && !!car && hasRealPhoto(car) && !hasPrice(car);
+const blockedInfo = item.status === "pending" && item.action !== "delete" && item.action !== "share" && !!car && hasRealPhoto(car) && hasPrice(car) && postingGaps(car).length > 0;
 // Phase B: a DELETE job (e.g. a sold car's listing removal) must read as
 // a removal at every stage — pending = queued, processing = in flight,
 // completed = removed — never as a generic post "Pending".
@@ -10275,7 +10430,7 @@ const statusChip = blockedNoPhoto
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No price — won't post</span>`
     : blockedInfo
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 Missing info — won't post</span>`
-    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
+    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.action === "share" && item.status === "pending" ? "🟡 Share queued" : item.action === "share" && item.status === "processing" ? "🔵 Sharing" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : item.action === "share" ? "🟢 Shared" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
 
     return `
 
@@ -11742,9 +11897,11 @@ function renderWishlist(fresh) {
         const milesText = (car.mileage || 0).toLocaleString() + " mi";
         const isPosted = !!car.marketplace_posted_at;
         const isQueued = postingQueue.some(i => i.vin === car.vin && i.status === 'pending');
+        const sharePending = postingQueue.some(i => i.vin === car.vin && i.action === 'share' && (i.status === 'pending' || i.status === 'processing'));
         const actions = isPosted
           ? `<button data-action="change-price" data-vin="${vinAttr}" class="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[11px] cursor-pointer">Change price</button>
              <button data-action="remove-fb" data-vin="${vinAttr}" class="flex-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] border border-rose-200 cursor-pointer">Remove from Facebook</button>`
+             + (sharePending ? `<button disabled class="flex-1 px-2.5 py-1.5 rounded-lg bg-sky-50 text-sky-400 font-bold text-[11px] border border-sky-200 cursor-not-allowed">Share queued</button>` : `<button data-action="share-feed" data-vin="${vinAttr}" class="flex-1 px-2.5 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-[11px] border border-sky-200 cursor-pointer">Share to my feed</button>`)
           : `<button data-action="enqueue" data-vin="${vinAttr}" class="flex-1 px-2.5 py-1.5 rounded-lg ${isQueued ? 'bg-indigo-600' : 'btn-gradient'} text-white font-bold text-[11px] cursor-pointer">${isQueued ? 'Queued For Posting' : 'Post To Facebook'}</button>`;
         return `<div class="rounded-xl border border-slate-200 overflow-hidden bg-white">
           <div class="relative">
@@ -14940,6 +15097,31 @@ async function toggleAutoSyncSetting(el) {
   } catch (err) {
     el.checked = !value;
     alert("Could not save the auto-sync setting: " + (err.message || "Unknown error"));
+  }
+}
+
+// Share posts to my feed (helper v2.1.55): the switch writes
+// user_settings.share_to_feed immediately, like Auto-delete on
+// exit. Opt-in — the default is off, and shareToFeedEnabled, which
+// only an explicit saved true turns on, is what the switch state
+// reflects. The helper reads the same column at claim time; when
+// it is on, a successfully posted car also gets a feed-share job.
+async function toggleShareToFeedSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        share_to_feed: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    shareToFeedEnabled = value;
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the share-to-feed setting: " + (err.message || "Unknown error"));
   }
 }
 

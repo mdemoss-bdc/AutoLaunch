@@ -398,6 +398,32 @@
 //     with a processing row answers { live: true }; and any
 //     lookup failure answers { live: true } too — uncertainty
 //     never blocks a fill.
+// 29. SHARE TO FEED (v2.1.55 — Matthew's spec, 2026-10-29;
+//     content.js header note 29 carries the Selling-page side):
+//     two entry points, ONE mechanism. (a) The app's "Share to
+//     my feed" button inserts an auto_posting_queue row with
+//     action 'share' — the worker claims it exactly like a
+//     delete (same Selling-page tab, same pacing/limit
+//     exemption class, same missing-inventory-row fallback to
+//     the row's stamped fields, same conditional claim), and
+//     the content script shares the strictly matched listing
+//     to the user's personal feed. A share NEVER touches
+//     scraped_inventory.marketplace_posted_at: the listing
+//     stays posted; the row settles 'completed'. (b) The
+//     settings toggle (user_settings.share_to_feed, read at
+//     claim time by userSettings exactly like the intro trio)
+//     rides POST jobs as job.shareToFeed; when a post job
+//     finalizes SUCCESSFULLY, finishJobPosted queues ONE share
+//     row for the just-posted car through maybeQueueFeedShare
+//     (dedupe-checked against live share rows for the VIN).
+//     STRICTLY FAIL-OPEN, mirroring the intro-video skip
+//     contract: the share insert is wrapped so it can never
+//     throw into, fail, or delay the completed post — the post
+//     is already final when it runs — and the share job itself
+//     is an ordinary queue row whose own failure settles
+//     'failed' with field_diag evidence, exactly like a delete.
+//     Post failure never reaches finishJobPosted, so a failed
+//     post never queues a share; toggle off queues nothing.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -919,9 +945,12 @@ async function todaysPostCount(userId) {
 // Stock # line — see header note 20.
 // v2.1.53: it also carries the intro-video preference trio
 // (enabled / mode / selected id) — see header note 27.
+// v2.1.55: it also carries share_to_feed for the post-success
+// feed share — see header note 29. Opt-in: anything but an
+// explicit true reads as off.
 async function userSettings(userId) {
   const rows = await sbGet(
-    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,include_stock,intro_video_enabled,intro_video_mode,intro_selected_video_id`);
+    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,include_stock,intro_video_enabled,intro_video_mode,intro_selected_video_id,share_to_feed`);
   const row = (rows && rows.length) ? rows[0] : {};
   return {
     limit: typeof row.daily_post_limit === "number" ? row.daily_post_limit : 10,
@@ -933,7 +962,8 @@ async function userSettings(userId) {
     includeStock: row.include_stock === true,
     introEnabled: row.intro_video_enabled === true,
     introMode: typeof row.intro_video_mode === "string" ? row.intro_video_mode : "selected",
-    introSelectedId: typeof row.intro_selected_video_id === "string" ? row.intro_selected_video_id : null
+    introSelectedId: typeof row.intro_selected_video_id === "string" ? row.intro_selected_video_id : null,
+    shareToFeed: row.share_to_feed === true
   };
 }
 
@@ -1266,8 +1296,10 @@ async function checkQueue() {
 
     // The claim set (v2.1.4): Marketplace POST rows (target_channel
     // 'marketplace') and Facebook DELETE rows (target_channel
-    // 'facebook', action 'delete') — the two jobs this helper runs.
-    // Other channels' rows belong to other workers; never touch them.
+    // 'facebook', action 'delete') — the jobs this helper runs.
+    // v2.1.55 adds Facebook SHARE rows (target_channel 'facebook',
+    // action 'share') to the same set. Other channels' rows belong
+    // to other workers; never touch them.
     const queueItems = await sbGet(
       `auto_posting_queue?user_id=eq.${userId}&status=eq.pending` +
       `&target_channel=in.(marketplace,facebook)&order=created_at.asc&limit=5`
@@ -1282,7 +1314,7 @@ async function checkQueue() {
       const postedToday = await todaysPostCount(userId);
       atLimit = postedToday >= settings.limit;
       if (atLimit) {
-        console.log(`[AutoLaunch] Daily limit reached (${postedToday}/${settings.limit}). Posts wait; deletes still run.`);
+        console.log(`[AutoLaunch] Daily limit reached (${postedToday}/${settings.limit}). Posts wait; deletes and shares still run.`);
       }
     }
     // Post pacing (v2.1.42, header note 19): post_delay_minutes is
@@ -1292,36 +1324,37 @@ async function checkQueue() {
     // delay (0) means no gate; a missing last-post stamp (never
     // posted, or the lookup failed) also means no gate.
     let pacingHeld = false;
-    if (settings.delayMinutes > 0 && queueItems.some(q => q.action !== "delete")) {
+    if (settings.delayMinutes > 0 && queueItems.some(q => q.action !== "delete" && q.action !== "share")) {
       const lastPost = await lastPostedAt(userId);
       if (lastPost !== null) {
         const sinceMin = (Date.now() - lastPost) / 60000;
         if (sinceMin < settings.delayMinutes) {
           pacingHeld = true;
-          console.log(`[AutoLaunch] Post pacing: last post ${Math.floor(sinceMin)} min ago; holding posts ~${Math.ceil(settings.delayMinutes - sinceMin)} more min (delay ${settings.delayMinutes} min). Deletes still run.`);
+          console.log(`[AutoLaunch] Post pacing: last post ${Math.floor(sinceMin)} min ago; holding posts ~${Math.ceil(settings.delayMinutes - sinceMin)} more min (delay ${settings.delayMinutes} min). Deletes and shares still run.`);
         }
       }
     }
     let item = null;
     for (const q of queueItems) {
-      if (q.action === "delete") { item = q; break; }
+      if (q.action === "delete" || q.action === "share") { item = q; break; }
       if (!atLimit && !pacingHeld) { item = q; break; }
     }
     if (!item) return; // only posts waiting, and the cap (or pacing) says wait
     const isDelete = item.action === "delete";
+    const isShare = item.action === "share";
 
     const cars = await sbGet(
       `scraped_inventory?vin=eq.${encodeURIComponent(item.vin)}&user_id=eq.${userId}&limit=1`
     );
     let carRow = cars.length ? cars[0] : null;
-    if (!carRow && !isDelete) {
+    if (!carRow && !isDelete && !isShare) {
       // Queue row points at a car that no longer exists: fail it loudly
       // instead of leaving it pending forever.
       await sbPatch(`auto_posting_queue?id=eq.${item.id}&status=eq.pending`, { status: "failed" });
       await logFailure(item.id, "inventory_row_missing");
       return;
     }
-    if (!carRow && isDelete) {
+    if (!carRow && (isDelete || isShare)) {
       // A delete can outlive its inventory row — by design: the
       // delete-job contract is producer-agnostic (the Remove button
       // today; an inventory-lifecycle auto-removal rule later, which
@@ -1340,7 +1373,7 @@ async function checkQueue() {
         price: item.price != null ? Number(item.price) : null
       };
     }
-    if (carRow && isDelete && carRow.price == null && item.price != null) {
+    if (carRow && (isDelete || isShare) && carRow.price == null && item.price != null) {
       // Inventory row exists but carries no price; the row's stamped
       // price is the better evidence for the strict match.
       carRow = Object.assign({}, carRow, { price: Number(item.price) });
@@ -1352,7 +1385,7 @@ async function checkQueue() {
     // of handing a photo-less listing to Facebook. POSTS ONLY: a delete
     // removes a listing, and a car whose photos vanished is exactly the
     // car whose listing should come down.
-    if (!isDelete) {
+    if (!isDelete && !isShare) {
       // Fallback placeholders are never real photos: the old hotlinked
       // Unsplash URL (rows stored before 2.1.11 may still carry it), the
       // local fallback asset in both the absolute Pages form a stored
@@ -1392,7 +1425,7 @@ async function checkQueue() {
     // a job or opening a tab, and WITHOUT touching the stamp:
     // the existing value is the truth. The row's executed_at
     // fingerprints this path (applyPosted rows carry none).
-    if (!isDelete && carRow.marketplace_posted_at) {
+    if (!isDelete && !isShare && carRow.marketplace_posted_at) {
       await sbPatch(`auto_posting_queue?id=eq.${item.id}`,
         { status: "posted", executed_at: new Date().toISOString() });
       console.log(`[AutoLaunch] already_posted_at_claim: queue item ${item.id} (VIN ${item.vin}) already carries marketplace_posted_at ${carRow.marketplace_posted_at} — completed without posting.`);
@@ -1403,18 +1436,19 @@ async function checkQueue() {
       queueId: item.id,
       userId,
       car: jobCarWithStock(carRow, item),
-      action: isDelete ? "delete" : "post",
+      action: isDelete ? "delete" : isShare ? "share" : "post",
       fullAuto: settings.fullAuto,
       dealershipName: settings.dealershipName,
       dealershipAddress: settings.dealershipAddress,
       includeStock: settings.includeStock,
+      shareToFeed: settings.shareToFeed === true,
       claimedAt: new Date().toISOString()
     };
     // Intro video (v2.1.53, header note 27): resolved at claim
     // time and carried on the job; posts only — a delete has no
     // composer to attach to. Absent = the post runs exactly as
     // before this version.
-    if (!isDelete) {
+    if (!isDelete && !isShare) {
       const intro = await introVideoForJob(userId, settings);
       if (intro) jobPayload.introVideo = intro;
     }
@@ -1431,7 +1465,7 @@ async function checkQueue() {
     // clicks over to it when they are ready to publish.
     const jobTab = await chrome.tabs.create({
       active: false,
-      url: isDelete
+      url: (isDelete || isShare)
         ? "https://www.facebook.com/marketplace/you/selling"
         : "https://www.facebook.com/marketplace/create/vehicle"
     });
@@ -1816,6 +1850,55 @@ async function applyDeleted(queueId, vin, userId) {
   );
 }
 
+// Share completion (v2.1.55, header note 29): the queue row ends
+// "completed" with executed_at stamped — and NOTHING else. A
+// share never touches scraped_inventory: the listing stays
+// posted and marketplace_posted_at keeps its value.
+async function applyShared(queueId) {
+  await sbPatch(`auto_posting_queue?id=eq.${queueId}`,
+    { status: "completed", executed_at: new Date().toISOString() });
+}
+
+// Post-success feed share (v2.1.55, header note 29): when the
+// job's claim-time settings carried shareToFeed, queue ONE share
+// row for the just-posted car — the producer contract the app's
+// "Share to my feed" button writes (target_channel 'facebook',
+// action 'share', the car's year/make/model/stock/price stamped
+// on the row for the strict matcher). Dedupe-checked against
+// live share rows for the VIN first, exactly like the app's
+// producer. STRICTLY FAIL-OPEN: called only after the post is
+// already final, wrapped so nothing it does can throw into,
+// fail, or delay the completed post — worst case the share is
+// skipped and the skip is logged.
+async function maybeQueueFeedShare(job) {
+  try {
+    if (!job || job.shareToFeed !== true || !job.car || !job.car.vin || !job.userId) return;
+    const car = job.car;
+    const existing = await sbGet(
+      `auto_posting_queue?user_id=eq.${job.userId}&vin=eq.${encodeURIComponent(car.vin)}&action=eq.share&status=in.(pending,processing)&select=id&limit=1`);
+    if (existing && existing.length) {
+      console.log(`[AutoLaunch] share_to_feed: a share for VIN ${car.vin} is already queued — not queueing another.`);
+      return;
+    }
+    await sbPost("auto_posting_queue", {
+      user_id: job.userId,
+      vin: car.vin,
+      target_channel: "facebook",
+      action: "share",
+      status: "pending",
+      year: car.year != null ? car.year : null,
+      make: car.make || null,
+      model: car.model || null,
+      stock_num: car.stock_num || car.stock_number || null,
+      price: car.price != null ? Number(car.price) : null,
+      created_at: new Date().toISOString()
+    });
+    console.log(`[AutoLaunch] share_to_feed: queued a feed share for VIN ${car.vin} (posted car, toggle on).`);
+  } catch (e) {
+    console.warn("[AutoLaunch] share_to_feed: queueing the feed share failed and was skipped — the post itself is unaffected.", e && e.message || e);
+  }
+}
+
 async function applyFailed(queueId, errorMessage) {
   if (errorMessage) {
     try {
@@ -1841,6 +1924,11 @@ async function flushPendingFinish() {
   try {
     if (pending.outcome === "posted") {
       await applyPosted(pending.queueId, pending.vin, pending.userId);
+      // The share the post earned rides the stash (v2.1.55):
+      // queued on replay, still fail-open.
+      await maybeQueueFeedShare({ userId: pending.userId, shareToFeed: pending.shareToFeed, car: pending.shareCar });
+    } else if (pending.outcome === "shared") {
+      await applyShared(pending.queueId);
     } else if (pending.outcome === "deleted") {
       await applyDeleted(pending.queueId, pending.vin, pending.userId);
     } else {
@@ -1897,7 +1985,16 @@ async function finishJobPosted(queueId, listingUrl) {
         autolaunch_pending_finish: {
           outcome: "posted", queueId,
           vin: job.car.vin, userId: job.userId,
-          listingUrl: listingUrl || null
+          listingUrl: listingUrl || null,
+          shareToFeed: job.shareToFeed === true,
+          shareCar: {
+            vin: job.car.vin,
+            year: job.car.year != null ? job.car.year : null,
+            make: job.car.make || null,
+            model: job.car.model || null,
+            stock_num: job.car.stock_num || job.car.stock_number || null,
+            price: job.car.price != null ? Number(job.car.price) : null
+          }
         }
       });
       await chrome.storage.local.remove(["current_posting_job"]);
@@ -1910,6 +2007,9 @@ async function finishJobPosted(queueId, listingUrl) {
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Posted confirmed for queue item", queueId, listingUrl || "");
   scheduleJobTabClose(job);
+  // Feed share (v2.1.55, header note 29): the post is final —
+  // queue the share its toggle earned. Never throws.
+  await maybeQueueFeedShare(job);
 }
 
 // The delete counterpart of finishJobPosted (v2.1.4). Called by the
@@ -1942,6 +2042,35 @@ async function finishJobDeleted(queueId) {
   scheduleJobTabClose(job);
 }
 
+// The share counterpart of finishJobDeleted (v2.1.55, header
+// note 29). Called by the content script ONLY after the share
+// dialog completed — never on a click alone. Settles the row
+// "completed"; the car's posted stamp is untouched.
+async function finishJobShared(queueId) {
+  const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
+  if (!job || job.queueId !== queueId) return;
+  try {
+    await applyShared(queueId);
+  } catch (err) {
+    if (err instanceof SbAuthError) {
+      await chrome.storage.local.set({
+        autolaunch_pending_finish: {
+          outcome: "shared", queueId,
+          vin: job.car.vin, userId: job.userId
+        }
+      });
+      await chrome.storage.local.remove(["current_posting_job"]);
+      console.warn("[AutoLaunch] Share confirmed on Facebook; the queue update is waiting on a fresh session token.");
+      scheduleJobTabClose(job);
+      return;
+    }
+    throw err;
+  }
+  await chrome.storage.local.remove(["current_posting_job"]);
+  console.log("[AutoLaunch] Share confirmed for queue item", queueId);
+  scheduleJobTabClose(job);
+}
+
 async function finishJobFailed(queueId, reason, diags) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
   if (!job || job.queueId !== queueId) return;
@@ -1962,7 +2091,7 @@ async function finishJobFailed(queueId, reason, diags) {
      reason === "publish_button_not_found" ||
      reason === "duplicate_rejected" ||
      reason === "job_orphaned" ||
-     (job && job.action === "delete"))
+     (job && (job.action === "delete" || job.action === "share")))
       ? compactDiagError(diags)
       : null;
   try {
@@ -2271,6 +2400,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     finishJobDeleted(message.queueId)
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_JOB_SHARED") {
+    // Same Selling-page sender discipline as AUTOLAUNCH_JOB_DELETED
+    // (v2.1.55): a share may only be CLAIMED from the Selling page —
+    // a report from anywhere else is a scan of the wrong room.
+    const senderUrl = (sender && sender.tab && sender.tab.url) ||
+      (sender && sender.url) || "";
+    if (!/^https:\/\/www\.facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(senderUrl)) {
+      finishJobFailed(message.queueId,
+        "share_reported_from_wrong_page:" + senderUrl.slice(0, 80), [])
+        .then(() => sendResponse({ ok: false }))
+        .catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+    finishJobShared(message.queueId)
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;
