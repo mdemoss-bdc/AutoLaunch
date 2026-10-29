@@ -7895,11 +7895,17 @@ function syncSummaryCountsText(row) {
     if (!row) return null;
     const parts = [];
     parts.push(syncSummaryNum(row.vehicles_checked).toLocaleString("en-US") + " vehicles checked");
-    parts.push(syncSummaryNum(row.new_added).toLocaleString("en-US") + " new");
-    parts.push(syncSummaryNum(row.updated).toLocaleString("en-US") + " updated");
-    parts.push(syncSummaryNum(row.exited_removed).toLocaleString("en-US") + " sold & removed");
     // Nullable segments: NULL means "not tracked for this run" — omit
     // the segment entirely rather than printing a misleading zero.
+    if (row.new_added !== null && row.new_added !== undefined) {
+        parts.push(syncSummaryNum(row.new_added).toLocaleString("en-US") + " new");
+    }
+    if (row.updated !== null && row.updated !== undefined) {
+        parts.push(syncSummaryNum(row.updated).toLocaleString("en-US") + " updated");
+    }
+    if (row.exited_removed !== null && row.exited_removed !== undefined) {
+        parts.push(syncSummaryNum(row.exited_removed).toLocaleString("en-US") + " sold & removed");
+    }
     if (row.queued_posts !== null && row.queued_posts !== undefined) {
         parts.push(syncSummaryNum(row.queued_posts).toLocaleString("en-US") + " queued to post");
     }
