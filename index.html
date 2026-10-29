@@ -1660,18 +1660,23 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <p class="text-xs text-slate-400 leading-relaxed">This status is real: the page asks the helper directly and shows exactly what it answers. Nothing here is guessed or faked.</p>
     </div>
 
-    <!-- WEB STORE PLACEHOLDER (no link yet — on purpose) -->
+    <!-- WEB STORE INSTALL (primary route — published, unlisted) -->
     <div class="p-5 rounded-2xl bg-blue-50 border border-blue-200">
       <h2 class="text-sm font-black text-slate-900 flex items-center gap-2">
         <i class="fa-brands fa-chrome text-blue-600"></i>
-        Coming soon — one-click install from the Chrome Web Store
+        Install the helper from the Chrome Web Store
       </h2>
-      <p class="text-sm text-slate-600 mt-1.5 leading-relaxed">The helper's unlisted Chrome Web Store listing is under review with Google. Until it's approved there is no store link — use the manual install steps below; they work today and take a couple of minutes.</p>
+      <p class="text-sm text-slate-600 mt-1.5 leading-relaxed">The helper is published on the Chrome Web Store (unlisted — this link is the way in). It installs in one click, and Chrome keeps it up to date on its own.</p>
+      <a href="https://chromewebstore.google.com/detail/cnicmlnclohognndlpfgoklikhdolejj" target="_blank" rel="noopener" class="inline-flex items-center gap-2 mt-3 px-5 py-3 rounded-xl btn-gradient text-white font-bold text-sm shadow-sm cursor-pointer">
+        <i class="fa-brands fa-chrome"></i>
+        <span>Install the AutoLaunch extension — free, from the Chrome Web Store</span>
+      </a>
+      <p class="text-sm text-slate-600 mt-3 leading-relaxed">After it installs, come back to this tab, hard-refresh (Ctrl+Shift+R) and click <strong>Check again</strong> above — the refresh is what hands the helper your signed-in session.</p>
     </div>
 
     <!-- MANUAL INSTALL STEPS -->
     <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-      <h2 class="text-base font-black text-slate-900">Install the helper (manual, for now)</h2>
+      <h2 class="text-base font-black text-slate-900">Install the helper manually (fallback)</h2>
       <ol class="mt-4 space-y-4 text-sm text-slate-700 leading-relaxed list-none">
         <li class="flex gap-3">
           <span class="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
@@ -14536,7 +14541,7 @@ const GUIDES = {
     modal: null,
     what: "AutoLaunch posts through a small Chrome extension — the helper — because Facebook Marketplace posting happens in YOUR signed-in Facebook session. The helper also powers Luca: it captures Marketplace chats into Prospects and delivers the replies you send from AutoLaunch. No helper, no posting and no chat sync — but your inventory, wishlist and settings live in AutoLaunch itself and work without it.",
     steps: [
-      "Open the Chrome Extension page in AutoLaunch and follow the install steps there (download, unzip, load it in chrome://extensions with Developer mode on). A one-click Chrome Web Store install is coming soon — it's under review with Google; the guided setup here is the way today.",
+      "Open the Chrome Extension page in AutoLaunch and click the Chrome Web Store install button there — one click, and Chrome keeps the helper up to date on its own. (A manual install is on the same page as a fallback: download, unzip, load it in chrome://extensions with Developer mode on.)",
       "Sign in to the helper with the same AutoLaunch account, and keep Chrome signed in to your Facebook account.",
       "Leave one computer as your hub: it must be AWAKE (locked is fine), with Chrome open and a Facebook or Messenger tab open. Posting, reposts, chat capture and reply delivery all run from that machine.",
       "In Chrome settings, exempt facebook.com from Memory Saver / tab sleeping — a slept Facebook tab can't post or sync.",
