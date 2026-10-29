@@ -1714,12 +1714,17 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <p id="extStatusDetail" class="text-sm text-slate-500 mt-1 leading-relaxed">Pinging the helper in this tab&hellip;</p>
           </div>
         </div>
-        <button onclick="checkExtensionStatus()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer shrink-0">
+        <button onclick="checkExtensionStatus(); refreshHelperLease();" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer shrink-0">
           <i class="fa-solid fa-rotate-right text-[10px]"></i>
           <span>Check again</span>
         </button>
       </div>
       <p class="text-xs text-slate-400 leading-relaxed">This status is real: the page asks the helper directly and shows exactly what it answers. Nothing here is guessed or faked.</p>
+      <!-- ONE ACTIVE HELPER (lease, helper v2.1.60): rendered by refreshHelperLease; stays hidden until the lease row reads -->
+      <div id="helperLeaseRow" class="hidden border-t border-slate-100 pt-3">
+        <p id="helperLeaseText" class="text-sm text-slate-600 leading-relaxed"></p>
+        <button id="btnTakeOverHelper" onclick="takeOverHelperLease()" class="hidden mt-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Use this computer instead</button>
+      </div>
     </div>
 
     <!-- WEB STORE INSTALL (primary route — published, unlisted) -->
@@ -11629,6 +11634,116 @@ function checkExtensionStatus() {
     }
 }
 
+/* =====================================================================
+   One-active-helper lease (helper v2.1.60). Only ONE helper
+   instance per account may claim queued posts; the lease lives on
+   the user's own user_settings row (helper_lease_id /
+   helper_lease_expires_at), and the holding helper renews it on
+   every claim cycle against a 10-minute TTL. This block only
+   READS the lease for display and — on the user's explicit tap —
+   writes THIS computer's instance id over it: takeover is
+   deliberate, never automatic. The instance id is asked over the
+   same bridge as the install id (AUTOLAUNCH_EXT_INSTANCE_ID_REQUEST
+   -> AUTOLAUNCH_EXT_INSTANCE_ID). If the helper in this tab does
+   not answer, the takeover button stays disabled: a computer
+   whose helper isn't running can't take the lease.
+   ===================================================================== */
+function helperLeaseState(row, localInstanceId, nowMs) {
+    const id = row && typeof row.helper_lease_id === "string" ? row.helper_lease_id : "";
+    const exp = row ? Date.parse(row.helper_lease_expires_at || "") : NaN;
+    if (!id || !isFinite(exp) || exp <= nowMs) return "none";
+    if (localInstanceId && id === localInstanceId) return "mine";
+    return "other";
+}
+
+function requestLocalInstanceId(timeoutMs) {
+    return new Promise(function (resolve) {
+        let settled = false;
+        const reqId = "instid-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+        const finish = function (value) {
+            if (settled) return;
+            settled = true;
+            try { window.removeEventListener("message", onMsg); } catch (e) { /* ignore */ }
+            resolve(value);
+        };
+        const onMsg = function (event) {
+            if (event.source !== window) return;
+            if (event.origin !== window.location.origin) return;
+            const data = event.data;
+            if (!data || data.type !== "AUTOLAUNCH_EXT_INSTANCE_ID" || data.reqId !== reqId) return;
+            finish(typeof data.instanceId === "string" && data.instanceId ? data.instanceId : null);
+        };
+        window.addEventListener("message", onMsg);
+        setTimeout(function () { finish(null); }, timeoutMs || 1200);
+        try {
+            window.postMessage({ type: "AUTOLAUNCH_EXT_INSTANCE_ID_REQUEST", reqId: reqId }, "*");
+        } catch (e) {
+            finish(null);
+        }
+    });
+}
+
+function renderHelperLease(state, localInstanceId) {
+    const row = document.getElementById("helperLeaseRow");
+    const text = document.getElementById("helperLeaseText");
+    const btn = document.getElementById("btnTakeOverHelper");
+    if (!row || !text || !btn) return;
+    row.classList.remove("hidden");
+    if (state === "mine") {
+        text.innerText = "Helper active on this computer \u2014 this is the computer claiming your queued posts.";
+        btn.classList.add("hidden");
+    } else if (state === "other") {
+        text.innerText = "Helper active on another computer \u2014 that computer is claiming your queued posts, and this computer's helper is standing by. Only one computer can work the queue at a time.";
+        btn.classList.remove("hidden");
+        btn.disabled = !localInstanceId;
+        btn.title = localInstanceId ? "" : "The helper in this tab didn't answer \u2014 install it, or hard-refresh this tab (Ctrl+Shift+R), first.";
+    } else {
+        text.innerText = "No helper is active right now \u2014 the next helper to check in claims your queue.";
+        btn.classList.add("hidden");
+    }
+}
+
+async function refreshHelperLease() {
+    if (!currentUser || typeof supabaseClient === "undefined") return;
+    try {
+        const localId = await requestLocalInstanceId();
+        const { data, error } = await supabaseClient
+            .from("user_settings")
+            .select("helper_lease_id, helper_lease_expires_at")
+            .eq("user_id", currentUser.id)
+            .maybeSingle();
+        if (error || !data) return; // lease unreadable: the lease line stays hidden
+        renderHelperLease(helperLeaseState(data, localId, Date.now()), localId);
+    } catch (e) { /* best-effort — the lease line must never break the page */ }
+}
+
+async function takeOverHelperLease() {
+    if (!currentUser || typeof supabaseClient === "undefined") return;
+    const btn = document.getElementById("btnTakeOverHelper");
+    const localId = await requestLocalInstanceId();
+    if (!localId) return; // no helper answered in this tab — nothing to take over with
+    if (btn) btn.disabled = true;
+    try {
+        const patch = {
+            helper_lease_id: localId,
+            helper_lease_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString()
+        };
+        const { data: upd, error } = await supabaseClient
+            .from("user_settings")
+            .update(patch)
+            .eq("user_id", currentUser.id)
+            .select("user_id");
+        if (error) throw error;
+        if (!upd || upd.length === 0) {
+            const { error: upErr } = await supabaseClient
+                .from("user_settings")
+                .upsert(Object.assign({ user_id: currentUser.id }, patch), { onConflict: "user_id" });
+            if (upErr) throw upErr;
+        }
+    } catch (e) { /* the refresh below renders whatever the row really holds */ }
+    await refreshHelperLease();
+}
+
 function showExtensionPage() {
   if (leaderGuard()) return;
     setActiveNav("extension");
@@ -11646,6 +11761,7 @@ function showExtensionPage() {
     if (dtpD) dtpD.classList.add("hidden");
     document.getElementById("extensionPage").classList.remove("hidden");
     checkExtensionStatus();
+    refreshHelperLease();
     syncQueuePoller();
 }
 

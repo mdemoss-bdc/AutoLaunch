@@ -36,6 +36,19 @@
 // own window — the id is never exposed to any other site. If the
 // worker cannot be reached, nothing is posted and the page's own
 // timeout resolves the request as "no helper" (fail-open).
+//
+// v2.1.60: it also carries the one-active-helper instance-id
+// request. The page posts {type:"AUTOLAUNCH_EXT_INSTANCE_ID_REQUEST",
+// reqId}; the bridge forwards it to the worker as
+// {type:"AUTOLAUNCH_GET_INSTANCE_ID"} and posts the answer back as
+// {type:"AUTOLAUNCH_EXT_INSTANCE_ID", reqId, instanceId}. The
+// Extension page's "Use this computer instead" takeover writes the
+// returned id onto the user's own user_settings lease columns
+// (helper v2.1.60, background header note 32). Same discipline as
+// the install id: this listener runs only on the AutoLaunch app
+// origin and answers only its own window; if the worker cannot be
+// reached, nothing is posted and the page's own timeout leaves the
+// takeover button disabled.
 (function () {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
@@ -94,6 +107,36 @@
       } catch (e) {
         // Extension context invalidated — no reply; the page's own
         // timeout treats it as "no helper" and the trial fails open.
+      }
+      return;
+    }
+
+    if (data.type === "AUTOLAUNCH_EXT_INSTANCE_ID_REQUEST") {
+      // One-active-helper instance id (v2.1.60): forward the page's
+      // request to the worker and post its answer back to the page.
+      // See the header note — no answer goes out at all if the
+      // worker is unreachable, and the page's timeout then leaves
+      // its takeover button disabled.
+      try {
+        chrome.runtime.sendMessage(
+          { type: "AUTOLAUNCH_GET_INSTANCE_ID" },
+          (response) => {
+            if (chrome.runtime.lastError) return;
+            try {
+              window.postMessage(
+                {
+                  type: "AUTOLAUNCH_EXT_INSTANCE_ID",
+                  reqId: data.reqId || null,
+                  instanceId: (response && response.instanceId) || null
+                },
+                window.location.origin
+              );
+            } catch (e) { /* page is gone — nothing to answer */ }
+          }
+        );
+      } catch (e) {
+        // Extension context invalidated — no reply; the page's own
+        // timeout treats it as "no helper" and disables takeover.
       }
       return;
     }

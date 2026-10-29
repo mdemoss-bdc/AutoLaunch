@@ -462,6 +462,48 @@
 //     (app button + auto-share) claim through the same
 //     path, so both arrive tagged-capable. This note is
 //     the whole worker-side delta: comment only.
+//
+// 32. ONE ACTIVE HELPER — THE LEASE (v2.1.60 — Matthew's
+//     spec, 2026-10-29; proven necessary the same night):
+//     two helper workers holding the same user's session
+//     raced one queue — an old pre-share build on Matthew's
+//     home PC kept claiming rows, and its claim-time
+//     already-posted shortcut closed SHARE rows "posted"
+//     without ever opening Facebook (three shares eaten;
+//     caught live by watching a row flip pending -> posted
+//     in 5 seconds with the desk helper switched OFF).
+//     Rule from this build: only ONE helper instance per
+//     account may CLAIM queue jobs. The lease lives on the
+//     user's own user_settings row (helper_lease_id /
+//     helper_lease_expires_at — two nullable columns; the
+//     own-row RLS policies already cover them). Each
+//     instance owns a random UUID (al_instance_id in
+//     chrome.storage.local, created on first need, stable
+//     for the install — deliberately distinct from the
+//     trial-abuse al_install_id). checkQueue reads the
+//     lease with the claim cycle's existing settings fetch
+//     (no extra round trip): empty, expired, or MINE ->
+//     renew (one PATCH, expiry now + 10 min) and claim as
+//     before; FOREIGN and unexpired -> claim NOTHING this
+//     cycle and keep cycling (dormant) — the lease may
+//     expire or be yielded. The lease gates NEW claims
+//     only: job-slot reconciliation, every finish function,
+//     the auth-stash replay (flushPendingFinish) and orphan
+//     handling run exactly as before, so a job already in
+//     flight settles its bookkeeping even if the lease is
+//     lost mid-run — a row is never stranded by the lease.
+//     If the lease write fails the cycle claims nothing
+//     (fail closed; Supabase being unreachable already
+//     blocks the queue reads, so this adds no new outage
+//     class). Takeover is deliberate, never automatic: the
+//     app's Extension page shows the lease state, and its
+//     "Use this computer instead" button writes THIS
+//     install's instance id (asked over the bridge —
+//     AUTOLAUNCH_GET_INSTANCE_ID, app-origin senders only)
+//     onto the row; the old holder sees a foreign lease on
+//     its next cycle and stands down. Legacy builds know
+//     nothing of the lease and ignore it — the lease
+//     protects an account once its helpers run this build.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -505,6 +547,47 @@ async function getOrCreateInstallId() {
   await chrome.storage.local.set({ al_install_id: id });
   return id;
 }
+
+// One-active-helper instance identity (v2.1.60, header note 32):
+// ONE random UUID per helper install, kept in chrome.storage.local
+// under al_instance_id — created lazily on first need, then stable
+// across restarts and updates. It names the INSTALL for the helper
+// lease only; it is deliberately NOT the trial-abuse al_install_id
+// above (that fence has its own reader and lifecycle). The only
+// outside reader is the AUTOLAUNCH_GET_INSTANCE_ID bridge answer,
+// which goes solely to the AutoLaunch app origin so the Extension
+// page's takeover button can write THIS install's id as the lease.
+async function getOrCreateInstanceId() {
+  const { al_instance_id: existing } =
+    await chrome.storage.local.get(["al_instance_id"]);
+  if (existing) return existing;
+  let id = null;
+  try { id = crypto.randomUUID(); } catch (e) { /* fall through */ }
+  if (!id) {
+    id = "al-inst-" + Date.now().toString(36) + "-" +
+      Math.random().toString(36).slice(2, 10) +
+      Math.random().toString(36).slice(2, 10);
+  }
+  await chrome.storage.local.set({ al_instance_id: id });
+  return id;
+}
+
+// [PURE-LEASE-DECISION-BEGIN] — extracted and unit-exercised by
+// the test harness; keep free of DOM/chrome references.
+// Lease decision (v2.1.60, header note 32): "take" when the lease
+// is empty, expired, unreadable, or already mine — the caller
+// renews and claims; "foreign" only when a DIFFERENT instance
+// holds a lease whose expiry is still ahead — the caller stands
+// down and claims nothing this cycle.
+const HELPER_LEASE_TTL_MS = 10 * 60 * 1000;
+function helperLeaseDecision(leaseId, leaseExpiresAt, myInstanceId, nowMs) {
+  if (!leaseId || typeof leaseId !== "string") return "take";
+  if (leaseId === myInstanceId) return "take";
+  const exp = Date.parse(leaseExpiresAt || "");
+  if (!isFinite(exp) || exp <= nowMs) return "take";
+  return "foreign";
+}
+// [PURE-LEASE-DECISION-END]
 
 async function sbHeaders(extra) {
   const token = await storedAccessToken();
@@ -986,9 +1069,13 @@ async function todaysPostCount(userId) {
 // v2.1.55: it also carries share_to_feed for the post-success
 // feed share — see header note 29. Opt-in: anything but an
 // explicit true reads as off.
+// v2.1.60: it also carries the one-active-helper lease
+// (helper_lease_id / helper_lease_expires_at) — see header
+// note 32. The claim cycle's gate reads them from THIS fetch;
+// no extra round trip.
 async function userSettings(userId) {
   const rows = await sbGet(
-    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,include_stock,intro_video_enabled,intro_video_mode,intro_selected_video_id,share_to_feed`);
+    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,include_stock,intro_video_enabled,intro_video_mode,intro_selected_video_id,share_to_feed,helper_lease_id,helper_lease_expires_at`);
   const row = (rows && rows.length) ? rows[0] : {};
   return {
     limit: typeof row.daily_post_limit === "number" ? row.daily_post_limit : 10,
@@ -1001,7 +1088,11 @@ async function userSettings(userId) {
     introEnabled: row.intro_video_enabled === true,
     introMode: typeof row.intro_video_mode === "string" ? row.intro_video_mode : "selected",
     introSelectedId: typeof row.intro_selected_video_id === "string" ? row.intro_selected_video_id : null,
-    shareToFeed: row.share_to_feed === true
+    shareToFeed: row.share_to_feed === true,
+    leaseId: (typeof row.helper_lease_id === "string" && row.helper_lease_id)
+      ? row.helper_lease_id : null,
+    leaseExpiresAt: typeof row.helper_lease_expires_at === "string"
+      ? row.helper_lease_expires_at : null
   };
 }
 
@@ -1331,6 +1422,27 @@ async function checkQueue() {
     }
 
     const settings = await userSettings(userId);
+
+    // One-active-helper lease (v2.1.60, header note 32): only
+    // ONE helper instance per account may claim. The lease rode
+    // this cycle's settings fetch — no extra round trip. Foreign
+    // + unexpired -> claim nothing and stay dormant (the cycle
+    // keeps polling; the lease may expire or be yielded).
+    // Otherwise renew — ONE PATCH, expiry now + TTL — and claim
+    // as before. A failed renew throws into the cycle's catch:
+    // no claim happens on an unproven lease (fail closed). The
+    // gate sits AFTER job-slot reconciliation on purpose: the
+    // lease gates NEW claims only, never the bookkeeping of a
+    // job already in flight.
+    const myInstanceId = await getOrCreateInstanceId();
+    if (helperLeaseDecision(settings.leaseId, settings.leaseExpiresAt, myInstanceId, Date.now()) === "foreign") {
+      console.log("[AutoLaunch] Another computer holds this account's helper lease — standing by, no claims this cycle.");
+      return;
+    }
+    await sbPatch(`user_settings?user_id=eq.${userId}`, {
+      helper_lease_id: myInstanceId,
+      helper_lease_expires_at: new Date(Date.now() + HELPER_LEASE_TTL_MS).toISOString()
+    });
 
     // The claim set (v2.1.4): Marketplace POST rows (target_channel
     // 'marketplace') and Facebook DELETE rows (target_channel
@@ -2277,6 +2389,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       const installId = await getOrCreateInstallId();
       sendResponse({ installId });
+    })();
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_GET_INSTANCE_ID") {
+    // One-active-helper instance id (v2.1.60, header note 32):
+    // only the bridge on the AutoLaunch origin may ask — same
+    // sender discipline as the install id above. The Extension
+    // page's takeover button writes this id onto the user's own
+    // settings row as the lease holder; the answer is the
+    // instance UUID itself (never a user id, never the token).
+    const fromApp = isAppUrl(sender.tab && sender.tab.url);
+    if (!fromApp) return;
+    (async () => {
+      const instanceId = await getOrCreateInstanceId();
+      sendResponse({ instanceId });
     })();
     return true;
   }
