@@ -1992,6 +1992,36 @@ def _apply_sync_cadence_guard(uid, job, settings_row):
 # ==============================================================================
 
 # ==============================================================================
+# ====================== AUTO-SYNC SWITCH START ================================
+# ==============================================================================
+# Auto-sync switch (Matthew, 2026-10-29): the Dashboard header switch
+# writes user_settings.auto_sync_enabled (additive column, DEFAULT
+# true). A user who turns it OFF is skipped by AUTO runs — runs that
+# serve no pending scrape_jobs row. A run serving a user-requested
+# job (the app's Sync button) NEVER consults the flag: manual sync
+# always works, and the auto-post pass that follows a served sync is
+# untouched. Fail-open: the flag bites only on an explicit False; an
+# absent column/value, a missing settings row, or any other shape
+# means ON (today's behavior for every account).
+def _auto_sync_skipped_uids(users, serving_job):
+    """UIDs an AUTO run must skip because the user turned auto-sync
+    off. Pure: `users` is the loaded user_settings rows; `serving_job`
+    is True when this run serves a pending user-requested job — then
+    the answer is always []."""
+    if serving_job:
+        return []
+    skipped = []
+    for u in users or []:
+        row = u or {}
+        uid = row.get("user_id")
+        if uid and row.get("auto_sync_enabled") is False:
+            skipped.append(uid)
+    return skipped
+# ==============================================================================
+# ======================= AUTO-SYNC SWITCH END =================================
+# ==============================================================================
+
+# ==============================================================================
 # ====================== SCRAPER ENTRYPOINT START ==============================
 # ==============================================================================
 
@@ -2059,6 +2089,29 @@ async def run_scraper():
         )
 
         users_to_scrape = res.data or []
+
+    # AUTO-SYNC SWITCH (Matthew, 2026-10-29): in an AUTO run (this
+    # run serves no pending job), drop users who turned auto-sync
+    # off — visibly, never silently. A run serving a user-requested
+    # job walks straight past: manual sync always works.
+    _auto_sync_skipped = _auto_sync_skipped_uids(
+        users_to_scrape, active_job is not None
+    )
+    if _auto_sync_skipped:
+        for _skipped_uid in _auto_sync_skipped:
+            print(
+                f"[*] Auto-sync OFF for user {_skipped_uid[:8]}: "
+                "skipping this auto run (manual sync still works)."
+            )
+        print(
+            f"[*] Auto-sync: skipped {len(_auto_sync_skipped)} of "
+            f"{len(users_to_scrape)} account(s) with auto-sync off."
+        )
+        _auto_sync_skipped_set = set(_auto_sync_skipped)
+        users_to_scrape = [
+            u for u in users_to_scrape
+            if u.get("user_id") not in _auto_sync_skipped_set
+        ]
 
     # SYNC CADENCE GUARD (Matthew, 2026-10-26): refuse a user-requested
     # job that lands inside the account's sync window. active_job is

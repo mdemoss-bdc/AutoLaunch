@@ -1393,6 +1393,27 @@ async def run_next(opts_override: dict = None) -> list:
         print(f"[!] Could not load users: {e}")
         return []
 
+    # AUTO-SYNC SWITCH parity (Matthew, 2026-10-29): mirror
+    # production — an auto run (this run serves no pending job)
+    # skips users whose user_settings.auto_sync_enabled is False.
+    # Uses production's own helper (scraper._auto_sync_skipped_uids)
+    # so the two selection paths cannot drift.
+    try:
+        _auto_sync_skipped = S._auto_sync_skipped_uids(
+            users, active_job_id is not None)
+    except Exception as e:
+        print(f"[!] Auto-sync switch warning (non-fatal, proceeding): {e}")
+        _auto_sync_skipped = []
+    if _auto_sync_skipped:
+        for _skipped_uid in _auto_sync_skipped:
+            print(f"[*] Auto-sync OFF for user {_skipped_uid[:8]}: "
+                  "skipping this run (production parity).")
+        print(f"[*] Auto-sync: skipped {len(_auto_sync_skipped)} of "
+              f"{len(users)} account(s) with auto-sync off.")
+        _auto_sync_skipped_set = set(_auto_sync_skipped)
+        users = [u for u in users
+                 if u.get("user_id") not in _auto_sync_skipped_set]
+
     limit = opts_override.get("limit", S.SCRAPE_LIMIT)
     outcomes_all = []
     total_written = 0

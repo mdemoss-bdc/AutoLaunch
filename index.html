@@ -1864,6 +1864,16 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           Last Refresh: Never
       </span>
 
+      <span>&bull;</span>
+
+      <span class="flex items-center gap-1.5">
+        <span class="text-slate-500 font-medium">Auto-sync</span>
+        <label class="relative inline-flex items-center cursor-pointer" title="Manual sync still works when off">
+          <input type="checkbox" id="chkAutoSync" onchange="toggleAutoSyncSetting(this)" class="sr-only peer" checked>
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </span>
+
     </div>
 
   </div>
@@ -4308,6 +4318,14 @@ let postingQueue = [];
 // additive migration not applied yet) means the feature is enabled;
 // only an explicit false turns it off.
 let autoDeleteOnExitEnabled = true;
+// Auto-sync switch (Dashboard header, beside Last Refresh):
+// user_settings.auto_sync_enabled. DEFAULT ON — an absent column
+// (the additive migration not applied yet) or an unreadable value
+// means auto-sync stays on; only an explicit saved false turns it
+// off. The production scraper reads the same column and skips its
+// AUTO runs for users who turned it off; manual syncs (pending
+// scrape_jobs rows) are never affected.
+let autoSyncEnabled = true;
 let userDailyPostLimit = 10;
 // The account's stored time-between-posts (user_settings.post_delay_minutes),
 // kept RAW here — the tier clamp lives in postDelayState, never in this value.
@@ -7680,6 +7698,12 @@ updateLastSyncDisplay();
         autoDeleteOnExitEnabled = !!data.auto_delete_on_exit_enabled;
         const chkExit = document.getElementById("chkAutoDeleteOnExit");
         if (chkExit) chkExit.checked = autoDeleteOnExitEnabled;
+      }
+      // Auto-sync switch: absent column leaves the default (ON).
+      if (data.auto_sync_enabled !== undefined && data.auto_sync_enabled !== null) {
+        autoSyncEnabled = !!data.auto_sync_enabled;
+        const chkAutoSync = document.getElementById("chkAutoSync");
+        if (chkAutoSync) chkAutoSync.checked = autoSyncEnabled;
       }
       if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
@@ -14857,6 +14881,31 @@ async function toggleAutoDeleteOnExitSetting(el) {
   } catch (err) {
     el.checked = !value;
     alert("Could not save the auto-remove setting: " + (err.message || "Unknown error"));
+  }
+}
+
+// Auto-sync switch (Dashboard header, beside Last Refresh): the
+// switch writes user_settings.auto_sync_enabled immediately, like
+// Auto-delete on exit. Only the scraper's AUTO runs honor it — a
+// run serving a pending scrape_jobs row (manual Sync button) is
+// always served — and autoSyncEnabled, which only an explicit
+// saved false turns off, is what the header state reflects.
+async function toggleAutoSyncSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        auto_sync_enabled: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    autoSyncEnabled = value;
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the auto-sync setting: " + (err.message || "Unknown error"));
   }
 }
 
