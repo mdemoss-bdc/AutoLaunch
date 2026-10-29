@@ -1411,19 +1411,79 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <h1 class="text-3xl font-black text-slate-900">Prospects</h1>
         <p class="text-slate-500 mt-1">Everyone who reached out about a car — and where they are in the buying process. Not a CRM. Just the list, kept current. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('prospects')">How Prospects works →</span> <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('messages')">Get your messages flowing →</span></p>
       </div>
-      <button onclick="openProspectForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
+      <button id="addProspectBtn" onclick="openProspectForm()" class="px-4 py-2.5 rounded-xl btn-gradient text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer">
         <i class="fa-solid fa-plus text-[10px]"></i>
         <span>Add Prospect</span>
       </button>
     </div>
 
-    <p class="flex items-center gap-2 text-xs text-slate-500 -mt-2">
+    <p id="prospectsSyncStatusRow" class="flex items-center gap-2 text-xs text-slate-500 -mt-2">
       <span id="prospectsSyncStatusDot" class="w-2 h-2 rounded-full shrink-0 bg-slate-300"></span>
       <span id="prospectsSyncStatus">Checking helper status…</span>
     </p>
 
     <div id="prospectsStorageNotice" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed">
       📱 <strong>Saved on this device for now.</strong> Your prospects are stored in this browser until the prospects table is enabled in Supabase (applying <span class="font-mono">supabase/migrations_draft/ai_closer_migration_APPLIED_2026-10-25.sql</span>). Nothing is lost; they just won't sync to your other devices yet.
+    </div>
+
+    <!-- PROSPECTS TEASER (Self Post, 2026-10-28): the pipeline room,
+         visible but locked. Shown ONLY to a resolved 'post' tier in
+         full billing mode (see prospectsTeaserApplies). The ghost
+         block below is STATIC placeholder markup — skeleton bars and
+         dashed counts. No prospect data is loaded, read, or rendered
+         on the teaser path at all: showProspectsPage routes here
+         before loadProspects/renderProspects can run. Trial users
+         never reach this block (the trial notice answers first);
+         Automate/'group', legacy 'automate' and owner accounts get
+         the real page exactly as before. Gate copy carries no prices,
+         per the plan-gate rule. -->
+    <div id="prospectsTeaser" class="hidden space-y-6">
+      <div class="relative">
+        <div class="blur-[3px] opacity-60 select-none pointer-events-none space-y-4" aria-hidden="true">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="px-3 py-1.5 rounded-full text-[11px] font-bold border bg-slate-900 text-white border-slate-900">All <span class="font-mono">–</span></span>
+            <span class="px-3 py-1.5 rounded-full text-[11px] font-bold border bg-blue-50 text-blue-700 border-blue-200">New <span class="font-mono">–</span></span>
+            <span class="px-3 py-1.5 rounded-full text-[11px] font-bold border bg-amber-50 text-amber-700 border-amber-200">Talking <span class="font-mono">–</span></span>
+            <span class="px-3 py-1.5 rounded-full text-[11px] font-bold border bg-purple-50 text-purple-700 border-purple-200">Visit set <span class="font-mono">–</span></span>
+            <span class="px-3 py-1.5 rounded-full text-[11px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">Sold <span class="font-mono">–</span></span>
+            <span class="px-3 py-1.5 rounded-full text-[11px] font-bold border bg-slate-100 text-slate-500 border-slate-200">Lost <span class="font-mono">–</span></span>
+          </div>
+          <p class="text-xs font-semibold text-slate-600">🏆 – sold from Marketplace conversations · <span class="text-amber-600">⏰ – follow-ups due</span></p>
+          <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
+            <div class="flex items-start justify-between gap-3">
+              <div class="space-y-2.5">
+                <div class="h-3.5 w-44 rounded bg-slate-300"></div>
+                <div class="h-2.5 w-60 rounded bg-slate-200"></div>
+                <div class="h-2.5 w-52 rounded bg-slate-200"></div>
+              </div>
+              <div class="h-7 w-24 rounded-lg bg-slate-200 shrink-0"></div>
+            </div>
+          </div>
+          <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
+            <div class="flex items-start justify-between gap-3">
+              <div class="space-y-2.5">
+                <div class="h-3.5 w-36 rounded bg-slate-300"></div>
+                <div class="h-2.5 w-48 rounded bg-slate-200"></div>
+                <div class="h-2.5 w-64 rounded bg-slate-200"></div>
+              </div>
+              <div class="h-7 w-24 rounded-lg bg-slate-200 shrink-0"></div>
+            </div>
+          </div>
+        </div>
+        <div class="absolute inset-x-0 top-20 flex justify-center pointer-events-none">
+          <span class="px-3.5 py-1.5 rounded-full bg-slate-900/85 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-lg"><i class="fa-solid fa-lock text-[9px]"></i> Locked on Self Post</span>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl border border-blue-200 bg-blue-50 shadow-sm p-6 space-y-4">
+        <div class="flex items-center gap-3">
+          <span class="w-11 h-11 rounded-2xl bg-white text-blue-600 flex items-center justify-center text-lg shrink-0 shadow-sm"><i class="fa-solid fa-lock"></i></span>
+          <h2 class="font-extrabold text-base text-slate-900">Prospects is part of Automate</h2>
+        </div>
+        <div id="prospectsTeaserVideoSlot" class="hidden"></div>
+        <p class="text-sm text-slate-600 leading-relaxed">On Automate, everyone who messages you about a car lands here automatically — sorted from New to Sold, flagged when a buyer goes quiet, and counted when they buy. Your account is on the Self Post plan, which doesn't include Prospects.</p>
+        <button onclick="openPlanPurchase()" class="px-5 py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">View plans</button>
+      </div>
     </div>
 
     <div id="prospectsStagePills" class="flex items-center gap-2 flex-wrap"></div>
@@ -12383,9 +12443,80 @@ async function confirmTradeDelete(withProspect) {
   }
 }
 
+// PROSPECTS TEASER (Self Post): a 'post'-tier user in full billing
+// mode who opens Prospects gets the teaser page — the pipeline room,
+// ghosted and locked — instead of the bare plan-gate modal. Everyone
+// else keeps today's exact behavior: Automate/'group', legacy
+// 'automate' and owners resolve at/above 'automate' and pass
+// requireTier to the real page; trial mode is answered by the trial
+// notice inside requireTier; gate mode stays behind the purchase
+// gate. (Verified 2026-10-28: the trial does NOT include Prospects —
+// TRIAL_ALLOWED_FEATURES is inventory / queue / manual_posting only —
+// so the teaser is deliberately 'post'-only and the trial funnel is
+// untouched.) The decision is a pure function of (billing mode,
+// resolved tier) so the harness can pin it. The owner tier PREVIEW
+// resolves through effectiveTier(), so previewing Post shows the
+// teaser exactly as a Post customer sees it — the same courtesy the
+// other gates extend to previews.
+
+// [prospects-teaser-pure:start]
+function prospectsTeaserApplies(input) {
+  if (!input) return false;
+  return input.mode === "full" && input.tier === "post";
+}
+// [prospects-teaser-pure:end]
+
+function prospectsShouldTease() {
+  return prospectsTeaserApplies({ mode: billingMode(), tier: effectiveTier() });
+}
+
+// Swap the Prospects page between its real blocks and the teaser
+// block. Real mode is re-asserted on every real page open;
+// renderProspects() then re-owns the storage-notice and
+// pipeline-stats visibility it manages.
+function setProspectsTeaserMode(on) {
+  const hide = function (id, hidden) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("hidden", !!hidden);
+  };
+  hide("prospectsTeaser", !on);
+  hide("addProspectBtn", on);
+  hide("prospectsSyncStatusRow", on);
+  hide("prospectsStorageNotice", on);
+  hide("prospectsStagePills", on);
+  hide("prospectsPipelineStats", on);
+  hide("prospectsList", on);
+  if (on) showDemoVideo("prospectsTeaserVideoSlot", "prospects");
+  else clearDemoVideo("prospectsTeaserVideoSlot");
+}
+
+// The teaser page: the same page switch as showProspectsPage, but
+// no prospect data is loaded and the helper is never poked — the
+// static ghost markup in #prospectsTeaser is the whole render.
+function showProspectsTeaserPage() {
+  setActiveNav("prospects");
+  document.querySelector("main").classList.add("hidden");
+  document.getElementById("getStartedPage").classList.add("hidden");
+  const wp = document.getElementById("wishlistPage");
+  if (wp) wp.classList.add("hidden");
+  const ep = document.getElementById("extensionPage");
+  if (ep) ep.classList.add("hidden");
+  const cp4 = document.getElementById("closerPage");
+  if (cp4) cp4.classList.add("hidden");
+  const tpF = document.getElementById("tradePage");
+  if (tpF) tpF.classList.add("hidden");
+  const dtpF = document.getElementById("dealershipPage");
+  if (dtpF) dtpF.classList.add("hidden");
+  document.getElementById("prospectsPage").classList.remove("hidden");
+  setProspectsTeaserMode(true);
+  syncQueuePoller();
+}
+
 async function showProspectsPage() {
   if (leaderGuard()) return;
+  if (prospectsShouldTease()) { showProspectsTeaserPage(); return; }
   if (!requireTier("prospects")) return;
+  setProspectsTeaserMode(false);
   setActiveNav("prospects");
   document.querySelector("main").classList.add("hidden");
   document.getElementById("getStartedPage").classList.add("hidden");
