@@ -1753,6 +1753,235 @@ def _auto_post_filtered(uid: str) -> int:
         return 0
 
 
+# =============================================================================
+# ===================== SYNC SUMMARIES (PRODUCTION) START =====================
+# =============================================================================
+# Per-user run tallies for the app's sync-summary card/popup — the
+# production counterpart of the shadow tally in scraper_next.py. After
+# a user's run, one row lands in sync_summaries (source "production"):
+# how many vehicles the run checked, how many were new, how many
+# changed, how many exited, and how many post/delete jobs it queued.
+#
+# Every count comes from this run's own data flow — never estimated:
+#   vehicles_checked  distinct VINs the crawl saw for the user.
+#   new_added/updated the exact rows handed to push_batch_to_supabase,
+#     compared against a snapshot of the user's stored inventory taken
+#     BEFORE this user's crawl wrote anything. (The shadow compares
+#     against the stored rows at flush time because it never writes;
+#     production writes its own inventory, so its baseline must be
+#     pre-crawl.) A page batch whose push did not report every unique
+#     VIN back is UNVERIFIED: its rows are excluded and new/updated
+#     stay NULL rather than risk a fabricated count.
+#   exited_removed    mark_stale_inventory's own flagged count,
+#     noted at its known-outcome exits (0 when its mass-exit brake
+#     fires — nothing was removed). NULL when the stale pass never
+#     reached a verdict (capped or errored crawl, or an internal
+#     stale-pass error): the count is unknown, not zero.
+#   queued_deletes    _queue_exit_listing_removals' own return value,
+#     noted at the same points.
+#   queued_posts      _auto_post_filtered's own return value, noted
+#     where run_scraper already calls it. NULL when the pass never
+#     ran for the user (only a clean, full crawl earns it); 0 when it
+#     ran and queued none, auto-post off included (the pass itself
+#     returns 0 then).
+#
+# Bookkeeping here is a passenger, never a driver: registration is
+# in-memory, the snapshot is read-only, inserts happen once per user
+# after the run's real work, and every step is wrapped so a tally
+# failure logs a warning and changes nothing else.
+
+_PROD_TALLY = {}  # uid -> accumulator for the current run
+
+
+def _prod_tally_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _prod_tally_baseline(uid):
+    """The user's stored inventory BEFORE this run writes anything,
+    paginated past the PostgREST 1,000-row cap (a short read here
+    would silently understate "new"). Returns a dict — possibly
+    empty, which on a first sync is the honest truth — or None when
+    the read failed, in which case the comparison counts stay NULL
+    rather than invented."""
+    try:
+        base = {}
+        start = 0
+        while True:
+            chunk = (
+                db.table("scraped_inventory")
+                .select("vin, price, status, photos")
+                .eq("user_id", uid)
+                .range(start, start + 999)
+                .execute()
+            ).data or []
+            for r in chunk:
+                if r.get("vin"):
+                    base[r["vin"]] = r
+            if len(chunk) < 1000:
+                return base
+            start += 1000
+    except Exception as e:
+        print(f"[!] Sync summary baseline warning ({uid[:8]}): {e}")
+        return None
+
+
+def _prod_tally_field_changed(written, stored):
+    """Same rule as the shadow tally: a field counts as changed only
+    when the run produced a value for it and it differs from the
+    stored one. A missing value on the run's side preserves the
+    stored one in the writer, so it is never evidence of change."""
+    if written.get("price") is not None and written["price"] != stored.get("price"):
+        return True
+    if written.get("status") is not None and written["status"] != stored.get("status"):
+        return True
+    w_photos = written.get("photos") or []
+    if w_photos and w_photos != (stored.get("photos") or []):
+        return True
+    return False
+
+
+def _prod_tally_start_user(uid):
+    """Open the tally accumulator for a user whose crawl is about to
+    start. The baseline snapshot MUST be taken before the crawl's
+    first push for this user. Fail-open: any surprise still leaves an
+    accumulator (with a None baseline) so the run's other counts can
+    still be reported."""
+    try:
+        _PROD_TALLY[uid] = {
+            "started_at": _prod_tally_now_iso(),
+            "finished_at": None,
+            "baseline": _prod_tally_baseline(uid),
+            "written": {},
+            "write_unverified": False,
+            "vehicles_checked": None,
+            "exited_removed": None,
+            "queued_deletes": None,
+            "queued_posts": None,
+        }
+    except Exception:
+        pass
+
+
+def _prod_tally_register_push(uid, cars, saved):
+    """Record one page batch exactly as handed to
+    push_batch_to_supabase — but only when the push reported every
+    unique VIN in the batch back (saved == unique count). Anything
+    less means part of the batch's fate is unknown: mark the user's
+    comparison counts unverified instead of guessing which rows
+    landed."""
+    try:
+        acc = _PROD_TALLY.get(uid)
+        if acc is None:
+            return
+        unique = {c["vin"]: c for c in cars or [] if c.get("vin")}
+        if saved != len(unique):
+            acc["write_unverified"] = True
+            return
+        for vin, r in unique.items():
+            acc["written"][vin] = {
+                "price": r.get("price"),
+                "status": r.get("status"),
+                "photos": list(r.get("photos") or []),
+            }
+    except Exception:
+        pass
+
+
+def _prod_tally_note_exits(uid, flagged, deletes):
+    """Called by mark_stale_inventory at its known-outcome exits
+    only — its internal-error path deliberately never calls this, so
+    an errored stale pass leaves the counts NULL (unknown)."""
+    try:
+        acc = _PROD_TALLY.get(uid)
+        if acc is not None:
+            acc["exited_removed"] = flagged
+            acc["queued_deletes"] = deletes
+    except Exception:
+        pass
+
+
+def _prod_tally_note_posts(uid, queued):
+    try:
+        acc = _PROD_TALLY.get(uid)
+        if acc is not None:
+            acc["queued_posts"] = queued
+    except Exception:
+        pass
+
+
+def _prod_tally_finish_user(uid, seen_count):
+    try:
+        acc = _PROD_TALLY.get(uid)
+        if acc is not None:
+            acc["vehicles_checked"] = seen_count
+            acc["finished_at"] = _prod_tally_now_iso()
+    except Exception:
+        pass
+
+
+def _prod_tally_restamp_finished(uid):
+    """The auto-post pass is part of the user's run: once it has run
+    for a user, their finish time moves to include it."""
+    try:
+        acc = _PROD_TALLY.get(uid)
+        if acc is not None:
+            acc["finished_at"] = _prod_tally_now_iso()
+    except Exception:
+        pass
+
+
+def _prod_tally_compute_row(uid, acc):
+    new_added = updated = None
+    base = acc.get("baseline")
+    if base is not None and not acc.get("write_unverified"):
+        written = acc.get("written") or {}
+        new_added = sum(1 for vin in written if vin not in base)
+        updated = sum(
+            1 for vin, w in written.items()
+            if vin in base and _prod_tally_field_changed(w, base[vin])
+        )
+    return {
+        "user_id": uid,
+        "run_started_at": acc.get("started_at"),
+        "run_finished_at": acc.get("finished_at"),
+        "vehicles_checked": acc.get("vehicles_checked"),
+        "new_added": new_added,
+        "updated": updated,
+        "exited_removed": acc.get("exited_removed"),
+        "queued_posts": acc.get("queued_posts"),
+        "queued_deletes": acc.get("queued_deletes"),
+        "source": "production",
+    }
+
+
+def _flush_prod_sync_summaries():
+    """Insert one sync_summaries row per user who ran. Fully
+    fail-open: any failure becomes a printed warning, never an
+    exception, and each user is isolated from the others."""
+    try:
+        accs = dict(_PROD_TALLY)
+        _PROD_TALLY.clear()
+        finished = _prod_tally_now_iso()
+        for uid, acc in accs.items():
+            try:
+                if acc.get("finished_at") is None:
+                    acc["finished_at"] = finished
+                row = _prod_tally_compute_row(uid, acc)
+                try:
+                    db.table("sync_summaries").insert(row).execute()
+                except Exception as e:
+                    print(f"[!] Sync summary insert warning ({uid[:8]}): {e}")
+            except Exception as e:
+                print(f"[!] Sync summary tally warning ({uid[:8]}): {e}")
+    except Exception as e:
+        print(f"[!] Sync summary flush warning: {e}")
+
+# =============================================================================
+# ====================== SYNC SUMMARIES (PRODUCTION) END ======================
+# =============================================================================
+
+
 def mark_stale_inventory(uid: str, seen_vins: set) -> int:
     """Flag inventory that a fully successful crawl did not see.
 
@@ -1791,6 +2020,7 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
         active_vins = [r["vin"] for r in active_rows]
         stale = [v for v in active_vins if v not in seen_vins]
         if not stale:
+            _prod_tally_note_exits(uid, 0, 0)
             return 0
 
         # MASS-EXIT SAFETY BRAKE: past the threshold we mark NOTHING
@@ -1802,6 +2032,7 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
                 f"{len(active_vins)} active units unseen (> {int(STALE_MAX_FRACTION * 100)}%). "
                 "Feed may have changed; refusing to mass-deactivate."
             )
+            _prod_tally_note_exits(uid, 0, 0)
             return 0
 
         flagged = 0
@@ -1821,8 +2052,10 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
             r for r in active_rows
             if r["vin"] in stale_set and r.get("marketplace_posted_at")
         ]
+        _deletes_queued = 0
         if posted_exits:
-            _queue_exit_listing_removals(uid, posted_exits)
+            _deletes_queued = _queue_exit_listing_removals(uid, posted_exits)
+        _prod_tally_note_exits(uid, flagged, _deletes_queued)
         return flagged
     except Exception as e:
         print(f"[!] Stale pass warning (non-fatal): {e}")
@@ -2230,6 +2463,11 @@ async def run_scraper():
                     f"{effective_limit if effective_limit else 'none (full pull)'}"
                 )
 
+            # Sync-summary tally: open this user's accumulator (and
+            # snapshot their stored inventory) BEFORE the crawl's
+            # first push — the baseline is only honest pre-crawl.
+            _prod_tally_start_user(active_uid)
+
             for feed in feeds_to_crawl:
 
                 if effective_limit and user_units_synced >= effective_limit:
@@ -2360,6 +2598,8 @@ async def run_scraper():
 
                     saved = push_batch_to_supabase(cars)
 
+                    _prod_tally_register_push(active_uid, cars, saved)
+
                     user_units_synced += saved
 
                     print(
@@ -2395,6 +2635,8 @@ async def run_scraper():
                     f"[!] Stale pass skipped for {store_name}: crawl had errors."
                 )
 
+            _prod_tally_finish_user(active_uid, len(user_seen_vins))
+
             print(
                 f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced."
             )
@@ -2402,9 +2644,15 @@ async def run_scraper():
         # Auto-post pass (location x condition filter): once per user
         # whose crawl was clean and complete. Fail-open inside.
         for _uid in auto_post_uids:
-            _auto_post_filtered(_uid)
+            _prod_tally_note_posts(_uid, _auto_post_filtered(_uid))
+            _prod_tally_restamp_finished(_uid)
 
         await browser.close()
+
+    # Sync-summary tallies (production): one row per user who ran,
+    # written only now that the run's real work is done. Fail-open
+    # inside — reporting never disturbs the run's outcome.
+    _flush_prod_sync_summaries()
 
     if active_job_id:
 

@@ -1860,7 +1860,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
       <span>&bull;</span>
 
-      <span id="lastSyncTimeLabel" class="text-slate-500">
+      <span id="lastSyncTimeLabel" class="text-slate-500" onclick="openSyncSummaryDetails()">
           Last Refresh: Never
       </span>
 
@@ -7955,6 +7955,7 @@ function syncSummaryShouldShowPopup(row, lastShownId) {
 // === SYNC SUMMARY PURE LOGIC END ===
 
 let syncSummaryBusy = false;
+let syncSummaryLatestRow = null;
 const syncSummaryShownIdMem = {};
 
 function syncSummaryLastShownId(userId) {
@@ -7996,6 +7997,18 @@ async function refreshSyncSummary() {
         const text = syncSummaryCardText(row);
         if (!text) return;
 
+        // Cache for the manual open: clicking the "Last Refresh"
+        // label re-opens this row's summary on demand (see
+        // openSyncSummaryDetails). The label only advertises that —
+        // pointer cursor + hover — once a row actually exists; with
+        // no row it stays the plain, inert label it has always been.
+        syncSummaryLatestRow = row;
+        const syncLabel = document.getElementById("lastSyncTimeLabel");
+        if (syncLabel) {
+            syncLabel.classList.add("cursor-pointer", "hover:underline", "hover:text-blue-600");
+            syncLabel.title = "See what the last sync did";
+        }
+
         const card = document.getElementById("syncSummaryCard");
         const cardText = document.getElementById("syncSummaryCardText");
         if (card && cardText) {
@@ -8015,6 +8028,27 @@ async function refreshSyncSummary() {
         /* best-effort surface — a summary must never break the app */
     } finally {
         syncSummaryBusy = false;
+    }
+}
+
+// Manual open, wired to the "Last Refresh" label in the header.
+// Renders the newest summary row into the same modal with the same
+// text the card and the one-time popup use. Deliberately NEVER
+// touches the shown-once marker: a manual look neither consumes the
+// one-time popup for a row still unseen, nor is blocked by it for a
+// row already seen — the two paths are independent. Inert when no
+// summary row exists yet (nothing cached): no modal, no error.
+function openSyncSummaryDetails() {
+    try {
+        const row = syncSummaryLatestRow;
+        if (!row) return;
+        const text = syncSummaryCardText(row);
+        if (!text) return;
+        const popText = document.getElementById("syncSummaryPopupText");
+        if (popText) popText.textContent = text;
+        openModal("syncSummaryModal");
+    } catch (e) {
+        /* fail open — a label click must never break the header */
     }
 }
 
