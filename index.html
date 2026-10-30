@@ -4452,7 +4452,7 @@ const TIER_FEATURES = {
   queue: "post",           // post queue
   manual_posting: "post",  // manual Marketplace posting
   listing_copy: "post",    // listing copy (AI)
-  post_delay: "automate",  // choosing the time between posts (5/10/15 min) — fixed at 15 on Post
+  post_delay: "automate",  // choosing the time between posts (5/10/15 min) — fixed at 30 on Post
   autopost: "automate",    // auto-post new arrivals + full-auto + auto-post settings
   auto_repost: "automate", // auto delete & repost + auto-remove sold/exited
   channels: "automate",    // TikTok / Instagram / Facebook Page channel switches
@@ -5520,11 +5520,13 @@ function needsSignupChoice(input) {
 // Posting delay (Matthew, 2026-10-28): the wait between posts —
 // user_settings.post_delay_minutes, which the helper's pacing gate
 // reads verbatim — is a CHOICE on the Automate plans (5, 10 or 15
-// minutes) and FIXED at 15 everywhere else: the Post plan, and
-// phase 1 + legacy trials (which resolve like Post for this
-// setting). A staged trial in phase 2 runs the full Automate set,
-// so the choice is live there too (mode "trial" with phase 2).
-// mode is the
+// minutes) and FIXED everywhere else: at 30 minutes on the Post
+// plan (and on a staged trial's phase 1, which resolves exactly as
+// Post), and at 15 on legacy trials. A staged trial in phase 2
+// runs the full Automate set, so the choice is live there too
+// (mode "trial" with phase 2). The helper's pacing hold reads the
+// stored value this resolves to — posts land no faster than one
+// per resolved delay; queueing itself is never blocked. mode is the
 // billingAccess() mode; tier is effectiveTier(). Pure and total: a
 // stored value outside {5, 10, 15} (absent, zero, or a stale number
 // left over from another plan) resolves to 15 — also the column's
@@ -5534,11 +5536,20 @@ function needsSignupChoice(input) {
 // save path persists exactly what this returns.
 const POST_DELAY_CHOICES = [5, 10, 15];
 const POST_DELAY_FIXED_MINUTES = 15;
+// Post-tier pacing (Matthew, 2026-10-30): an account resolving at
+// the Self Post tier spaces its posts 30 minutes apart — the fixed
+// delay for 'post' resolution. A staged trial in phase 1 resolves
+// exactly as Post, so it inherits the 30. Legacy trials keep the
+// original fixed 15 above.
+const POST_DELAY_POST_TIER_MINUTES = 30;
 
 function postDelayState(mode, tier, storedMinutes, phase) {
   const adjustable = (mode === "full" && (TIER_RANK[tier] || 0) >= TIER_RANK.automate) ||
     (mode === "trial" && phase === 2);
-  if (!adjustable) return { minutes: POST_DELAY_FIXED_MINUTES, adjustable: false };
+  if (!adjustable) {
+    const postResolution = tier === "post" || (mode === "trial" && phase === 1);
+    return { minutes: postResolution ? POST_DELAY_POST_TIER_MINUTES : POST_DELAY_FIXED_MINUTES, adjustable: false };
+  }
   const stored = POST_DELAY_CHOICES.indexOf(storedMinutes) !== -1 ? storedMinutes : POST_DELAY_FIXED_MINUTES;
   return { minutes: stored, adjustable: true };
 }
@@ -15708,7 +15719,7 @@ const GUIDES = {
       "Open this card.",
       "Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.",
       "Pick a posting speed: Standard, or Cautious for twice the spacing between posts.",
-      "Set the time between posts — 5, 10 or 15 minutes. On the Post plan — and on days 1–2 of the free trial — it stays at 15 minutes; choosing it is part of the Automate plan, which the trial unlocks in full on day 3.",
+      "Set the time between posts — 5, 10 or 15 minutes. On the Post plan — and on days 1–2 of the free trial — posts are spaced 30 minutes apart; choosing your own spacing is part of the Automate plan, which the trial unlocks in full on day 3.",
       "Press Save. The counter on this card shows how much of today's limit you have used."
     ],
     notes: [
@@ -16908,16 +16919,17 @@ function setPostingSpeed(speed) {
 
 // Time between posts (Matthew, 2026-10-28): on the Automate plans
 // the user picks 5, 10 or 15 minutes; everywhere else the delay is
-// fixed at 15, and tapping a different value raises the plan notice
-// (requireTier — the same gate every Automate feature uses; the
-// safety modal closes first so the notice is not stacked under it).
-// Tapping the fixed 15 itself just repaints. postDelayState is the
+// fixed (30 on Post resolution, 15 on a legacy trial), and tapping
+// a different value raises the plan notice (requireTier — the same
+// gate every Automate feature uses; the safety modal closes first
+// so the notice is not stacked under it). Tapping the fixed value
+// itself just repaints. postDelayState is the
 // one place the tier rule is computed; the save path persists
 // exactly what it returns.
 function setPostDelay(minutes) {
   const st = postDelayState(billingMode(), effectiveTier(), userPostDelayMinutes, trialPhase());
   if (!st.adjustable) {
-    if (minutes === POST_DELAY_FIXED_MINUTES) { syncPostDelayHighlight(); return; }
+    if (minutes === st.minutes) { syncPostDelayHighlight(); return; }
     closeModal('postingSafetyModal');
     requireTier("post_delay");
     return;
@@ -16951,9 +16963,9 @@ function syncPostDelayControlsFromState() {
       ? "How long the helper waits after a post before starting the next one. Deletes are never delayed."
       : (billingMode() === "trial"
         ? (trialPhase() === 1
-          ? "Fixed at 15 minutes for days 1–2 of the trial. From day 3 your trial runs the full Automate plan and you can choose your spacing."
+          ? "Fixed at 30 minutes for days 1–2 of the trial (the Self Post spacing). From day 3 your trial runs the full Automate plan and you can choose your spacing."
           : "Fixed at 15 minutes on the free trial. Choosing your spacing is part of the Automate plan.")
-        : "Fixed at 15 minutes on the " + PLAN_DETAILS[effectiveTier()].name + " plan. Choosing your spacing is part of the Automate plan.");
+        : "Fixed at " + st.minutes + " minutes on the " + PLAN_DETAILS[effectiveTier()].name + " plan. Choosing your spacing is part of the Automate plan.");
   }
 }
 

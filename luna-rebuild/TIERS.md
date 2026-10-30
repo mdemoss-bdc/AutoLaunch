@@ -345,7 +345,7 @@ the month** the subscription starts, and users can **cancel in-app**.
 shape in the paragraph above and everywhere below except the dated
 verification logs):** the trial is now a **4-day staged trial**.
 Days 1–2 (the first 48 hours) resolve exactly as the **Self Post**
-plan (5 queued posts/day, sync 1/18h, fixed 15-min post delay, AI
+plan (5 queued posts/day, sync 1/18h, fixed 30-min post delay, AI
 listing copy; no automation, no in-app delete, no channels, no
 Prospects/Luca); days 3–4 resolve exactly as the **Automate** plan
 (auto-post, delete & repost, channels, Luca + Prospects, wishlist,
