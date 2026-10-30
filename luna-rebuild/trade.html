@@ -46,6 +46,12 @@
   .yn span { display: block; text-align: center; padding: 10px; border-radius: 12px; border: 1px solid var(--edge); background: var(--field); color: var(--body); font-weight: 700; cursor: pointer; }
   .yn input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; }
   .yn input:focus-visible + span { outline: 2px solid var(--link); }
+  .yn.vinmode { margin: 12px 0 2px; max-width: 360px; }
+  .scanpanel { margin-top: 12px; border: 1px solid var(--edge); border-radius: 14px; padding: 14px; background: var(--field); }
+  .scanpanel video { width: 100%; display: block; border-radius: 10px; background: #000; }
+  .scanpanel .srow { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .scanpanel .sbtn { padding: 10px 16px; border-radius: 12px; background: var(--card); border: 1px solid var(--edge); color: var(--h); font-weight: 700; font-size: 14px; cursor: pointer; }
+  .scanpanel input[type=file] { display: none; }
   .note { margin-bottom: 10px; }
   .upload { border: 1.5px dashed rgba(88,166,255,.4); border-radius: 14px; padding: 16px; text-align: center; margin-top: 10px; }
   .upload input { display: none; }
@@ -91,10 +97,26 @@
 
     <div class="card">
       <h2>Your vehicle</h2>
+      <div class="yn vinmode">
+        <label><input type="radio" name="vinMode" value="type" checked><span>Type manually</span></label>
+        <label><input type="radio" name="vinMode" value="scan"><span>Scan VIN</span></label>
+      </div>
       <label for="fVin">VIN <span class="req">*</span></label>
       <input type="text" id="fVin" maxlength="17" placeholder="17-character VIN" style="text-transform:uppercase">
       <p class="soft">You&rsquo;ll find it on the driver&rsquo;s side dash (through the windshield) or the driver&rsquo;s door jamb sticker.</p>
       <span id="decodeStatus" class="soft"></span>
+      <p class="count done hidden" id="scanOk"></p>
+      <p class="count soft hidden" id="scanNote"></p>
+      <div id="scanPanel" class="scanpanel hidden">
+        <video id="scanVideo" playsinline muted></video>
+        <p class="soft">Point the camera at the barcode or QR code on the driver&rsquo;s door jamb sticker.</p>
+        <p class="count" id="scanMsg"></p>
+        <div class="srow">
+          <button type="button" class="sbtn" id="scanPhotoBtn">Use a photo instead</button>
+          <button type="button" class="sbtn" id="scanCancel">Cancel</button>
+        </div>
+        <input type="file" id="scanPhotoInput" accept="image/*" capture="environment">
+      </div>
       <div class="row2">
         <div><label for="fYear">Year</label><input type="number" id="fYear" inputmode="numeric" placeholder="e.g. 2019"></div>
         <div><label for="fMiles">Mileage <span class="req">*</span></label><input type="number" id="fMiles" inputmode="numeric" placeholder="e.g. 86400"></div>
@@ -350,6 +372,238 @@ function maybeVinDecode() {
 }
 document.getElementById("fVin").addEventListener("input", maybeVinDecode);
 document.getElementById("fVin").addEventListener("blur", maybeVinDecode);
+
+// ---- VIN scanner ----
+// "Scan VIN" opens an in-page camera panel that reads the barcode or
+// QR code on the door jamb sticker. Nothing loads until the first
+// scan tap: where the browser has a built-in BarcodeDetector it is
+// used directly, and everywhere else a pinned ZXing build loads
+// lazily as the fallback engine. A decoded payload only counts when
+// it yields a 17-character VIN whose check digit validates (the same
+// vinCheckDigitOk the photo gate uses) — anything else is ignored
+// and scanning continues. Every failure path is fail-open: no
+// camera, no library, no scan — the typed field is always there.
+const SCAN_FORMATS = ["code_39", "qr_code", "data_matrix", "code_128", "pdf417"];
+const scan = { active: false, runId: 0, timer: 0, stream: null, controls: null, reader: null, stillReader: null };
+let scannedVinShown = "";
+
+// Pull a VIN out of a scanner payload. Delimited fields are checked
+// first — a field that is exactly a check-digit-valid VIN wins as
+// is. Otherwise the payload is stripped to letters and digits and a
+// 17-character window slides over it; a window only counts over the
+// VIN charset (no I, O or Q — a real VIN never contains them), with
+// a letter/digit mix, and only when its check digit validates, so
+// neighbouring sticker text can't fake a read.
+function extractVinFromPayload(raw) {
+  const text = String(raw || "").toUpperCase();
+  const tokens = text.split(/[^A-Z0-9]+/).filter(Boolean);
+  for (let t = 0; t < tokens.length; t++) {
+    if (tokens[t].length === 17 && /^[A-HJ-NPR-Z0-9]{17}$/.test(tokens[t]) && vinCheckDigitOk(tokens[t])) return tokens[t];
+  }
+  const cleaned = text.replace(/[^A-Z0-9]/g, "");
+  for (let i = 0; i + 17 <= cleaned.length; i++) {
+    const cand = cleaned.slice(i, i + 17);
+    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(cand)) continue;
+    if (!/[A-Z]/.test(cand) || !/[0-9]/.test(cand)) continue;
+    if (vinCheckDigitOk(cand)) return cand;
+  }
+  return "";
+}
+
+// ZXing loads lazily, pinned, only when a scan actually needs it —
+// the same discipline as the Tesseract load in the photo gate.
+let zxingPromise = null;
+function loadZxing() {
+  if (window.ZXingBrowser) return Promise.resolve(window.ZXingBrowser);
+  if (!zxingPromise) {
+    zxingPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js";
+      s.onload = () => (window.ZXingBrowser ? resolve(window.ZXingBrowser) : reject(new Error("Scanner library unavailable")));
+      s.onerror = () => reject(new Error("Scanner library failed to load"));
+      document.head.appendChild(s);
+    });
+  }
+  return zxingPromise;
+}
+
+function setScanMsg(msg) { document.getElementById("scanMsg").textContent = msg; }
+function setScanNote(msg) {
+  const n = document.getElementById("scanNote");
+  n.textContent = msg || "";
+  n.classList.toggle("hidden", !msg);
+}
+
+function stopScanner() {
+  scan.runId++;
+  scan.active = false;
+  if (scan.timer) { clearTimeout(scan.timer); scan.timer = 0; }
+  if (scan.controls) { try { scan.controls.stop(); } catch (e) { /* already stopped */ } scan.controls = null; }
+  if (scan.stream) {
+    scan.stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) { /* already stopped */ } });
+    scan.stream = null;
+  }
+  const v = document.getElementById("scanVideo");
+  if (v) { try { v.pause(); } catch (e) { /* not playing */ } v.srcObject = null; }
+}
+
+function setVinMode(mode) {
+  document.querySelectorAll('input[name="vinMode"]').forEach((r) => { r.checked = (r.value === mode); });
+  if (mode === "scan") {
+    document.getElementById("scanPanel").classList.remove("hidden");
+    startScanner();
+  } else {
+    stopScanner();
+    document.getElementById("scanPanel").classList.add("hidden");
+  }
+}
+
+function acceptScannedVin(vin) {
+  setVinMode("type");
+  const f = document.getElementById("fVin");
+  f.value = vin;
+  scannedVinShown = vin;
+  setScanNote("");
+  const ok = document.getElementById("scanOk");
+  ok.textContent = "VIN scanned ✓";
+  ok.classList.remove("hidden");
+  // The input event is what the auto-decode and the validation
+  // refresh already listen for, so a scanned VIN flows through
+  // exactly the same paths as a typed one.
+  f.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function tryAcceptPayload(raw) {
+  if (!scan.active) return false;
+  const vin = extractVinFromPayload(raw);
+  if (!vin) return false;
+  acceptScannedVin(vin);
+  return true;
+}
+
+function scanNativeLoop(run, detector, video) {
+  let busy = false;
+  const tick = async () => {
+    if (!scan.active || run !== scan.runId) return;
+    if (!busy && video.readyState >= 2) {
+      busy = true;
+      try {
+        const codes = await detector.detect(video);
+        for (let i = 0; i < codes.length; i++) {
+          if (tryAcceptPayload(codes[i].rawValue)) return;
+        }
+      } catch (e) { /* frame not decodable yet */ }
+      busy = false;
+    }
+    if (scan.active && run === scan.runId) scan.timer = setTimeout(tick, 250);
+  };
+  tick();
+}
+
+async function startScanner() {
+  const run = ++scan.runId;
+  scan.active = true;
+  setScanNote("");
+  setScanMsg("Opening camera…");
+  const video = document.getElementById("scanVideo");
+  if ("BarcodeDetector" in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    try {
+      const detector = new window.BarcodeDetector({ formats: SCAN_FORMATS });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      if (run !== scan.runId) { stream.getTracks().forEach((t) => t.stop()); return; }
+      scan.stream = stream;
+      video.srcObject = stream;
+      await video.play();
+      setScanMsg("Looking for a barcode…");
+      scanNativeLoop(run, detector, video);
+      return;
+    } catch (e) {
+      // No usable native path (an unsupported format in the list, a
+      // denied camera, a detector hiccup) — clean up, then fall
+      // through to the ZXing engine unless the panel was closed.
+      if (scan.stream) {
+        scan.stream.getTracks().forEach((t) => { try { t.stop(); } catch (err) { /* already stopped */ } });
+        scan.stream = null;
+      }
+      video.srcObject = null;
+      if (run !== scan.runId) return;
+    }
+  }
+  try {
+    const ZX = await loadZxing();
+    if (run !== scan.runId) return;
+    if (!scan.reader) scan.reader = new ZX.BrowserMultiFormatReader();
+    setScanMsg("Looking for a barcode…");
+    scan.controls = await scan.reader.decodeFromVideoDevice(undefined, video, (result) => {
+      if (result && scan.active) tryAcceptPayload(result.getText());
+    });
+    if (run !== scan.runId) stopScanner();
+  } catch (e) {
+    if (run === scan.runId) scannerUnavailable();
+  }
+}
+
+// The camera can't be used on this device/browser at all: say so,
+// return to manual entry, and point at the VIN plate photo below —
+// the photo gate reads the VIN from that photo anyway.
+function scannerUnavailable() {
+  setVinMode("type");
+  setScanNote("Camera isn't available here — type the VIN in above, or add the VIN plate photo below and we'll check it from that.");
+}
+
+// Still-photo scanning, for devices where a live camera view is
+// awkward: one captured/picked image through the same two engines,
+// then the same check-digit acceptance as a live read.
+async function scanPhotoFile(file) {
+  stopScanner();
+  setScanMsg("Reading that photo…");
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url; });
+    let raw = "";
+    if ("BarcodeDetector" in window) {
+      try {
+        const detector = new window.BarcodeDetector({ formats: SCAN_FORMATS });
+        const codes = await detector.detect(img);
+        if (codes.length) raw = codes[0].rawValue || "";
+      } catch (e) { /* fall through to ZXing */ }
+    }
+    if (!raw) {
+      const ZX = await loadZxing();
+      if (!scan.stillReader) scan.stillReader = new ZX.BrowserMultiFormatReader();
+      const result = await scan.stillReader.decodeFromImageElement(img);
+      raw = result.getText();
+    }
+    const vin = extractVinFromPayload(raw);
+    if (vin) { acceptScannedVin(vin); return; }
+    setScanMsg("No VIN barcode found in that photo — try another photo, or Cancel and type it in.");
+  } catch (e) {
+    setScanMsg("Couldn't read a barcode in that photo — try another photo, or Cancel and type it in.");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+document.querySelectorAll('input[name="vinMode"]').forEach((r) => {
+  r.addEventListener("change", () => { if (r.checked) setVinMode(r.value); });
+});
+document.getElementById("scanCancel").onclick = () => setVinMode("type");
+document.getElementById("scanPhotoBtn").onclick = () => document.getElementById("scanPhotoInput").click();
+document.getElementById("scanPhotoInput").onchange = (e) => {
+  const f = (e.target.files || [])[0];
+  e.target.value = "";
+  if (f) scanPhotoFile(f);
+};
+// The "VIN scanned ✓" note belongs to the scanned value only — a
+// manual edit to anything else takes it away again.
+document.getElementById("fVin").addEventListener("input", () => {
+  const v = document.getElementById("fVin").value.trim().toUpperCase();
+  if (scannedVinShown && v !== scannedVinShown) {
+    scannedVinShown = "";
+    document.getElementById("scanOk").classList.add("hidden");
+  }
+});
 
 // ---- photo smart gate ----
 // The two required photos get a client-side once-over: the VIN plate
