@@ -383,8 +383,27 @@ document.getElementById("fVin").addEventListener("blur", maybeVinDecode);
 // vinCheckDigitOk the photo gate uses) — anything else is ignored
 // and scanning continues. Every failure path is fail-open: no
 // camera, no library, no scan — the typed field is always there.
+//
+// Field fix (2026-10-30): the first version never decoded a real
+// door jamb sticker on an iPhone. The sticker's Code 39 bars run
+// VERTICAL in a portrait camera frame, and a 1D reader only scans
+// horizontal rows, so every frame came back "not found" — silently,
+// forever. The loops below therefore draw each camera frame to a
+// canvas at 0°, 90° and 270° in turn (either rotation lays the bars
+// horizontal), the camera is asked for the highest resolution it
+// has, and ZXing runs with TRY_HARDER set. If no code has landed
+// after ~10 seconds, the scanner also reads the PRINTED VIN beside
+// the barcode with the photo gate's OCR, and keeps retrying that
+// read while the panel stays open — a printed-only dash plate gets
+// the same chance. Real decode errors are counted and surfaced in
+// the panel instead of being swallowed like a slow scan.
 const SCAN_FORMATS = ["code_39", "qr_code", "data_matrix", "code_128", "pdf417"];
-const scan = { active: false, runId: 0, timer: 0, stream: null, controls: null, reader: null, stillReader: null };
+const SCAN_VIDEO = { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } };
+const SCAN_ROTATIONS = [0, 90, 270];
+const SCAN_OCR_FIRST_MS = 10000;
+const SCAN_OCR_RETRY_MS = 15000;
+const SCAN_ERR_KICK = 5;
+const scan = { active: false, runId: 0, timer: 0, stream: null, reader: null, stillReader: null, canvas: null, startedAt: 0, lastOcrAt: 0, ocrBusy: false, errStreak: 0 };
 let scannedVinShown = "";
 
 // Pull a VIN out of a scanner payload. Delimited fields are checked
@@ -410,6 +429,39 @@ function extractVinFromPayload(raw) {
   return "";
 }
 
+// The printed-VIN read needs a stricter net than a barcode payload:
+// OCR text is long, and across hundreds of sliding windows a random
+// window can pass the check digit by luck (the sticker's own
+// "GVWR 1790KG…" boilerplate does exactly that). So OCR candidates
+// must be whole tokens — the number as printed stands alone — with
+// the usual I/O/Q misreads normalized, and a token printed right
+// after a "VIN" label wins over any stray token.
+function extractVinFromOcrText(raw) {
+  const text = String(raw || "").toUpperCase();
+  const tokens = text.split(/[^A-Z0-9]+/).filter(Boolean);
+  const ok = (t) => {
+    const v = normalizeVin(t || "");
+    if (v.length !== 17 || !/^[A-HJ-NPR-Z0-9]{17}$/.test(v)) return "";
+    if (!/[A-Z]/.test(v) || !/[0-9]/.test(v)) return "";
+    return vinCheckDigitOk(v) ? v : "";
+  };
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === "VIN") { const v = ok(tokens[i + 1]); if (v) return v; }
+    if (tokens[i] === "V" && tokens[i + 1] === "I" && tokens[i + 2] === "N") { const v = ok(tokens[i + 3]); if (v) return v; }
+  }
+  for (let i = 0; i < tokens.length; i++) { const v = ok(tokens[i]); if (v) return v; }
+  return "";
+}
+
+// When does a scan session earn an OCR pass? Pure timing, kept
+// separate so it can be harness-tested: the first read ~10s in,
+// then at most one per ~15s, never while a read is already running.
+function scanOcrDue(s, now) {
+  if (!s.active || s.ocrBusy || !s.startedAt) return false;
+  if (!s.lastOcrAt) return now - s.startedAt >= SCAN_OCR_FIRST_MS;
+  return now - s.lastOcrAt >= SCAN_OCR_RETRY_MS;
+}
+
 // ZXing loads lazily, pinned, only when a scan actually needs it —
 // the same discipline as the Tesseract load in the photo gate.
 let zxingPromise = null;
@@ -427,6 +479,22 @@ function loadZxing() {
   return zxingPromise;
 }
 
+// One configured reader for both ZXing jobs (live loop and still
+// photos). The hints map is keyed by DecodeHintType's numeric
+// values — POSSIBLE_FORMATS is 2 and TRY_HARDER is 3 in the
+// @zxing/library the pinned bundle embeds; the bundle exports
+// BarcodeFormat but not DecodeHintType itself. TRY_HARDER is the
+// point: without it the reader takes the fast path and gives up
+// on marginal frames.
+function makeZxingReader(ZX) {
+  const byName = { code_39: "CODE_39", qr_code: "QR_CODE", data_matrix: "DATA_MATRIX", code_128: "CODE_128", pdf417: "PDF_417" };
+  const formats = SCAN_FORMATS.map((f) => ZX.BarcodeFormat[byName[f]]).filter((f) => typeof f === "number");
+  const hints = new Map();
+  if (formats.length) hints.set(2, formats);
+  hints.set(3, true);
+  return new ZX.BrowserMultiFormatReader(hints);
+}
+
 function setScanMsg(msg) { document.getElementById("scanMsg").textContent = msg; }
 function setScanNote(msg) {
   const n = document.getElementById("scanNote");
@@ -437,8 +505,11 @@ function setScanNote(msg) {
 function stopScanner() {
   scan.runId++;
   scan.active = false;
+  scan.startedAt = 0;
+  scan.lastOcrAt = 0;
+  scan.ocrBusy = false;
+  scan.errStreak = 0;
   if (scan.timer) { clearTimeout(scan.timer); scan.timer = 0; }
-  if (scan.controls) { try { scan.controls.stop(); } catch (e) { /* already stopped */ } scan.controls = null; }
   if (scan.stream) {
     scan.stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) { /* already stopped */ } });
     scan.stream = null;
@@ -481,18 +552,92 @@ function tryAcceptPayload(raw) {
   return true;
 }
 
+// Draw the live camera frame onto the work canvas, optionally
+// rotated, capped at the same 1600px the photo pipeline uses. The
+// 90°/270° passes are what make a door jamb barcode readable at
+// all: its bars run vertical in the frame, and rotating the draw
+// lays them horizontal for the 1D reader.
+function scanFrameCanvas(video, deg) {
+  const vw = video.videoWidth || 0;
+  const vh = video.videoHeight || 0;
+  if (!vw || !vh) return null;
+  const scale = Math.min(1, 1600 / Math.max(vw, vh));
+  const w = Math.max(1, Math.round(vw * scale));
+  const h = Math.max(1, Math.round(vh * scale));
+  const swap = deg === 90 || deg === 270;
+  const c = scan.canvas || (scan.canvas = document.createElement("canvas"));
+  c.width = swap ? h : w;
+  c.height = swap ? w : h;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  if (deg === 90) { ctx.translate(c.width, 0); ctx.rotate(Math.PI / 2); }
+  else if (deg === 270) { ctx.translate(0, c.height); ctx.rotate(-Math.PI / 2); }
+  ctx.drawImage(video, 0, 0, w, h);
+  return c;
+}
+
+// A ZXing "not found" arrives as a rejection carrying this message
+// (the class name itself is minified away in the pinned bundle).
+// Anything else is a real engine error.
+function isScanNotFound(e) {
+  return !!e && typeof e.message === "string" && e.message.indexOf("No MultiFormat Readers were able to detect") !== -1;
+}
+
+// Real engine trouble (not the routine not-found) used to be
+// swallowed, which made a broken scanner look exactly like a slow
+// one. Count it instead: a streak of it says so in the panel and
+// jumps straight to the printed-VIN read.
+function noteScanError(run, video) {
+  if (!scan.active || run !== scan.runId) return;
+  scan.errStreak++;
+  if (scan.errStreak >= SCAN_ERR_KICK) {
+    scan.errStreak = 0;
+    setScanMsg("The scanner is having trouble — reading the printed VIN instead…");
+    scanOcrPass(run, video);
+  }
+}
+
+// The OCR fallback: read the printed VIN off the live frame with
+// the photo gate's OCR (same loader, same shrink pipeline), at the
+// same rotations the barcode passes use, and put whatever comes
+// out through the strict OCR extraction. Fail-soft throughout — a
+// failed read just hands the panel back to the barcode loop.
+async function scanOcrPass(run, video) {
+  if (!scan.active || run !== scan.runId || scan.ocrBusy) return;
+  scan.ocrBusy = true;
+  scan.lastOcrAt = Date.now();
+  setScanMsg("Reading the printed VIN…");
+  try {
+    for (let r = 0; r < SCAN_ROTATIONS.length; r++) {
+      if (!scan.active || run !== scan.runId) break;
+      const c = scanFrameCanvas(video, SCAN_ROTATIONS[r]);
+      if (!c) break;
+      const blob = await new Promise((resolve) => { try { c.toBlob(resolve, "image/jpeg", 0.92); } catch (e) { resolve(null); } });
+      if (!blob) continue;
+      const text = await withTimeout(ocrPhotoText(blob), 45000);
+      if (!scan.active || run !== scan.runId) break;
+      const vin = extractVinFromOcrText(text);
+      if (vin) { acceptScannedVin(vin); break; }
+    }
+  } catch (e) { /* a failed read just returns to barcode scanning */ }
+  scan.ocrBusy = false;
+  if (scan.active && run === scan.runId) setScanMsg("Looking for a barcode…");
+}
+
 function scanNativeLoop(run, detector, video) {
   let busy = false;
   const tick = async () => {
     if (!scan.active || run !== scan.runId) return;
+    if (scanOcrDue(scan, Date.now())) scanOcrPass(run, video);
     if (!busy && video.readyState >= 2) {
       busy = true;
       try {
         const codes = await detector.detect(video);
+        scan.errStreak = 0;
         for (let i = 0; i < codes.length; i++) {
           if (tryAcceptPayload(codes[i].rawValue)) return;
         }
-      } catch (e) { /* frame not decodable yet */ }
+      } catch (e) { noteScanError(run, video); }
       busy = false;
     }
     if (scan.active && run === scan.runId) scan.timer = setTimeout(tick, 250);
@@ -500,44 +645,73 @@ function scanNativeLoop(run, detector, video) {
   tick();
 }
 
+// The ZXing engine, driven by hand instead of decodeFromVideoDevice
+// so every frame can be tried at the rotations a door jamb sticker
+// needs. Attempts cycle 0° → 90° → 270°; a not-found just moves on
+// to the next attempt, a real error is counted by noteScanError,
+// and the OCR fallback clock runs alongside.
+function scanZxingLoop(run, reader, video) {
+  let busy = false;
+  let rotIdx = 0;
+  const tick = async () => {
+    if (!scan.active || run !== scan.runId) return;
+    if (scanOcrDue(scan, Date.now())) scanOcrPass(run, video);
+    if (!busy && video.readyState >= 2 && video.videoWidth) {
+      busy = true;
+      const deg = SCAN_ROTATIONS[rotIdx % SCAN_ROTATIONS.length];
+      rotIdx++;
+      try {
+        const c = scanFrameCanvas(video, deg);
+        if (c) {
+          const result = await reader.decodeFromCanvas(c);
+          scan.errStreak = 0;
+          if (result && tryAcceptPayload(result.getText())) return;
+        }
+      } catch (e) {
+        if (isScanNotFound(e)) scan.errStreak = 0;
+        else noteScanError(run, video);
+      }
+      busy = false;
+    }
+    if (scan.active && run === scan.runId) scan.timer = setTimeout(tick, 300);
+  };
+  tick();
+}
+
 async function startScanner() {
   const run = ++scan.runId;
   scan.active = true;
+  scan.startedAt = Date.now();
+  scan.lastOcrAt = 0;
+  scan.ocrBusy = false;
+  scan.errStreak = 0;
   setScanNote("");
   setScanMsg("Opening camera…");
   const video = document.getElementById("scanVideo");
-  if ("BarcodeDetector" in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scannerUnavailable(); return; }
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: SCAN_VIDEO, audio: false });
+  } catch (e) { stream = null; }
+  if (run !== scan.runId) { if (stream) stream.getTracks().forEach((t) => t.stop()); return; }
+  if (!stream) { scannerUnavailable(); return; }
+  scan.stream = stream;
+  video.srcObject = stream;
+  try { await video.play(); } catch (e) { /* some browsers settle play() late; the loops check readyState */ }
+  if (run !== scan.runId) return;
+  setScanMsg("Looking for a barcode…");
+  if ("BarcodeDetector" in window) {
     try {
       const detector = new window.BarcodeDetector({ formats: SCAN_FORMATS });
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-      if (run !== scan.runId) { stream.getTracks().forEach((t) => t.stop()); return; }
-      scan.stream = stream;
-      video.srcObject = stream;
-      await video.play();
-      setScanMsg("Looking for a barcode…");
       scanNativeLoop(run, detector, video);
       return;
-    } catch (e) {
-      // No usable native path (an unsupported format in the list, a
-      // denied camera, a detector hiccup) — clean up, then fall
-      // through to the ZXing engine unless the panel was closed.
-      if (scan.stream) {
-        scan.stream.getTracks().forEach((t) => { try { t.stop(); } catch (err) { /* already stopped */ } });
-        scan.stream = null;
-      }
-      video.srcObject = null;
-      if (run !== scan.runId) return;
-    }
+    } catch (e) { /* the detector won't start here — ZXing takes the same stream */ }
   }
   try {
     const ZX = await loadZxing();
     if (run !== scan.runId) return;
-    if (!scan.reader) scan.reader = new ZX.BrowserMultiFormatReader();
-    setScanMsg("Looking for a barcode…");
-    scan.controls = await scan.reader.decodeFromVideoDevice(undefined, video, (result) => {
-      if (result && scan.active) tryAcceptPayload(result.getText());
-    });
-    if (run !== scan.runId) stopScanner();
+    if (!scan.reader) scan.reader = makeZxingReader(ZX);
+    scanZxingLoop(run, scan.reader, video);
   } catch (e) {
     if (run === scan.runId) scannerUnavailable();
   }
@@ -553,7 +727,11 @@ function scannerUnavailable() {
 
 // Still-photo scanning, for devices where a live camera view is
 // awkward: one captured/picked image through the same two engines,
-// then the same check-digit acceptance as a live read.
+// then the same check-digit acceptance as a live read. A photo of
+// a door jamb sticker holds the barcode sideways as often as not,
+// so ZXing tries the image at each rotation too — and if no code
+// reads at any angle, the printed number gets an OCR read before
+// the photo is given up on.
 async function scanPhotoFile(file) {
   stopScanner();
   setScanMsg("Reading that photo…");
@@ -571,15 +749,37 @@ async function scanPhotoFile(file) {
     }
     if (!raw) {
       const ZX = await loadZxing();
-      if (!scan.stillReader) scan.stillReader = new ZX.BrowserMultiFormatReader();
-      const result = await scan.stillReader.decodeFromImageElement(img);
-      raw = result.getText();
+      if (!scan.stillReader) scan.stillReader = makeZxingReader(ZX);
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+      const iw = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+      const ih = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+      for (let r = 0; r < SCAN_ROTATIONS.length && !raw; r++) {
+        const deg = SCAN_ROTATIONS[r];
+        const swap = deg === 90 || deg === 270;
+        try {
+          const c = document.createElement("canvas");
+          c.width = swap ? ih : iw;
+          c.height = swap ? iw : ih;
+          const ctx = c.getContext("2d");
+          if (!ctx) break;
+          if (deg === 90) { ctx.translate(c.width, 0); ctx.rotate(Math.PI / 2); }
+          else if (deg === 270) { ctx.translate(0, c.height); ctx.rotate(-Math.PI / 2); }
+          ctx.drawImage(img, 0, 0, iw, ih);
+          const result = await scan.stillReader.decodeFromCanvas(c);
+          if (result) raw = result.getText() || "";
+        } catch (e) { /* not found at this rotation — try the next */ }
+      }
     }
     const vin = extractVinFromPayload(raw);
     if (vin) { acceptScannedVin(vin); return; }
-    setScanMsg("No VIN barcode found in that photo — try another photo, or Cancel and type it in.");
+    try {
+      const text = await withTimeout(ocrPhotoText(file), 45000);
+      const ocrVin = extractVinFromOcrText(text);
+      if (ocrVin) { acceptScannedVin(ocrVin); return; }
+    } catch (e) { /* OCR failing just means the photo yielded no VIN */ }
+    setScanMsg("No VIN found in that photo — try another photo, or Cancel and type it in.");
   } catch (e) {
-    setScanMsg("Couldn't read a barcode in that photo — try another photo, or Cancel and type it in.");
+    setScanMsg("Couldn't read that photo — try another one, or Cancel and type it in.");
   } finally {
     URL.revokeObjectURL(url);
   }
