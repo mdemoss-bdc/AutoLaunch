@@ -1037,9 +1037,14 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         <div class="glass-card rounded-3xl p-8">
 
-          <h1 class="text-3xl font-black text-slate-900">
-            Welcome to AutoLaunch
-          </h1>
+          <div class="flex items-start">
+            <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
+              <i class="fa-solid fa-bars"></i>
+            </button>
+            <h1 class="text-3xl font-black text-slate-900">
+              Welcome to AutoLaunch
+            </h1>
+          </div>
 
           <p class="text-slate-500 mt-2">
             Let's connect your inventory and get your vehicles ready for posting.
@@ -1223,6 +1228,9 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
   <div class="max-w-6xl mx-auto space-y-6">
 
     <div class="flex items-start justify-between gap-4 flex-wrap">
+      <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
+        <i class="fa-solid fa-bars"></i>
+      </button>
       <div>
         <h1 class="text-3xl font-black text-slate-900">Customer Wishlist</h1>
         <p class="text-slate-500 mt-1">Tell AutoLaunch what your customers are hunting for — it watches every arrival on your lot and flags the matches. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('wishlist')">How the Wishlist works →</span></p>
@@ -1258,9 +1266,14 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 <!-- ============================================================================= -->
 <div id="tradePage" class="hidden flex-1 overflow-y-auto p-8">
   <div class="max-w-5xl mx-auto space-y-6">
-    <div>
-      <h2 class="text-2xl font-extrabold text-slate-900">Trade Appraisals</h2>
-      <p class="text-slate-500 mt-1">Send a customer your link — they answer 10 condition questions and upload photos of their trade, and the whole packet lands here for the desk. Every appraisal is stamped <span class="font-semibold text-slate-700">Fair</span> condition. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('trade')">How Trade Appraisals works →</span></p>
+    <div class="flex items-start">
+      <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div>
+        <h2 class="text-2xl font-extrabold text-slate-900">Trade Appraisals</h2>
+        <p class="text-slate-500 mt-1">Send a customer your link — they answer 10 condition questions and upload photos of their trade, and the whole packet lands here for the desk. Every appraisal is stamped <span class="font-semibold text-slate-700">Fair</span> condition. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('trade')">How Trade Appraisals works →</span></p>
+      </div>
     </div>
     <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
       <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-link text-blue-600"></i> Your trade-in link</h3>
@@ -1279,9 +1292,14 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
 <div id="dealershipPage" class="hidden flex-1 overflow-y-auto p-8">
   <div class="max-w-5xl mx-auto space-y-6">
-    <div>
-      <h2 class="text-2xl font-extrabold text-slate-900">Dealership</h2>
-      <p class="text-slate-500 mt-1">Your store's AutoLaunch account — seats, member logins, and who manages them.</p>
+    <div class="flex items-start">
+      <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div>
+        <h2 class="text-2xl font-extrabold text-slate-900">Dealership</h2>
+        <p class="text-slate-500 mt-1">Your store's AutoLaunch account — seats, member logins, and who manages them.</p>
+      </div>
     </div>
 
     <!-- CREATE: owners who don't belong to a dealership yet -->
@@ -1407,6 +1425,9 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
   <div class="max-w-6xl mx-auto space-y-6">
 
     <div class="flex items-start justify-between gap-4 flex-wrap">
+      <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
+        <i class="fa-solid fa-bars"></i>
+      </button>
       <div>
         <h1 class="text-3xl font-black text-slate-900">Prospects</h1>
         <p class="text-slate-500 mt-1">Everyone who reached out about a car — and where they are in the buying process. Not a CRM. Just the list, kept current. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('prospects')">How Prospects works →</span> <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('messages')">Get your messages flowing →</span></p>
@@ -1504,9 +1525,14 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 <div id="closerPage" class="hidden flex-1 overflow-y-auto p-8">
   <div class="max-w-6xl mx-auto space-y-6">
 
-    <div>
-      <h1 class="text-3xl font-black text-slate-900">Luca <span class="text-slate-400 font-bold text-xl">· AI Assistant</span></h1>
-      <p class="text-slate-500 mt-1">Luca answers your buyer chats the way <em>you</em> would. He learns from your corrections, follows the instructions you give him, and hands the chat back the moment it needs a human. Set him up below. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('luca')">How Luca works →</span> <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('messages')">Get your messages flowing →</span></p>
+    <div class="flex items-start">
+      <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div>
+        <h1 class="text-3xl font-black text-slate-900">Luca <span class="text-slate-400 font-bold text-xl">· AI Assistant</span></h1>
+        <p class="text-slate-500 mt-1">Luca answers your buyer chats the way <em>you</em> would. He learns from your corrections, follows the instructions you give him, and hands the chat back the moment it needs a human. Set him up below. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('luca')">How Luca works →</span> <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('messages')">Get your messages flowing →</span></p>
+      </div>
     </div>
 
     <div class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-900 leading-relaxed">
@@ -1699,9 +1725,14 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 <div id="extensionPage" class="hidden flex-1 overflow-y-auto p-8">
   <div class="max-w-6xl mx-auto space-y-6">
 
-    <div>
-      <h1 class="text-3xl font-black text-slate-900">Chrome Extension</h1>
-      <p class="text-slate-500 mt-1">The AutoLaunch posting helper runs in your Chrome and posts your queued cars to Facebook Marketplace for you. This page checks — live, in this tab — whether the helper is actually here and ready. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('extension')">How the helper works →</span></p>
+    <div class="flex items-start">
+      <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div>
+        <h1 class="text-3xl font-black text-slate-900">Chrome Extension</h1>
+        <p class="text-slate-500 mt-1">The AutoLaunch posting helper runs in your Chrome and posts your queued cars to Facebook Marketplace for you. This page checks — live, in this tab — whether the helper is actually here and ready. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('extension')">How the helper works →</span></p>
+      </div>
     </div>
 
     <!-- LIVE STATUS (real bridge handshake: AUTOLAUNCH_EXT_PING / PONG) -->
