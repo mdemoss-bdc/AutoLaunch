@@ -91,7 +91,7 @@
 
     <div class="card">
       <h2>Your vehicle</h2>
-      <label for="fVin">VIN <span class="opt">(optional — but it helps us value it faster)</span></label>
+      <label for="fVin">VIN <span class="req">*</span></label>
       <input type="text" id="fVin" maxlength="17" placeholder="17-character VIN" style="text-transform:uppercase">
       <p class="soft">You&rsquo;ll find it on the driver&rsquo;s side dash (through the windshield) or the driver&rsquo;s door jamb sticker. If you add it, we&rsquo;ll fill in the vehicle details for you.</p>
       <button type="button" id="decodeBtn" class="pick" style="background:var(--field);border:1px solid var(--edge);color:var(--h);padding:10px 18px;border-radius:12px;font-weight:700;cursor:pointer">Decode VIN</button>
@@ -537,6 +537,7 @@ function isValid() {
   return token.length >= 16
     && document.getElementById("fName").value.trim().length > 1
     && document.getElementById("fContact").value.trim().length > 3
+    && document.getElementById("fVin").value.trim().length > 0
     && parseInt(document.getElementById("fMiles").value, 10) > 0
     && allAnswered()
     && photos.vin && photos.dash && photos.gallery.length >= 6
@@ -556,6 +557,7 @@ function firstUnmetReason() {
   if (photoGate.miles.verdict === "mismatch") return MILES_MISMATCH_MSG;
   if (document.getElementById("fName").value.trim().length <= 1) return "Enter your name to continue";
   if (document.getElementById("fContact").value.trim().length <= 3) return "Enter your phone or email to continue";
+  if (document.getElementById("fVin").value.trim().length === 0) return "Enter the VIN to continue";
   if (!(parseInt(document.getElementById("fMiles").value, 10) > 0)) return "Enter the mileage to continue";
   for (let i = 0; i < QUESTIONS.length; i++) {
     if (!document.querySelector('input[name="q' + (i + 1) + '"]:checked')) return "Answer question " + (i + 1) + " to continue";
