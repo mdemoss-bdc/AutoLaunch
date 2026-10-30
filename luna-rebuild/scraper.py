@@ -762,6 +762,199 @@ def push_batch_to_supabase(records: List[dict]) -> int:
         return 0
 
 # ==============================================================================
+# ==================== CARFAX REPORT LINK CAPTURE (2026-10-29) =================
+# ==============================================================================
+# Phase 2 of Matthew's CARFAX ask (the shadow trial in scraper_next
+# proved the shape first: 938 of his 982 active Used/CPO cars carry a
+# published report — 95.5%). Dealer VDPs carry a "Show Me the CARFAX"
+# badge in the car's benefits block whose anchor opens the free CARFAX
+# report the dealer publishes for that car (on the Moses/DealerOn
+# template: <a class="reportImg" data-loc="carfax"
+# href="https://www.carfax.com/vehiclehistory/ar20/<token>">, verified
+# in the raw served HTML — no JS execution needed).
+#
+# * extract_carfax_url() is a pure function over one VDP's raw HTML.
+#   Scoping mirrors the price_status rule below: script/style are
+#   stripped first (the platform's CSS mentions the cross-sell classes
+#   long before the real section), then the page is cut at the
+#   "Vehicles You Might Like" cross-sell — a cross-sell car's badge
+#   must never land on the host car.
+# * Validation: a URL that carries a parseable VIN (a vin= parameter
+#   or a path segment that is exactly a VIN) must name THIS car, or
+#   the link is refused and filed in scraper_uncertain — a wrong-car
+#   report link in a listing is the critical hazard. The DealerOn
+#   ar20 token carries no parseable VIN; there the section scoping +
+#   the report path shape are the guards.
+# * WRITE RULE: car["carfax_url"] is set ONLY on a verified find. A
+#   no-find never sets the key, so the upsert in push_batch_to_supabase
+#   (which only SETs the keys a record carries) can never erase a
+#   previously captured link. Used / Certified cars only — a new car's
+#   report is meaningless. Fully fail-open: a CARFAX failure can never
+#   fail the car's sync.
+
+_CARFAX_CROSS_SELL_MARKERS = (
+    "vehicles you might like",
+    "you may also like",
+    "similar vehicles",
+    "recommended vehicles",
+    "similar-vehicles",
+)
+_CARFAX_ANCHOR_RE = re.compile(r"<a\b[^>]*>.*?</a>", re.S | re.I)
+_CARFAX_HREF_RE = re.compile(r"""href\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
+_CARFAX_VIN_TOKEN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
+_CARFAX_RUN_ID = "prod-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _carfax_main_section(html: str) -> str:
+    """The car's own VDP region: script/style stripped, cut at the
+    cross-sell — the same scoping the price_status rule uses."""
+    stripped = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
+    low = stripped.lower()
+    cut = len(stripped)
+    for marker in _CARFAX_CROSS_SELL_MARKERS:
+        idx = low.find(marker)
+        if 0 <= idx < cut:
+            cut = idx
+    return stripped[:cut]
+
+
+def _carfax_url_vin(url: str):
+    """A VIN the URL itself asserts, or None: the vin= query parameter,
+    or a path segment that is exactly a 17-char VIN. An opaque report
+    token (DealerOn's ar20) yields None — no assertion to check."""
+    try:
+        parts = urlparse(url)
+    except Exception:
+        return None
+    for pair in (parts.query or "").split("&"):
+        if pair.lower().startswith("vin="):
+            val = pair[4:].strip().upper()
+            if _CARFAX_VIN_TOKEN_RE.match(val):
+                return val
+    for seg in (parts.path or "").split("/"):
+        seg = seg.strip().upper()
+        if _CARFAX_VIN_TOKEN_RE.match(seg):
+            return seg
+    return None
+
+
+def extract_carfax_url(html: str, vin: str, page_url: str = "") -> dict:
+    """Find this car's CARFAX report link in its VDP HTML.
+
+    Returns {url, form, badge_seen, reject, evidence}:
+    * form: "direct" (carfax.com report URL), "redirector" (a URL
+      naming carfax off-host), "dealer_page" (dealer-hosted report
+      path), "js_only" (badge present, no usable href), or None.
+    * reject: a human reason when a badge link was REFUSED (the
+      caller files it in scraper_uncertain); url is None then.
+    """
+    out = {"url": None, "form": None, "badge_seen": False,
+           "reject": None, "evidence": ""}
+    if not html:
+        return out
+    main = _carfax_main_section(html)
+    origin = ""
+    if page_url:
+        p = urlparse(page_url)
+        if p.scheme and p.netloc:
+            origin = f"{p.scheme}://{p.netloc}"
+
+    candidates = []
+    for m in _CARFAX_ANCHOR_RE.finditer(main):
+        block = m.group(0)
+        if "carfax" not in block.lower():
+            continue
+        out["badge_seen"] = True
+        open_tag = block[:block.find(">") + 1] if ">" in block else block
+        hm = _CARFAX_HREF_RE.search(open_tag)
+        href = ""
+        if hm:
+            href = (hm.group(1) or hm.group(2) or "").strip()
+        if href and not href.lower().startswith(("javascript:", "#", "mailto:")):
+            candidates.append(href)
+    if not out["badge_seen"]:
+        # Badge artwork can exist without any anchor wrapping it.
+        if re.search(r"partnerstatic\.carfax\.com|data-loc=[\"']carfax[\"']", main, re.I):
+            out["badge_seen"] = True
+    if not out["badge_seen"]:
+        return out
+    if not candidates:
+        out["form"] = "js_only"
+        out["evidence"] = "CARFAX badge present but no usable anchor href (JS-only)"
+        return out
+
+    vin_u = (vin or "").strip().upper()
+    first_bad = None
+    for raw in candidates:
+        href = raw.replace("&amp;", "&")
+        if href.startswith("//"):
+            href = "https:" + href
+        elif href.startswith("/") and origin:
+            href = origin + href
+        if not href.startswith("http"):
+            continue
+        host = (urlparse(href).netloc or "").lower()
+        path = (urlparse(href).path or "").lower()
+        if host.endswith("carfax.com"):
+            form = "direct"
+            is_report = "/vehiclehistory/" in path
+        elif "carfax" in href.lower():
+            form, is_report = "redirector", True
+        elif any(t in path for t in ("vehiclehistory", "vehicle-history",
+                                     "history-report", "carfax")):
+            form, is_report = "dealer_page", True
+        else:
+            form, is_report = None, False
+        if not is_report:
+            if first_bad is None:
+                first_bad = (href, "badge link does not resolve to a report URL")
+            continue
+        asserted = _carfax_url_vin(href)
+        if asserted and vin_u and asserted != vin_u:
+            if first_bad is None:
+                first_bad = (href, f"report URL names VIN {asserted}, not this car's VIN {vin_u}")
+            continue
+        out["url"] = href
+        out["form"] = form
+        out["evidence"] = f"form={form}; href={href[:180]}"
+        return out
+    if first_bad:
+        out["reject"] = first_bad[1]
+        out["evidence"] = f"refused href={first_bad[0][:180]}"
+    elif candidates:
+        out["form"] = "js_only"
+        out["evidence"] = "CARFAX anchors present but none carried an http(s) href"
+    return out
+
+
+def _carfax_in_scope(car: dict) -> bool:
+    """Used / Certified Pre-Owned only — the trial's scope rule."""
+    cond = (car.get("condition") or "").strip().lower()
+    return cond.startswith("used") or cond.startswith("certified")
+
+
+def _log_carfax_reject(car: dict, result: dict):
+    """File a refused CARFAX link in scraper_uncertain (the review
+    list) with the evidence, fail-open like every other tally here:
+    a logging failure is a printed warning, never a sync failure."""
+    try:
+        detail_url = car.get("detail_url") or ""
+        host = urlparse(detail_url).netloc.lower() if detail_url else ""
+        db.table("scraper_uncertain").insert({
+            "run_id": _CARFAX_RUN_ID,
+            "user_id": car.get("user_id"),
+            "site_key": (host + "|" + (car.get("condition") or "")) if host else None,
+            "vin": car.get("vin"),
+            "field": "carfax_url",
+            "found_value": (result.get("evidence") or "")[:180],
+            "reason": f"CARFAX link rejected: {result.get('reject')}",
+            "evidence": (result.get("evidence") or "")[:500],
+        }).execute()
+    except Exception as e:
+        print(f"[!] CARFAX uncertain-log warning (non-fatal): {e}")
+
+
+# ==============================================================================
 # ==================== VDP ENRICHMENT (photos + final price) ===================
 # ==============================================================================
 # SRP cards only ever expose ONE photo per vehicle and (on DealerOn) a price
@@ -1189,6 +1382,22 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
         # dealer's headline figure and always wins.
         if d.get("mileage") is not None and car.get("mileage") is None:
             car["mileage"] = d["mileage"]
+        # CARFAX report link (2026-10-29, phase 2): this VDP's own
+        # "Show Me the CARFAX" badge, for Used / Certified cars only.
+        # The key is set ONLY on a verified find — a no-find leaves it
+        # unset, so the push upsert can never erase a link a previous
+        # sync captured. A refused link (a report naming a different
+        # VIN) goes to the scraper_uncertain review list. Fail-open:
+        # nothing in this block may fail the car's sync.
+        try:
+            if _carfax_in_scope(car):
+                cfx = extract_carfax_url(html, car.get("vin") or "", detail_url)
+                if cfx.get("url"):
+                    car["carfax_url"] = cfx["url"]
+                elif cfx.get("reject"):
+                    _log_carfax_reject(car, cfx)
+        except Exception as e:
+            print(f"[!] CARFAX capture warning (non-fatal): {e}")
 
     await asyncio.gather(*(one(c) for c in cars), return_exceptions=True)
     return enriched

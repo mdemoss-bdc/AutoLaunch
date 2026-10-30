@@ -504,6 +504,20 @@
 //     its next cycle and stands down. Legacy builds know
 //     nothing of the lease and ignore it — the lease
 //     protects an account once its helpers run this build.
+//
+// 33. CARFAX REPORT LINE IN SHARE TEXT (v2.1.61 — CARFAX
+//     phase 2, 2026-10-29; content.js header note 34
+//     carries the composer's side): buildShareTextForCar
+//     gains the identical conditional "CARFAX report:
+//     <url>" line the composer gained, from the same input
+//     (the claimed car row's carfax_url, which the
+//     production scraper now keeps fresh from each VDP's
+//     badge). The three builders stay byte-identical, so
+//     a share's details text still equals the listing's
+//     description exactly — with the link when the car
+//     has one, and byte-identical to 2.1.60 when it
+//     doesn't. Comment + one builder term; no other
+//     worker behavior changes.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -2037,6 +2051,13 @@ function buildShareTextForCar(car, job) {
   const stockRaw = (car.stock_num != null && String(car.stock_num).trim())
     ? car.stock_num : car.stock_number;
   const stock = stockRaw != null ? String(stockRaw).trim() : "";
+  // CARFAX report line (v2.1.61, header note 33): mirrors the
+  // composer exactly — the car's stored carfax_url (scraper-
+  // captured from its VDP badge) joins the facts block under the
+  // stock line; absent or blank, the text is byte-identical to
+  // 2.1.60. The claim-time car fetch is select-*, so the field
+  // rides the job's car row with no new plumbing.
+  const carfax = car.carfax_url != null ? String(car.carfax_url).trim() : "";
   let desc =
     `${title}\n` +
     `Price: $${(car.price || 0).toLocaleString()}\n` +
@@ -2045,6 +2066,7 @@ function buildShareTextForCar(car, job) {
     (car.transmission ? `Transmission: ${car.transmission}\n` : "") +
     (car.vin ? `VIN: ${car.vin}\n` : "") +
     (job && job.includeStock === true && stock ? `Stock #: ${stock}\n` : "") +
+    (carfax ? `CARFAX report: ${carfax}\n` : "") +
     (lm.defaulted
       ? (lm.isNew
         ? `\nBrand new vehicle — the mileage shown is a listing default; actual miles may be less.`

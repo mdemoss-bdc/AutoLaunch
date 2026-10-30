@@ -663,6 +663,28 @@
 //     share_tag_skipped, details ≤185 chars like the
 //     2.1.58 diag chunks. CDP attach discipline: the
 //     attempt detaches only a session it attached.
+//
+// 34. CARFAX REPORT LINE IN THE DESCRIPTION (v2.1.61 —
+//     Matthew's ask, CARFAX phase 2, 2026-10-29): the
+//     production scraper now captures each Used/Certified
+//     car's published CARFAX report link from its VDP
+//     badge into the inventory row's carfax_url (the
+//     shadow trial measured 95.5% coverage of Matthew's
+//     used fleet; a wrong-VIN badge link is refused
+//     scraper-side and never stored). buildDescription
+//     gains ONE conditional line — "CARFAX report: <url>"
+//     — in the facts block directly under the stock line,
+//     above the dealership closing, present only when the
+//     car row carries a non-blank link. No plumbing was
+//     needed: the claim-time inventory fetch is a select-*
+//     read, so carfax_url rides the job's car row like
+//     every other fact. The two mirrors (the app's
+//     buildShareDetailsText and the worker's
+//     buildShareTextForCar) gained the identical line, so
+//     a feed share's details text still matches the
+//     listing's description byte for byte. No link, no
+//     line — every other description is byte-identical
+//     to 2.1.60.
 
 
 (async function () {
@@ -3086,6 +3108,14 @@
     const stockRaw = (car.stock_num != null && String(car.stock_num).trim())
       ? car.stock_num : car.stock_number;
     const stock = stockRaw != null ? String(stockRaw).trim() : "";
+    // CARFAX report link (v2.1.61 — header note 34): the car's own
+    // published CARFAX report, captured by the scraper from the
+    // VDP's "Show Me the CARFAX" badge into the inventory row's
+    // carfax_url. It joins the facts block directly under the stock
+    // line, above the closing. Fail-open both ways: no stored link
+    // (or a blank one) and the line simply isn't there — the
+    // description stays byte-identical to 2.1.60.
+    const carfax = car.carfax_url != null ? String(car.carfax_url).trim() : "";
     let desc = (
       `${title}\n` +
       `Price: $${(car.price || 0).toLocaleString()}\n` +
@@ -3094,6 +3124,7 @@
       (car.transmission ? `Transmission: ${car.transmission}\n` : "") +
       (car.vin ? `VIN: ${car.vin}\n` : "") +
       (includeStock && stock ? `Stock #: ${stock}\n` : "") +
+      (carfax ? `CARFAX report: ${carfax}\n` : "") +
       (lm.defaulted
         ? (lm.isNew
           ? `\nBrand new vehicle — the mileage shown is a listing default; actual miles may be less.`

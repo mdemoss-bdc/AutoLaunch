@@ -84,6 +84,23 @@
 //      value asks hand back AND offer the intake link (never a
 //      number). Transfer asks get the price-confirmation draft
 //      instead of a manager punt.
+//
+// CARFAX GROUNDING (2026-10-29, phase 2 — Matthew's ask): the
+// production scraper now stores each Used/Certified car's published
+// CARFAX report link on its inventory row (carfax_url, captured
+// from the VDP's "Show Me the CARFAX" badge; the production port of
+// the shadow trial that measured 95.5% coverage of Matthew's used
+// fleet). fmtCar carries the link on the car's fact line — the
+// VERIFIED-CAR block and INVENTORY RESULTS alike (the thread car
+// resolves via select *, so it arrives unlisted; the term-search
+// and browse selects name the column explicitly) — and the system
+// prompt gains the CARFAX rule: offer the link verbatim when the
+// buyer asks about accident/service history or the car's past, or
+// when offering proof of condition; NEVER describe, summarize, or
+// characterize the report's contents (Luca cannot see inside it);
+// NEVER mention CARFAX for a car whose fact line has no link; never
+// construct or guess a link. Purely additive grounding — every
+// other behavior is the previous version's.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -542,6 +559,11 @@ Deno.serve(async (req) => {
     c.location_name ? "at " + displayLoc(c.location_name) + (homeLabel ? (displayLoc(c.location_name) === homeLabel ? " (the salesperson's own lot)" : " (a sister lot)") : "") : null,
     c.stock_number ? "Stock #" + c.stock_number : null,
     c.detail_url || null,
+    // CARFAX grounding (2026-10-29): the car's own published
+    // vehicle-history report link, when the scraper captured one.
+    // Labeled so the model can offer it under the CARFAX rule —
+    // and absent entirely when there is no stored link.
+    c.carfax_url ? "CARFAX report: " + c.carfax_url : null,
   ].filter(Boolean).join(" · ");
 
   // VIN decode (NHTSA vPIC — free, no key): the inventory table has
@@ -805,7 +827,7 @@ Deno.serve(async (req) => {
       const orExpr = pats.map(p => `model.ilike.%${p}%,make.ilike.%${p}%`).join(",");
       const { data: rows } = await supabase
         .from("scraped_inventory")
-        .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin, location_name, marketplace_posted_at")
+        .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, carfax_url, color, interior_color, transmission, vin, location_name, marketplace_posted_at")
         .eq("is_active", true)
         .or(orExpr)
         .limit(25);
@@ -850,7 +872,7 @@ Deno.serve(async (req) => {
       /\b(suv|suvs|truck|trucks|sedan|sedans|van|vans|coupe|coupes|hatchback|car|cars|vehicle|vehicles)\b/.test(buyerText))) {
     const { data: browsed } = await supabase
       .from("scraped_inventory")
-      .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, color, interior_color, transmission, vin, location_name, marketplace_posted_at")
+      .select("year, make, model, trim, price, mileage, condition, stock_number, detail_url, carfax_url, color, interior_color, transmission, vin, location_name, marketplace_posted_at")
       .eq("is_active", true).not("price", "is", null)
       .order("price", { ascending: true }).limit(60);
     const hits = (browsed || []).filter((c: any) => condOk(c) && (!ceiling || (c.price && c.price <= ceiling)));
@@ -894,6 +916,7 @@ Deno.serve(async (req) => {
     "HARD RULES — never break these:",
     "- Never invent or guess a price, monthly payment, APR, financing term, discount, or trade-in value. The only prices you may mention are ones that appear in the listing label, the conversation, or the INVENTORY RESULTS block.",
     "- Vehicle facts (stock number, mileage, colors, transmission, drivetrain, fuel, engine, listing link) may ONLY come from the VERIFIED-CAR or INVENTORY RESULTS blocks, stated exactly as written. When you recommend a vehicle from the results, include its stock # and its link. If a spec the buyer asks about is not in the blocks, say you'll double-check rather than guessing it.",
+    "- CARFAX: some vehicle fact lines carry a 'CARFAX report:' link — the dealer's published vehicle-history report for that exact car. When the buyer asks about accident history, service history, previous owners, or the car's past — or when offering proof of the car's condition — include that car's CARFAX link in the draft exactly as written. NEVER describe, summarize, or characterize what a CARFAX report says — you cannot see inside it. If a car's fact line has no CARFAX link, never mention CARFAX for that car, and never construct or guess a link.",
     "- THIS conversation's car: the VERIFIED-CAR block is the ONLY basis for its facts. When there is no VERIFIED-CAR block, the exact car could not be matched in live inventory and you do NOT know its mileage, colors, or specs — never borrow numbers from a similar car or from a search result. For those questions, say you'll double-check and get right back to them.",
     "- If the buyer asks whether you have a particular vehicle and NO block in this request covers it, you do not know either way: never claim to have it OR not have it, and never name a specific alternative vehicle. Say you'll check the lot and get right back to them. The ONE exception: a VERIFIED — NONE IN STOCK line is a completed inventory search — for the vehicles it names, you may say plainly that you don't have one on the lot right now.",
     "- Never promise the vehicle is available as a fact beyond what the conversation shows; phrase it as the salesperson checking/confirming ('Yes, it's still here as of today' is fine when the thread implies a live listing).",
