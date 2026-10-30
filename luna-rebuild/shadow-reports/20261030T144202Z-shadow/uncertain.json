@@ -1,0 +1,352 @@
+[
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1FADP3KE3GL273598",
+  "field": "price",
+  "found_value": "8161",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1C4NJRFB9ED575746",
+  "field": "price",
+  "found_value": "9475",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "KNAFX6A83E5181339",
+  "field": "price",
+  "found_value": "9938",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "JF2SJAWC0HH518590",
+  "field": "price",
+  "found_value": "10275",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "5XYPG4A31JG384781",
+  "field": "price",
+  "found_value": "10363",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "19XFB2F85DE220793",
+  "field": "price",
+  "found_value": "10573",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "5NPDH4AE4DH226952",
+  "field": "price",
+  "found_value": "10574",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "KM8J3CA29GU230762",
+  "field": "price",
+  "found_value": "11327",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "JN1CV6EKXDM900286",
+  "field": "price",
+  "found_value": "11564",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "3FA6P0D95LR174042",
+  "field": "price",
+  "found_value": "11574",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1C4RDJAGXHC710028",
+  "field": "price",
+  "found_value": "12458",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "3GNAXJEV1LL169517",
+  "field": "price",
+  "found_value": "12475",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "JN8AY2NC4H9506955",
+  "field": "price",
+  "found_value": "12561",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1GT4UXEY5SF208498",
+  "field": "price",
+  "found_value": "79095",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1FT8W2BM8REE06606",
+  "field": "price",
+  "found_value": "80571",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1GKS2KKL1TR104927",
+  "field": "price",
+  "found_value": "92190",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "5UX33EU07T9285712",
+  "field": "price",
+  "found_value": "96450",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "2T3BF4DV9BW176273",
+  "field": "price",
+  "found_value": "11574",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "ZACCJABB2JPJ39537",
+  "field": "price",
+  "found_value": "12457",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1G1PC5SH2C7384955",
+  "field": "price",
+  "found_value": "9998",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "5YFEPMAE2MP175560",
+  "field": "price",
+  "found_value": "9998",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "JM1NC25F780138569",
+  "field": "year",
+  "found_value": "2008",
+  "reason": "VIN year code says 2037, page says 2008",
+  "evidence": ""
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "5UX23EU01T9450536",
+  "field": "price",
+  "found_value": "82675",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "5UX23EM07R9W02666",
+  "field": "price",
+  "found_value": "90770",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1N4AA5AP6BC816129",
+  "field": "price",
+  "found_value": "9998",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Used",
+  "vin": "1HGCY1F43TA004369",
+  "field": "price",
+  "found_value": "9998",
+  "reason": "price far outside the lot's median ($31,531) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $31,531 across 975 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Certified Pre-Owned",
+  "vin": "JTEAAAAH7PJ140557",
+  "field": "photos",
+  "found_value": "1",
+  "reason": "photo set far below this lot's norm (~20 per car)",
+  "evidence": ""
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Certified Pre-Owned",
+  "vin": "JTNABAAE4SA016743",
+  "field": "photos",
+  "found_value": "1",
+  "reason": "photo set far below this lot's norm (~20 per car)",
+  "evidence": ""
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Certified Pre-Owned",
+  "vin": "JTEAAAAH7PJ140557",
+  "field": "photos",
+  "found_value": "1",
+  "reason": "photo set far below this lot's norm (~20 per car)",
+  "evidence": ""
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|Certified Pre-Owned",
+  "vin": "JTNABAAE4SA016743",
+  "field": "photos",
+  "found_value": "1",
+  "reason": "photo set far below this lot's norm (~20 per car)",
+  "evidence": ""
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|New",
+  "vin": "5YM13ET00T9369260",
+  "field": "price",
+  "found_value": "141750",
+  "reason": "price far outside the lot's median ($50,389) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $50,389 across 1310 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|New",
+  "vin": "5YM13ET01T9385144",
+  "field": "price",
+  "found_value": "142770",
+  "reason": "price far outside the lot's median ($50,389) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $50,389 across 1310 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|New",
+  "vin": "5YM13ET09T9405009",
+  "field": "price",
+  "found_value": "142770",
+  "reason": "price far outside the lot's median ($50,389) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $50,389 across 1310 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|New",
+  "vin": "1GYS9GKL1VR130042",
+  "field": "price",
+  "found_value": "130085",
+  "reason": "price far outside the lot's median ($50,389) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $50,389 across 1310 priced cars"
+ },
+ {
+  "run_id": "20261030T144202Z-shadow",
+  "user_id": "40a95557-504a-460f-a891-462bb2b4f25c",
+  "site_key": "www.mosescars.com|New",
+  "vin": "1GYS9GKL5VR158409",
+  "field": "price",
+  "found_value": "126865",
+  "reason": "price far outside the lot's median ($50,389) \u2014 possible wrong-car or stale price",
+  "evidence": "lot median $50,389 across 1310 priced cars"
+ }
+]
