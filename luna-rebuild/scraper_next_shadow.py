@@ -26,6 +26,18 @@ SHADOW CONTRACT (hard rules, enforced in this file)
 * Feeds come from the target user's user_settings rows — literally
   the same feeds production crawls.
 
+CARFAX TRIAL EXCEPTION (2026-10-29, Matthew approved): with
+SCRAPER_NEXT_CARFAX=1 the pipeline also runs scraper_next's CARFAX
+link capture during enrichment (extraction + digest stats +
+scraper_uncertain rejects — the learning-layer writes above). With
+SCRAPER_NEXT_CARFAX_WRITE=1 ADDITIONALLY set, the driver may write
+ONE column — scraped_inventory.carfax_url — via targeted
+(vin, user_id) updates for verified finds only
+(scraper_next.carfax_apply_writes). That is the sole inventory write
+this driver can ever make, it is off unless both flags are set, and
+the GitHub workflow never sets them: the standing shadow week's
+contract is unchanged.
+
 OUTPUT (into $SHADOW_OUT, default ./shadow-out)
 -----------------------------------------------
 digest.md (step-1 format: scraper_next's own build_digest + the
@@ -280,6 +292,11 @@ async def main():
         async def enrich(cars):
             await S.enrich_cars_with_vdp(context, cars)
 
+        carfax_fn = None
+        if os.environ.get("SCRAPER_NEXT_CARFAX") == "1":
+            async def carfax_fn(cars):
+                return await N.carfax_enrich_pass(context, cars)
+
         for feed in feeds:
             sk = N.site_key_for(feed["url"], feed["condition"])
             recording_push.current_key = sk
@@ -288,7 +305,8 @@ async def main():
                        if lot_pb.get("platform") else N.default_playbook())
             eff_pb = N.merge_playbooks(plat_pb, lot_pb)
             opts = {"limit": 0, "page_modifier": page_modifier,
-                    "push_fn": recording_push, "enrich_fn": enrich}
+                    "push_fn": recording_push, "enrich_fn": enrich,
+                    "carfax_fn": carfax_fn}
             ctx_base = {"uid": TARGET_UID, "location_name": store}
 
             async def make_fetcher(feed=feed, cond=feed["condition"]):
@@ -350,6 +368,17 @@ async def main():
 
         await browser.close()
 
+    # CARFAX trial write-back (opt-in; see header): targeted
+    # carfax_url column updates for verified finds among the recorded
+    # would-write rows. Only when BOTH trial flags are set.
+    carfax_write = None
+    if os.environ.get("SCRAPER_NEXT_CARFAX_WRITE") == "1" and \
+            os.environ.get("SCRAPER_NEXT_CARFAX") == "1":
+        recorded = [r for rows in pushed.values() for r in rows]
+        carfax_write = N.carfax_apply_writes(recorded, TARGET_UID)
+        print(f"[*] CARFAX write-back: attempted={carfax_write['attempted']} "
+              f"errors={carfax_write['errors']}")
+
     totals = {"run_id": run_id, "seconds": round(time.monotonic() - t_all, 1),
               "cars": sum(o["cars_written"] for o in outcomes)}
     trend = N.recent_run_totals(5)
@@ -369,7 +398,8 @@ async def main():
                 "stock_number": c.get("stock_number"),
                 "location_name": c.get("location_name"),
                 "color": c.get("color"), "body_type": c.get("body_type"),
-                "detail_url": c.get("detail_url"), "held_why": held_why}
+                "detail_url": c.get("detail_url"),
+                "carfax_url": c.get("carfax_url"), "held_why": held_why}
 
     all_cars = []
     for o, feed in zip(outcomes, feeds):
@@ -391,6 +421,23 @@ async def main():
         digest += f"\n---\n## Comparison vs production\n\nUNAVAILABLE: {e}\n"
     digest += uncertainty_section()
 
+    if os.environ.get("SCRAPER_NEXT_CARFAX") == "1":
+        cfx_cars = [c for c in all_cars if c.get("held_why") is None
+                    and (c.get("condition") or "").lower().startswith(
+                        ("used", "certified"))]
+        got = [c for c in cfx_cars if c.get("carfax_url")]
+        cov = (len(got) / len(cfx_cars) * 100) if cfx_cars else 0.0
+        digest += ("\n---\n## CARFAX coverage (this run's recorded cars)\n\n"
+                   f"- In-scope (Used/CPO) cars recorded: {len(cfx_cars)}; "
+                   f"with a captured CARFAX link: {len(got)} ({cov:.1f}%).\n")
+        if carfax_write is not None:
+            digest += (f"- Write-back: attempted {carfax_write['attempted']} "
+                       f"targeted carfax_url updates, {carfax_write['errors']} "
+                       f"errors. Ground truth is the DB readback of "
+                       f"scraped_inventory.carfax_url.\n")
+        else:
+            digest += "- Write-back: OFF (extraction only; no inventory writes).\n"
+
     inv_after = table_count("scraped_inventory")
     learn_after = {t: table_count(t) for t in
                    ("scraper_playbooks", "scraper_uncertain", "scraper_run_log")}
@@ -400,6 +447,12 @@ async def main():
                f"delta belongs to production's own schedule, not this run.\n"
                f"- learning tables before: {learn_before}\n"
                f"- learning tables after: {learn_after}\n")
+    if carfax_write is not None:
+        digest += (f"- CARFAX exception: this run updated the carfax_url "
+                   f"COLUMN on up to {carfax_write['attempted']} existing "
+                   f"row(s) ({carfax_write['errors']} write errors) under "
+                   f"SCRAPER_NEXT_CARFAX_WRITE=1; no rows were inserted, "
+                   f"deleted, or otherwise modified.\n")
 
     with open(os.path.join(OUT, "cars.json"), "w") as f:
         json.dump(all_cars, f, indent=1)

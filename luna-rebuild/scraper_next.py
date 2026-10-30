@@ -1192,15 +1192,29 @@ async def process_feed(feed: dict, ctx_base: dict, fetcher, eff_pb: dict,
         except Exception as e:
             print(f"[!] Enrichment warning ({site_key}): {e}")
 
+    # CARFAX trial pass (opt-in: entry points supply carfax_fn only
+    # under SCRAPER_NEXT_CARFAX=1). Runs before evaluation so a
+    # captured link rides the write rows like any other field; its
+    # rejects join the run's review list under field "carfax_url".
+    carfax_stats, carfax_unc = None, []
+    if opts.get("carfax_fn") and cars:
+        try:
+            carfax_stats, carfax_unc = await opts["carfax_fn"](cars)
+        except Exception as e:
+            print(f"[!] CARFAX pass warning ({site_key}): {e}")
+    outcome["carfax"] = carfax_stats
+
     verdict = evaluate_lot(cars, eff_pb)
     outcome["eval_stats"] = verdict["stats"]
     outcome["quarantined"] = verdict["quarantine"]
     outcome["reasons"] = verdict["reasons"]
     outcome["held"] = verdict["held"]
-    outcome["uncertain_count"] = len(verdict["uncertain"])
+    outcome["uncertain_count"] = len(verdict["uncertain"]) + len(carfax_unc)
     outcome["strategies"] = strat_agg
 
     log_uncertain(run_id, uid, site_key, verdict["uncertain"])
+    if carfax_unc:
+        log_uncertain(run_id, uid, site_key, carfax_unc)
 
     tally_rows = []
     if verdict["quarantine"]:
@@ -1295,8 +1309,257 @@ async def crawl_feed(feed: dict, ctx_base: dict, fetcher_factory, eff_pb: dict,
         "uncertain_count": 0, "quarantined": False, "reasons": [],
         "strategies": {}, "seconds": 0.0, "error": str(last_err),
         "trusted": False, "seen_vins": set(), "rate_limit_hits": 0,
-        "sitemap_url": None, "recrawl_of": False, "attempts": len(RETRY_BACKOFFS) + 1,
+        "sitemap_url": None, "recrawl_of": False, "carfax": None,
+        "attempts": len(RETRY_BACKOFFS) + 1,
     }
+
+
+# =============================================================================
+# CARFAX LINK CAPTURE (shadow trial, Matthew approved 2026-10-29)
+# =============================================================================
+# Dealer VDPs carry a "Show Me the CARFAX" badge in the car's benefits
+# block whose anchor opens the free CARFAX report the dealer publishes
+# for that car (on the Moses/DealerOn template: <a class="reportImg"
+# data-loc="carfax" href="https://www.carfax.com/vehiclehistory/ar20/
+# <token>">, verified in the raw served HTML 2026-10-29). This section
+# teaches the SHADOW engine to capture that link per car:
+#
+# * extract_carfax_url() is a pure function over one VDP's raw HTML.
+#   Scoping mirrors production's price_status rule: script/style are
+#   stripped first (the platform's CSS mentions the cross-sell classes
+#   long before the real section), then the page is cut at the
+#   "Vehicles You Might Like" cross-sell — a cross-sell car's badge
+#   must never land on the host car.
+# * Validation: a URL that carries a parseable VIN (a vin= parameter
+#   or a path segment that is exactly a VIN) must name THIS car, or
+#   the link is rejected into scraper_uncertain — a wrong-car report
+#   link in a listing is the critical hazard. The DealerOn ar20 token
+#   carries no parseable VIN; there the section scoping + the report
+#   path shape are the guards.
+# * The pass runs ONLY when an entry point supplies opts["carfax_fn"]
+#   (env SCRAPER_NEXT_CARFAX=1). Standing shadow runs and any
+#   production-parity run are byte-for-byte unaffected. A verified
+#   find sets car["carfax_url"]; a no-find NEVER sets the key, so no
+#   writer downstream can erase a previously captured value (the
+#   writers upsert only the keys a record carries).
+
+_CARFAX_CROSS_SELL_MARKERS = (
+    "vehicles you might like",
+    "you may also like",
+    "similar vehicles",
+    "recommended vehicles",
+    "similar-vehicles",
+)
+_CARFAX_ANCHOR_RE = re.compile(r"<a\b[^>]*>.*?</a>", re.S | re.I)
+_CARFAX_HREF_RE = re.compile(r"""href\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
+_CARFAX_VIN_TOKEN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
+
+
+def _carfax_main_section(html: str) -> str:
+    """The car's own VDP region: script/style stripped, cut at the
+    cross-sell — the same scoping production's price_status uses."""
+    stripped = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
+    low = stripped.lower()
+    cut = len(stripped)
+    for marker in _CARFAX_CROSS_SELL_MARKERS:
+        idx = low.find(marker)
+        if 0 <= idx < cut:
+            cut = idx
+    return stripped[:cut]
+
+
+def _carfax_url_vin(url: str):
+    """A VIN the URL itself asserts, or None: the vin= query parameter,
+    or a path segment that is exactly a 17-char VIN. An opaque report
+    token (DealerOn's ar20) yields None — no assertion to check."""
+    try:
+        parts = urlparse(url)
+    except Exception:
+        return None
+    for pair in (parts.query or "").split("&"):
+        if pair.lower().startswith("vin="):
+            val = pair[4:].strip().upper()
+            if _CARFAX_VIN_TOKEN_RE.match(val):
+                return val
+    for seg in (parts.path or "").split("/"):
+        seg = seg.strip().upper()
+        if _CARFAX_VIN_TOKEN_RE.match(seg):
+            return seg
+    return None
+
+
+def extract_carfax_url(html: str, vin: str, page_url: str = "") -> dict:
+    """Find this car's CARFAX report link in its VDP HTML.
+
+    Returns {url, form, badge_seen, reject, evidence}:
+    * form: "direct" (carfax.com report URL), "redirector" (a URL
+      naming carfax off-host), "dealer_page" (dealer-hosted report
+      path), "js_only" (badge present, no usable href), or None.
+    * reject: a human reason when a badge link was REFUSED (the
+      caller files it in scraper_uncertain); url is None then.
+    """
+    out = {"url": None, "form": None, "badge_seen": False,
+           "reject": None, "evidence": ""}
+    if not html:
+        return out
+    main = _carfax_main_section(html)
+    origin = ""
+    if page_url:
+        p = urlparse(page_url)
+        if p.scheme and p.netloc:
+            origin = f"{p.scheme}://{p.netloc}"
+
+    candidates = []
+    for m in _CARFAX_ANCHOR_RE.finditer(main):
+        block = m.group(0)
+        if "carfax" not in block.lower():
+            continue
+        out["badge_seen"] = True
+        open_tag = block[:block.find(">") + 1] if ">" in block else block
+        hm = _CARFAX_HREF_RE.search(open_tag)
+        href = ""
+        if hm:
+            href = (hm.group(1) or hm.group(2) or "").strip()
+        if href and not href.lower().startswith(("javascript:", "#", "mailto:")):
+            candidates.append(href)
+    if not out["badge_seen"]:
+        # Badge artwork can exist without any anchor wrapping it.
+        if re.search(r"partnerstatic\.carfax\.com|data-loc=[\"']carfax[\"']", main, re.I):
+            out["badge_seen"] = True
+    if not out["badge_seen"]:
+        return out
+    if not candidates:
+        out["form"] = "js_only"
+        out["evidence"] = "CARFAX badge present but no usable anchor href (JS-only)"
+        return out
+
+    vin_u = (vin or "").strip().upper()
+    first_bad = None
+    for raw in candidates:
+        href = raw.replace("&amp;", "&")
+        if href.startswith("//"):
+            href = "https:" + href
+        elif href.startswith("/") and origin:
+            href = origin + href
+        if not href.startswith("http"):
+            continue
+        host = (urlparse(href).netloc or "").lower()
+        path = (urlparse(href).path or "").lower()
+        if host.endswith("carfax.com"):
+            form = "direct"
+            is_report = "/vehiclehistory/" in path
+        elif "carfax" in href.lower():
+            form, is_report = "redirector", True
+        elif any(t in path for t in ("vehiclehistory", "vehicle-history",
+                                     "history-report", "carfax")):
+            form, is_report = "dealer_page", True
+        else:
+            form, is_report = None, False
+        if not is_report:
+            if first_bad is None:
+                first_bad = (href, "badge link does not resolve to a report URL")
+            continue
+        asserted = _carfax_url_vin(href)
+        if asserted and vin_u and asserted != vin_u:
+            if first_bad is None:
+                first_bad = (href, f"report URL names VIN {asserted}, not this car's VIN {vin_u}")
+            continue
+        out["url"] = href
+        out["form"] = form
+        out["evidence"] = f"form={form}; href={href[:180]}"
+        return out
+    if first_bad:
+        out["reject"] = first_bad[1]
+        out["evidence"] = f"refused href={first_bad[0][:180]}"
+    elif candidates:
+        out["form"] = "js_only"
+        out["evidence"] = "CARFAX anchors present but none carried an http(s) href"
+    return out
+
+
+async def carfax_enrich_pass(context, cars: list):
+    """Fetch each in-scope (Used / Certified Pre-Owned) car's VDP once
+    and capture its CARFAX link. Sets car["carfax_url"] ONLY on a
+    verified find — a no-find leaves the key unset so no downstream
+    write can erase a stored value. Returns (stats, uncertain_rows).
+    Mirrors production's VDP fetch discipline (context.request,
+    semaphore 5, 20s timeout); any failure is an honest 'unfetched',
+    never a guess."""
+    stats = {"visited": 0, "fetched": 0, "badges": 0, "captured": 0,
+             "rejected": 0, "no_badge": 0, "js_only": 0}
+    uncertain = []
+    sem = asyncio.Semaphore(5)
+
+    def in_scope(car):
+        cond = (car.get("condition") or "").strip().lower()
+        return cond.startswith("used") or cond.startswith("certified")
+
+    async def one(car):
+        detail_url = car.get("detail_url")
+        if not detail_url:
+            return
+        stats["visited"] += 1
+        html = None
+        async with sem:
+            try:
+                resp = await context.request.get(detail_url, timeout=20000)
+                if resp.status == 200:
+                    html = await resp.text()
+            except Exception:
+                html = None
+        if not html:
+            return
+        stats["fetched"] += 1
+        try:
+            r = extract_carfax_url(html, car.get("vin") or "", detail_url)
+        except Exception as e:
+            r = {"url": None, "form": None, "badge_seen": False,
+                 "reject": f"extractor error: {e}", "evidence": ""}
+        if r.get("badge_seen"):
+            stats["badges"] += 1
+        if r.get("url"):
+            car["carfax_url"] = r["url"]
+            stats["captured"] += 1
+        elif r.get("reject"):
+            stats["rejected"] += 1
+            uncertain.append({
+                "vin": car.get("vin"), "field": "carfax_url",
+                "found_value": (r.get("evidence") or "")[:180],
+                "reason": f"CARFAX link rejected: {r['reject']}",
+                "evidence": (r.get("evidence") or "")[:500],
+            })
+        elif r.get("form") == "js_only":
+            stats["js_only"] += 1
+        elif not r.get("badge_seen"):
+            stats["no_badge"] += 1
+
+    await asyncio.gather(*(one(c) for c in cars if in_scope(c)),
+                         return_exceptions=True)
+    return stats, uncertain
+
+
+def carfax_apply_writes(rows, uid) -> dict:
+    """Targeted carfax_url writes for the shadow trial: one column,
+    filtered by (vin, user_id), only for rows carrying a verified
+    link. This is the ONLY inventory write the shadow path can make,
+    and only when an entry point explicitly calls it under its
+    opt-in flag. Returns {"attempted", "errors"}; the caller verifies
+    landed values by readback."""
+    seen = {}
+    for r in rows:
+        u = (r.get("carfax_url") or "").strip()
+        v = (r.get("vin") or "").strip()
+        if u and v:
+            seen[v] = u
+    errors = 0
+    for v, u in seen.items():
+        try:
+            db.table("scraped_inventory").update(
+                {"carfax_url": u}).eq("vin", v).eq("user_id", uid).execute()
+        except Exception as e:
+            errors += 1
+            print(f"[!] CARFAX write warning ({v}): {e}")
+    return {"attempted": len(seen), "errors": errors}
 
 
 # =============================================================================
@@ -1322,6 +1585,29 @@ def build_digest(outcomes: list, needs_pb: dict, totals: dict, trend: list) -> s
         platforms[o.get("platform") or "unknown"] = platforms.get(o.get("platform") or "unknown", 0) + 1
     lines.append("")
     lines.append("Platform coverage: " + ", ".join(f"{k} ×{v}" for k, v in sorted(platforms.items())))
+    cfx = [o for o in outcomes if o.get("carfax")]
+    if cfx:
+        lines.append("")
+        lines.append("CARFAX link capture (shadow trial — Used/CPO VDPs only):")
+        tot = {"visited": 0, "fetched": 0, "badges": 0, "captured": 0,
+               "rejected": 0, "no_badge": 0, "js_only": 0}
+        for o in cfx:
+            s = o["carfax"]
+            for k in tot:
+                tot[k] += s.get(k, 0)
+            pct = (s["captured"] / s["fetched"] * 100) if s.get("fetched") else 0.0
+            lines.append(
+                f"  [{o['condition']:<18}] {o['host']}: {s['visited']} visited, "
+                f"{s['fetched']} fetched, {s['badges']} badges, "
+                f"{s['captured']} captured ({pct:.0f}% of fetched), "
+                f"{s['rejected']} rejected, {s['no_badge']} no badge, "
+                f"{s['js_only']} JS-only")
+        tpct = (tot["captured"] / tot["fetched"] * 100) if tot["fetched"] else 0.0
+        lines.append(
+            f"  TOTAL: {tot['visited']} visited, {tot['fetched']} fetched, "
+            f"{tot['badges']} badges, {tot['captured']} captured "
+            f"({tpct:.0f}% of fetched), {tot['rejected']} rejected, "
+            f"{tot['no_badge']} no badge, {tot['js_only']} JS-only")
     for o in outcomes:
         if (o.get("platform") or "unknown") == "unknown":
             lines.append(f"  ⚠ UNRECOGNIZED platform at {o['host']} ({o.get('platform_evidence') or 'no evidence'}) — compatibility gap, learning per-lot only.")
@@ -1431,6 +1717,13 @@ async def run_next(opts_override: dict = None) -> list:
         async def enrich(cars):
             await S.enrich_cars_with_vdp(context, cars)
 
+        # CARFAX trial pass — opt-in only (SCRAPER_NEXT_CARFAX=1).
+        # Default None: standing runs behave exactly as before.
+        carfax_fn = None
+        if os.environ.get("SCRAPER_NEXT_CARFAX") == "1":
+            async def carfax_fn(cars):
+                return await carfax_enrich_pass(context, cars)
+
         for user_cfg in users:
             uid = user_cfg.get("user_id")
             if not uid:
@@ -1485,7 +1778,7 @@ async def run_next(opts_override: dict = None) -> list:
 
                 feed_opts = {
                     "limit": limit, "page_modifier": user_cfg.get("page_modifier") or "?pt={page}",
-                    "push_fn": S.push_batch_to_supabase, "enrich_fn": enrich,
+                    "push_fn": S.push_batch_to_supabase, "enrich_fn": enrich, "carfax_fn": carfax_fn,
                 }
                 ctx_base = {"uid": uid, "location_name": store_name}
                 outcome = await crawl_feed(feed, ctx_base, make_fetcher, eff_pb, run_id, feed_opts)
@@ -1524,7 +1817,7 @@ async def run_next(opts_override: dict = None) -> list:
                 eff_pb = merge_playbooks(plat_pb, lot_pb)
                 feed_opts = {
                     "limit": limit, "page_modifier": user_cfg.get("page_modifier") or "?pt={page}",
-                    "push_fn": S.push_batch_to_supabase, "enrich_fn": enrich,
+                    "push_fn": S.push_batch_to_supabase, "enrich_fn": enrich, "carfax_fn": carfax_fn,
                 }
                 try:
                     fetcher = await make_fetcher(feed=feed, cond=feed["condition"])
