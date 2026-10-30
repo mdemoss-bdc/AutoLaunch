@@ -93,7 +93,7 @@
       <h2>Your vehicle</h2>
       <label for="fVin">VIN <span class="req">*</span></label>
       <input type="text" id="fVin" maxlength="17" placeholder="17-character VIN" style="text-transform:uppercase">
-      <p class="soft">You&rsquo;ll find it on the driver&rsquo;s side dash (through the windshield) or the driver&rsquo;s door jamb sticker. If you add it, we&rsquo;ll fill in the vehicle details for you.</p>
+      <p class="soft">You&rsquo;ll find it on the driver&rsquo;s side dash (through the windshield) or the driver&rsquo;s door jamb sticker.</p>
       <button type="button" id="decodeBtn" class="pick" style="background:var(--field);border:1px solid var(--edge);color:var(--h);padding:10px 18px;border-radius:12px;font-weight:700;cursor:pointer">Decode VIN</button>
       <span id="decodeStatus" class="soft" style="margin-left:10px"></span>
       <div class="row2">
@@ -433,8 +433,9 @@ function judgeVinPhoto() {
   g.read = "";
   if (!confident.length) { g.verdict = "unverified"; return; }
   if (typed && confident.indexOf(typed) !== -1) { g.verdict = "verified"; g.read = typed; return; }
-  // No VIN typed: the field is optional, and a check-digit-valid
-  // read contradicts nothing — keep the read for the packet.
+  // No VIN typed yet: a check-digit-valid read contradicts
+  // nothing, so keep the read — the typed VIN is required at
+  // submit, so this state never reaches the packet as-is.
   if (!typed) { g.verdict = "verified"; g.read = confident[0]; return; }
   g.verdict = "mismatch";
   g.read = confident[0];
