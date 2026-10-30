@@ -595,7 +595,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
        only: no auth, trial or billing logic lives in this markup. -->
   <div class="min-h-full w-full max-w-[1440px] mx-auto flex flex-col items-center justify-center gap-4 lg:gap-5 p-4">
     <div class="text-center px-2 shrink-0">
-      <p class="text-2xl lg:text-[2rem] font-extrabold tracking-tight text-slate-900 leading-tight">Start your free 5-day trial</p>
+      <p class="text-2xl lg:text-[2rem] font-extrabold tracking-tight text-slate-900 leading-tight">Start your free 4-day trial</p>
       <p class="text-sm lg:text-[15px] text-slate-600 font-medium mt-1.5">No card up front — see what it does for your lot.</p>
     </div>
     <div class="w-full flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-4 lg:gap-5">
@@ -618,7 +618,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <p class="text-[13px] font-bold text-slate-700 leading-relaxed mt-1.5">TikTok &amp; Instagram — coming soon, Automate only.</p>
           </div>
         </div>
-        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 5 days on us.</p>
+        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 4 days on us.</p>
         <button type="button" class="landing-trial-btn btn-gradient w-full py-2.5 rounded-xl text-white font-bold text-sm shadow-lg cursor-pointer mt-3">Start free trial</button>
       </section>
       <div class="order-3 lg:order-2 w-full max-w-md shrink-0">
@@ -651,7 +651,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <button id="authTypeIndividual" type="button" onclick="setSignupAccountType('individual')" class="py-2.5 rounded-lg bg-blue-600 text-white transition cursor-pointer shadow-sm">Individual</button>
             <button id="authTypeDealership" type="button" onclick="setSignupAccountType('dealership')" class="py-2.5 rounded-lg hover:text-slate-900 transition cursor-pointer">Dealership</button>
           </div>
-          <p class="text-[11px] text-slate-400 mt-1.5 leading-snug">Dealership registers your store — it starts a free 5-day dealership trial with 2 seats, and you can buy more seats anytime. You get a free leader account to manage the store; seats are only for your salespeople.</p>
+          <p class="text-[11px] text-slate-400 mt-1.5 leading-snug">Dealership registers your store — it starts a free 4-day dealership trial with 2 seats, and you can buy more seats anytime. You get a free leader account to manage the store; seats are only for your salespeople.</p>
         </div>
         <div id="authDealershipNameWrap" class="hidden">
           <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Dealership name</label>
@@ -710,7 +710,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           <p>25+ seats: $69 / $89 a seat</p>
           <p>Yearly prepaid saves 5–15%.</p>
         </div>
-        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 5-day dealership trial, 2 seats to try.</p>
+        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 4-day dealership trial, 2 seats to try.</p>
         <button type="button" class="landing-trial-btn btn-gradient w-full py-2.5 rounded-xl text-white font-bold text-sm shadow-lg cursor-pointer mt-3">Start free trial</button>
       </section>
     </div>
@@ -760,8 +760,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
   </div>
 </div>
 
-<!-- TRIAL NOTICE MODAL: during the 5-day trial, opening a feature the
-     trial doesn't include (or queueing past 1 car per day) lands here.
+<!-- TRIAL NOTICE MODAL: during the free trial, opening a feature the
+     trial doesn't include yet (or queueing past the day's cap) lands here.
      Plain and factual, like the plan gate — with a path to the plans. -->
 <div id="trialNoticeModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 hidden">
   <div class="glass-card w-full max-w-md rounded-2xl p-8 space-y-4 shadow-2xl relative border border-slate-200 bg-white">
@@ -836,7 +836,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
   </div>
 <!-- PURCHASE GATE: full-screen and non-dismissible (it is in
      MODAL_CLOSE_DENY, so Escape / backdrop taps can't close it).
-     Shown when the 5-day trial has ended, or when this network's
+     Shown when the free trial has ended, or when this network's
      trial was already used by another account. The only ways forward
      are buying a plan or signing out. One exception: an owner who is
      only PREVIEWING the expired state gets an "Exit preview (owner)"
@@ -847,7 +847,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
   <div class="glass-card w-full max-w-2xl rounded-2xl p-8 shadow-2xl border border-slate-200 bg-white my-auto">
     <div class="text-center space-y-2 mb-6">
       <span class="inline-flex w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 items-center justify-center text-xl"><i class="fa-solid fa-lock"></i></span>
-      <h3 id="purchaseGateHeadline" class="font-extrabold text-xl text-slate-900">Your 5-day trial has ended</h3>
+      <h3 id="purchaseGateHeadline" class="font-extrabold text-xl text-slate-900">Your free trial has ended</h3>
       <p id="purchaseGateSub" class="text-sm text-slate-500">Pick a plan to keep posting:</p>
     </div>
     <div id="purchaseGateCards" class="grid sm:grid-cols-2 gap-3"></div>
@@ -862,7 +862,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 </div>
 
 <!-- SIGNUP CHOICE GATE: a brand-new (post-cutoff) account chooses how
-     to start — the 5-day free trial, or a plan right away — instead of
+     to start — the free trial, or a plan right away — instead of
      the trial starting silently on first load. Full-screen and
      non-dismissible (it is in MODAL_CLOSE_DENY, like the purchase
      gate). Nothing is written until the user picks: closing or
@@ -879,7 +879,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     </div>
     <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 mb-3">
       <div id="signupChoiceTrialCard"></div>
-      <button id="signupChoiceTrialBtn" onclick="chooseStartTrial()" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Start my 5-day free trial</button>
+      <button id="signupChoiceTrialBtn" onclick="chooseStartTrial()" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Start my 4-day free trial</button>
     </div>
     <p class="text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 my-3">or choose a plan now</p>
     <div id="signupChoiceCards" class="grid sm:grid-cols-2 gap-3"></div>
@@ -4574,21 +4574,21 @@ const PLAN_DETAILS = {
     name: "Free trial",
     priceLabel: "Free",
     price: null,
-    tagline: "The basics, free for 5 days.",
-    note: "No card needed. When the trial ends, pick a plan to keep posting.",
+    tagline: "Four days free — Self Post first, then full Automate.",
+    note: "Days 1–2 run the Self Post plan; days 3–4 unlock the full Automate plan, Luca + Prospects included. No card needed. When the trial ends, pick a plan to keep posting.",
     features: [
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
-      { label: "Queued posts per day", value: "1 per day" },
-      { label: "Inventory sync", value: "1 sync per 24 hours" },
-      { label: "AI listing copy", included: false },
-      { label: "Auto-post new arrivals", included: false },
-      { label: "Delete listings + auto delete & repost", included: false },
-      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: false },
-      { label: "Luca AI Assistant + Prospects", included: false },
-      { label: "Customer Wishlist", included: false },
-      { label: "Trade Appraisals", included: false },
-      { label: "Intro videos", included: false },
+      { label: "Queued posts per day", value: "5 per day (days 1–2) · no plan cap (days 3–4)" },
+      { label: "Inventory sync", value: "1 sync per 18 hours (days 1–2) · 1 per 6 hours (days 3–4)" },
+      { label: "AI listing copy", included: true },
+      { label: "Auto-post new arrivals", included: true, note: "days 3–4" },
+      { label: "Delete listings + auto delete & repost", included: true, note: "days 3–4" },
+      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true, note: "days 3–4" },
+      { label: "Luca AI Assistant + Prospects", included: true, note: "days 3–4" },
+      { label: "Customer Wishlist", included: true, note: "days 3–4" },
+      { label: "Trade Appraisals", included: true, note: "days 3–4" },
+      { label: "Intro videos", included: true, note: "days 3–4" },
     ]
   },
   post: {
@@ -4728,11 +4728,13 @@ function effectiveTier() {
 function tierAllows(feature) {
   const need = TIER_FEATURES[feature];
   if (!need) return true; // unmapped feature = not gated
-  // TRIAL + BILLING: in trial mode only the trial's own features pass;
-  // behind the purchase gate nothing does (the gate overlay covers
-  // the app anyway — this is the second lock on the same door).
+  // TRIAL + BILLING: in trial mode the trial's phase decides — a
+  // staged trial passes the Self Post set in phase 1 and the full
+  // Automate set in phase 2; a legacy trial passes its original
+  // scope. Behind the purchase gate nothing passes (the gate
+  // overlay covers the app anyway — this is the second lock).
   const mode = billingMode();
-  if (mode === "trial") return trialFeatureAllowed(feature);
+  if (mode === "trial") return trialPhaseFeatureAllowed(feature, trialPhase());
   if (mode === "gate") return false;
   return TIER_RANK[effectiveTier()] >= TIER_RANK[need];
 }
@@ -5120,13 +5122,23 @@ function setOwnTierForTesting(v) {
 }
 
 // ==================== TRIAL + BILLING ====================
-// Matthew's spec (2026-10-26; see TIERS.md "Trial + Billing"): new
-// accounts get a 5-day free trial, one per IP (enforced server-side
-// by the trial-start Edge Function). During the trial the account can
-// pull inventory and queue 1 car per day; every other feature shows
-// the trial notice. When the trial ends — or the network's trial was
-// already used by another account — the app sits behind the purchase
-// gate until the account buys Post ($75/mo) or Group ($100/mo).
+// Matthew's spec (2026-10-26; STAGED TRIAL UPDATE 2026-10-30 — see
+// TIERS.md "Trial + Billing"): new accounts get a 4-day free trial,
+// one per IP (enforced server-side by the trial-start Edge
+// Function). The trial is STAGED: days 1–2 (the first 48 hours)
+// resolve exactly as the Self Post plan; days 3–4 resolve exactly
+// as the Automate plan, Luca + Prospects included. Trials granted
+// before the staged build carry a longer stored window and keep
+// the ORIGINAL trial scope (pull inventory + queue 1 car per day)
+// for their whole window — the phase logic detects them from the
+// stored window length (see trialPhaseState in the pure access
+// block). One free trial per dealership source is enforced
+// separately by the trial-source-claim function: a trialing
+// account that syncs a dealership whose trial was already used by
+// another account is stopped (trial_blocked, reason
+// 'dealership_trial_used'). When the trial ends — or a claim
+// blocks the account — the app sits behind the purchase gate
+// until the account buys Post ($75/mo) or Group ($100/mo).
 // Existing accounts were backfilled to billing_status 'active' when
 // the system shipped and are never trial-locked; owners are exempt,
 // as always. Billing runs through Stripe: checkout via the
@@ -5136,7 +5148,7 @@ function setOwnTierForTesting(v) {
 // UPDATE (2026-10-26, Matthew's call): a brand-new signup no longer
 // starts the trial silently. Post-cutoff accounts (auth created_at on
 // or after 2026-10-26T00:00:00Z) whose billing_status is still null
-// get the SIGNUP CHOICE GATE instead: "Start my 5-day free trial" or
+// get the SIGNUP CHOICE GATE instead: "Start my 4-day free trial" or
 // "Choose a plan now". The choice is the trigger — trial-start is not
 // called for them until they pick the trial. Pre-cutoff accounts keep
 // the automatic trial-start resolution (it grandfathers them to
@@ -5153,6 +5165,7 @@ let currentBilling = {
   status: null, // 'trialing' | 'active' | 'expired' | 'trial_blocked' | null
   trialStartedAt: null,
   trialEndsAt: null,
+  blockReason: null,
   periodEnd: null,
   hasStripeCustomer: false,
   hasSubscription: false, // stripe_subscription_id present on the row
@@ -5184,15 +5197,17 @@ let prospectsLastBuyerAt = null;
 // "Dealership accounts"): this account's dealership membership,
 // resolved on load from dealership_account_members joined to
 // dealership_accounts. Shape: { id, name, role, status, seatLimit,
-// planKey, planFlavor, trialEndsAt, billingStatus, periodEnd, blockTeammateAutopost } or
+// planKey, planFlavor, trialStartedAt, trialEndsAt, billingStatus, periodEnd, blockTeammateAutopost } or
 // null when the account belongs to no dealership.
 // A member of a COVERED dealership gets their access through the
 // dealership at the dealership's flavor, and their own billing row
 // is never consulted — no trial, no signup choice, no purchase
 // gate. Covered means (Phase 2): the dealership is ACTIVE (paid),
-// or it is in its 5-day TRIAL window (trial_ends_at still ahead) —
-// the trial runs at the full Group flavor so the store tastes
-// everything. An EXPIRED dealership (trial lapsed unpaid, or the
+// or it is in its TRIAL window (trial_ends_at still ahead) — a
+// staged trial (4-day stored window) runs member seats at the Self
+// Post flavor for the first 48 hours and the full Group flavor
+// after; legacy longer-window trials run at Group throughout. An
+// EXPIRED dealership (trial lapsed unpaid, or the
 // subscription ended) covers nobody: the account falls through to
 // the normal billing path below.
 let currentDealership = null;
@@ -5251,14 +5266,35 @@ function isDealershipLeader() {
   return !!currentDealership && currentDealership.role === "admin";
 }
 
-// The tier a covered member actually runs at: the trial tastes the
-// full Group flavor; a paid dealership runs at its bought flavor
-// (Post seats follow the Post rules — 5/day cap, 18h sync; Group
-// seats the Group rules). A paid dealership with no flavor on file
-// (owner-provisioned before Phase 2) keeps the full kit.
+// The phase of the current dealership's trial (staged trial,
+// 2026-10-30): 1 during the first 48 hours of a staged (4-day
+// stored window) trial, 2 after, "legacy" for a longer stored
+// window, null when the dealership is not trialing. Anchored on
+// the dealership's own creation (trialStartedAt) — the whole org
+// flips together. Seat and org MANAGEMENT never gates on this:
+// leaders manage in both phases; only the selling features
+// resolve through the flavor below.
+function dealershipTrialPhase() {
+  if (!currentDealership || currentDealership.status !== "trial") return null;
+  return trialPhaseState(
+    currentDealership.trialStartedAt ? Date.parse(currentDealership.trialStartedAt) : null,
+    currentDealership.trialEndsAt ? Date.parse(currentDealership.trialEndsAt) : null,
+    Date.now()
+  );
+}
+
+// The tier a covered member actually runs at: a staged dealership
+// trial runs member seats at the Self Post flavor for the first 48
+// hours, then the full Group flavor (legacy longer-window trials
+// run at Group throughout); a paid dealership runs at its bought
+// flavor (Post seats follow the Post rules — 5/day cap, 18h sync;
+// Group seats the Group rules). A paid dealership with no flavor
+// on file (owner-provisioned before Phase 2) keeps the full kit.
 function dealershipFlavorTier() {
   if (!currentDealership) return "group";
-  if (currentDealership.status === "trial") return "group";
+  if (currentDealership.status === "trial") {
+    return dealershipTrialPhase() === 1 ? "post" : "group";
+  }
   return currentDealership.planFlavor || "group";
 }
 
@@ -5309,6 +5345,40 @@ try {
 // resolveTier lands it on exactly the access it paid for.
 const TRIAL_ALLOWED_FEATURES = ["inventory", "queue", "manual_posting"];
 
+// STAGED TRIAL (2026-10-30): a trial whose stored window is 4 days
+// (plus a 1-hour tolerance for clock/rounding slack) runs in two
+// phases — phase 1 (the first 48 hours) resolves exactly as the
+// Self Post plan, phase 2 (48h until the trial ends) exactly as
+// the Automate plan. A trial with a LONGER stored window is a
+// legacy trial: it keeps the original trial scope
+// (TRIAL_ALLOWED_FEATURES + 1 queued post/day + 24h sync) for its
+// whole window. Detection is purely from the stored window, so
+// rows written before the staged build can never flip behavior
+// mid-trial. Missing or unreadable stamps resolve to "legacy" —
+// the pre-staged behavior — never to a phase.
+const TRIAL_PHASE2_AFTER_MS = 48 * 60 * 60 * 1000;
+const TRIAL_STAGED_WINDOW_MAX_MS = 4 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000;
+
+function trialPhaseState(startedAtMs, endsAtMs, nowMs) {
+  const started = Number(startedAtMs), ends = Number(endsAtMs), now = Number(nowMs);
+  if (!isFinite(started) || !isFinite(ends) || !isFinite(now)) return "legacy";
+  if (ends - started > TRIAL_STAGED_WINDOW_MAX_MS) return "legacy";
+  return now < started + TRIAL_PHASE2_AFTER_MS ? 1 : 2;
+}
+
+// Feature gate for a STAGED trial phase: phase 1 allows exactly
+// the Self Post feature set, phase 2 exactly the Automate
+// ('group') set. Any other phase value ("legacy", null,
+// undefined) falls back to the original trial scope in
+// trialFeatureAllowed below.
+function trialPhaseFeatureAllowed(feature, phase) {
+  const need = TIER_FEATURES[feature];
+  if (!need) return true;
+  if (phase === 1) return TIER_RANK.post >= TIER_RANK[need];
+  if (phase === 2) return TIER_RANK.group >= TIER_RANK[need];
+  return trialFeatureAllowed(feature);
+}
+
 function computeAccessState(input) {
   const now = input.nowMs;
   if (input.isOwner) {
@@ -5321,7 +5391,7 @@ function computeAccessState(input) {
   if (s === "trialing") {
     const ends = input.trialEndsAtMs;
     if (ends && now < ends) {
-      return { mode: "trial", gateKind: null, daysLeft: Math.max(1, Math.ceil((ends - now) / 86400000)) };
+      return { mode: "trial", gateKind: null, daysLeft: Math.max(1, Math.ceil((ends - now) / 86400000)), phase: trialPhaseState(input.trialStartedAtMs, ends, now) };
     }
     return { mode: "gate", gateKind: "expired", daysLeft: 0 };
   }
@@ -5359,7 +5429,9 @@ function trialQueueAllowed(usedToday) {
 // The daily queue allowance actually in force, as one number (999
 // keeps its "unlimited" meaning wherever the user's own limit is the
 // only cap):
-//   trialing            -> 1 (the trial rule; strictest, wins outright)
+//   trialing (legacy)   -> 1 (the original trial rule, strictest)
+//   trialing (staged)   -> phase 1 resolves as 'post', phase 2 as
+//                          'group' through the rules below
 //   owner (not preview) -> the user's own limit, untouched (hard rule)
 //   tier with a cap     -> min(own limit, tier cap); an unlimited own
 //                          limit (999 / unset) collapses to the cap
@@ -5367,8 +5439,12 @@ function trialQueueAllowed(usedToday) {
 // isOwner is the EXEMPTION flag, not the raw account check: the caller
 // passes false while an owner tier/billing preview is active, so
 // previewing Post shows the cap exactly as a Post customer gets it.
-function effectiveDailyPostAllowance(tier, userLimit, billingStatus, isOwner) {
-  if (billingStatus === "trialing") return 1;
+function effectiveDailyPostAllowance(tier, userLimit, billingStatus, isOwner, phase) {
+  if (billingStatus === "trialing") {
+    if (phase === 1) tier = "post";
+    else if (phase === 2) tier = "group";
+    else return 1;
+  }
   if (isOwner) return userLimit;
   const cap = TIER_DAILY_POST_CAP[tier];
   if (cap === null || cap === undefined) return userLimit;
@@ -5379,14 +5455,15 @@ function effectiveDailyPostAllowance(tier, userLimit, billingStatus, isOwner) {
 // Inventory sync cadence (Matthew, 2026-10-26): one user-requested
 // sync per window — SYNC_COOLDOWN_HOURS, resolved from the same
 // access facts as everything else. access = { mode, tier, isOwner,
-// covered }: mode is the billingAccess() mode, tier is
+// covered, phase }: mode is the billingAccess() mode, tier is
 // effectiveTier(), isOwner is the EXEMPTION flag (the caller passes
 // false while an owner preview is active, exactly like the post-cap
 // allowance, so a preview shows the cadence the previewed customer
 // gets), and covered marks a dealership-covered member — covered
 // members resolve to their DEALERSHIP FLAVOR's cadence via tier
-// (trial dealerships and Group dealerships: Group 6h; Post
-// dealerships: Post 18h), because effectiveTier() is already
+// (dealerships at their flavor's cadence — a staged trial's Post
+// phase and Post dealerships 18h; its Group phase and Group
+// dealerships 6h), because effectiveTier() is already
 // flavor-aware. Returns { allowed, hours, nextAt }:
 //   hours null -> no cadence applies (owner, or mode "gate" where a
 //                 sync is unreachable behind the purchase gate anyway)
@@ -5403,7 +5480,12 @@ function syncCooldownState(access, lastSyncAtISO, priorNonTestCount, nowMs) {
   if (access.isOwner) {
     hours = null;
   } else if (access.mode === "trial") {
-    hours = SYNC_COOLDOWN_HOURS.trial;
+    // Staged trial (2026-10-30): phase 1 syncs at the Post cadence
+    // (18h), phase 2 at the Group cadence (6h); legacy trials keep
+    // the original 24h trial cadence.
+    hours = access.phase === 1 ? SYNC_COOLDOWN_HOURS.post
+      : access.phase === 2 ? SYNC_COOLDOWN_HOURS.group
+      : SYNC_COOLDOWN_HOURS.trial;
   } else if (access.mode === "gate") {
     hours = null;
   } else if (access.covered) {
@@ -5438,8 +5520,11 @@ function needsSignupChoice(input) {
 // Posting delay (Matthew, 2026-10-28): the wait between posts —
 // user_settings.post_delay_minutes, which the helper's pacing gate
 // reads verbatim — is a CHOICE on the Automate plans (5, 10 or 15
-// minutes) and FIXED at 15 everywhere else: the Post plan, and the
-// trial (which resolves like Post for this setting). mode is the
+// minutes) and FIXED at 15 everywhere else: the Post plan, and
+// phase 1 + legacy trials (which resolve like Post for this
+// setting). A staged trial in phase 2 runs the full Automate set,
+// so the choice is live there too (mode "trial" with phase 2).
+// mode is the
 // billingAccess() mode; tier is effectiveTier(). Pure and total: a
 // stored value outside {5, 10, 15} (absent, zero, or a stale number
 // left over from another plan) resolves to 15 — also the column's
@@ -5450,8 +5535,9 @@ function needsSignupChoice(input) {
 const POST_DELAY_CHOICES = [5, 10, 15];
 const POST_DELAY_FIXED_MINUTES = 15;
 
-function postDelayState(mode, tier, storedMinutes) {
-  const adjustable = mode === "full" && (TIER_RANK[tier] || 0) >= TIER_RANK.automate;
+function postDelayState(mode, tier, storedMinutes, phase) {
+  const adjustable = (mode === "full" && (TIER_RANK[tier] || 0) >= TIER_RANK.automate) ||
+    (mode === "trial" && phase === 2);
   if (!adjustable) return { minutes: POST_DELAY_FIXED_MINUTES, adjustable: false };
   const stored = POST_DELAY_CHOICES.indexOf(storedMinutes) !== -1 ? storedMinutes : POST_DELAY_FIXED_MINUTES;
   return { minutes: stored, adjustable: true };
@@ -5475,6 +5561,7 @@ function billingAccess() {
     isOwner: !!(currentUser && isOwnerUser(currentUser.id)),
     ownerPreview: ownerBillingPreview,
     billingStatus: currentBilling.status,
+    trialStartedAtMs: currentBilling.trialStartedAt ? Date.parse(currentBilling.trialStartedAt) : null,
     trialEndsAtMs: currentBilling.trialEndsAt ? Date.parse(currentBilling.trialEndsAt) : null,
     periodEndMs: currentBilling.periodEnd ? Date.parse(currentBilling.periodEnd) : null,
     hasSubscription: currentBilling.hasSubscription,
@@ -5484,6 +5571,17 @@ function billingAccess() {
 
 function billingMode() {
   return billingAccess().mode;
+}
+
+// The staged-trial phase of the signed-in account: 1 or 2 for a
+// staged trial inside its window, "legacy" for a legacy trial,
+// null whenever the account is not in trial mode at all. (The
+// owner's trial PREVIEW carries no phase — it reads as undefined
+// here and every phase check falls back to the legacy behavior,
+// exactly what the preview showed before the staged build.)
+function trialPhase() {
+  const access = billingAccess();
+  return access.mode === "trial" ? access.phase : null;
 }
 
 function trialEndsDisplayMs() {
@@ -5568,7 +5666,7 @@ async function ensureBillingStatus() {
 
 // ---- Signup choice gate -----------------------------------------------
 // The gate is the trigger for post-cutoff signups: nothing calls
-// trial-start for them until they pick "Start my 5-day free trial"
+// trial-start for them until they pick "Start my 4-day free trial"
 // here (chooseStartTrial below runs the exact call the old automatic
 // flow made). Picking a plan instead runs the same startCheckout as
 // the purchase gate. Closing or refreshing decides nothing — the
@@ -5676,7 +5774,19 @@ async function getTrialQueueUsedToday() {
 // Gate run before every post-queue insert: true = go ahead.
 async function trialQueueGate(carCount) {
   if (billingMode() !== "trial") return true;
+  const phase = trialPhase();
+  if (phase === 2) return true; // Automate days: no trial queue cap (the plan gate and the user's own limit still apply downstream)
   const used = await getTrialQueueUsedToday();
+  if (phase === 1) {
+    // Self Post days: the Post plan's 5-per-day cap is the trial's
+    // cap, with the plan gate's own discipline — this gate speaks
+    // only when the PLAN cap binds; a lower own safety limit is
+    // checkDailyLimit's message, exactly as on the paid plan.
+    const cap = TIER_DAILY_POST_CAP.post;
+    if (used >= cap) { showTrialNotice("queue_cap"); return false; }
+    if (used + (carCount || 1) > cap) { showTrialNotice("queue_multi_cap"); return false; }
+    return true;
+  }
   if (!trialQueueAllowed(used)) { showTrialNotice("queue"); return false; }
   if ((carCount || 1) > 1) { showTrialNotice("queue_multi"); return false; }
   return true;
@@ -5687,8 +5797,9 @@ async function trialQueueGate(carCount) {
 // only when NO owner preview (tier or billing) is active — a preview
 // must show the cap exactly as the previewed customer gets it. Trial
 // mode is expressed as billingStatus "trialing" so the same function
-// yields the trial's 1 (the counter shows it too); the trial's own
-// gate above still does the trial's enforcing.
+// yields the trial's allowance (legacy trials: 1; staged trials:
+// the phase's plan allowance — the counter shows it too); the
+// trial's own gate above still does the trial's enforcing.
 function currentDailyPostAllowance() {
   const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
   const previewing = isOwner && (!!ownerTestTier || !!ownerBillingPreview);
@@ -5696,7 +5807,8 @@ function currentDailyPostAllowance() {
     effectiveTier(),
     userDailyPostLimit,
     billingMode() === "trial" ? "trialing" : currentBilling.status,
-    isOwner && !previewing
+    isOwner && !previewing,
+    trialPhase()
   );
 }
 
@@ -5740,16 +5852,63 @@ function showTrialNotice(kind, feature) {
     } else if (kind === "queue_multi") {
       title.innerText = "One car per day on the trial";
       body.innerText = "Your free trial includes queueing 1 car per day, so queueing several cars at once isn't available yet. Queue a single car — or pick a plan now and post without the trial limit.";
+    } else if (kind === "queue_cap") {
+      title.innerText = "Daily queue cap reached";
+      body.innerText = "Days 1–2 of the trial run the Self Post plan — 5 queued posts per day. On day 3 the full Automate plan unlocks: no plan cap (your own daily limit still applies), auto-posting, delete & repost, channels and Luca + Prospects. Or pick a plan now and skip the wait.";
+    } else if (kind === "queue_multi_cap") {
+      title.innerText = "That batch passes today's cap";
+      body.innerText = "Days 1–2 of the trial run the Self Post plan — 5 queued posts per day, so that batch doesn't fit today's cap. Queue fewer cars, or wait for day 3 when the full Automate plan unlocks. Or pick a plan now and skip the wait.";
     } else {
       const label = FEATURE_LABELS[feature] || (feature === "listing_copy" ? "Listing copy (AI)" : "This feature");
       title.innerText = "Not in the free trial";
-      body.innerText = label + " isn't part of the 5-day free trial. During the trial you can pull inventory and queue 1 car per day — everything unlocks on a plan.";
+      if (trialPhase() === 1) {
+        body.innerText = label + " is part of the Automate plan. Your trial unlocks the full Automate plan on day 3 — or pick a plan now and get it today.";
+      } else {
+        body.innerText = label + " isn't part of the free trial. During the trial you can pull inventory and queue 1 car per day — everything unlocks on a plan.";
+      }
     }
   }
   if (kind === "feature" && feature) showDemoVideo("trialNoticeVideoSlot", feature);
   else clearDemoVideo("trialNoticeVideoSlot");
   const modal = document.getElementById("trialNoticeModal");
   if (modal) modal.classList.remove("hidden");
+}
+
+// ---- Dealership source claim (2026-10-30) ------------------------------
+// One free trial per dealership SOURCE: the first time a trialing
+// solo account syncs (or saves at setup / in Settings) an inventory
+// source, the trial-source-claim function records that source's
+// dealership domain for the account. A DIFFERENT trialing account
+// reaching for an already-claimed source is stopped on the spot —
+// its billing_status flips to trial_blocked with the reason
+// 'dealership_trial_used' server-side, and currentBilling follows
+// here so the purchase gate renders the dealership notice. Owners,
+// dealership accounts (leader + covered members) and paid accounts
+// are exempt: this gate returns true for them without calling the
+// function. FAIL-OPEN on transport errors: a function hiccup must
+// never block a legitimate sync — the check runs again at the next
+// sync or source save.
+async function trialSourceClaimGate(urls) {
+  if (!currentUser || isOwnerUser(currentUser.id)) return true;
+  if (isDealershipLeader() || dealershipCovered()) return true;
+  if (billingMode() !== "trial") return true;
+  const list = (urls || []).filter(function (u) { return typeof u === "string" && !!u.trim(); });
+  if (!list.length) return true;
+  try {
+    const { data, error } = await supabaseClient.functions.invoke("trial-source-claim", {
+      body: { urls: list }
+    });
+    if (error || !data) return true;
+    if (data.status === "blocked") {
+      currentBilling.status = "trial_blocked";
+      currentBilling.blockReason = data.reason || "dealership_trial_used";
+      applyBillingUI();
+      return false;
+    }
+    return true;
+  } catch (e) {
+    return true;
+  }
 }
 
 function trialNoticeViewPlans() {
@@ -6294,13 +6453,18 @@ function applyPurchaseGate() {
     const head = document.getElementById("purchaseGateHeadline");
     const sub = document.getElementById("purchaseGateSub");
     if (access.gateKind === "blocked") {
-      if (head) head.innerText = "This account isn't eligible for a free trial";
-      if (sub) sub.innerText = "Pick a plan to start using AutoLaunch:";
+      if (currentBilling.blockReason === "dealership_trial_used") {
+        if (head) head.innerText = "Free trial has already been used for this dealership.";
+        if (sub) sub.innerText = "One free trial per dealership — this store's inventory source was already trialed by another account. If you're a different person at this store, contact support (tap Ask Luna) and we'll sort it out. Or pick a plan to start now:";
+      } else {
+        if (head) head.innerText = "This account isn't eligible for a free trial";
+        if (sub) sub.innerText = "Pick a plan to start using AutoLaunch:";
+      }
     } else if (access.gateKind === "term_ended") {
       if (head) head.innerText = "Your prepaid term has ended";
       if (sub) sub.innerText = "Pick a plan to keep posting:";
     } else {
-      if (head) head.innerText = "Your 5-day trial has ended";
+      if (head) head.innerText = "Your free trial has ended";
       if (sub) sub.innerText = "Pick a plan to keep posting:";
     }
     renderPurchaseCards("purchaseGateCards", "purchaseGateMsg");
@@ -6326,9 +6490,18 @@ function renderTrialBanner() {
   const endsMs = trialEndsDisplayMs();
   const text = document.getElementById("trialBannerText");
   if (text) {
-    text.innerText = "Free trial · " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") +
-      (endsMs ? " · ends " + fmtBillingDate(endsMs) : "") +
-      " — during the trial you can pull inventory and queue 1 car per day.";
+    const daysPart = access.daysLeft === 1 ? "last day" : access.daysLeft + " days left";
+    const endsPart = endsMs ? " · ends " + fmtBillingDate(endsMs) : "";
+    if (access.phase === 1) {
+      text.innerText = "Free trial · " + daysPart + endsPart +
+        " — you're on Self Post for days 1–2. Automate unlocks on day 3.";
+    } else if (access.phase === 2) {
+      text.innerText = "Full Automate trial · " + daysPart + endsPart +
+        " — every Automate feature is on, Luca + Prospects included.";
+    } else {
+      text.innerText = "Free trial · " + daysPart + endsPart +
+        " — during the trial you can pull inventory and queue 1 car per day.";
+    }
   }
   banner.classList.remove("hidden");
 }
@@ -6357,17 +6530,26 @@ function renderBillingPanel() {
     const flavorName = dealershipFlavorTier() === "post" ? "Dealership Self Post" : "Dealership Group";
     status = "Covered by your dealership — " + (currentDealership.name || "your dealership") + " (" + flavorName + ").";
     detail = currentDealership.status === "trial"
-      ? "Your dealership is in its free trial — full Group access until " + fmtBillingDate(Date.parse(currentDealership.trialEndsAt)) + ". No subscription is needed on this account."
+      ? (dealershipTrialPhase() === 1
+        ? "Your dealership is in its free trial — Self Post features for days 1–2; the full Group feature set unlocks on day 3 and runs until " + fmtBillingDate(Date.parse(currentDealership.trialEndsAt)) + ". No subscription is needed on this account."
+        : "Your dealership is in its free trial — full Group access until " + fmtBillingDate(Date.parse(currentDealership.trialEndsAt)) + ". No subscription is needed on this account.")
       : currentDealership.billingStatus === "term_active" && currentDealership.periodEnd
         ? "Your dealership prepaid in full — access paid through " + fmtBillingDate(Date.parse(currentDealership.periodEnd)) + ". No subscription is needed on this account."
         : "No subscription is needed on this account.";
   } else if (access.mode === "trial") {
     status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
-    detail = "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
+    detail = access.phase === 1
+      ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". Days 1–2 run the Self Post plan (5 queued posts per day, sync every 18 hours); the full Automate plan unlocks on day 3."
+      : access.phase === 2
+        ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". The full Automate plan is unlocked for the rest of your trial — Luca + Prospects included."
+        : "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
   } else if (access.mode === "gate") {
-    status = access.gateKind === "blocked" ? "This account isn't eligible for a free trial."
+    status = access.gateKind === "blocked"
+      ? (currentBilling.blockReason === "dealership_trial_used" ? "Free trial has already been used for this dealership." : "This account isn't eligible for a free trial.")
       : access.gateKind === "term_ended" ? "Your prepaid term has ended." : "Your free trial has ended.";
-    detail = "Pick a plan below to keep using AutoLaunch.";
+    detail = access.gateKind === "blocked" && currentBilling.blockReason === "dealership_trial_used"
+      ? "One free trial per dealership. If you're a different person at this store, contact support (Ask Luna) — or pick a plan below to start now."
+      : "Pick a plan below to keep using AutoLaunch.";
   } else if (access.termActive) {
     // Prepaid term (one-time purchase): show the plan + the exact
     // end of access. There is no subscription and nothing renews.
@@ -6492,7 +6674,7 @@ async function resolveDealershipMembership() {
   try {
     const { data, error } = await supabaseClient
       .from("dealership_account_members")
-      .select("role, dealership_id, dealership_accounts ( id, name, status, seat_limit, plan_key, plan_flavor, trial_ends_at, billing_status, current_period_end, block_teammate_autopost )")
+      .select("role, dealership_id, dealership_accounts ( id, name, status, seat_limit, plan_key, plan_flavor, created_at, trial_ends_at, billing_status, current_period_end, block_teammate_autopost )")
       .eq("user_id", currentUser.id)
       .maybeSingle();
     if (error) throw error;
@@ -6505,6 +6687,7 @@ async function resolveDealershipMembership() {
         seatLimit: data.dealership_accounts.seat_limit,
         planKey: data.dealership_accounts.plan_key,
         planFlavor: data.dealership_accounts.plan_flavor,
+        trialStartedAt: data.dealership_accounts.created_at,
         trialEndsAt: data.dealership_accounts.trial_ends_at,
         billingStatus: data.dealership_accounts.billing_status,
         periodEnd: data.dealership_accounts.current_period_end,
@@ -6533,7 +6716,9 @@ function updateDealershipNav() {
 // (key autolaunch_pending_dealership) before the auth round-trip. On
 // the first signed-in load with no membership yet, turn the stash
 // into a dealership via the function — which now creates it as a
-// working 5-day TRIAL (2 seats, full Group flavor). The function is
+// working staged 4-day TRIAL (2 seats; member seats run the Self
+// Post flavor for the first 48 hours, then full Group). The
+// function is
 // idempotent: a stash replayed after the row exists just returns
 // it. Fail-soft: a transient failure keeps the stash so the next
 // load retries.
@@ -6644,7 +6829,9 @@ async function renderDealershipPage() {
   if (guardToggleEl) guardToggleEl.checked = currentDealership.blockTeammateAutopost !== false;
   if (currentDealership.status === "trial") {
     renderDealerBuyPanel("Buy seats before your trial ends",
-      "Your trial runs at the full Group flavor. Pick the flavor and seat count your store keeps when it converts — buying now means no interruption.");
+      dealershipTrialPhase() === 1
+        ? "Your trial is staged: member seats run the Self Post flavor for days 1–2, then the full Group flavor unlocks on day 3. Pick the flavor and seat count your store keeps when it converts — buying now means no interruption."
+        : "Your trial runs at the full Group flavor. Pick the flavor and seat count your store keeps when it converts — buying now means no interruption.");
   } else if (dealershipTermActive(currentDealership, Date.now())) {
     renderDealerBuyPanel("Add prepaid time before this term ends",
       "Your store is prepaid through " + fmtBillingDate(Date.parse(currentDealership.periodEnd)) + ". Buying another term now stacks the new time on top of what's left — nothing is lost.");
@@ -6667,9 +6854,12 @@ function renderDealerStatusLines() {
     if (currentDealership.status === "trial") {
       const endsMs = currentDealership.trialEndsAt ? Date.parse(currentDealership.trialEndsAt) : null;
       const days = endsMs ? Math.max(1, Math.ceil((endsMs - Date.now()) / 86400000)) : null;
-      banner.innerText = "5-day dealership trial · 2 member seats" +
+      const phase = dealershipTrialPhase();
+      banner.innerText = (phase === "legacy" ? "Dealership trial" : "4-day dealership trial") + " · 2 member seats" +
         (days ? " · " + (days === 1 ? "last day" : days + " days left") : "") +
-        (endsMs ? " · ends " + fmtBillingDate(endsMs) : "");
+        (endsMs ? " · ends " + fmtBillingDate(endsMs) : "") +
+        (phase === 1 ? " · seats run Self Post — full Group unlocks on day 3" : "") +
+        (phase === 2 ? " · full Group unlocked" : "");
       banner.classList.remove("hidden");
     } else {
       banner.classList.add("hidden");
@@ -7333,7 +7523,7 @@ function openAccountModal() {
       (trialEndsDisplayMs() ? " · ends " + fmtBillingDate(trialEndsDisplayMs()) : "") + ".";
   } else if (access.mode === "gate") {
     billing = access.gateKind === "blocked"
-      ? "This account isn't eligible for a free trial."
+      ? (currentBilling.blockReason === "dealership_trial_used" ? "Free trial has already been used for this dealership." : "This account isn't eligible for a free trial.")
       : access.gateKind === "term_ended"
         ? "Your prepaid term has ended — pick a plan in Settings → Plans to continue."
         : "Your free trial has ended — pick a plan in Settings → Plan to continue.";
@@ -7659,6 +7849,7 @@ async function loadUserStoreSettings() {
       status: data && data.billing_status !== undefined ? data.billing_status : null,
       trialStartedAt: data ? (data.trial_started_at || null) : null,
       trialEndsAt: data ? (data.trial_ends_at || null) : null,
+      blockReason: data ? (data.trial_block_reason || null) : null,
       periodEnd: data ? (data.current_period_end || null) : null,
       hasStripeCustomer: !!(data && data.stripe_customer_id),
       hasSubscription: !!(data && data.stripe_subscription_id),
@@ -8165,6 +8356,16 @@ const certifiedUrl =
   updated_at: new Date().toISOString()
 }, { onConflict: "user_id" });
     if (error) throw error;
+
+    // DEALERSHIP SOURCE CLAIM (2026-10-30): saving sources is a
+    // claim point — a trialing account whose saved source was
+    // already trialed by another account is stopped here (the
+    // claim gate renders the notice + purchase gate; the settings
+    // themselves stay saved).
+    if (!(await trialSourceClaimGate([usedUrl, newUrl, certifiedUrl]))) {
+      closeModal("settingsModal");
+      return;
+    }
 
     currentStore.name = storeName;
 currentStore.usedUrl = usedUrl;
@@ -10914,7 +11115,8 @@ async function getSyncCooldownState() {
     mode: billingMode(),
     tier: effectiveTier(),
     isOwner: isOwner && !previewing,
-    covered: dealershipCovered()
+    covered: dealershipCovered(),
+    phase: trialPhase()
   };
   let lastSyncAt = null, priorCount = 0;
   try {
@@ -10991,6 +11193,13 @@ async function triggerLiveLotCrawl(event) {
         refreshSyncButtonState();
         return;
     }
+
+    // DEALERSHIP SOURCE CLAIM (2026-10-30): a trialing solo
+    // account claims its inventory sources at sync time — a source
+    // another account already trialed stops the trial here (the
+    // claim gate renders the notice + purchase gate). Exempt
+    // accounts pass straight through.
+    if (!(await trialSourceClaimGate([currentStore.usedUrl, currentStore.newUrl, currentStore.cpoUrl]))) return;
 
     btn.dataset.syncing = "1";
     const originalHTML = btn.innerHTML;
@@ -11166,6 +11375,14 @@ async function finishSetup() {
         alert("Could not save your dealership settings: " + (error.message || "Unknown error") + "\n\nYour inventory URLs were NOT saved. Please try again.");
         return;
     }
+
+    // DEALERSHIP SOURCE CLAIM (2026-10-30): setup is a claim
+    // point — a trialing account whose source was already trialed
+    // by another account is stopped before the test sync queues
+    // (the claim gate renders the notice + purchase gate). The
+    // settings themselves stay saved.
+    const claimOk = await trialSourceClaimGate([usedUrl, newUrl, certifiedUrl]);
+    if (!claimOk) return;
 
     // SETUP TEST SYNC (Matthew, 2026-10-23): finishing setup kicks off
     // the capped TEST sync (up to 15 cars) so the dealer sees real
@@ -12874,7 +13091,10 @@ async function confirmTradeDelete(withProspect) {
 // 'automate' and owners resolve at/above 'automate' and pass
 // requireTier to the real page; trial mode is answered by the trial
 // notice inside requireTier; gate mode stays behind the purchase
-// gate. (Verified 2026-10-28: the trial does NOT include Prospects —
+// gate. (Staged trial, 2026-10-30: Prospects sits outside the
+// trial scope in phase 1 and on legacy trials, and opens for real
+// in phase 2 when the full Automate set unlocks. Original note,
+// 2026-10-28: the trial did NOT include Prospects —
 // TRIAL_ALLOWED_FEATURES is inventory / queue / manual_posting only —
 // so the teaser is deliberately 'post'-only and the trial funnel is
 // untouched.) The decision is a pure function of (billing mode,
@@ -15488,7 +15708,7 @@ const GUIDES = {
       "Open this card.",
       "Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.",
       "Pick a posting speed: Standard, or Cautious for twice the spacing between posts.",
-      "Set the time between posts — 5, 10 or 15 minutes. On the Post plan and the free trial it stays at 15 minutes; choosing it is part of the Automate plan.",
+      "Set the time between posts — 5, 10 or 15 minutes. On the Post plan — and on days 1–2 of the free trial — it stays at 15 minutes; choosing it is part of the Automate plan, which the trial unlocks in full on day 3.",
       "Press Save. The counter on this card shows how much of today's limit you have used."
     ],
     notes: [
@@ -16695,7 +16915,7 @@ function setPostingSpeed(speed) {
 // one place the tier rule is computed; the save path persists
 // exactly what it returns.
 function setPostDelay(minutes) {
-  const st = postDelayState(billingMode(), effectiveTier(), userPostDelayMinutes);
+  const st = postDelayState(billingMode(), effectiveTier(), userPostDelayMinutes, trialPhase());
   if (!st.adjustable) {
     if (minutes === POST_DELAY_FIXED_MINUTES) { syncPostDelayHighlight(); return; }
     closeModal('postingSafetyModal');
@@ -16720,7 +16940,7 @@ function syncPostDelayHighlight() {
 // (never a stale stored number) everywhere else — same discipline
 // as syncDailyLimitControlsFromState.
 function syncPostDelayControlsFromState() {
-  const st = postDelayState(billingMode(), effectiveTier(), userPostDelayMinutes);
+  const st = postDelayState(billingMode(), effectiveTier(), userPostDelayMinutes, trialPhase());
   selectedPostDelay = st.minutes;
   syncPostDelayHighlight();
   const group = document.getElementById("postDelayGroup");
@@ -16730,7 +16950,9 @@ function syncPostDelayControlsFromState() {
     note.innerText = st.adjustable
       ? "How long the helper waits after a post before starting the next one. Deletes are never delayed."
       : (billingMode() === "trial"
-        ? "Fixed at 15 minutes on the free trial. Choosing your spacing is part of the Automate plan."
+        ? (trialPhase() === 1
+          ? "Fixed at 15 minutes for days 1–2 of the trial. From day 3 your trial runs the full Automate plan and you can choose your spacing."
+          : "Fixed at 15 minutes on the free trial. Choosing your spacing is part of the Automate plan.")
         : "Fixed at 15 minutes on the " + PLAN_DETAILS[effectiveTier()].name + " plan. Choosing your spacing is part of the Automate plan.");
   }
 }
@@ -16926,7 +17148,7 @@ async function savePostingSafetyPreferences() {
     }
   }
 
-  const delayValue = postDelayState(billingMode(), effectiveTier(), selectedPostDelay).minutes;
+  const delayValue = postDelayState(billingMode(), effectiveTier(), selectedPostDelay, trialPhase()).minutes;
 
   try {
     const { error } = await supabaseClient.from("user_settings").upsert({

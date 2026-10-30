@@ -1,5 +1,5 @@
 // =====================================================================
-// trial-start — AutoLaunch 5-day trial + one-trial-per-claim locks
+// trial-start — AutoLaunch 4-day staged trial + one-trial-per-claim locks
 // (2026-10-26, see TIERS.md "Trial + Billing" and "Trial abuse
 // defenses").
 //
@@ -51,7 +51,10 @@
 //      Accounts in any other state are never re-checked or flipped:
 //      a paying customer cannot be claim-blocked.
 //   3. On pass, the account gets billing_status = 'trialing' with a
-//      trial window of now .. now + 5 days.
+//      trial window of now .. now + 4 days. The window is
+//      STAGED (2026-10-30): the app resolves the first 48 hours as
+//      the Self Post plan and the rest as the full Automate plan,
+//      from the stored window alone; nothing extra is written.
 //   4. FAIL-OPEN: a missing IP, a missing/invalid ext id, or a
 //      missing salt secret skips that claim only — missing data must
 //      never lock out a legitimate user.
@@ -73,7 +76,7 @@ const cors = {
 // Accounts created before this instant predate the trial system and
 // are grandfathered to 'active' forever.
 const GRANDFATHER_CUTOFF = Date.parse("2026-10-26T00:00:00Z");
-const TRIAL_MS = 5 * 24 * 60 * 60 * 1000;
+const TRIAL_MS = 4 * 24 * 60 * 60 * 1000;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -413,7 +416,7 @@ Deno.serve(async (req) => {
   if (extPlan) extClaimStatus = extPlan.status;
   if (emailPlan) emailClaimStatus = emailPlan.status;
 
-  // Grant the 5-day trial.
+  // Grant the 4-day staged trial.
   const now = new Date();
   const ends = new Date(now.getTime() + TRIAL_MS);
   const { error } = await svc

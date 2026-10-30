@@ -2,7 +2,7 @@
 
 Built 2026-10-26. Tier gating and the email-confirmation flow came
 first; the **trial + billing system followed the same day** (see
-"Trial + Billing" below): a 5-day IP-locked trial, a purchase gate,
+"Trial + Billing" below): a staged 4-day IP-locked trial, a purchase gate,
 and Stripe checkout/portal/webhook plumbing. The plumbing is live but
 dormant — it activates the moment the Stripe secrets are set.
 
@@ -341,12 +341,41 @@ highest tier (**Group, $100/mo**), each described in plain language.
 Billing requirements: the monthly charge recurs on the **same day of
 the month** the subscription starts, and users can **cancel in-app**.
 
+**STAGED TRIAL UPDATE (2026-10-30, Matthew — supersedes the trial
+shape in the paragraph above and everywhere below except the dated
+verification logs):** the trial is now a **4-day staged trial**.
+Days 1–2 (the first 48 hours) resolve exactly as the **Self Post**
+plan (5 queued posts/day, sync 1/18h, fixed 15-min post delay, AI
+listing copy; no automation, no in-app delete, no channels, no
+Prospects/Luca); days 3–4 resolve exactly as the **Automate** plan
+(auto-post, delete & repost, channels, Luca + Prospects, wishlist,
+trade, intro videos; no plan post cap — the user's own daily limit
+governs; sync 1/6h). Detection is from the stored window alone:
+(trial_ends_at − trial_started_at) ≤ 4 days + 1h → staged; a longer
+window is a **legacy trial** and keeps the original scope for its
+whole window (the one live legacy trial at ship time: mosescars,
+ends 2026-10-31). Dealership trials are staged identically,
+anchored on the dealership's `created_at`, the whole org flipping
+together; seat/org management is available in BOTH phases. A
+**dealership source claim** (same date) adds one free trial per
+dealership: `trial_dealer_claims` maps a normalized source domain
+(last two DNS labels of the inventory source URL) to the claiming
+user; the `trial-source-claim` Edge Function writes/checks it when
+a solo trialing account first syncs or saves a source. A different
+trialing account reaching for a claimed source is flipped to
+`trial_blocked` with `user_settings.trial_block_reason =
+'dealership_trial_used'` and sees "Free trial has already been
+used for this dealership." Owners, dealership accounts and paid
+accounts are exempt; the registry started EMPTY (no retroactive
+claims). Owner release = delete the claim row; a stopped account
+is NOT auto-restored (Matthew decides per case).
+
 ### State machine (user_settings.billing_status)
 
 | Value | Meaning | App behavior |
 |---|---|---|
 | `NULL` | Not yet decided (new signup) — or a row predating billing | Pre-cutoff account: app calls `trial-start` once on load, resolved server-side. Post-cutoff signup: the **signup choice gate** (below) — nothing is called or written until the user picks trial or plan |
-| `trialing` | In the 5-day trial (`trial_ends_at` is the clock) | Trial mode (below) until the window passes, then the purchase gate |
+| `trialing` | In the 4-day staged trial (`trial_ends_at` is the clock; legacy longer-window trials keep the original scope) | Trial mode (below) until the window passes, then the purchase gate |
 | `trial_blocked` | This network's trial was already used by another account | Purchase gate immediately, no trial |
 | `active` | Paid subscription — or a grandfathered account | Normal tier behavior (`plan_tier` decides features) |
 | `expired` | Trial ended unused, or a subscription ended (webhook) | Purchase gate |
@@ -371,7 +400,7 @@ Idempotent — a decided account gets its status back unchanged.
    **no policies** — service-role access only).
 3. Hash already claimed by a **different** account →
    `trial_blocked`. Otherwise the claim is recorded and the account
-   gets `trialing` with a 5-day window.
+   gets `trialing` with a 4-day window.
 4. **Fail-open:** no IP header (or no salt configured) → the trial is
    granted *without* a claim. A missing header must never lock out a
    legitimate user.
@@ -390,9 +419,10 @@ purchase writes the real tier explicitly via the webhook). The
 second was a trap and was fixed the same day (choice gate, below):
 `trial_ends_at` carried a legacy default of `now() + 30 days`, so a
 fresh row *displayed* a 30-day window until `trial-start` overwrote
-it with the real one. Its default is now `now() + '5 days'`
-(record: `supabase/migrations_draft/trial_default_5day_APPLIED_2026-10-26.sql`),
-so even an undecided row shows the true 5-day shape; `trial-start`
+it with the real one. Its default was `now() + '5 days'`
+(record: `supabase/migrations_draft/trial_default_5day_APPLIED_2026-10-26.sql`)
+and is now `now() + '4 days'` (2026-10-30 staged-trial build),
+so even an undecided row shows the true 4-day shape; `trial-start`
 still writes the authoritative window when it decides. Note the
 Supabase gateway decides which IP the function
 sees — from Luna's sandbox that's a rotating egress pool, which is
@@ -403,7 +433,7 @@ is the user's public IP, which is what the lock is designed around.
 ### Signup choice gate (added 2026-10-26)
 
 Matthew's follow-up call: a new signup should **choose** — start the
-5-day free trial, or pick a membership level right away — instead of
+4-day free trial, or pick a membership level right away — instead of
 the trial starting silently on first load.
 
 - **Who sees it:** a signed-in, non-owner account created on/after
@@ -413,8 +443,8 @@ the trial starting silently on first load.
   grandfathers them to `active`. Owners never see it.
 - **What it is:** a non-dismissible full-screen overlay
   (`#signupChoiceOverlay`, in `MODAL_CLOSE_DENY`, same styling as the
-  purchase gate, sign-out link included). Path one: **Start my 5-day
-  free trial** — plain copy (pull inventory, queue 1 car per day, no
+  purchase gate, sign-out link included). Path one: **Start my 4-day
+  free trial** — plain copy (staged: Self Post for 2 days, then full Automate for 2 days; no
   card needed; when the trial ends you pick a plan) — runs the same
   `trial-start` call the automatic flow used to make, then
   re-resolves: `trialing` closes the gate into trial mode (banner +
@@ -1460,7 +1490,7 @@ nothing more, until a dealer plan activates it.
   caller who already belongs to a dealership gets that dealership
   back unchanged. **Phase 2 supersedes the Phase 1.5 'pending'
   state**: registration now creates a working **trial** dealership
-  (`status = 'trial'`, 2 member seats, `trial_ends_at` = +5 days) —
+  (`status = 'trial'`, 2 member seats, `trial_ends_at` = +4 days) —
   see "Dealership accounts — Phase 2" below. The Phase 1.5 text
   above this bullet (the register fork itself: segmented control,
   localStorage stash, consume-on-first-load) is unchanged and
@@ -1497,9 +1527,13 @@ seats the discount vs the flat top rate is $300 on Post
   can still open the page and buy seats.
 - **The trial is real now.** `register_dealership` creates
   `status = 'trial'`, `seat_limit = 2` (member seats),
-  `trial_ends_at = now + 5 days`, `billing_status = 'trialing'`.
-  During the window the store runs at the **full Group flavor** so
-  it tastes everything; members are covered (below). Member
+  `trial_ends_at = now + 4 days`, `billing_status = 'trialing'`
+  (the window was 5 days until the 2026-10-30 staged build).
+  The trial is STAGED (2026-10-30): member seats run the **Self
+  Post flavor** for the first 48 hours from the dealership's
+  creation, then the **full Group flavor** until the window ends;
+  member management works in both stages; members are covered
+  (below). Legacy longer-window trials run at Group throughout. Member
   management works during the trial (the Phase 1.5 409
   `dealership_not_active` refusal now applies only to non-trial,
   non-active statuses — an expired store refuses adds until it

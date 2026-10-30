@@ -25,10 +25,12 @@
 //     new account picks Individual vs Dealership. ANY signed-in user
 //     with NO existing membership registers their store: the
 //     dealership row is created with status 'trial', seat_limit 2,
-//     trial_ends_at = created_at + 5 days, billing_status
+//     trial_ends_at = created_at + 4 days, billing_status
 //     'trialing', and the caller becomes its admin member. The
-//     trial is a WORKING trial: the store tastes the full Group
-//     flavor with up to 2 seats, and member management is enabled.
+//     trial is a WORKING trial, staged like the solo trial
+//     (2026-10-30): member seats run the Self Post flavor for the
+//     first 48 hours, then the full Group flavor, with up to 2
+//     seats, and member management is enabled in BOTH stages.
 //     (Phase 1.5 created status 'pending' with no powers; the
 //     Phase 2 migration moved pending rows to this trial state and
 //     dealer checkout — billing-checkout kind 'dealership' — is
@@ -269,9 +271,10 @@ Deno.serve(async (req) => {
 
   // ------------------------------------------------- register_dealership
   // Self-serve registration (Register page, Dealership choice).
-  // Phase 2: creates a TRIAL dealership — a working 5-day trial at
-  // the full Group flavor with seat_limit 2 and member management
-  // enabled — with the caller as its admin. Idempotent: a caller
+  // Phase 2: creates a TRIAL dealership — a working staged 4-day
+  // trial (Self Post flavor for the first 48 hours, then the full
+  // Group flavor) with seat_limit 2 and member management enabled
+  // in both stages — with the caller as its admin. Idempotent: a caller
   // who already belongs to a dealership gets it back unchanged.
   if (action === "register_dealership") {
     const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -288,7 +291,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "dealership_not_found" }, 404);
     }
 
-    const trialEndsAt = new Date(Date.now() + 5 * 86400000).toISOString();
+    const trialEndsAt = new Date(Date.now() + 4 * 86400000).toISOString();
     const { data: dealer, error: dErr } = await svc
       .from("dealership_accounts")
       .insert({

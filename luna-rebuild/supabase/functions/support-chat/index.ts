@@ -156,7 +156,7 @@ async function callGemini(
 // Account snapshot — the caller's OWN rows only (RLS via their JWT).
 // ---------------------------------------------------------------------
 const SETTINGS_COLUMNS =
-  "plan_tier, billing_status, trial_started_at, trial_ends_at, " +
+  "plan_tier, billing_status, trial_started_at, trial_ends_at, trial_block_reason, " +
   "daily_post_limit, post_delay_minutes, auto_post_enabled, " +
   "dealership_name, onboarding_complete, last_synced_at, " +
   "current_period_end, lifetime_tier, lifetime_purchased_at, " +
@@ -215,6 +215,23 @@ function fmtNameList(v: unknown): string {
   }).join(", ");
 }
 
+// Staged trial phase (2026-10-30), mirroring the app's
+// trialPhaseState: a stored window of 4 days + 1h tolerance or
+// less is staged — phase 1 for its first 48 hours, phase 2 after.
+// Anything longer (or unreadable) is a legacy trial with the
+// original trial scope.
+function stagedTrialPhase(
+  startedAt: string | null | undefined,
+  endsAt: string | null | undefined,
+  nowMs: number,
+): "legacy" | 1 | 2 {
+  const started = startedAt ? Date.parse(startedAt) : NaN;
+  const ends = endsAt ? Date.parse(endsAt) : NaN;
+  if (!isFinite(started) || !isFinite(ends)) return "legacy";
+  if (ends - started > 4 * 86400000 + 3600000) return "legacy";
+  return nowMs < started + 48 * 3600000 ? 1 : 2;
+}
+
 async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   const now = new Date();
   const todayStart = new Date(Date.UTC(
@@ -239,7 +256,7 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
       supabase.from("scraped_inventory").select("vin", { count: "exact", head: true })
         .eq("user_id", userId).gte("marketplace_posted_at", todayStart),
       supabase.from("dealership_account_members")
-        .select("role, dealership_accounts(name, status, plan_flavor, trial_ends_at)")
+        .select("role, dealership_accounts(name, status, plan_flavor, trial_ends_at, created_at)")
         .eq("user_id", userId),
       supabase.from("auto_posting_queue")
         .select("id", { count: "exact", head: true })
@@ -288,11 +305,15 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     name: m.dealership_accounts?.name || "(unnamed dealership)",
     status: m.dealership_accounts?.status || "unknown",
     flavor: m.dealership_accounts?.plan_flavor || null,
+    trialStartedAt: m.dealership_accounts?.created_at || null,
     trialEndsAt: m.dealership_accounts?.trial_ends_at || null,
   }));
   // Coverage (Phase 2): an active dealership covers its MEMBERS;
-  // so does a dealership still inside its 5-day trial window (full
-  // Group flavor). An expired dealership covers nobody. The leader
+  // so does a dealership still inside its trial window (staged
+  // since 2026-10-30: a 4-day window runs the Self Post flavor for
+  // its first 48 hours, then the full Group flavor; legacy longer
+  // windows run at Group throughout). An expired dealership covers
+  // nobody. The leader
   // (admin) is NEVER covered — that account is manage-only
   // (Matthew, 2026-10-26); it follows the personal path below.
   const coveredMembership = memberships.find((m: any) =>
@@ -304,7 +325,9 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   const covered = !!coveredMembership;
   const coveredFlavor = coveredMembership
     ? (coveredMembership.status === "trial"
-      ? "group"
+      ? (stagedTrialPhase(coveredMembership.trialStartedAt, coveredMembership.trialEndsAt, now.getTime()) === 1
+        ? "post"
+        : "group")
       : coveredMembership.flavor || "group")
     : null;
 
@@ -319,10 +342,13 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   }
 
   // Sync cadence state: covered members ride at their dealership's
-  // flavor (trial dealerships and Group dealerships at Group
-  // cadence, Post dealerships at Post cadence); a trialing account
-  // uses the trial cadence; everyone else their tier.
-  const cadenceKey = covered ? (coveredFlavor || "group") : billingState === "trialing" ? "trial" : tier;
+  // flavor; a trialing solo account rides at its stage's cadence
+  // (phase 1 Post 18h, phase 2 Group 6h, legacy trials the 24h
+  // trial cadence); everyone else their tier.
+  const soloPhase = billingState === "trialing"
+    ? stagedTrialPhase(s?.trial_started_at, s?.trial_ends_at, now.getTime())
+    : null;
+  const cadenceKey = covered ? (coveredFlavor || "group") : billingState === "trialing" ? (soloPhase === 1 ? "post" : soloPhase === 2 ? "group" : "trial") : tier;
   const cadenceHours = SYNC_COOLDOWN_HOURS[cadenceKey] ?? 18;
   const lastRealSync = jobs.find((j: any) => j.sync_mode !== "test");
   let syncLine = "No inventory sync has run yet on this account.";
@@ -354,7 +380,15 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     lines.push(
       `- Plan tier: ${tier}. Billing status: ${billingState}.` +
       (billingState === "trialing"
-        ? ` Trial ends ${s.trial_ends_at} (${trialDaysLeft} day(s) left).`
+        ? ` Trial ends ${s.trial_ends_at} (${trialDaysLeft} day(s) left).` +
+          (soloPhase === 1
+            ? " Trial stage: phase 1 of 2 — Self Post features; the full Automate plan unlocks at 48 hours."
+            : soloPhase === 2
+              ? " Trial stage: phase 2 of 2 — full Automate features, Luca + Prospects included."
+              : " Trial stage: legacy trial scope (a pre-staged trial).")
+        : "") +
+      (billingState === "trial_blocked" && s.trial_block_reason === "dealership_trial_used"
+        ? " Trial stopped: the free trial was already used for this account's dealership source (one free trial per dealership). The account can still buy a plan; if the user is a different person at the same store, support can review it and release the claim."
         : "") +
       (s.lifetime_tier ? ` Lifetime plan: ${s.lifetime_tier} (purchased ${s.lifetime_purchased_at}).` : "") +
       (s.support_plan_status ? ` Support Plan: ${s.support_plan_status}.` : ""),
@@ -369,7 +403,7 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   if (covered) {
     lines.push(
       `- Dealership cover: this account is a ${coveredMembership.role} of ` +
-      `"${coveredMembership.name}" (${coveredMembership.status === "trial" ? "dealership trial, full Group flavor" : (coveredFlavor || "group") + " plan"}) — covered by the dealership, no personal subscription needed.`,
+      `"${coveredMembership.name}" (${coveredMembership.status === "trial" ? (coveredFlavor === "post" ? "dealership trial, Self Post stage (days 1–2)" : "dealership trial, full Group flavor") : (coveredFlavor || "group") + " plan"}) — covered by the dealership, no personal subscription needed.`,
     );
   } else if (memberships.length) {
     lines.push(
@@ -478,9 +512,20 @@ inventory from their website and posts it to Facebook Marketplace (plus
 optional channels — Facebook Page posting is live, and TikTok and Instagram are coming soon). It is NOT a CRM.
 
 PLANS AND PRICES:
-- 5-day free trial: no card needed. Queue 1 post per day, inventory sync
-  once every 24 hours. Automate features are locked during the trial.
-  When the trial ends, a plan is required to keep posting.
+- 4-day free trial: no card needed, and it runs in two stages. Days
+  1–2 are the Self Post plan (queue up to 5 posts per day, inventory
+  sync once every 18 hours, posting delay fixed at 15 minutes, no
+  automation, no Prospects). Days 3–4 unlock the full Automate plan
+  (auto-post, delete & repost, channels, Luca + Prospects; no plan
+  cap on queued posts; sync once every 6 hours). When the trial
+  ends, a plan is required to keep posting.
+- One free trial per dealership: a trial is claimed for a dealership
+  the first time a trialing account syncs (or saves) that
+  dealership's inventory website. If a trial stopped with "Free
+  trial has already been used for this dealership," another account
+  already used this store's free trial — the account is NOT deleted
+  and can still buy a plan. If you're a different person at the
+  same store, contact support and we can review it.
 - Self Post — $75/month: POSTING ONLY (inventory, post queue, manual
   posting, AI listing copy). Cap: 5 queued posts per day. Sync every
   18 hours. Self Post has NO delete: it cannot remove a listing in
@@ -648,9 +693,12 @@ OTHER FEATURES:
   suggest it gets their next month on us.
 
 DEALERSHIP ACCOUNTS:
-- Registering as a dealership starts a free 5-day dealership trial:
-  up to 2 member seats, the full Group feature set, and the leader
-  can add members from the Dealership page right away.
+- Registering as a dealership starts a free 4-day dealership trial:
+  up to 2 member seats, staged like the solo trial — member seats
+  run the Dealership Self Post feature set on days 1–2, then the
+  full Dealership Group set on days 3–4. The leader can add and
+  manage members from the Dealership page right away, in both
+  stages (management never waits for day 3).
 - Paid dealerships pick a flavor and a seat count (1 to 50 seats):
   Dealership Self Post — $75/seat/mo for 1-24 seats, $69 for 25-50.
   Dealership Group — $99/seat/mo for 1-9 seats, $95 for
@@ -1910,7 +1958,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     2
    ]
   ],
-  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: 5 days, no card needed. Queued posts on the trial: 1 per day; inventory sync 1 sync per 24 hours. Automate features are locked on the trial.\n- Self Post — $75/month: POSTING ONLY — queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no delete (removing a listing in the app is an Automate feature), no auto-post, no channels, no Luca.\n- Post + Automate (a legacy tier some older accounts still hold — not sold anymore; Settings -> Plans shows it as Automate): everything in Self Post plus auto-post new arrivals, delete listings + auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Automate — $100/month: everything in Self Post, plus all the automation and team features. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Self Post 1 year $855, 2 years $1,620, 3 years $2,295; Automate 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Self Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
+  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: 4 days, staged, no card needed. Days 1–2 run the Self Post plan: queued posts 5 per day; inventory sync 1 sync per 18 hours; posting delay fixed at 15 minutes. Days 3–4 unlock the full Automate plan: no plan cap on queued posts (your own daily limit applies); inventory sync 1 sync per 6 hours; auto-post, delete & repost, channels, Luca + Prospects. One free trial per person, per network, and per dealership source.\n- Self Post — $75/month: POSTING ONLY — queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no delete (removing a listing in the app is an Automate feature), no auto-post, no channels, no Luca.\n- Post + Automate (a legacy tier some older accounts still hold — not sold anymore; Settings -> Plans shows it as Automate): everything in Self Post plus auto-post new arrivals, delete listings + auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Automate — $100/month: everything in Self Post, plus all the automation and team features. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Self Post 1 year $855, 2 years $1,620, 3 years $2,295; Automate 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Self Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
  },
  {
   "id": "terms",
@@ -1977,7 +2025,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "From the AutoLaunch Terms of Service (version 2026-10-26):\nREFUNDS: All sales are final. We do not offer refunds on any plan, including multi-year prepaid terms and the Support Plan. That includes partial periods: if you cancel mid-cycle, no amount is returned for the unused part of the period — your access simply continues until the paid period ends, as described above. Before you pay, the app shows this policy and asks you to confirm that you understand it, and checkout asks you to accept these Terms. If you are not willing to buy on a final-sale basis, please use the free trial first.\nCANCELLING: Monthly plans renew on the same day of the month the subscription started, charged automatically until cancelled. Cancel anytime in Settings -> Plans (\"Manage or cancel subscription\") — cancelling stops future charges and access continues until the end of the period already paid for.\nFREE TRIAL: New accounts may start one 5-day free trial: no card is required, you can pull inventory, and you can queue 1 post per day with an inventory sync once every 24 hours. Trials are limited to one per person and per network — additional accounts from the same person or network are not eligible for another trial. When the trial ends, a paid plan is required to keep using AutoLaunch.\nPREPAID TERMS: Solo plans can also be bought as prepaid terms: 1 year (5% off the monthly price), 2 years (10% off), or 3 years (15% off), paid in a single one-time payment. A prepaid term is not a subscription: it does not renew automatically. Your access runs until the term's end date, which is shown in Settings → Plans before and after you buy; buying another …"
+  "text": "From the AutoLaunch Terms of Service (version 2026-10-26):\nREFUNDS: All sales are final. We do not offer refunds on any plan, including multi-year prepaid terms and the Support Plan. That includes partial periods: if you cancel mid-cycle, no amount is returned for the unused part of the period — your access simply continues until the paid period ends, as described above. Before you pay, the app shows this policy and asks you to confirm that you understand it, and checkout asks you to accept these Terms. If you are not willing to buy on a final-sale basis, please use the free trial first.\nCANCELLING: Monthly plans renew on the same day of the month the subscription started, charged automatically until cancelled. Cancel anytime in Settings -> Plans (\"Manage or cancel subscription\") — cancelling stops future charges and access continues until the end of the period already paid for.\nFREE TRIAL: New accounts may start one 4-day free trial: no card is required. The trial runs in two stages — on days 1–2 you get the Self Post features, with up to 5 queued posts per day and an inventory sync once every 18 hours; on days 3–4 the full Automate plan unlocks, including Luca and Prospects, with no plan cap on queued posts and an inventory sync once every 6 hours. Trials are limited to one per person and per network, and to one per dealership: if a free trial has already been used for your dealership's inventory source, another trial for that dealership is not eligible. Additional accounts from the same person or network are not eligible for another trial. When the trial ends, a paid plan is required to keep using AutoLaunch.\nPREPAID TERMS: Solo plans can also be bought as prepaid terms: 1 year (5% off the monthly price), 2 years (10% off), or 3 years (15% off), paid in a single one-time payment. A prepaid term is not a subscription: it does not renew automatically. Your access runs until the term's end date, which is shown in Settings → Plans before and after you buy; buying another …"
  },
  {
   "id": "referrals",
