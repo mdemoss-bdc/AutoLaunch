@@ -584,6 +584,88 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 <body class="dark-shell h-full flex select-none overflow-x-hidden text-slate-800">
 
 <!-- ============================================================================== -->
+<!-- ================= STATIC LANDING (NO-JS / REVIEWER VIEW) ==================== -->
+<!-- ============================================================================== -->
+<!-- Real product content baked into the served HTML so autolaunch.org reads
+     as a fully developed website even when NO script runs (channel reviewers
+     and crawlers that do not execute JavaScript — the app itself is a
+     script-driven SPA, so without this block they see an empty shell).
+     The first boot script below removes this block the moment the app
+     starts; with scripts on, visitors see only the app, unchanged.
+     Styles are self-contained ON PURPOSE: they must not depend on the
+     Tailwind CDN. Palette = the Midnight Blue preset tokens. -->
+<div id="alStaticLanding">
+  <style>
+    body { margin: 0; }
+    #alStaticLanding { background: #070D1A; color: #E2E8F0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; width: 100%; flex: 0 0 100%; box-sizing: border-box; }
+    #alStaticLanding * { box-sizing: border-box; }
+    #alStaticLanding .al-wrap { max-width: 1060px; margin: 0 auto; padding: 56px 24px 40px; }
+    #alStaticLanding .al-brand { display: flex; align-items: center; gap: 14px; }
+    #alStaticLanding .al-brand img { width: 52px; height: 52px; border-radius: 14px; }
+    #alStaticLanding .al-name { font-size: 30px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.02em; line-height: 1.15; }
+    #alStaticLanding .al-tag { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.22em; color: #60A5FA; text-transform: uppercase; margin-top: 3px; }
+    #alStaticLanding h1 { font-size: 34px; line-height: 1.25; font-weight: 800; color: #FFFFFF; margin: 34px 0 14px; letter-spacing: -0.01em; }
+    #alStaticLanding h1 .al-accent { color: #3B82F6; }
+    #alStaticLanding p { margin: 0 0 14px; font-size: 16px; color: #CBD5E1; max-width: 780px; }
+    #alStaticLanding h2 { font-size: 20px; font-weight: 800; color: #FFFFFF; margin: 36px 0 12px; }
+    #alStaticLanding ul { margin: 0 0 8px; padding-left: 20px; max-width: 840px; }
+    #alStaticLanding li { margin-bottom: 9px; font-size: 15.5px; color: #CBD5E1; }
+    #alStaticLanding li strong { color: #FFFFFF; }
+    #alStaticLanding .al-plans { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 6px; }
+    #alStaticLanding .al-plan { flex: 1 1 280px; background: #0B1526; border: 1px solid #1E3A5F; border-radius: 16px; padding: 22px; }
+    #alStaticLanding .al-plan h3 { margin: 0 0 4px; font-size: 17px; color: #FFFFFF; font-weight: 800; }
+    #alStaticLanding .al-price { font-size: 26px; font-weight: 800; color: #60A5FA; margin: 2px 0 10px; }
+    #alStaticLanding .al-price span { font-size: 14px; font-weight: 600; color: #94A3B8; }
+    #alStaticLanding .al-plan p { font-size: 14.5px; margin: 0; max-width: none; }
+    #alStaticLanding .al-cta { display: inline-block; background: #2563EB; color: #FFFFFF; font-weight: 700; font-size: 15px; padding: 12px 22px; border-radius: 12px; text-decoration: none; margin-top: 20px; }
+    #alStaticLanding .al-links { margin-top: 42px; padding-top: 20px; border-top: 1px solid #1E293B; font-size: 14px; color: #94A3B8; }
+    #alStaticLanding .al-links a { color: #93C5FD; text-decoration: none; margin-right: 22px; }
+  </style>
+  <div class="al-wrap">
+    <div class="al-brand">
+      <img src="icons/logo-mark-512.png" alt="AutoLaunch logo">
+      <div>
+        <span class="al-name">AutoLaunch</span>
+        <span class="al-tag">0 to Posted</span>
+      </div>
+    </div>
+    <h1>Your cars, <span class="al-accent">posted</span> — without the copy-paste grind.</h1>
+    <p>AutoLaunch is a listing syndication tool built for car dealerships and independent sales reps. It connects to your dealership&rsquo;s inventory, prepares each vehicle as a ready-to-post listing, and gets it in front of more buyers on Facebook Marketplace — while you keep full control of every post.</p>
+    <h2>What AutoLaunch does</h2>
+    <ul>
+      <li><strong>Inventory sync:</strong> your lot&rsquo;s vehicles pull in automatically from your dealership website and stay current as cars arrive and sell.</li>
+      <li><strong>Listing prep:</strong> photos get a dealership branding frame and clean listing copy is generated for every car, so no listing starts from a blank page.</li>
+      <li><strong>Marketplace posting &amp; queue:</strong> post to Facebook Marketplace from one workspace, with a managed post queue plus daily posting limits and pacing designed to keep accounts in good standing.</li>
+      <li><strong>Automation (Automate plan):</strong> auto-post new arrivals, automatically delete sold listings and repost on your schedule, and post to your Facebook Page.</li>
+      <li><strong>Luca, the AI drafting assistant:</strong> buyer messages from your listings land in one Prospects inbox, and Luca drafts replies in your voice — you review and send every message yourself.</li>
+      <li><strong>Trade appraisals &amp; wishlist:</strong> send customers your trade-in appraisal link, and keep a wishlist of what buyers are hunting for, matched against new arrivals.</li>
+    </ul>
+    <h2>Plans</h2>
+    <div class="al-plans">
+      <div class="al-plan">
+        <h3>Self Post</h3>
+        <div class="al-price">$75<span>/mo</span></div>
+        <p>For reps who post their own cars: manual Marketplace posting, inventory pulls every 18 hours, up to 5 posts a day and AI listing copy. You make every post yourself — no automation included.</p>
+      </div>
+      <div class="al-plan">
+        <h3>Automate</h3>
+        <div class="al-price">$100<span>/mo</span></div>
+        <p>Everything in Self Post, plus the machine does the posting: auto-post new arrivals, automatic delete &amp; repost, Facebook Page posting, Luca reply drafts with Prospects, trade appraisals and wishlist. Inventory pulls every 6 hours.</p>
+      </div>
+    </div>
+    <p style="margin-top:22px">Dealership accounts with per-seat pricing are also available. Every plan starts with a <strong style="color:#FFFFFF">free 4-day trial</strong> — no card up front. AutoLaunch gives your team back the hours that manual posting eats; what you do with that time is up to you.</p>
+    <a class="al-cta" href="https://autolaunch.org/">Sign in or start your free trial</a>
+    <div class="al-links">
+      <a href="https://autolaunch.org/terms.html">Terms of Service</a>
+      <a href="https://autolaunch.org/privacy.html">Privacy Policy</a>
+      <a href="https://autolaunch.org/">Sign in</a>
+      <span>&copy; 2026 AutoLaunch</span>
+    </div>
+  </div>
+</div>
+<noscript><style>body > :not(#alStaticLanding):not(noscript):not(script):not(style) { display: none !important; }</style></noscript>
+
+<!-- ============================================================================== -->
 <!-- ======================= SECTION 1: AUTHENTICATION MODAL START =============== -->
 <!-- ============================================================================== -->
 <div id="authOverlay" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm overflow-y-auto">
@@ -729,6 +811,12 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 // same element a visitor clicks — then brings the card into view.
 // No auth logic lives here; switchAuthMode does the rest.
 (function () {
+  // Static no-JS landing (#alStaticLanding, right after <body>): real
+  // product copy baked into the HTML for reviewers/crawlers that never
+  // run scripts. The app takes over now, so the block is removed as the
+  // first boot step — with scripts on, visitors see only the app.
+  var staticLanding = document.getElementById("alStaticLanding");
+  if (staticLanding) staticLanding.remove();
   document.querySelectorAll(".landing-trial-btn").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var tab = document.getElementById("tabSignUp");
