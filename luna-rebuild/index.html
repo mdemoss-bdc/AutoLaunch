@@ -8534,25 +8534,144 @@ async function fetchLiveInventory(isManual) {
     }
 
     rawInventory = allCars.filter(c => c.is_active !== false || !!c.marketplace_posted_at);
-    populateFilterDropdowns();
-    renderLocationGroupsSettings();
-    // Phase B: counts use the SAME predicates as applyFilters' pill
-    // filter (see isSold above), so count === rendered rows per pill.
-    const postedCount = rawInventory.filter(c => !!c.marketplace_posted_at).length;
-    const activeCount = rawInventory.filter(c => !isSold(c)).length;
-    const unpostedCount = rawInventory.filter(c => !c.marketplace_posted_at && !isSold(c)).length;
-
-    document.getElementById("topCarsCountLabel").innerText = `${rawInventory.length} Vehicles`;
-    document.getElementById("showingCountBold").innerText = rawInventory.length;
-    document.getElementById("pillActiveCount").innerText = activeCount;
-    document.getElementById("pillUnpostedCount").innerText = unpostedCount;
-    document.getElementById("pillPostedCount").innerText = postedCount;
-
-    applyFilters();
-    checkWishlistMatches(); // Customer Wishlist: flag new matches (badge + toast)
-    refreshProspectsBadge(); // Prospects: sidebar count of New-stage prospects
-    refreshTradeBadge(); // Trade Appraisals: sidebar count of unreviewed submissions
+    applyInventoryRefreshUI();
   } catch (err) {
+
+// Everything the screen derives from rawInventory after new state lands:
+// shared by the full load above and by the delta poll below, so a change
+// that arrives by either path produces exactly the same screen.
+function applyInventoryRefreshUI() {
+  populateFilterDropdowns();
+  renderLocationGroupsSettings();
+  // Phase B: counts use the SAME predicates as applyFilters' pill
+  // filter (see isSold above), so count === rendered rows per pill.
+  const postedCount = rawInventory.filter(c => !!c.marketplace_posted_at).length;
+  const activeCount = rawInventory.filter(c => !isSold(c)).length;
+  const unpostedCount = rawInventory.filter(c => !c.marketplace_posted_at && !isSold(c)).length;
+
+  document.getElementById("topCarsCountLabel").innerText = `${rawInventory.length} Vehicles`;
+  document.getElementById("showingCountBold").innerText = rawInventory.length;
+  document.getElementById("pillActiveCount").innerText = activeCount;
+  document.getElementById("pillUnpostedCount").innerText = unpostedCount;
+  document.getElementById("pillPostedCount").innerText = postedCount;
+
+  applyFilters();
+  checkWishlistMatches(); // Customer Wishlist: flag new matches (badge + toast)
+  refreshProspectsBadge(); // Prospects: sidebar count of New-stage prospects
+  refreshTradeBadge(); // Trade Appraisals: sidebar count of unreviewed submissions
+}
+
+// =====================================================================
+// DELTA POLL (perf fix — measurement finding #1, 2026-10-31): the 12 s
+// queue tick used to re-download the ENTIRE inventory (select *, ~7.5 MB
+// on a full lot) and rebuild the table even when nothing had changed.
+// The tick now pulls only the columns that carry live state and merges
+// them into the in-memory set:
+//   vin                    — identity / join key for the merge
+//   status                 — Sold flips drive the row chips + pill counts
+//   marketplace_posted_at  — the Posted state the extension flips when a
+//                            post or delete lands; this poller's whole
+//                            reason to exist
+//   is_active              — feed membership: a car leaving the feed drops
+//                            off screen, or stays badged "Exited feed" when
+//                            its listing is still live; exits cannot be
+//                            detected without it
+// (~95 B/row instead of ~3 KB/row.) Any other field of a car changes only
+// through a scrape sync, whose results still arrive via the full loads
+// (sign-in, Sync) and through the arrivals path below. A VIN that is new
+// — or whose duplicate rows changed shape — is fetched in full, targeted
+// by VIN. If nothing changed, the tick touches nothing: no re-render, no
+// scroll/focus churn. A failed delta leaves the working inventory on
+// screen untouched and retries next tick — it never blanks the table.
+// =====================================================================
+async function pollInventoryDelta() {
+  if (!currentUser) return;
+  try {
+    let light = [];
+    let from = 0;
+    const step = 1000;
+    let keepFetching = true;
+    while (keepFetching) {
+      const { data, error } = await supabaseClient
+        .from("scraped_inventory")
+        .select("vin, status, marketplace_posted_at, is_active")
+        .eq("user_id", currentUser.id)
+        .order("vin", { ascending: true })
+        .range(from, from + step - 1);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        light = light.concat(data);
+        if (data.length < step) keepFetching = false;
+        else from += step;
+      } else {
+        keepFetching = false;
+      }
+    }
+
+    // The same visibility predicate the full load filters by.
+    const visible = (r) => r.is_active !== false || !!r.marketplace_posted_at;
+    const tuple = (r) => [(r.status || ""), (r.marketplace_posted_at || ""), r.is_active === false].join("|");
+
+    const lightByVin = new Map();
+    light.forEach(r => {
+      if (!lightByVin.has(r.vin)) lightByVin.set(r.vin, []);
+      lightByVin.get(r.vin).push(r);
+    });
+    const memByVin = new Map();
+    rawInventory.forEach(c => {
+      if (!memByVin.has(c.vin)) memByVin.set(c.vin, []);
+      memByVin.get(c.vin).push(c);
+    });
+
+    let changed = false;
+    const dropVins = new Set();  // leave the screen entirely
+    const fetchVins = new Set(); // need full rows (new arrivals / reshaped duplicates)
+
+    const allVins = new Set([...lightByVin.keys(), ...memByVin.keys()]);
+    for (const vin of allVins) {
+      const mem = memByVin.get(vin) || [];
+      const live = (lightByVin.get(vin) || []).filter(visible);
+      if (mem.length && !live.length) { dropVins.add(vin); changed = true; continue; }
+      if (!mem.length && live.length) { fetchVins.add(vin); changed = true; continue; }
+      if (!mem.length || !live.length) continue;
+      const memTuples = mem.map(tuple).sort().join(";");
+      const liveTuples = live.map(tuple).sort().join(";");
+      if (memTuples === liveTuples) continue;
+      changed = true;
+      if (mem.length === 1 && live.length === 1) {
+        // Common case: copy the live state onto the in-memory row.
+        mem[0].status = live[0].status;
+        mem[0].marketplace_posted_at = live[0].marketplace_posted_at;
+        mem[0].is_active = live[0].is_active;
+      } else {
+        dropVins.add(vin);
+        fetchVins.add(vin);
+      }
+    }
+
+    if (!changed) return;
+
+    if (dropVins.size) {
+      rawInventory = rawInventory.filter(c => !dropVins.has(c.vin));
+    }
+    if (fetchVins.size) {
+      const vins = [...fetchVins];
+      for (let i = 0; i < vins.length; i += 200) {
+        const { data, error } = await supabaseClient
+          .from("scraped_inventory")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .in("vin", vins.slice(i, i + 200));
+        if (error) throw error;
+        (data || []).filter(visible).forEach(r => rawInventory.push(r));
+      }
+    }
+
+    applyInventoryRefreshUI();
+  } catch (err) {
+    console.error("Delta poll failed (will retry next tick):", err);
+  }
+}
     console.error("Fetch error:", err);
     tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
   }
@@ -10978,7 +11097,7 @@ async function pollQueueTick() {
         const focusAction = (ae && ae.dataset) ? (ae.dataset.action || "") : "";
 
         if (modalOpen) await loadPostingQueue();       // list + sidebar badge
-        if (invVisible) await fetchLiveInventory(false); // rows + Posted pills
+        if (invVisible) await pollInventoryDelta(); // rows + Posted pills (delta — full reload stays on sign-in/Sync)
 
         if (card) card.scrollTop = cardScroll;
         if (window.scrollY !== winScroll) window.scrollTo(0, winScroll);
