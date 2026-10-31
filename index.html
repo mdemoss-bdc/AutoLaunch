@@ -8536,6 +8536,10 @@ async function fetchLiveInventory(isManual) {
     rawInventory = allCars.filter(c => c.is_active !== false || !!c.marketplace_posted_at);
     applyInventoryRefreshUI();
   } catch (err) {
+    console.error("Fetch error:", err);
+    tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
+  }
+}
 
 // Everything the screen derives from rawInventory after new state lands:
 // shared by the full load above and by the delta poll below, so a change
@@ -8670,10 +8674,6 @@ async function pollInventoryDelta() {
     applyInventoryRefreshUI();
   } catch (err) {
     console.error("Delta poll failed (will retry next tick):", err);
-  }
-}
-    console.error("Fetch error:", err);
-    tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
   }
 }
 
