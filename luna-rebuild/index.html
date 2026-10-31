@@ -8408,6 +8408,12 @@ async function refreshSyncSummary() {
             if (popText) popText.textContent = text;
             openModal("syncSummaryModal");
         }
+
+        // PART A (2026-10-31): the newest row IS the sync-completion
+        // signal - hand it to the coalescer, which fires exactly one
+        // full inventory refresh per completion (and none for rows
+        // the sign-in load already covered).
+        noteSyncSummaryRow(row);
     } catch (e) {
         /* best-effort surface — a summary must never break the app */
     } finally {
@@ -8505,8 +8511,82 @@ function isExitedPosted(car) {
   return !!car && car.is_active === false && !!car.marketplace_posted_at;
 }
 
+// =====================================================================
+// REFRESH COALESCING (2026-10-31): one refresh per meaningful event.
+//
+// PART A - a sync completes: the scraper writes inventory first and
+// its sync_summaries row last, and only a FULL reload carries prices,
+// photos and the rest of what a sync changed (the delta tick below
+// moves live state only). noteSyncSummaryRow() is fed the newest
+// summary row (by the 10s summary poller, and by the delta tick when
+// it spots a hard change first): a row finished before this session's
+// first full load began is covered by that load; every row finished
+// after it fires exactly ONE full refresh through the single-flight
+// coalescer below - however many triggers land while it runs, they
+// collapse into at most one trailing reload.
+// =====================================================================
+let invBaselineAt = null; // when this session's first full load began
+const syncInvRefreshedIds = new Set();
+let invSyncRefreshInFlight = false;
+let invSyncRefreshAgain = false;
+
+async function refreshInventoryOnceAfterSync() {
+  if (invSyncRefreshInFlight) { invSyncRefreshAgain = true; return; }
+  invSyncRefreshInFlight = true;
+  try {
+    do {
+      invSyncRefreshAgain = false;
+      await fetchLiveInventory(false);
+    } while (invSyncRefreshAgain);
+  } finally {
+    invSyncRefreshInFlight = false;
+  }
+}
+
+// Feed the newest sync_summaries row. Returns true when a coalesced
+// sync refresh is in flight or was just fired - a caller holding
+// inventory changes of its own should then let that refresh do the
+// render instead of rendering a second time for the same sync.
+function noteSyncSummaryRow(row) {
+  if (!row || row.id === null || row.id === undefined) return false;
+  const id = String(row.id);
+  if (syncInvRefreshedIds.has(id)) return invSyncRefreshInFlight;
+  const finishedAt = Date.parse(row.run_finished_at || row.created_at || "");
+  if (invBaselineAt === null || !isFinite(finishedAt) || finishedAt <= invBaselineAt) {
+    syncInvRefreshedIds.add(id); // pre-session sync - the sign-in load covered it
+    return false;
+  }
+  syncInvRefreshedIds.add(id);
+  refreshInventoryOnceAfterSync();
+  return true;
+}
+
+// The delta tick's half of Part A: it can spot a sync's hard changes
+// (a sold flip, an arrival) before the 10s summary poller observes
+// the row. One tiny read, only on ticks that found a hard change:
+// if the newest summary row is a completion this session hasn't
+// refreshed for, the coalesced full refresh does the render.
+async function syncCompletionCoversRender() {
+  if (invSyncRefreshInFlight) return true;
+  if (!currentUser) return false;
+  try {
+    const { data, error } = await supabaseClient
+      .from("sync_summaries")
+      .select("id, run_finished_at, created_at")
+      .eq("user_id", currentUser.id)
+      .order("run_finished_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error || !data || !data.length) return false;
+    return noteSyncSummaryRow(data[0]);
+  } catch (e) {
+    return false; // fail open: the caller renders its own change
+  }
+}
+
 async function fetchLiveInventory(isManual) {
   if (!currentUser) return;
+  if (invBaselineAt === null) invBaselineAt = Date.now();
   const tbody = document.getElementById("inventoryTableBody");
   try {
     let allCars = [];
@@ -8545,10 +8625,23 @@ async function fetchLiveInventory(isManual) {
 // shared by the full load above and by the delta poll below, so a change
 // that arrives by either path produces exactly the same screen.
 function applyInventoryRefreshUI() {
+  postStateRenderDeferred = false; // a full refresh surfaces every deferred state
   populateFilterDropdowns();
   renderLocationGroupsSettings();
-  // Phase B: counts use the SAME predicates as applyFilters' pill
-  // filter (see isSold above), so count === rendered rows per pill.
+  updateInventoryCounts();
+
+  applyFilters();
+  checkWishlistMatches(); // Customer Wishlist: flag new matches (badge + toast)
+  refreshProspectsBadge(); // Prospects: sidebar count of New-stage prospects
+  refreshTradeBadge(); // Trade Appraisals: sidebar count of unreviewed submissions
+}
+
+// The header + pill counts on their own (Phase B: the SAME predicates
+// as applyFilters' pill filter - see isSold above - so count ===
+// rendered rows per pill). Split out of applyInventoryRefreshUI so a
+// posting-state change can surface the counts on its tick WITHOUT a
+// table rebuild (see pollInventoryDelta / Part B).
+function updateInventoryCounts() {
   const postedCount = rawInventory.filter(c => !!c.marketplace_posted_at).length;
   const activeCount = rawInventory.filter(c => !isSold(c)).length;
   const unpostedCount = rawInventory.filter(c => !c.marketplace_posted_at && !isSold(c)).length;
@@ -8558,11 +8651,6 @@ function applyInventoryRefreshUI() {
   document.getElementById("pillActiveCount").innerText = activeCount;
   document.getElementById("pillUnpostedCount").innerText = unpostedCount;
   document.getElementById("pillPostedCount").innerText = postedCount;
-
-  applyFilters();
-  checkWishlistMatches(); // Customer Wishlist: flag new matches (badge + toast)
-  refreshProspectsBadge(); // Prospects: sidebar count of New-stage prospects
-  refreshTradeBadge(); // Trade Appraisals: sidebar count of unreviewed submissions
 }
 
 // =====================================================================
@@ -8628,6 +8716,8 @@ async function pollInventoryDelta() {
     });
 
     let changed = false;
+    let hardChange = false;     // anything but a posted_at flip: renders fully
+    let postStateChange = false; // marketplace_posted_at flips only
     const dropVins = new Set();  // leave the screen entirely
     const fetchVins = new Set(); // need full rows (new arrivals / reshaped duplicates)
 
@@ -8635,8 +8725,8 @@ async function pollInventoryDelta() {
     for (const vin of allVins) {
       const mem = memByVin.get(vin) || [];
       const live = (lightByVin.get(vin) || []).filter(visible);
-      if (mem.length && !live.length) { dropVins.add(vin); changed = true; continue; }
-      if (!mem.length && live.length) { fetchVins.add(vin); changed = true; continue; }
+      if (mem.length && !live.length) { dropVins.add(vin); changed = true; hardChange = true; continue; }
+      if (!mem.length && live.length) { fetchVins.add(vin); changed = true; hardChange = true; continue; }
       if (!mem.length || !live.length) continue;
       const memTuples = mem.map(tuple).sort().join(";");
       const liveTuples = live.map(tuple).sort().join(";");
@@ -8644,16 +8734,24 @@ async function pollInventoryDelta() {
       changed = true;
       if (mem.length === 1 && live.length === 1) {
         // Common case: copy the live state onto the in-memory row.
+        // Classify BEFORE copying: a posted_at-only flip is surfaced
+        // without a table rebuild (Part B); anything else renders.
+        const postedFlip = (mem[0].marketplace_posted_at || "") !== (live[0].marketplace_posted_at || "");
+        const hardFlip = (mem[0].status || "") !== (live[0].status || "") ||
+          (mem[0].is_active === false) !== (live[0].is_active === false);
         mem[0].status = live[0].status;
         mem[0].marketplace_posted_at = live[0].marketplace_posted_at;
         mem[0].is_active = live[0].is_active;
+        if (hardFlip) hardChange = true;
+        else if (postedFlip) postStateChange = true;
       } else {
         dropVins.add(vin);
         fetchVins.add(vin);
+        hardChange = true;
       }
     }
 
-    if (!changed) return;
+    if (!changed) { await flushDeferredPostStateRender(); return; }
 
     if (dropVins.size) {
       rawInventory = rawInventory.filter(c => !dropVins.has(c.vin));
@@ -8671,11 +8769,64 @@ async function pollInventoryDelta() {
       }
     }
 
+    if (postStateChange && !hardChange) {
+      // Posting-state only: the counts surface now (this tick); the
+      // table rebuild waits for the batch-end flush (Part B).
+      postStateRenderDeferred = true;
+      updateInventoryCounts();
+      await flushDeferredPostStateRender();
+      return;
+    }
+
+    // A hard change - but if it is a scraper sync landing, the sync's
+    // ONE full refresh (Part A) does this render instead: rendering
+    // here as well would refresh twice for one sync.
+    if (await syncCompletionCoversRender()) return;
+
     applyInventoryRefreshUI();
   } catch (err) {
     console.error("Delta poll failed (will retry next tick):", err);
   }
 }
+
+// PART B (2026-10-31, Matthew: "the main system refreshes after each
+// post"): a completed post/delete/share changes exactly one inventory
+// field - marketplace_posted_at. The merge above lands it in memory
+// on the tick that sees it and updateInventoryCounts() puts the
+// header + pill counts right on the same tick, but the table itself
+// is NOT rebuilt per post. The deferred render lands ONCE, when the
+// posting queue drains (no pending/processing jobs) or piggybacks on
+// the next full refresh (sync, sign-in, any hard change). The queue
+// modal is untouched - it re-reads every tick, so batch progress
+// stays live - and the worst case for a row's Posted chip is the
+// length of the batch it belongs to; a lone post's queue is already
+// drained when its flip is seen, so it renders on that same tick.
+let postStateRenderDeferred = false;
+async function flushDeferredPostStateRender() {
+  if (!postStateRenderDeferred || !currentUser) return;
+  let active;
+  try {
+    if (isQueueModalOpen()) {
+      // The same tick refreshed the queue list just before the delta.
+      active = postingQueue.some(i => i.status === "pending" || i.status === "processing");
+    } else {
+      const { data, error } = await supabaseClient
+        .from("auto_posting_queue")
+        .select("id")
+        .eq("user_id", currentUser.id)
+        .in("status", ["pending", "processing"])
+        .limit(1);
+      if (error) throw error;
+      active = !!(data && data.length);
+    }
+  } catch (e) {
+    return; // stay deferred; the next tick retries
+  }
+  if (active) return;
+  postStateRenderDeferred = false;
+  applyInventoryRefreshUI();
+}
+
 
 function setPillFilter(filter) {
   activePillFilter = filter;
@@ -13811,11 +13962,16 @@ async function refreshProspectsSoft() {
     prospectsSoftBusy = false;
   }
 }
-// The 8-second driver asks the HELPER to sync first (event-driven —
+// The 15-second driver asks the HELPER to sync first (event-driven —
 // a background tab's timers are throttled to ~1/min, which was the
 // inbound lag Matthew measured), then repaints when the helper
 // confirms. If no confirmation arrives in 4s, repaint anyway from
-// whatever is already stored.
+// whatever is already stored. Cadence set to 15s on 2026-10-31
+// (Matthew's 10-30s band, Luna's pick): every repaint re-reads the
+// full Prospects set, so the old ~5s cycle bought nothing a person
+// can see at 3x the read load - and the moments freshness is actually
+// looked at (opening the tab, returning to the window) repaint
+// immediately through the page-shown / focus paths, not the cycle.
 let lucaSyncReqSeq = 0;
 let lucaSyncFallbackTimer = null;
 window.addEventListener("message", (event) => {
@@ -13841,7 +13997,7 @@ setInterval(() => {
   const list = document.getElementById("prospectsList");
   if (!list || list.getClientRects().length === 0) return;
   requestLucaSyncNow();
-}, 5000);
+}, 15000);
 
 // PROSPECTS AUTO-SYNC (2026-10-27): the Prospects screen syncs ITSELF —
 // no manual sync click. Opening Prospects pokes the helper once (via
@@ -13900,6 +14056,15 @@ window.addEventListener("message", (event) => {
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { stopProspectsAutoSync(); return; }
+  const page = document.getElementById("prospectsPage");
+  if (page && !page.classList.contains("hidden")) prospectsAutoSyncPageShown();
+});
+
+// Window focus is the other "he's looking at it again" signal (alt-tab
+// back without a visibility flip, a second monitor, clicking back from
+// another app): same page-shown path - poke + repaint - so the view is
+// current the moment he lands on it, not up to a cycle later.
+window.addEventListener("focus", () => {
   const page = document.getElementById("prospectsPage");
   if (page && !page.classList.contains("hidden")) prospectsAutoSyncPageShown();
 });
