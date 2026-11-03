@@ -5488,7 +5488,28 @@
       return;
     }
     let matchedCard = matches[0];
+    // Bring the card on screen and let the scroll settle before
+    // looking for its menu button — the delete flow's discipline
+    // (v2.1.9): on Facebook's lazy-rendered Selling page an
+    // off-viewport card's action row (incl. the menu button) may
+    // not be in the DOM yet. Without this, the finder reads a
+    // buttonless card and the update dies as price_menu_missing
+    // (live E2E 2026-11-03, helper 2.1.65).
+    try { matchedCard.scrollIntoView({ block: "center" }); } catch (e) {}
+    await sleep(600);
+    await humanPause();
     let menuBtn = listingMenuButton(matchedCard);
+    if (!menuBtn) {
+      // The scroll may have re-rendered the card — re-resolve it
+      // once and look again before giving up.
+      const freshAfterScroll = listingCardsIn(null, fromMatcher);
+      if (freshAfterScroll.length === 1) {
+        matchedCard = freshAfterScroll[0];
+        try { matchedCard.scrollIntoView({ block: "center" }); } catch (e) {}
+        await sleep(400);
+        menuBtn = listingMenuButton(matchedCard);
+      }
+    }
     if (!menuBtn) {
       recordStepNote("price_menu_missing",
         menuItemTexts(matchedCard).join(" | ").slice(0, 180));
