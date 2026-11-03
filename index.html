@@ -3602,14 +3602,13 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <div class="space-y-4 text-xs">
       <div>
         <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-2">Only post cars with at least</label>
-        <div class="grid grid-cols-5 gap-2 text-center font-bold">
-          <button type="button" data-min-photos="0" onclick="setMinPhotos(0)" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">0 photos</button>
+        <div class="grid grid-cols-4 gap-2 text-center font-bold">
           <button type="button" data-min-photos="1" onclick="setMinPhotos(1)" class="py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm">1 photo</button>
           <button type="button" data-min-photos="3" onclick="setMinPhotos(3)" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">3 photos</button>
           <button type="button" data-min-photos="5" onclick="setMinPhotos(5)" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">5 photos</button>
           <button type="button" data-min-photos="10" onclick="setMinPhotos(10)" class="py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer">10 photos</button>
         </div>
-        <p class="text-[11px] text-slate-500 mt-2">Logos and "photo coming soon" pictures don't count. A car still waiting for photos posts by itself once they're on your website. 0 means no minimum — but Facebook still requires at least one real photo to post a car, so a car with none waits for photos either way.</p>
+        <p class="text-[11px] text-slate-500 mt-2">Logos and "photo coming soon" pictures don't count. A car still waiting for photos posts by itself once they're on your website.</p>
       </div>
 
       <div>
@@ -8104,7 +8103,7 @@ updateLastSyncDisplay();
         const chkShareFeed = document.getElementById("chkShareToFeed");
         if (chkShareFeed) chkShareFeed.checked = shareToFeedEnabled;
       }
-      if (data.auto_post_min_photos != null) setMinPhotos(parseInt(data.auto_post_min_photos, 10));
+      if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
 
       // Phase 6: channel switches (columns arrive with the channels
@@ -17502,7 +17501,7 @@ function setPrefLength(len) {
 // Button Audit: the "at least N photos" selector in the Auto-Post modal was
 // decorative — the choice was never tracked or saved. It is now real state.
 function setMinPhotos(n) {
-  selectedMinPhotos = [0, 1, 3, 5, 10].includes(n) ? n : 1;
+  selectedMinPhotos = [1, 3, 5, 10].includes(n) ? n : 1;
   const on = "py-2.5 rounded-xl border border-blue-600 bg-blue-600 text-white cursor-pointer shadow-sm";
   const off = "py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 cursor-pointer";
   document.querySelectorAll("[data-min-photos]").forEach(btn => {

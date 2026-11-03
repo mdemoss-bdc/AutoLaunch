@@ -1922,12 +1922,8 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
         s = rows[0]
         if s.get("auto_post_enabled") is not True:
             return 0
-        # The user's minimum-photos choice (Matthew, 2026-11-03):
-        # 0 is a real choice — "no minimum" — and must survive the
-        # read; only a missing/unreadable value falls back to 1.
         try:
-            _raw_mp = s.get("auto_post_min_photos")
-            min_photos = max(0, int(_raw_mp)) if _raw_mp is not None else 1
+            min_photos = max(1, int(s.get("auto_post_min_photos") or 1))
         except Exception:
             min_photos = 1
         conditions = s.get("auto_post_conditions")
@@ -2087,13 +2083,7 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
                 continue
             if _missing_color(car.get("color")) or _missing_color(car.get("interior_color")):
                 continue
-            _usable_photos = _usable_photo_count(car)
-            if _usable_photos < 1:
-                # Marketplace cannot post a car with no real photo —
-                # never queue one, whatever the minimum says (the
-                # helper's claim check refuses them regardless).
-                continue
-            if _usable_photos < min_photos:
+            if _usable_photo_count(car) < min_photos:
                 continue
             vin = car.get("vin")
             if not vin:
