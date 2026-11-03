@@ -5590,6 +5590,20 @@
       }
       if (navigated) {
         recordStepNote("price_editor_open", "navigated");
+        // Facebook may soft-navigate (SPA pushState) to the
+        // editor — /edit/listing — without reloading the page.
+        // Then NO fresh content script ever boots there and the
+        // stored job wedges (live E2E 2026-11-03: banner frozen
+        // on the edit page, row stuck processing). On a HARD
+        // navigation this context is destroyed and the awaits
+        // below never resume; if execution continues past the
+        // wait on an edit surface, this same incarnation must
+        // drive the editor itself.
+        await sleep(1500);
+        if (/facebook\.com\/(marketplace\/edit|edit\/listing)/.test(window.location.href)) {
+          recordStepNote("price_editor_open", "soft_nav_continuation");
+          await runUpdatePriceEditor();
+        }
         return;
       }
     }
@@ -5602,7 +5616,18 @@
     await runUpdatePriceEditor();
   }
 
+  // Watchdog wrapper: no editor attempt may run longer than
+  // 120s without settling — a never-resolving await in this
+  // phase wedged a live attempt (2026-11-03). The race rejects
+  // into the dispatcher's crash trap, which fails the job with
+  // the timeout named instead of leaving it processing.
   async function runUpdatePriceEditor() {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("price_editor_timeout")), 120000));
+    await Promise.race([runUpdatePriceEditorBody(), timeout]);
+  }
+
+  async function runUpdatePriceEditorBody() {
     say("Updating this listing's price…");
     const plan = priceUpdatePlan(job);
     if (!plan.ok) {
@@ -5613,7 +5638,10 @@
     let field = null;
     for (let i = 0; i < 24 && !field; i++) {
       field = findPriceFieldInEditor();
-      if (!field) await sleep(500);
+      if (!field) {
+        if (i % 4 === 3) { try { window.scrollBy(0, 700); } catch (_) {} }
+        await sleep(500);
+      }
     }
     if (!field) {
       recordStepNote("price_editor_missing", window.location.href.slice(0, 100));
@@ -5638,13 +5666,13 @@
     await sleep(400);
     let setOk = valueMatches(extractValue(field), String(plan.toPrice), "price");
     if (!setOk) {
-      const r = await escalatedRefill([{
+      const r = await escalatedRefill({
         name: "Price", kind: "price", expected: plan.toPrice,
         keywords: ["price"], el: field,
         read: () => moneyNumber(extractValue(field)),
-        rung1: (el2, v) => nativeSetValue(el2, String(v))
-      }]).catch(() => ({ ok: false }));
-      setOk = !!(r && r.ok);
+        rung1: async () => { nativeSetValue(field, String(plan.toPrice)); }
+      }).catch(() => false);
+      setOk = r === true;
       if (!setOk) {
         const f2 = findPriceFieldInEditor();
         if (f2) setOk = moneyNumber(extractValue(f2)) === plan.toPrice;
@@ -6215,7 +6243,7 @@
         await runUpdatePriceVerify();
         return;
       }
-      if (phase === "edit" || /facebook\.com\/marketplace\/edit/.test(pageUrl)) {
+      if (phase === "edit" || /facebook\.com\/(marketplace\/edit|edit\/listing)/.test(pageUrl)) {
         await runUpdatePriceEditor();
         return;
       }
