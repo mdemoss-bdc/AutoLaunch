@@ -5379,10 +5379,21 @@
   // NOT findAnyField — that helper early-returns on pages
   // without composer controls, and an edit page is exactly such
   // a page.
-  function findPriceFieldInEditor() {
+  function findPriceFieldInEditor(fromPrice) {
     const inputs = Array.from(document.querySelectorAll(
       'input:not([type="hidden"]), textarea, [contenteditable="true"]'
     )).filter(el => isVisibleEl(el));
+    // Fast path first (v2.1.72): the price field is the one
+    // input already showing the FROM price — a pure string
+    // check per input. The label-meta scoring below runs a
+    // document-wide label lookup PER INPUT and crawls on
+    // Facebook's editor page (a live attempt burned its whole
+    // budget inside this hunt, 2026-11-03).
+    if (fromPrice) {
+      for (const el of inputs) {
+        if (moneyNumber(extractValue(el)) === fromPrice) return el;
+      }
+    }
     const scored = [];
     for (const el of inputs) {
       let score = 0;
@@ -5570,7 +5581,7 @@
         navigated = true;
         break;
       }
-      field = findPriceFieldInEditor();
+      field = findPriceFieldInEditor(plan.fromPrice);
     }
     if (navigated) {
       // The edit page's own incarnation drives from here.
@@ -5586,7 +5597,7 @@
           navigated = true;
           break;
         }
-        field = findPriceFieldInEditor();
+        field = findPriceFieldInEditor(plan.fromPrice);
       }
       if (navigated) {
         recordStepNote("price_editor_open", "navigated");
@@ -5644,14 +5655,15 @@
       return;
     }
     let field = null;
-    for (let i = 0; i < 24 && !field; i++) {
-      field = findPriceFieldInEditor();
+    const huntDeadline = Date.now() + 25000;
+    for (let miss = 0; !field && Date.now() < huntDeadline; miss++) {
+      field = findPriceFieldInEditor(plan.fromPrice);
       if (!field) {
-        if (i % 6 === 5) {
-          recordStepNote("price_editor_hunting", "miss " + (i + 1));
+        if (miss % 10 === 9) {
+          recordStepNote("price_editor_hunting", "miss " + (miss + 1));
         }
-        if (i % 4 === 3) { try { window.scrollBy(0, 700); } catch (_) {} }
-        await sleep(500);
+        if (miss % 8 === 7) { try { window.scrollBy(0, 700); } catch (_) {} }
+        await sleep(400);
       }
     }
     if (!field) {
@@ -5685,7 +5697,7 @@
       }).catch(() => false);
       setOk = r === true;
       if (!setOk) {
-        const f2 = findPriceFieldInEditor();
+        const f2 = findPriceFieldInEditor(plan.fromPrice);
         if (f2) setOk = moneyNumber(extractValue(f2)) === plan.toPrice;
       }
     }
@@ -5708,7 +5720,7 @@
     // click's.
     for (let i = 0; i < 20; i++) {
       await sleep(500);
-      if (!findPriceFieldInEditor()) break;
+      if (!findPriceFieldInEditor(plan.fromPrice)) break;
       if (/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) break;
     }
     await setPriceUpdateStage("verify");
@@ -5720,6 +5732,12 @@
   }
 
   async function runUpdatePriceVerify() {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("price_verify_timeout")), 120000));
+    await Promise.race([runUpdatePriceVerifyBody(), timeout]);
+  }
+
+  async function runUpdatePriceVerifyBody() {
     const plan = priceUpdatePlan(job);
     if (!plan.ok) {
       await fail(plan.reason, "price_update_plan",
