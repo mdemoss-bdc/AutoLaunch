@@ -5752,14 +5752,44 @@
         JSON.stringify({ reason: "selling_list_never_settled" }));
       return;
     }
+    // A price DROP renders on the Selling card as the new price
+    // with the old one struck through beside it — the card's raw
+    // text contains BOTH prices forever, so a naive FROM match
+    // reads "still at old price" eternally (the first live
+    // verify, 2026-11-03: new:1 old:1 on a card showing $15,472
+    // with $16,308 struck). The FROM count below therefore only
+    // counts cards whose old price appears in NON-struck text.
+    const cardTextSansStrike = el => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let out = "";
+      let n;
+      while ((n = walker.nextNode())) {
+        let struck = false;
+        let p = n.parentElement;
+        while (p) {
+          try {
+            const cs = window.getComputedStyle(p);
+            if (cs && /line-through/.test(
+              (cs.textDecorationLine || "") + " " + (cs.textDecoration || ""))) {
+              struck = true;
+            }
+          } catch (e) { /* style read is best-effort */ }
+          if (struck || p === el) break;
+          p = p.parentElement;
+        }
+        if (!struck) out += (n.nodeValue || "") + " ";
+      }
+      return out;
+    };
     const scan = () => ({
       atNew: listingCardsIn(null, t => listingTextMatches(t, plan.toCar)).length,
-      atOld: listingCardsIn(null, t => listingTextMatches(t, plan.fromCar)).length
+      atOld: listingCardsIn(null, t => listingTextMatches(t, plan.fromCar))
+        .filter(c => listingTextMatches(cardTextSansStrike(c), plan.fromCar)).length
     });
     let s = scan();
     recordStepNote("price_verify_scan",
       "new:" + s.atNew + " old:" + s.atOld + " cards:" + countSellingCards());
-    if (s.atOld > 0 && s.atNew === 0) {
+    if (s.atOld > 0 && s.atNew <= 1) {
       // Facebook can lag the card paint after an edit; one
       // patient re-look before declaring the edit unproven.
       await sleep(15000);
