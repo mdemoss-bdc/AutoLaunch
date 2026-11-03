@@ -5448,8 +5448,8 @@
         JSON.stringify({ from: updateFromPrice, to: updateToPrice }));
       return;
     }
-    const settle = await settleSellingList();
-    if (!settle.cards) {
+    await settleSellingList();
+    if (!countSellingCards()) {
       if (await recoverToSellingPageForUpdate("listing_scan")) return;
       const probe = {
         strict: 0,
@@ -5666,8 +5666,8 @@
         JSON.stringify({ from: updateFromPrice, to: updateToPrice }));
       return;
     }
-    const settle = await settleSellingList();
-    if (!settle.cards) {
+    await settleSellingList();
+    if (!countSellingCards()) {
       if (await recoverToSellingPageForUpdate("verify_scan")) return;
       await fail("listing_not_found", "price_verify_probe",
         JSON.stringify({ reason: "selling_list_never_settled" }));
@@ -5684,11 +5684,9 @@
       // Facebook can lag the card paint after an edit; one
       // patient re-look before declaring the edit unproven.
       await sleep(15000);
-      const settle2 = await settleSellingList();
-      if (settle2.cards) {
-        s = scan();
-        recordStepNote("price_verify_rescan", "new:" + s.atNew + " old:" + s.atOld);
-      }
+      await settleSellingList();
+      s = scan();
+      recordStepNote("price_verify_rescan", "new:" + s.atNew + " old:" + s.atOld);
     }
     if (s.atNew === 1 && s.atOld === 0) {
       try {
@@ -6191,15 +6189,23 @@
     // attempt on the Selling page, the editor (this tab may
     // have navigated to the edit page), or the verifying scan.
     const phase = (job.priceUpdate && job.priceUpdate.stage) || "";
-    if (phase === "verify") {
-      await runUpdatePriceVerify();
-      return;
+    try {
+      if (phase === "verify") {
+        await runUpdatePriceVerify();
+        return;
+      }
+      if (phase === "edit" || /facebook\.com\/marketplace\/edit/.test(pageUrl)) {
+        await runUpdatePriceEditor();
+        return;
+      }
+      await runUpdatePriceListing();
+    } catch (e) {
+      await fail("The price update hit an unexpected error (" +
+        ((e && e.message) || e || "unknown") +
+        ") — the listing was left unchanged.", "price_update_crash",
+        JSON.stringify({ phase, error: String((e && e.message) || e || "") })
+      ).catch(() => {});
     }
-    if (phase === "edit" || /facebook\.com\/marketplace\/edit/.test(pageUrl)) {
-      await runUpdatePriceEditor();
-      return;
-    }
-    await runUpdatePriceListing();
     return;
   }
   if (jobAction === "post" && job.verifyPublished) {
