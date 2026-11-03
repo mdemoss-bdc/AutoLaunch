@@ -5454,7 +5454,7 @@
       const probe = {
         strict: 0,
         title: findListingCardsByTitle(plan.fromCar).length,
-        rendered: sellingRenderedFromSignals(),
+        rendered: sellingRenderedFromSignals(sellingChromeSignals()),
         url: window.location.href.slice(0, 100)
       };
       await fail("listing_not_found", "price_update_probe", JSON.stringify(probe));
@@ -5468,13 +5468,13 @@
     const titleProbe = listingCardsIn(null, t => listingTitleMatches(t, plan.fromCar));
     recordStepNote("price_match_scan",
       "strict:" + matches.length + " title:" + titleProbe.length +
-      " rendered:" + sellingRenderedFromSignals() +
+      " rendered:" + sellingRenderedFromSignals(sellingChromeSignals()) +
       " cards:" + countSellingCards());
     if (!matches.length) {
       const probe = {
         strict: 0,
         title: titleProbe.length,
-        rendered: sellingRenderedFromSignals(),
+        rendered: sellingRenderedFromSignals(sellingChromeSignals()),
         cards: countSellingCards(),
         samples: findListingCardsByTitle(plan.fromCar)
           .slice(0, 3).map(c => normText(c.textContent).slice(0, 80))
