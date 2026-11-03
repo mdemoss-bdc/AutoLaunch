@@ -33,6 +33,15 @@
       "run_at": "document_idle"
     },
     {
+      "js": [
+        "content.js"
+      ],
+      "matches": [
+        "https://www.facebook.com/marketplace/edit*"
+      ],
+      "run_at": "document_idle"
+    },
+    {
       "matches": [
         "https://www.facebook.com/messages/*",
         "https://www.facebook.com/marketplace/inbox*",
@@ -65,5 +74,5 @@
     "alarms",
     "debugger"
   ],
-  "version": "2.1.61"
+  "version": "2.1.62"
 }

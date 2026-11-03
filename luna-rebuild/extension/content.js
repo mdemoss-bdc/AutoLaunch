@@ -685,6 +685,38 @@
 //     listing's description byte for byte. No link, no
 //     line — every other description is byte-identical
 //     to 2.1.60.
+//
+// 35. LISTING PRICE SYNC — THE EDITOR (v2.1.62 — Matthew,
+//     2026-11-03; background.js header note 34 carries the
+//     worker's side): a price-update job (job.action ===
+//     "update_price") edits this car's live listing so its
+//     price follows the dealer's. The job carries
+//     updateFromPrice (the price the listing still shows —
+//     the strict-match target) and updateToPrice (the price
+//     to set). runUpdatePriceListing finds the card with
+//     the delete flow's strict matcher AT THE FROM PRICE,
+//     opens the card's own ⋯ menu, and clicks its Edit
+//     listing entry; runUpdatePriceEditor then drives
+//     whatever edit UI Facebook presents (an in-page editor
+//     or the /marketplace/edit page — the manifest now
+//     injects there too, and the phase marker on the stored
+//     job carries the flow across the navigation): the
+//     price field must READ BACK the FROM price before it
+//     is touched (a field showing anything else is the
+//     wrong listing — abort, change nothing), then takes
+//     the NEW price and must read THAT back before Save is
+//     clicked. Success is never claimed from the Save
+//     click: the flow returns to the Selling page and
+//     runUpdatePriceVerify settles the verdict on a fresh
+//     scan — exactly one strict match at the NEW price and
+//     none at the FROM price — before reporting
+//     AUTOLAUNCH_JOB_PRICE_UPDATED. Every ambiguity (0 or
+//     >1 strict matches, no Edit entry, no editable price
+//     field, a field not showing the FROM price, a missing
+//     Save control, a read-back mismatch) fails the job
+//     with field_diag notes in the delete flow's style and
+//     changes NOTHING on Facebook. A price update is not a
+//     post: nothing here touches the car's posted stamp.
 
 
 (async function () {
@@ -729,16 +761,29 @@
   // fails honestly rather than posting a bare listing.
   const shareText = typeof job.shareText === "string" ? job.shareText : "";
 
+  // Price update (v2.1.62, header note 35): the worker carries
+  // the FROM price (what the listing still shows) and the TO
+  // price (what the editor sets) on update_price jobs only.
+  const updateFromPrice = job.updateFromPrice != null ? Number(job.updateFromPrice) : null;
+  const updateToPrice = job.updateToPrice != null ? Number(job.updateToPrice) : null;
+
   // ---- job routing (v2.1.4, header notes 14–15) -----------------------
   // This script is injected on BOTH the create pages and the selling
   // page now. A delete job runs only on the selling page; a post job
   // runs only on the create pages. Without the guards, a leftover job
   // of one kind would fire its routine on the other kind's page.
   const jobAction = job.action === "delete" ? "delete"
-    : job.action === "share" ? "share" : "post";
+    : job.action === "share" ? "share"
+    : job.action === "update_price" ? "update_price" : "post";
   const pageUrl = window.location.href;
   if ((jobAction === "delete" || jobAction === "share") &&
       !/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(pageUrl)) return;
+  // A price-update job lives on the Selling page AND on the
+  // listing edit page (v2.1.62): the ⋯ menu's Edit entry may
+  // navigate, and the stored job's phase marker carries the
+  // flow across. Anywhere else is not this job's room.
+  if (jobAction === "update_price" &&
+      !/facebook\.com\/marketplace\/(you\/(selling|dashboard)|edit)/.test(pageUrl)) return;
   // A post job normally lives only on the create pages — EXCEPT a
   // job in post-publish verification (v2.1.7, header note 18): its
   // tab was navigated to the Selling page to settle posted-vs-not
@@ -5250,6 +5295,418 @@
     }
   }
 
+  // ---- price update flow (v2.1.62, header note 35) ------
+  // [PURE-PRICE-UPDATE-BEGIN] — extracted and unit-exercised
+  // by the test harness; keep free of DOM/chrome references.
+  // The price-update plan: validates the job's price payload
+  // once, up front, and derives the two strict-match car
+  // shapes — the listing as it stands (FROM price) and as it
+  // must read after the edit (TO price). Any payload defect
+  // fails the plan before anything on the page is touched.
+  function priceUpdatePlan(jobLike) {
+    const car = (jobLike && jobLike.car) || null;
+    const fromPrice = Number(jobLike && jobLike.updateFromPrice);
+    const toPrice = Number(jobLike && jobLike.updateToPrice);
+    if (!car || !car.year || !car.make || !car.model) {
+      return { ok: false, reason: "price_update_job_incomplete" };
+    }
+    if (!isFinite(fromPrice) || !isFinite(toPrice) ||
+        fromPrice <= 0 || toPrice <= 0 || fromPrice === toPrice) {
+      return { ok: false, reason: "price_update_payload_invalid" };
+    }
+    return {
+      ok: true,
+      fromPrice,
+      toPrice,
+      fromCar: Object.assign({}, car, { price: fromPrice }),
+      toCar: Object.assign({}, car, { price: toPrice })
+    };
+  }
+
+  // A Save control's commit text (v2.1.62): the edit form's
+  // commit button reads Save / Update / Done (or carries one
+  // of those as its label). Anything else — Cancel, Delete,
+  // a bare icon — is not the commit.
+  function editSaveButtonTextOk(text) {
+    return /^(save|update|done|save changes|update listing)$/i
+      .test(String(text || "").trim());
+  }
+  // [PURE-PRICE-UPDATE-END]
+
+  // The Edit entry in an open listing menu — the delete
+  // entry's twin (findDeleteMenuItem's discipline: menu
+  // containers first, shortest label wins).
+  function findEditMenuItem() {
+    const clickables = Array.from(document.querySelectorAll(
+      '[role="menuitem"], [role="option"], a, button, [role="button"], [tabindex]'
+    ));
+    const matches = clickables.filter(el => {
+      if (!isVisible(el)) return false;
+      const t = normText(el.getAttribute("aria-label") || el.textContent);
+      return /^edit( listing)?$/i.test(t);
+    });
+    if (!matches.length) return null;
+    const inMenu = matches.filter(el =>
+      el.closest('[role="menu"], [role="listbox"], [role="dialog"]'));
+    return (inMenu.length ? inMenu : matches)
+      .sort((a, b) => (a.textContent || "").length - (b.textContent || "").length)[0];
+  }
+
+  function priceFieldMeta(el) {
+    const parts = [];
+    try {
+      if (el.id) {
+        const lab = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+        if (lab) parts.push(lab.textContent || "");
+      }
+    } catch (_) { /* label hunt is best-effort */ }
+    let host = el;
+    for (let d = 0; d < 4 && host; d++) {
+      host = host.parentElement;
+      if (host && /price/i.test(host.textContent || "") &&
+          (host.textContent || "").length < 120) {
+        parts.push(host.textContent || "");
+        break;
+      }
+    }
+    parts.push(el.getAttribute("aria-label") || "",
+      el.getAttribute("placeholder") || "", el.name || "", el.id || "");
+    return normText(parts.join(" "));
+  }
+
+  // The editor's price field: a visible input whose label /
+  // aria / placeholder / neighbourhood says "price". Deliberately
+  // NOT findAnyField — that helper early-returns on pages
+  // without composer controls, and an edit page is exactly such
+  // a page.
+  function findPriceFieldInEditor() {
+    const inputs = Array.from(document.querySelectorAll(
+      'input:not([type="hidden"]), textarea, [contenteditable="true"]'
+    )).filter(el => isVisible(el));
+    const scored = [];
+    for (const el of inputs) {
+      let score = 0;
+      if (/price/i.test(priceFieldMeta(el))) score += 3;
+      if (moneyNumber(extractValue(el)) != null) score += 1;
+      if (score > 0) scored.push({ el, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.length ? scored[0].el : null;
+  }
+
+  function findEditSaveButton() {
+    const cands = Array.from(document.querySelectorAll(
+      'button, [role="button"], a, input[type="submit"]'
+    )).filter(el => isVisible(el) && !el.disabled);
+    const scored = [];
+    for (const el of cands) {
+      const t = normText(el.getAttribute("aria-label") || el.value || el.textContent);
+      if (!t || /cancel|delete|discard/i.test(t)) continue;
+      if (editSaveButtonTextOk(t)) scored.push({ el, t });
+    }
+    const inDialog = scored.filter(c => c.el.closest('[role="dialog"], form'));
+    return (inDialog.length ? inDialog : scored)[0] || null;
+  }
+
+  // Records the flow's phase on the STORED job, so a fresh
+  // content-script incarnation (the Edit click may navigate
+  // this tab to the edit page) resumes at the right phase.
+  async function setPriceUpdateStage(stage) {
+    try {
+      job.priceUpdate = Object.assign({}, job.priceUpdate || {}, { stage });
+      await chrome.storage.local.set({ current_posting_job: job });
+    } catch (_) { /* fail-open: worst case a phase re-runs */ }
+  }
+
+  // The delete flow's navigation recovery, price-update twin:
+  // a scan attempted off the Selling page reloads to it — the
+  // job and its phase marker live in storage, so the fresh
+  // incarnation resumes exactly here.
+  let priceUpdateNavRecoveries = 0;
+  async function recoverToSellingPageForUpdate(reason) {
+    if (priceUpdateNavRecoveries >= 2) return false;
+    priceUpdateNavRecoveries += 1;
+    recordStepNote("price_nav_recover",
+      reason + " | " + window.location.href.slice(0, 100));
+    window.location.href = "https://www.facebook.com/marketplace/you/selling";
+    await sleep(8000);
+    return true;
+  }
+
+  async function runUpdatePriceListing() {
+    banner("AutoLaunch: updating this listing's price…");
+    if (job.listingCheckpoint && job.listingCheckpoint.stage === "done") {
+      // A previous incarnation finished the edit; the verdict
+      // still belongs to the verifying scan, never to memory.
+      await setPriceUpdateStage("verify");
+      await runUpdatePriceVerify();
+      return;
+    }
+    const plan = priceUpdatePlan(job);
+    if (!plan.ok) {
+      await fail(plan.reason, "price_update_plan",
+        JSON.stringify({ from: updateFromPrice, to: updateToPrice }));
+      return;
+    }
+    const settle = await settleSellingList();
+    if (!settle.cards) {
+      if (await recoverToSellingPageForUpdate("listing_scan")) return;
+      const probe = {
+        strict: 0,
+        title: findListingCardsByTitle(plan.fromCar).length,
+        rendered: sellingRenderedFromSignals(),
+        url: window.location.href.slice(0, 100)
+      };
+      await fail("listing_not_found", "price_update_probe", JSON.stringify(probe));
+      return;
+    }
+    // Strict match AT THE FROM PRICE — the price the listing
+    // still shows. Matching at the current price is the bug
+    // this feature exists to fix.
+    const fromMatcher = t => listingTextMatches(t, plan.fromCar);
+    const matches = listingCardsIn(null, fromMatcher);
+    const titleProbe = listingCardsIn(null, t => listingTitleMatches(t, plan.fromCar));
+    recordStepNote("price_match_scan",
+      "strict:" + matches.length + " title:" + titleProbe.length +
+      " rendered:" + sellingRenderedFromSignals() +
+      " cards:" + countSellingCards());
+    if (!matches.length) {
+      const probe = {
+        strict: 0,
+        title: titleProbe.length,
+        rendered: sellingRenderedFromSignals(),
+        cards: countSellingCards(),
+        samples: findListingCardsByTitle(plan.fromCar)
+          .slice(0, 3).map(c => normText(c.textContent).slice(0, 80))
+      };
+      await fail("listing_not_found", "price_update_probe", JSON.stringify(probe));
+      return;
+    }
+    if (matches.length > 1) {
+      await fail("listing_ambiguous", "price_update_probe",
+        JSON.stringify({ strict: matches.length }));
+      return;
+    }
+    let matchedCard = matches[0];
+    let menuBtn = listingMenuButton(matchedCard);
+    if (!menuBtn) {
+      recordStepNote("price_menu_missing",
+        menuItemTexts(matchedCard).join(" | ").slice(0, 180));
+      await fail("listing_menu_not_found", "price_menu_missing",
+        JSON.stringify({ items: menuItemTexts(matchedCard).slice(0, 6) }));
+      return;
+    }
+    // The delete flow's menu ladder, unchanged: realistic
+    // click, one re-render re-resolve, then CDP rungs.
+    recordStepNote("price_menu_click", "realistic");
+    await realisticClick(menuBtn);
+    let menuOpen = await pollForMenuOpen(matchedCard, menuBtn);
+    if (!menuOpen) {
+      const fresh = listingCardsIn(null, fromMatcher);
+      const freshBtn = fresh.length === 1 ? listingMenuButton(fresh[0]) : null;
+      if (freshBtn && freshBtn !== menuBtn) {
+        await realisticClick(freshBtn);
+        menuOpen = await pollForMenuOpen(fresh[0], freshBtn);
+        if (menuOpen) { matchedCard = fresh[0]; menuBtn = freshBtn; }
+      }
+    }
+    if (!menuOpen) {
+      const ok = await cdpClickEl(menuBtn).catch(() => false);
+      if (ok) menuOpen = await pollForMenuOpen(matchedCard, menuBtn);
+      recordStepNote("price_menu_cdp_click", ok ? "clicked" : "failed");
+    }
+    if (!menuOpen) {
+      const ok = await cdpClickSeq(menuBtn).catch(() => false);
+      if (ok) menuOpen = await pollForMenuOpen(matchedCard, menuBtn);
+      recordStepNote("price_menu_cdp_seq", ok ? "clicked" : "failed");
+    }
+    if (!menuOpen) {
+      recordStepNote("price_menu_items",
+        menuItemTexts(matchedCard).join(" | ").slice(0, 180));
+      await fail("listing_menu_not_found", "price_menu_items",
+        JSON.stringify({ items: menuItemTexts(matchedCard).slice(0, 6) }));
+      return;
+    }
+    recordStepNote("price_menu_items",
+      menuItemTexts(matchedCard).join(" | ").slice(0, 180));
+    const editItem = findEditMenuItem();
+    if (!editItem) {
+      await fail("price_edit_item_not_found", "price_menu_items",
+        JSON.stringify({ items: menuItemTexts(matchedCard).slice(0, 6) }));
+      return;
+    }
+    // Arm the editor phase BEFORE the click: the click may
+    // navigate this tab, and the next incarnation must know
+    // the editor is where the flow resumes.
+    await setPriceUpdateStage("edit");
+    recordStepNote("price_edit_click", "realistic");
+    await realisticClick(editItem);
+    let navigated = false;
+    let field = null;
+    for (let i = 0; i < 24 && !field; i++) {
+      await sleep(500);
+      if (!/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) {
+        navigated = true;
+        break;
+      }
+      field = findPriceFieldInEditor();
+    }
+    if (navigated) {
+      // The edit page's own incarnation drives from here.
+      recordStepNote("price_editor_open", "navigated");
+      return;
+    }
+    if (!field) {
+      const ok = await cdpClickEl(editItem).catch(() => false);
+      recordStepNote("price_edit_cdp_click", ok ? "clicked" : "failed");
+      for (let i = 0; i < 16 && !field; i++) {
+        await sleep(500);
+        if (!/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) {
+          navigated = true;
+          break;
+        }
+        field = findPriceFieldInEditor();
+      }
+      if (navigated) {
+        recordStepNote("price_editor_open", "navigated");
+        return;
+      }
+    }
+    if (!field) {
+      await fail("price_editor_not_found", "price_editor_probe",
+        JSON.stringify({ url: window.location.href.slice(0, 100) }));
+      return;
+    }
+    recordStepNote("price_editor_open", "in_page");
+    await runUpdatePriceEditor();
+  }
+
+  async function runUpdatePriceEditor() {
+    banner("AutoLaunch: updating this listing's price…");
+    const plan = priceUpdatePlan(job);
+    if (!plan.ok) {
+      await fail(plan.reason, "price_update_plan",
+        JSON.stringify({ from: updateFromPrice, to: updateToPrice }));
+      return;
+    }
+    let field = null;
+    for (let i = 0; i < 24 && !field; i++) {
+      field = findPriceFieldInEditor();
+      if (!field) await sleep(500);
+    }
+    if (!field) {
+      recordStepNote("price_editor_missing", window.location.href.slice(0, 100));
+      await fail("price_editor_not_found", "price_editor_probe",
+        JSON.stringify({ url: window.location.href.slice(0, 100) }));
+      return;
+    }
+    // IDENTITY GATE: the field must currently show the FROM
+    // price. Anything else means this editor is showing a
+    // different listing (or the price already moved) — abort
+    // having changed nothing.
+    const beforeText = extractValue(field);
+    const before = moneyNumber(beforeText);
+    recordStepNote("price_field_before",
+      String(beforeText).slice(0, 40) + " | expect " + plan.fromPrice);
+    if (before !== plan.fromPrice) {
+      await fail("price_update_wrong_listing", "price_field_before",
+        JSON.stringify({ shown: beforeText, expect: plan.fromPrice }));
+      return;
+    }
+    nativeSetValue(field, String(plan.toPrice));
+    await sleep(400);
+    let setOk = valueMatches(extractValue(field), String(plan.toPrice), "price");
+    if (!setOk) {
+      const r = await escalatedRefill([{
+        name: "Price", kind: "price", expected: plan.toPrice,
+        keywords: ["price"], el: field,
+        read: () => moneyNumber(extractValue(field)),
+        rung1: (el2, v) => nativeSetValue(el2, String(v))
+      }]).catch(() => ({ ok: false }));
+      setOk = !!(r && r.ok);
+      if (!setOk) {
+        const f2 = findPriceFieldInEditor();
+        if (f2) setOk = moneyNumber(extractValue(f2)) === plan.toPrice;
+      }
+    }
+    recordStepNote("price_field_after", String(extractValue(field)).slice(0, 40));
+    if (!setOk) {
+      await fail("price_update_field_unset", "price_field_after",
+        JSON.stringify({ shown: extractValue(field), expect: plan.toPrice }));
+      return;
+    }
+    const save = findEditSaveButton();
+    if (!save) {
+      await fail("price_save_button_not_found", "price_save_probe",
+        JSON.stringify({ url: window.location.href.slice(0, 100) }));
+      return;
+    }
+    recordStepNote("price_save_click", save.t);
+    await realisticClick(save.el);
+    // Wait for the editor to close or the tab to come home;
+    // the verdict itself is the verify scan's, never this
+    // click's.
+    for (let i = 0; i < 20; i++) {
+      await sleep(500);
+      if (!findPriceFieldInEditor()) break;
+      if (/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) break;
+    }
+    await setPriceUpdateStage("verify");
+    if (!/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) {
+      window.location.href = "https://www.facebook.com/marketplace/you/selling";
+      return; // the fresh incarnation runs the verify phase
+    }
+    await runUpdatePriceVerify();
+  }
+
+  async function runUpdatePriceVerify() {
+    const plan = priceUpdatePlan(job);
+    if (!plan.ok) {
+      await fail(plan.reason, "price_update_plan",
+        JSON.stringify({ from: updateFromPrice, to: updateToPrice }));
+      return;
+    }
+    const settle = await settleSellingList();
+    if (!settle.cards) {
+      if (await recoverToSellingPageForUpdate("verify_scan")) return;
+      await fail("listing_not_found", "price_verify_probe",
+        JSON.stringify({ reason: "selling_list_never_settled" }));
+      return;
+    }
+    const scan = () => ({
+      atNew: listingCardsIn(null, t => listingTextMatches(t, plan.toCar)).length,
+      atOld: listingCardsIn(null, t => listingTextMatches(t, plan.fromCar)).length
+    });
+    let s = scan();
+    recordStepNote("price_verify_scan",
+      "new:" + s.atNew + " old:" + s.atOld + " cards:" + countSellingCards());
+    if (s.atOld > 0 && s.atNew === 0) {
+      // Facebook can lag the card paint after an edit; one
+      // patient re-look before declaring the edit unproven.
+      await sleep(15000);
+      const settle2 = await settleSellingList();
+      if (settle2.cards) {
+        s = scan();
+        recordStepNote("price_verify_rescan", "new:" + s.atNew + " old:" + s.atOld);
+      }
+    }
+    if (s.atNew === 1 && s.atOld === 0) {
+      try {
+        job.listingCheckpoint = { stage: "done", ts: Date.now() };
+        await chrome.storage.local.set({ current_posting_job: job });
+      } catch (_) { /* the checkpoint is advisory */ }
+      recordStepNote("price_update_verified", plan.fromPrice + " -> " + plan.toPrice);
+      await report("AUTOLAUNCH_JOB_PRICE_UPDATED", {});
+      return;
+    }
+    if (s.atNew > 1) {
+      await fail("price_update_ambiguous", "price_verify_scan", JSON.stringify(s));
+      return;
+    }
+    await fail(s.atOld > 0 ? "price_update_not_applied" : "price_update_unproven",
+      "price_verify_scan", JSON.stringify(s));
+  }
+
   async function runDeleteListing() {
     try {
       say("Removing your listing from Facebook…");
@@ -5726,6 +6183,23 @@
   }
   if (jobAction === "share") {
     await runShareListing();
+    return;
+  }
+  if (jobAction === "update_price") {
+    // Phase routing (v2.1.62, header note 35): the stored job's
+    // priceUpdate marker says where the flow left off — the
+    // attempt on the Selling page, the editor (this tab may
+    // have navigated to the edit page), or the verifying scan.
+    const phase = (job.priceUpdate && job.priceUpdate.stage) || "";
+    if (phase === "verify") {
+      await runUpdatePriceVerify();
+      return;
+    }
+    if (phase === "edit" || /facebook\.com\/marketplace\/edit/.test(pageUrl)) {
+      await runUpdatePriceEditor();
+      return;
+    }
+    await runUpdatePriceListing();
     return;
   }
   if (jobAction === "post" && job.verifyPublished) {

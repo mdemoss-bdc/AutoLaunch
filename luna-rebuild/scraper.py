@@ -1497,7 +1497,10 @@ def _queue_exit_listing_removals(uid: str, posted_rows: list) -> int:
                 "make": r.get("make"),
                 "model": r.get("model"),
                 "stock_num": r.get("stock_number") or r.get("stock_num"),
-                "price": r.get("price"),
+                # The match price is the price the LISTING carries —
+                # the posted price when it is stamped — not the
+                # car's current price (see _delete_match_price).
+                "price": _delete_match_price(r),
             }
         )
         blocked.add(vin)
@@ -1517,6 +1520,177 @@ def _queue_exit_listing_removals(uid: str, posted_rows: list) -> int:
     print(
         f"[✓] Auto-delete for user {uid[:8]}: queued {len(rows)} listing "
         "removal(s) for exited cars."
+    )
+    return len(rows)
+
+
+# =============================================================================
+# ==================== PRICE UPDATES (LISTING PRICE SYNC) ====================
+# =============================================================================
+# Matthew's ask (2026-11-03): when the dealer's advertised price
+# changes on a car whose Marketplace listing is already live, the
+# LISTING's price follows automatically. The failure that forced
+# this: a Facebook listing keeps its post-time price forever, while
+# scraped_inventory.price tracks the dealer's current price — so an
+# exit-delete built at the current price failed the helper's strict
+# title+price match (the 2020 Lincoln Nautilus: posted at $14,530,
+# dealer price later dropped to $12,492, delete failed with the
+# helper's own diag strict:0 title:1).
+#
+# Foundation: scraped_inventory.marketplace_posted_price — the price
+# the live listing actually carries. The extension stamps it when a
+# post completes and advances it on every successful price update.
+# NULL means "no stamped post price" (every car posted before this
+# feature) and every consumer falls back to the current price —
+# exactly the pre-feature behavior.
+#
+# This pass queues ONE action "update_price" row per drifted car:
+# price = the NEW (current) price the listing should show,
+# update_from_price = the price the listing still shows. NOT A POST:
+# by Matthew's rule a price update never counts toward the daily
+# post cap, the usage counters, or post pacing — the extension
+# claims the action with the same exemptions "share" carries, and
+# nothing in this feature ever stamps marketplace_posted_at.
+PRICE_UPDATE_MAX_PER_RUN = 25
+
+
+def _delete_match_price(row):
+    """The price a delete job must match on Facebook: the price the
+    listing was posted at (marketplace_posted_price) when it is
+    known, else the car's current price. Pure."""
+    posted = (row or {}).get("marketplace_posted_price")
+    if posted is not None:
+        return posted
+    return (row or {}).get("price")
+
+
+def _price_update_queue_rows(uid, inv_rows, blocked_vins, failed_keys):
+    """Pure drift selection: which inventory rows earn a price-update
+    job, and the exact queue payloads for them.
+
+    A row qualifies when its listing is live (marketplace_posted_at
+    set), the car is still active, a posted price is stamped, the
+    current price is a real positive number, and the two differ.
+    blocked_vins (a live update_price or delete row already exists
+    for the VIN — a car with a live delete NEVER gets an update) and
+    failed_keys ((vin, from_price, to_price) triples an identical
+    update already FAILED on; the same drift never re-queues itself,
+    while a NEW drift to a different price still can) are honored.
+    Capped at PRICE_UPDATE_MAX_PER_RUN; the rest simply qualify
+    again next run. Returns queue-row dicts in the producers' shared
+    contract."""
+    rows = []
+    for r in inv_rows or []:
+        vin = r.get("vin")
+        if not vin or vin in blocked_vins:
+            continue
+        if not r.get("marketplace_posted_at"):
+            continue
+        if r.get("is_active") is not True:
+            continue
+        posted_price = r.get("marketplace_posted_price")
+        current_price = r.get("price")
+        if posted_price is None or current_price is None:
+            continue
+        try:
+            posted_i = int(posted_price)
+            current_i = int(current_price)
+        except (TypeError, ValueError):
+            continue
+        if current_i <= 0 or posted_i <= 0 or current_i == posted_i:
+            continue
+        if (vin, posted_i, current_i) in failed_keys:
+            continue
+        if len(rows) >= PRICE_UPDATE_MAX_PER_RUN:
+            continue
+        rows.append(
+            {
+                "user_id": uid,
+                "vin": vin,
+                "target_channel": "facebook",
+                "action": "update_price",
+                "status": "pending",
+                "year": r.get("year"),
+                "make": r.get("make"),
+                "model": r.get("model"),
+                "stock_num": r.get("stock_number") or r.get("stock_num"),
+                "price": current_i,
+                "update_from_price": posted_i,
+            }
+        )
+        blocked_vins.add(vin)
+    return rows
+
+
+def _queue_price_updates(uid: str) -> int:
+    """Queue one price-update job per live listing whose dealer price
+    has drifted from the price it posted at.
+
+    Runs after a clean crawl (the caller guarantees it): is_active is
+    fresh, and the stale pass has already queued deletes for this
+    run's exits — those cars are inactive here and never qualify.
+    Failures are logged and swallowed — queueing price updates must
+    never break the scrape. Returns the number of rows queued."""
+    try:
+        inv_rows = []
+        page_size = 1000
+        offset = 0
+        while True:
+            res = (
+                db.table("scraped_inventory")
+                .select("vin, year, make, model, price, stock_number, is_active, marketplace_posted_at, marketplace_posted_price")
+                .eq("user_id", uid)
+                .eq("is_active", True)
+                .order("vin")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            rows = res.data or []
+            inv_rows.extend(r for r in rows if r.get("vin"))
+            if len(rows) < page_size:
+                break
+            offset += page_size
+        if not inv_rows:
+            return 0
+        # Dedupe reads: without them we cannot prove a row is new —
+        # skip rather than risk a duplicate job (the auto-delete
+        # pass's discipline).
+        live = (
+            db.table("auto_posting_queue")
+            .select("vin")
+            .eq("user_id", uid)
+            .in_("action", ["update_price", "delete"])
+            .in_("status", ["pending", "processing"])
+            .execute()
+        ).data or []
+        blocked = {r["vin"] for r in live if r.get("vin")}
+        failed = (
+            db.table("auto_posting_queue")
+            .select("vin, update_from_price, price")
+            .eq("user_id", uid)
+            .eq("action", "update_price")
+            .eq("status", "failed")
+            .execute()
+        ).data or []
+        failed_keys = {
+            (r.get("vin"), r.get("update_from_price"), r.get("price"))
+            for r in failed
+            if r.get("vin")
+        }
+    except Exception as e:
+        print(f"[!] Price-update pass failed for user {uid[:8]}: {e}")
+        return 0
+    rows = _price_update_queue_rows(uid, inv_rows, blocked, failed_keys)
+    if not rows:
+        return 0
+    try:
+        db.table("auto_posting_queue").insert(rows).execute()
+    except Exception as e:
+        print(f"[!] Price-update queue insert failed for user {uid[:8]}: {e}")
+        return 0
+    print(
+        f"[✓] Price updates for user {uid[:8]}: queued {len(rows)} "
+        "listing price update(s)."
     )
     return len(rows)
 
@@ -2213,7 +2387,7 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
         while True:
             res = (
                 db.table("scraped_inventory")
-                .select("vin, marketplace_posted_at, year, make, model, price, stock_number")
+                .select("vin, marketplace_posted_at, marketplace_posted_price, year, make, model, price, stock_number")
                 .eq("user_id", uid)
                 .eq("is_active", True)
                 .order("vin")
@@ -2832,6 +3006,13 @@ async def run_scraper():
             elif user_seen_vins and not user_had_error:
 
                 mark_stale_inventory(active_uid, user_seen_vins)
+
+                # Listing price sync: queue one price-update job per
+                # live listing whose dealer price has drifted from
+                # the price it posted at. Never a post: the rows are
+                # exempt from the daily cap, the usage counters and
+                # post pacing on every surface that counts.
+                _queue_price_updates(active_uid)
 
                 # A clean, full crawl also earns the auto-post pass
                 # (it runs once per user after the crawl loop).

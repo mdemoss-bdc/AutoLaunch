@@ -518,6 +518,34 @@
 //     has one, and byte-identical to 2.1.60 when it
 //     doesn't. Comment + one builder term; no other
 //     worker behavior changes.
+//
+// 34. LISTING PRICE SYNC (v2.1.62 — Matthew, 2026-11-03;
+//     content.js header note 35 carries the editor's side):
+//     a Facebook listing keeps its post-time price forever,
+//     while the dealer's price moves — so removals built at
+//     the current price failed the strict title+price match
+//     (the Nautilus: posted $14,530, price dropped to
+//     $12,492, removal refused). Two foundations land here.
+//     (a) POSTED-PRICE STAMP: applyPosted now also writes
+//     scraped_inventory.marketplace_posted_price — the price
+//     the post actually used, carried on the job from the
+//     queue row — and applyDeleted clears it with the posted
+//     stamp; producers build removals from it, so a removal
+//     always matches the price the listing shows. (b) PRICE
+//     UPDATE JOBS: the scraper queues action "update_price"
+//     rows (price = the new price, update_from_price = the
+//     price the listing still shows) when a live listing's
+//     dealer price drifts. A price update is NOT a post —
+//     Matthew's rule: it never counts toward the daily cap,
+//     the usage counters, or post pacing, so checkQueue
+//     claims it under the same exemptions "share" carries,
+//     and its completion (applyPriceUpdated) advances ONLY
+//     marketplace_posted_price — marketplace_posted_at is
+//     never touched, so neither today's-posts count nor the
+//     pacing anchor can move. Claim-time basis validation
+//     (priceUpdateClaimGate) fails the row untouched when
+//     the drift it was queued for is no longer the drift
+//     that exists; the next sync re-queues the truth.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1404,6 +1432,46 @@ async function reconcileActiveJob(job) {
 
 let isChecking = false;
 
+// [PURE-PRICE-UPDATE-BEGIN] — extracted and unit-exercised by
+// the test harness; keep free of DOM/chrome references.
+// Claim-time basis validation for a price-update job (v2.1.62,
+// header note 34): the job was queued for ONE specific drift —
+// the listing showed update_from_price, the dealer's price was
+// the row's price. At claim time the inventory row is re-read,
+// and the job may only run while that exact drift still exists:
+// the car is still posted, the stamped posted price still
+// equals the job's FROM price, and the current price still
+// equals the job's TO price. Any mismatch means the world moved
+// (a price update already landed, the listing came down, the
+// dealer price moved again) — the row fails untouched with a
+// named reason and the next sync's drift pass re-queues the
+// truth. Pure: (queue item, inventory row) -> verdict.
+function priceUpdateClaimGate(item, carRow) {
+  if (!item || item.action !== "update_price") {
+    return { ok: false, reason: "not_a_price_update" };
+  }
+  const fromPrice = Number(item.update_from_price);
+  const toPrice = Number(item.price);
+  if (!isFinite(fromPrice) || !isFinite(toPrice) ||
+      fromPrice <= 0 || toPrice <= 0 || fromPrice === toPrice) {
+    return { ok: false, reason: "price_update_payload_invalid" };
+  }
+  if (!carRow) {
+    return { ok: false, reason: "inventory_row_missing" };
+  }
+  if (!carRow.marketplace_posted_at) {
+    return { ok: false, reason: "listing_not_posted" };
+  }
+  if (Number(carRow.marketplace_posted_price) !== fromPrice) {
+    return { ok: false, reason: "price_basis_changed" };
+  }
+  if (Number(carRow.price) !== toPrice) {
+    return { ok: false, reason: "price_basis_changed" };
+  }
+  return { ok: true, fromPrice, toPrice };
+}
+// [PURE-PRICE-UPDATE-END]
+
 async function checkQueue() {
   if (isChecking) return;
   isChecking = true;
@@ -1462,8 +1530,9 @@ async function checkQueue() {
     // 'marketplace') and Facebook DELETE rows (target_channel
     // 'facebook', action 'delete') — the jobs this helper runs.
     // v2.1.55 adds Facebook SHARE rows (target_channel 'facebook',
-    // action 'share') to the same set. Other channels' rows belong
-    // to other workers; never touch them.
+    // action 'share') to the same set. v2.1.62 adds Facebook
+    // PRICE UPDATE rows (action 'update_price') the same way.
+    // Other channels' rows belong to other workers; never touch them.
     const queueItems = await sbGet(
       `auto_posting_queue?user_id=eq.${userId}&status=eq.pending` +
       `&target_channel=in.(marketplace,facebook)&order=created_at.asc&limit=5`
@@ -1478,7 +1547,7 @@ async function checkQueue() {
       const postedToday = await todaysPostCount(userId);
       atLimit = postedToday >= settings.limit;
       if (atLimit) {
-        console.log(`[AutoLaunch] Daily limit reached (${postedToday}/${settings.limit}). Posts wait; deletes and shares still run.`);
+        console.log(`[AutoLaunch] Daily limit reached (${postedToday}/${settings.limit}). Posts wait; deletes, shares and price updates still run.`);
       }
     }
     // Post pacing (v2.1.42, header note 19): post_delay_minutes is
@@ -1488,29 +1557,49 @@ async function checkQueue() {
     // delay (0) means no gate; a missing last-post stamp (never
     // posted, or the lookup failed) also means no gate.
     let pacingHeld = false;
-    if (settings.delayMinutes > 0 && queueItems.some(q => q.action !== "delete" && q.action !== "share")) {
+    if (settings.delayMinutes > 0 && queueItems.some(q => q.action !== "delete" && q.action !== "share" && q.action !== "update_price")) {
       const lastPost = await lastPostedAt(userId);
       if (lastPost !== null) {
         const sinceMin = (Date.now() - lastPost) / 60000;
         if (sinceMin < settings.delayMinutes) {
           pacingHeld = true;
-          console.log(`[AutoLaunch] Post pacing: last post ${Math.floor(sinceMin)} min ago; holding posts ~${Math.ceil(settings.delayMinutes - sinceMin)} more min (delay ${settings.delayMinutes} min). Deletes and shares still run.`);
+          console.log(`[AutoLaunch] Post pacing: last post ${Math.floor(sinceMin)} min ago; holding posts ~${Math.ceil(settings.delayMinutes - sinceMin)} more min (delay ${settings.delayMinutes} min). Deletes, shares and price updates still run.`);
         }
       }
     }
     let item = null;
     for (const q of queueItems) {
-      if (q.action === "delete" || q.action === "share") { item = q; break; }
+      if (q.action === "delete" || q.action === "share" || q.action === "update_price") { item = q; break; }
       if (!atLimit && !pacingHeld) { item = q; break; }
     }
     if (!item) return; // only posts waiting, and the cap (or pacing) says wait
     const isDelete = item.action === "delete";
     const isShare = item.action === "share";
+    // Price updates (v2.1.62, header note 34) ride the delete/share
+    // exemptions everywhere below: not a post — never capped, never
+    // paced, never photo-gated, never intro-video'd.
+    const isUpdatePrice = item.action === "update_price";
 
     const cars = await sbGet(
       `scraped_inventory?vin=eq.${encodeURIComponent(item.vin)}&user_id=eq.${userId}&limit=1`
     );
     let carRow = cars.length ? cars[0] : null;
+    if (isUpdatePrice) {
+      // Basis validation (v2.1.62, header note 34): the exact
+      // drift this row was queued for must still exist — the car
+      // still posted, its stamped posted price still the row's
+      // FROM price, its current price still the row's TO price.
+      // Anything else means the world moved; fail the row
+      // untouched (the next sync re-queues the truth) rather
+      // than editing a listing on stale instructions.
+      const gate = priceUpdateClaimGate(item, carRow);
+      if (!gate.ok) {
+        await sbPatch(`auto_posting_queue?id=eq.${item.id}&status=eq.pending`, { status: "failed" });
+        await logFailure(item.id, gate.reason);
+        console.log(`[AutoLaunch] Price update for VIN ${item.vin} not claimed: ${gate.reason}.`);
+        return;
+      }
+    }
     if (!carRow && !isDelete && !isShare) {
       // Queue row points at a car that no longer exists: fail it loudly
       // instead of leaving it pending forever.
@@ -1549,7 +1638,7 @@ async function checkQueue() {
     // of handing a photo-less listing to Facebook. POSTS ONLY: a delete
     // removes a listing, and a car whose photos vanished is exactly the
     // car whose listing should come down.
-    if (!isDelete && !isShare) {
+    if (!isDelete && !isShare && !isUpdatePrice) {
       // Fallback placeholders are never real photos: the old hotlinked
       // Unsplash URL (rows stored before 2.1.11 may still carry it), the
       // local fallback asset in both the absolute Pages form a stored
@@ -1589,7 +1678,7 @@ async function checkQueue() {
     // a job or opening a tab, and WITHOUT touching the stamp:
     // the existing value is the truth. The row's executed_at
     // fingerprints this path (applyPosted rows carry none).
-    if (!isDelete && !isShare && carRow.marketplace_posted_at) {
+    if (!isDelete && !isShare && !isUpdatePrice && carRow.marketplace_posted_at) {
       await sbPatch(`auto_posting_queue?id=eq.${item.id}`,
         { status: "posted", executed_at: new Date().toISOString() });
       console.log(`[AutoLaunch] already_posted_at_claim: queue item ${item.id} (VIN ${item.vin}) already carries marketplace_posted_at ${carRow.marketplace_posted_at} — completed without posting.`);
@@ -1600,7 +1689,7 @@ async function checkQueue() {
       queueId: item.id,
       userId,
       car: jobCarWithStock(carRow, item),
-      action: isDelete ? "delete" : isShare ? "share" : "post",
+      action: isDelete ? "delete" : isShare ? "share" : isUpdatePrice ? "update_price" : "post",
       fullAuto: settings.fullAuto,
       dealershipName: settings.dealershipName,
       dealershipAddress: settings.dealershipAddress,
@@ -1612,13 +1701,25 @@ async function checkQueue() {
       // Absent (a pre-column row) the job carries "" and the
       // share fails honestly rather than posting bare.
       shareText: isShare && typeof item.share_text === "string" ? item.share_text : "",
+      // Price update (v2.1.62, header note 34): the FROM price
+      // (what the listing still shows — the strict-match target
+      // on the Selling page) and the TO price (what the editor
+      // sets), carried only on update_price jobs; the basis gate
+      // above has already proven both against the fresh
+      // inventory row.
+      updateFromPrice: isUpdatePrice ? Number(item.update_from_price) : null,
+      updateToPrice: isUpdatePrice ? Number(item.price) : null,
+      // The queue row's stamped price (v2.1.62): the price a post
+      // publishes with, written to the inventory row as
+      // marketplace_posted_price when the post completes.
+      queuePrice: item.price != null ? Number(item.price) : null,
       claimedAt: new Date().toISOString()
     };
     // Intro video (v2.1.53, header note 27): resolved at claim
     // time and carried on the job; posts only — a delete has no
     // composer to attach to. Absent = the post runs exactly as
     // before this version.
-    if (!isDelete && !isShare) {
+    if (!isDelete && !isShare && !isUpdatePrice) {
       const intro = await introVideoForJob(userId, settings);
       if (intro) jobPayload.introVideo = intro;
     }
@@ -1635,7 +1736,7 @@ async function checkQueue() {
     // clicks over to it when they are ready to publish.
     const jobTab = await chrome.tabs.create({
       active: false,
-      url: (isDelete || isShare)
+      url: (isDelete || isShare || isUpdatePrice)
         ? "https://www.facebook.com/marketplace/you/selling"
         : "https://www.facebook.com/marketplace/create/vehicle"
     });
@@ -1996,11 +2097,22 @@ function compactDiagError(diags) {
 // The DB writes that end a job, split out so a finish that collides with
 // a dead token can be stashed and replayed when a fresh token arrives
 // (see autolaunch_pending_finish below) instead of being lost.
-async function applyPosted(queueId, vin, userId) {
+async function applyPosted(queueId, vin, userId, postedPrice) {
   await sbPatch(`auto_posting_queue?id=eq.${queueId}`, { status: "posted" });
+  // Posted-price stamp (v2.1.62, header note 34): alongside the
+  // posted-at stamp, record the price the post actually used —
+  // the queue row's stamped price, carried on the job — as
+  // marketplace_posted_price. It is the price the live listing
+  // carries: removals match against it, and the drift pass diffs
+  // the dealer's current price against it. A missing/invalid
+  // price leaves the column untouched (null = fall back to the
+  // current price, the pre-feature behavior).
+  const stamp = { marketplace_posted_at: new Date().toISOString() };
+  const pp = Number(postedPrice);
+  if (isFinite(pp) && pp > 0) stamp.marketplace_posted_price = Math.round(pp);
   await sbPatch(
     `scraped_inventory?vin=eq.${encodeURIComponent(vin)}&user_id=eq.${userId}`,
-    { marketplace_posted_at: new Date().toISOString() }
+    stamp
   );
 }
 
@@ -2016,7 +2128,10 @@ async function applyDeleted(queueId, vin, userId) {
     { status: "completed", executed_at: new Date().toISOString() });
   await sbPatch(
     `scraped_inventory?vin=eq.${encodeURIComponent(vin)}&user_id=eq.${userId}`,
-    { marketplace_posted_at: null }
+    // The posted price clears with the posted stamp (v2.1.62):
+    // no live listing, no posted price — the invariant the
+    // drift pass and the removal matcher both rely on.
+    { marketplace_posted_at: null, marketplace_posted_price: null }
   );
 }
 
@@ -2027,6 +2142,24 @@ async function applyDeleted(queueId, vin, userId) {
 async function applyShared(queueId) {
   await sbPatch(`auto_posting_queue?id=eq.${queueId}`,
     { status: "completed", executed_at: new Date().toISOString() });
+}
+
+// Price-update completion (v2.1.62, header note 34): the queue
+// row ends "completed" with executed_at stamped, and the car's
+// marketplace_posted_price advances to the price the listing now
+// shows. marketplace_posted_at is NEVER touched here — a price
+// update is not a post, and that stamp feeds both the
+// today's-posts count and the pacing anchor.
+async function applyPriceUpdated(queueId, vin, userId, newPrice) {
+  await sbPatch(`auto_posting_queue?id=eq.${queueId}`,
+    { status: "completed", executed_at: new Date().toISOString() });
+  const np = Number(newPrice);
+  if (isFinite(np) && np > 0) {
+    await sbPatch(
+      `scraped_inventory?vin=eq.${encodeURIComponent(vin)}&user_id=eq.${userId}`,
+      { marketplace_posted_price: Math.round(np) }
+    );
+  }
 }
 
 // The share row's details text (v2.1.56, header note 30): a
@@ -2149,12 +2282,14 @@ async function flushPendingFinish() {
   if (!pending) return;
   try {
     if (pending.outcome === "posted") {
-      await applyPosted(pending.queueId, pending.vin, pending.userId);
+      await applyPosted(pending.queueId, pending.vin, pending.userId, pending.postedPrice);
       // The share the post earned rides the stash (v2.1.55):
       // queued on replay, still fail-open.
       await maybeQueueFeedShare({ userId: pending.userId, shareToFeed: pending.shareToFeed, car: pending.shareCar, includeStock: pending.includeStock === true, dealershipName: pending.dealershipName || "", dealershipAddress: pending.dealershipAddress || "" });
     } else if (pending.outcome === "shared") {
       await applyShared(pending.queueId);
+    } else if (pending.outcome === "price_updated") {
+      await applyPriceUpdated(pending.queueId, pending.vin, pending.userId, pending.price);
     } else if (pending.outcome === "deleted") {
       await applyDeleted(pending.queueId, pending.vin, pending.userId);
     } else {
@@ -2200,7 +2335,8 @@ async function finishJobPosted(queueId, listingUrl) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
   if (!job || job.queueId !== queueId) return;
   try {
-    await applyPosted(queueId, job.car.vin, job.userId);
+    await applyPosted(queueId, job.car.vin, job.userId,
+      job.queuePrice != null ? job.queuePrice : job.car.price);
   } catch (err) {
     if (err instanceof SbAuthError) {
       // The listing really is live; only the bookkeeping failed. Stash
@@ -2211,6 +2347,11 @@ async function finishJobPosted(queueId, listingUrl) {
         autolaunch_pending_finish: {
           outcome: "posted", queueId,
           vin: job.car.vin, userId: job.userId,
+          // v2.1.62: the posted price rides the stash so a
+          // replayed finish stamps marketplace_posted_price
+          // exactly like the direct one.
+          postedPrice: job.queuePrice != null ? job.queuePrice
+            : (job.car.price != null ? Number(job.car.price) : null),
           listingUrl: listingUrl || null,
           shareToFeed: job.shareToFeed === true,
           // v2.1.56: the settings the share text is built from
@@ -2307,6 +2448,41 @@ async function finishJobShared(queueId) {
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Share confirmed for queue item", queueId);
+  scheduleJobTabClose(job);
+}
+
+// The price-update counterpart of finishJobDeleted (v2.1.62,
+// header note 34). Called by the content script ONLY after its
+// fresh Selling-page scan proved the listing now shows the new
+// price — never on the editor's Save click alone. Settles the
+// row "completed" and advances the car's posted price; the
+// posted-at stamp is never touched.
+async function finishJobPriceUpdated(queueId) {
+  const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
+  if (!job || job.queueId !== queueId) return;
+  try {
+    await applyPriceUpdated(queueId, job.car.vin, job.userId, job.updateToPrice);
+  } catch (err) {
+    if (err instanceof SbAuthError) {
+      // The listing really does show the new price; only the
+      // bookkeeping failed. Stash + replay on the next fresh
+      // token, like the other finishes.
+      await chrome.storage.local.set({
+        autolaunch_pending_finish: {
+          outcome: "price_updated", queueId,
+          vin: job.car.vin, userId: job.userId,
+          price: job.updateToPrice != null ? job.updateToPrice : null
+        }
+      });
+      await chrome.storage.local.remove(["current_posting_job"]);
+      console.warn("[AutoLaunch] Price update confirmed on Facebook; the queue update is waiting on a fresh session token.");
+      scheduleJobTabClose(job);
+      return;
+    }
+    throw err;
+  }
+  await chrome.storage.local.remove(["current_posting_job"]);
+  console.log("[AutoLaunch] Price update confirmed for queue item", queueId);
   scheduleJobTabClose(job);
 }
 
@@ -2674,6 +2850,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     finishJobShared(message.queueId)
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_JOB_PRICE_UPDATED") {
+    // Same Selling-page sender discipline as AUTOLAUNCH_JOB_DELETED
+    // (v2.1.62): a price update may only be CLAIMED from the
+    // Selling page, where the content script's verifying scan ran —
+    // a report from anywhere else is a scan of the wrong room.
+    const senderUrl = (sender && sender.tab && sender.tab.url) ||
+      (sender && sender.url) || "";
+    if (!/^https:\/\/www\.facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(senderUrl)) {
+      finishJobFailed(message.queueId,
+        "price_update_reported_from_wrong_page:" + senderUrl.slice(0, 80), [])
+        .then(() => sendResponse({ ok: false }))
+        .catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+    finishJobPriceUpdated(message.queueId)
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;

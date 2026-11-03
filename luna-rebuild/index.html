@@ -5841,7 +5841,9 @@ async function chooseStartTrial() {
 // counts once. A failed post consumes nothing: its row is 'failed'
 // and it never earns a posted_at. Delete rows (sold/exited removals)
 // never consume a post: gating them would trap the one car a trial
-// user is allowed to have live. (A queue row with no VIN can't be
+// user is allowed to have live. Price-update rows (listing price
+// sync, 2026-11-03) never consume a post either — Matthew's rule:
+// a price edit is not a post, on any surface that counts. (A queue row with no VIN can't be
 // deduped, so it counts singly — every real insert stamps a VIN, so
 // that is only a conservative fallback.)
 async function getTrialQueueUsedToday() {
@@ -5858,7 +5860,7 @@ async function getTrialQueueUsedToday() {
       .gte("created_at", startISO);
     if (error) throw error;
     (data || []).forEach(r => {
-      if (r.status === "failed" || r.action === "delete") return;
+      if (r.status === "failed" || r.action === "delete" || r.action === "update_price") return;
       if (r.vin) vins.add(r.vin); else unidentified++;
     });
   } catch (err) {
@@ -10057,7 +10059,7 @@ async function freshCarForDecision(vin, localCar) {
   try {
     const { data, error } = await supabaseClient
       .from("scraped_inventory")
-      .select("status, marketplace_posted_at, year, make, model, price, stock_number")
+      .select("status, marketplace_posted_at, marketplace_posted_price, year, make, model, price, stock_number")
       .eq("vin", vin)
       .eq("user_id", currentUser.id)
       .limit(1);
@@ -10066,6 +10068,21 @@ async function freshCarForDecision(vin, localCar) {
   } catch (e) {
     return localCar;
   }
+}
+
+// The price a removal job must match on Facebook (listing price
+// sync, 2026-11-03): the price the live listing actually carries —
+// marketplace_posted_price, stamped when the post completed and
+// advanced by every price update — NOT the car's current price.
+// A dealer price change after posting otherwise strands the
+// removal on the helper's strict title+price match (the Nautilus:
+// posted $14,530, price dropped to $12,492, removal failed). A car
+// with no stamped posted price (posted before the column existed)
+// falls back to its current price — the pre-feature behavior.
+function listingRemovalPrice(car) {
+  if (!car) return null;
+  if (car.marketplace_posted_price != null) return car.marketplace_posted_price;
+  return car.price ?? null;
 }
 
 // AUTO-DELETE ON EXIT — shared producer for listing-removal jobs.
@@ -10117,8 +10134,10 @@ async function queueListingRemoval(car) {
       model: car.model || null,
       stock_num: car.stock_num || car.stock_number || null,
       // The price rides the row on purpose: the helper's strict
-      // matcher needs year/make/model AND price.
-      price: car.price ?? null,
+      // matcher needs year/make/model AND price. It is the price
+      // the LISTING carries (listingRemovalPrice), never the
+      // car's current price once the two have drifted apart.
+      price: listingRemovalPrice(car),
       created_at: new Date().toISOString()
     });
   if (error) throw error;
@@ -10893,7 +10912,7 @@ function paintQueueRowPending(id) {
         for (const span of spans) {
             if (span.className && span.className.indexOf("rounded-full") !== -1) {
                 span.className = "px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold";
-                span.textContent = item && item.action === "delete" ? "🟡 Removal queued" : item && item.action === "share" ? "🟡 Share queued" : "🟡 Pending";
+                span.textContent = item && item.action === "delete" ? "🟡 Removal queued" : item && item.action === "share" ? "🟡 Share queued" : item && item.action === "update_price" ? "🟡 Price update queued" : "🟡 Pending";
                 break;
             }
         }
@@ -11089,9 +11108,9 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 // left is blocked — it renders as "No photos — won't post" and the
 // extension fails it rather than handing it to the poster. Delete
 // jobs are exempt: they remove a listing, photos are irrelevant.
-const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && item.action !== "share" && !!car && !hasRealPhoto(car);
-const blockedNoPrice = item.status === "pending" && item.action !== "delete" && item.action !== "share" && !!car && hasRealPhoto(car) && !hasPrice(car);
-const blockedInfo = item.status === "pending" && item.action !== "delete" && item.action !== "share" && !!car && hasRealPhoto(car) && hasPrice(car) && postingGaps(car).length > 0;
+const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && !!car && !hasRealPhoto(car);
+const blockedNoPrice = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && !!car && hasRealPhoto(car) && !hasPrice(car);
+const blockedInfo = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && !!car && hasRealPhoto(car) && hasPrice(car) && postingGaps(car).length > 0;
 // Phase B: a DELETE job (e.g. a sold car's listing removal) must read as
 // a removal at every stage — pending = queued, processing = in flight,
 // completed = removed — never as a generic post "Pending".
@@ -11101,7 +11120,7 @@ const statusChip = blockedNoPhoto
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No price — won't post</span>`
     : blockedInfo
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 Missing info — won't post</span>`
-    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.action === "share" && item.status === "pending" ? "🟡 Share queued" : item.action === "share" && item.status === "processing" ? "🔵 Sharing" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : item.action === "share" ? "🟢 Shared" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
+    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.action === "share" && item.status === "pending" ? "🟡 Share queued" : item.action === "share" && item.status === "processing" ? "🔵 Sharing" : item.action === "update_price" && item.status === "pending" ? "🟡 Price update queued" : item.action === "update_price" && item.status === "processing" ? "🔵 Updating price" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : item.action === "share" ? "🟢 Shared" : item.action === "update_price" ? "🟢 Price updated" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
 
     return `
 
