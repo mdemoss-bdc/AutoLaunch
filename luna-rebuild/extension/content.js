@@ -3580,10 +3580,10 @@
   // then up the ancestor chain — but a level is only trusted while it
   // still contains exactly ONE matching listing, so a neighbouring
   // card's menu can never be opened by mistake.
-  function listingMenuButton(cardEl) {
+  function listingMenuButton(cardEl, guardMatcher) {
     let node = cardEl;
     for (let depth = 0; depth < 6 && node; depth++) {
-      if (listingCardsIn(node).length !== 1) return null;
+      if (listingCardsIn(node, guardMatcher).length !== 1) return null;
       const btns = Array.from(
         node.querySelectorAll ? node.querySelectorAll('[role="button"], button') : []);
       const hit = btns.find(b => {
@@ -5498,7 +5498,7 @@
     try { matchedCard.scrollIntoView({ block: "center" }); } catch (e) {}
     await sleep(600);
     await humanPause();
-    let menuBtn = listingMenuButton(matchedCard);
+    let menuBtn = listingMenuButton(matchedCard, fromMatcher);
     if (!menuBtn) {
       // The scroll may have re-rendered the card — re-resolve it
       // once and look again before giving up.
@@ -5507,7 +5507,7 @@
         matchedCard = freshAfterScroll[0];
         try { matchedCard.scrollIntoView({ block: "center" }); } catch (e) {}
         await sleep(400);
-        menuBtn = listingMenuButton(matchedCard);
+        menuBtn = listingMenuButton(matchedCard, fromMatcher);
       }
     }
     if (!menuBtn) {
@@ -5524,7 +5524,7 @@
     let menuOpen = await pollForMenuOpen(matchedCard, menuBtn);
     if (!menuOpen) {
       const fresh = listingCardsIn(null, fromMatcher);
-      const freshBtn = fresh.length === 1 ? listingMenuButton(fresh[0]) : null;
+      const freshBtn = fresh.length === 1 ? listingMenuButton(fresh[0], fromMatcher) : null;
       if (freshBtn && freshBtn !== menuBtn) {
         await realisticClick(freshBtn);
         menuOpen = await pollForMenuOpen(fresh[0], freshBtn);
