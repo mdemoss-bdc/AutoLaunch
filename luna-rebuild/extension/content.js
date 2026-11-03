@@ -5434,7 +5434,7 @@
   }
 
   async function runUpdatePriceListing() {
-    banner("AutoLaunch: updating this listing's price…");
+    say("Updating this listing's price…");
     if (job.listingCheckpoint && job.listingCheckpoint.stage === "done") {
       // A previous incarnation finished the edit; the verdict
       // still belongs to the verifying scan, never to memory.
@@ -5582,7 +5582,7 @@
   }
 
   async function runUpdatePriceEditor() {
-    banner("AutoLaunch: updating this listing's price…");
+    say("Updating this listing's price…");
     const plan = priceUpdatePlan(job);
     if (!plan.ok) {
       await fail(plan.reason, "price_update_plan",
