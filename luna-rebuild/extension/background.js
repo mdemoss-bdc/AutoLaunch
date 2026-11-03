@@ -2506,7 +2506,8 @@ async function finishJobFailed(queueId, reason, diags) {
      reason === "publish_button_not_found" ||
      reason === "duplicate_rejected" ||
      reason === "job_orphaned" ||
-     (job && (job.action === "delete" || job.action === "share")))
+     (job && (job.action === "delete" || job.action === "share" ||
+              job.action === "update_price")))
       ? compactDiagError(diags)
       : null;
   try {
