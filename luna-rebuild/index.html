@@ -2363,6 +2363,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <i class="fa-solid fa-gauge w-4 text-slate-400"></i>
     <span>Change miles</span>
   </button>
+  <button onclick="handleDropdownAction('sync_one')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-rotate w-4 text-slate-400"></i>
+    <span>Sync this car</span>
+  </button>
   <button onclick="handleDropdownAction('listing_copy')" class="ai-gradient-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition cursor-pointer text-left font-bold">
     <i class="fa-solid fa-wand-magic-sparkles w-4"></i>
     <span>✨ Listing copy (AI)</span>
@@ -10045,6 +10049,7 @@ function handleDropdownAction(action) {
     case "change_price": openChangePriceModal(car.vin, car.price || 0); break;
     case "change_vin": openChangeVinModal(car.vin); break;
     case "change_miles": openChangeMilesModal(car.vin, car.mileage); break;
+    case "sync_one": syncSingleCar(car.vin); break;
     case "listing_copy": openListingCopyModal(car); break;
     case "add_link": openAddFbLinkModal(car.vin); break;
     case "remove_inventory": removeVehicleFromInventory(car.vin); break;
@@ -11527,11 +11532,11 @@ async function getSyncCooldownState() {
   try {
     const { data } = await supabaseClient
       .from("scrape_jobs")
-      .select("started_at, sync_mode")
+      .select("started_at, sync_mode, sync_vin")
       .eq("user_id", currentUser.id)
       .order("started_at", { ascending: false })
       .limit(200);
-    const rows = (data || []).filter(function (r) { return r.sync_mode !== "test"; });
+    const rows = (data || []).filter(function (r) { return r.sync_mode !== "test" && !r.sync_vin; });
     priorCount = rows.length;
     if (rows.length) lastSyncAt = rows[0].started_at;
   } catch (e) {
@@ -11615,6 +11620,31 @@ function pickSyncScope(event, key) {
     closeSyncScopeMenu();
     const btn = document.getElementById("navSyncItem");
     if (btn) triggerLiveLotCrawl({ currentTarget: btn }, key ? [key] : null);
+}
+
+// SYNC THIS CAR (2026-11-03, scoped-sync phase 2): refresh ONE car
+// from its own detail page — seconds instead of a lot crawl. Inserts
+// a scrape_jobs row carrying sync_vin; the scraper fetches just that
+// car's page through the same VDP path a full crawl uses. Cadence:
+// single-car rows never set the sync clock (the cooldown read below
+// filters them out, and the scraper's guard exempts them too).
+async function syncSingleCar(vin) {
+    if (!currentUser || !vin) return;
+    try {
+        const { error } = await supabaseClient
+            .from("scrape_jobs")
+            .insert({
+                user_id: currentUser.id,
+                status: "pending",
+                triggered_by: currentUser.email,
+                sync_mode: "full",
+                sync_vin: vin
+            });
+        if (error) throw error;
+        alert("\u2713 Refreshing that car from the dealer's site \u2014 give it a few seconds.");
+    } catch (e) {
+        alert("Could not start the refresh: " + (e.message || "unknown error"));
+    }
 }
 
 async function triggerLiveLotCrawl(event, scopeKeys) {

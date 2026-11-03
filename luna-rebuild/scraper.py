@@ -2392,6 +2392,104 @@ def _scope_filter_rows(rows, scope_keys):
     return [r for r in rows if r.get("source_key") in scope_keys]
 
 
+def _refresh_car_from_row(row):
+    """The starting record for a single-car refresh: the stored row's
+    identity + last-known values, with mileage pre-cleared so the
+    car's own detail page refills it (the caller restores the stored
+    figure if the page yields none). source_key is carried only when
+    the row already has one — a refresh never changes provenance.
+    Pure."""
+    car = {
+        "user_id": row.get("user_id"),
+        "vin": row.get("vin"),
+        "year": row.get("year"),
+        "make": row.get("make"),
+        "model": row.get("model"),
+        "stock_number": row.get("stock_number"),
+        "condition": row.get("condition"),
+        "location_name": row.get("location_name"),
+        "detail_url": row.get("detail_url") or row.get("listing_url"),
+        "image_url": row.get("image_url"),
+        "photos": list(row.get("photos") or []),
+        "price": row.get("price"),
+        "price_status": row.get("price_status"),
+        "color": row.get("color"),
+        "interior_color": row.get("interior_color"),
+        "body_type": row.get("body_type"),
+        "mileage": None,
+    }
+    if row.get("source_key"):
+        car["source_key"] = row["source_key"]
+    return car
+
+
+async def _sync_single_vin(context, uid: str, vin: str) -> int:
+    """Refresh ONE car from its own detail page (scoped-sync phase 2,
+    Matthew, 2026-11-03). Reuses the crawl's own VDP enrichment, so a
+    refreshed car is byte-for-byte the product of the same code that
+    syncs it in a full crawl. Fences: NO stale pass (one car says
+    nothing about the rest of the lot); a dead detail page leaves the
+    stored row completely untouched; is_active/status are never
+    written, so a refresh can neither exit nor resurrect a car.
+    Returns the number of records saved (0 or 1). Never raises."""
+    try:
+        rows = (
+            db.table("scraped_inventory")
+            .select("*")
+            .eq("user_id", uid)
+            .eq("vin", vin)
+            .execute()
+        ).data or []
+        if not rows and vin.upper() != vin:
+            rows = (
+                db.table("scraped_inventory")
+                .select("*")
+                .eq("user_id", uid)
+                .eq("vin", vin.upper())
+                .execute()
+            ).data or []
+        if not rows:
+            print(f"[!] Single-car refresh: VIN {vin} is not in this user's inventory.")
+            return 0
+        row = rows[0]
+        detail_url = row.get("detail_url") or row.get("listing_url")
+        if not detail_url:
+            print(f"[!] Single-car refresh: {vin} has no detail URL on file.")
+            return 0
+        # Pre-check the page is alive BEFORE touching anything: a
+        # failed fetch must never degrade stored data (the enrichment
+        # would otherwise fall back to a single SRP photo).
+        try:
+            resp = await context.request.get(detail_url, timeout=20000)
+            if resp.status != 200:
+                print(
+                    f"[!] Single-car refresh: detail page for {vin} "
+                    f"returned {resp.status}; stored data untouched."
+                )
+                return 0
+            if not await resp.text():
+                print(f"[!] Single-car refresh: detail page for {vin} was empty; stored data untouched.")
+                return 0
+        except Exception as e:
+            print(f"[!] Single-car refresh: detail fetch failed for {vin} ({e}); stored data untouched.")
+            return 0
+        car = _refresh_car_from_row(row)
+        stored_mileage = row.get("mileage")
+        await enrich_cars_with_vdp(context, [car])
+        if car.get("mileage") is None and stored_mileage is not None:
+            car["mileage"] = stored_mileage
+        saved = push_batch_to_supabase([car])
+        _prod_tally_register_push(uid, [car], saved)
+        print(
+            f"[✓] Single-car refresh for user {uid[:8]}: {vin} "
+            f"{'updated' if saved else 'push failed'}."
+        )
+        return saved
+    except Exception as e:
+        print(f"[!] Single-car refresh warning (non-fatal): {e}")
+        return 0
+
+
 def mark_stale_inventory(uid: str, seen_vins: set, scope_keys=None) -> int:
     """Flag inventory that a fully successful crawl did not see.
 
@@ -2619,13 +2717,22 @@ def _apply_sync_cadence_guard(uid, job, settings_row):
     the caller must skip the crawl."""
     if job.get("sync_mode") == "test":
         return False
+    # Single-car refreshes (scoped-sync phase 2) are exempt: the job
+    # fetches ONE detail page, and a refresh must never eat the
+    # account's sync window — nor set the clock for later syncs
+    # (priors below are filtered the same way).
+    if job.get("sync_vin"):
+        return False
     covered = _dealership_covered(uid)
-    priors = (
-        db.table("scrape_jobs")
-        .select("id, started_at, sync_mode")
-        .eq("user_id", uid)
-        .execute()
-    ).data or []
+    priors = [
+        p for p in (
+            db.table("scrape_jobs")
+            .select("id, started_at, sync_mode, sync_vin")
+            .eq("user_id", uid)
+            .execute()
+        ).data or []
+        if not p.get("sync_vin")
+    ]
     reason = _sync_cadence_block_reason(
         uid, job, settings_row, covered, priors, datetime.now(timezone.utc)
     )
@@ -2853,6 +2960,14 @@ async def run_scraper():
                     "key": "new_url"
                 })
 
+            # SINGLE-CAR REFRESH (phase 2): the job owner's own job
+            # may name one VIN; that run refreshes just that car.
+            job_vin = None
+            if active_job is not None and active_uid == (target_uid or "").strip():
+                _raw_vin = active_job.get("sync_vin")
+                if isinstance(_raw_vin, str) and _raw_vin.strip():
+                    job_vin = _raw_vin.strip()
+
             # SCOPED SYNC: only the run serving the job owner's own
             # pending job may be scoped, and only to that job's keys.
             job_scope = None
@@ -2916,6 +3031,27 @@ async def run_scraper():
             # snapshot their stored inventory) BEFORE the crawl's
             # first push — the baseline is only honest pre-crawl.
             _prod_tally_start_user(active_uid)
+
+            if job_vin:
+                _synced_one = await _sync_single_vin(context, active_uid, job_vin)
+                total_synced_all += _synced_one
+                _prod_tally_finish_user(active_uid, 1 if _synced_one else 0)
+                if _synced_one:
+                    # The drift pass is DB-only and global: if the
+                    # refresh moved a posted car's price, its update
+                    # queues here. Auto-post may consider ONLY the
+                    # refreshed car (the D2 rule at single-car scale).
+                    _queue_price_updates(active_uid)
+                    _prod_tally_note_posts(
+                        active_uid,
+                        _auto_post_filtered(active_uid, only_vins={job_vin}),
+                    )
+                    _prod_tally_restamp_finished(active_uid)
+                print(
+                    f"[✓] Completed single-car refresh for {store_name}: "
+                    f"{_synced_one} unit(s) synced."
+                )
+                continue
 
             for feed in feeds_to_crawl:
 
