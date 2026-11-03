@@ -1052,12 +1052,20 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         </div>
         <span id="navQueueBadge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-600 text-[10px] font-mono font-bold text-white">0</span>
       </a>
-      <a href="#" id="navSyncItem" onclick="triggerLiveLotCrawl(event); return false;" class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
-        <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-rotate w-4 text-blue-600 text-xs"></i>
-          <span>Sync Inventory</span>
+      <div class="relative" id="navSyncWrap">
+        <div class="flex items-center gap-1">
+          <a href="#" id="navSyncItem" onclick="triggerLiveLotCrawl(event); return false;" class="flex flex-1 items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
+            <div class="flex items-center gap-2.5">
+              <i class="fa-solid fa-rotate w-4 text-blue-600 text-xs"></i>
+              <span>Sync Inventory</span>
+            </div>
+          </a>
+          <button type="button" id="navSyncCaret" onclick="toggleSyncScopeMenu(event)" title="Sync part of the lot" class="px-2 py-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer">
+            <i class="fa-solid fa-chevron-down text-[10px] pointer-events-none"></i>
+          </button>
         </div>
-      </a>
+        <div id="syncScopeMenu" class="hidden absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 space-y-0.5"></div>
+      </div>
     </div>
 
     <!-- FOOTER TOOLS -->
@@ -11564,7 +11572,52 @@ async function refreshSyncButtonState() {
 // ====================== SYNC INVENTORY START ==================================
 // ==============================================================================
 
-async function triggerLiveLotCrawl(event) {
+// SCOPED SYNC (2026-11-03): the caret beside Sync Inventory opens a
+// small menu — Everything (the plain Sync click, unchanged) or one
+// section of the lot. A scoped click inserts the job with sync_scope
+// set; the scraper then crawls only that feed, and its stale pass is
+// fenced to cars that feed produced. Plain Sync sends no sync_scope
+// (NULL = full sync, exactly as before).
+function syncScopeMenuOptions() {
+    const opts = [];
+    if (typeof currentStore !== "undefined" && currentStore) {
+        if (currentStore.usedUrl) opts.push({ key: "used_url", label: "Used only" });
+        if (currentStore.cpoUrl) opts.push({ key: "certified_url", label: "Certified only" });
+        if (currentStore.newUrl) opts.push({ key: "new_url", label: "New only" });
+    }
+    return opts;
+}
+
+function closeSyncScopeMenu() {
+    const m = document.getElementById("syncScopeMenu");
+    if (m) m.classList.add("hidden");
+}
+
+function toggleSyncScopeMenu(event) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    const menu = document.getElementById("syncScopeMenu");
+    if (!menu) return;
+    if (!menu.classList.contains("hidden")) { closeSyncScopeMenu(); return; }
+    const btnCls = "block w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer";
+    let html = '<button type="button" class="' + btnCls + '" onclick="pickSyncScope(event, null)">Everything (full lot)</button>';
+    syncScopeMenuOptions().forEach(function (o) {
+        html += '<button type="button" class="' + btnCls + '" onclick="pickSyncScope(event, \'' + o.key + '\')">' + o.label + '</button>';
+    });
+    menu.innerHTML = html;
+    menu.classList.remove("hidden");
+    setTimeout(function () {
+        document.addEventListener("click", closeSyncScopeMenu, { once: true });
+    }, 0);
+}
+
+function pickSyncScope(event, key) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    closeSyncScopeMenu();
+    const btn = document.getElementById("navSyncItem");
+    if (btn) triggerLiveLotCrawl({ currentTarget: btn }, key ? [key] : null);
+}
+
+async function triggerLiveLotCrawl(event, scopeKeys) {
 
     if (!currentUser) return;
 
@@ -11632,7 +11685,10 @@ async function triggerLiveLotCrawl(event) {
                 user_id: currentUser.id,
                 status: "pending",
                 triggered_by: currentUser.email,
-                sync_mode: syncMode
+                sync_mode: syncMode,
+                ...(Array.isArray(scopeKeys) && scopeKeys.length
+                    ? { sync_scope: scopeKeys }
+                    : {})
             });
 
         if (error) throw error;
@@ -11640,7 +11696,9 @@ async function triggerLiveLotCrawl(event) {
         alert(
             syncMode === "test"
                 ? "✓ Test sync started — we'll pull up to 15 cars to verify your inventory connection. After this first success, Sync pulls your full lot."
-                : "✓ Inventory refresh started. Inventory will begin updating shortly!"
+                : (Array.isArray(scopeKeys) && scopeKeys.length
+                    ? "✓ " + scopeKeys.map(function (k) { return ({ used_url: "Used", certified_url: "Certified", new_url: "New" })[k] || k; }).join(" + ") + " refresh started — syncing just that section of your lot."
+                    : "✓ Inventory refresh started. Inventory will begin updating shortly!")
         );
 
         setTimeout(() => {

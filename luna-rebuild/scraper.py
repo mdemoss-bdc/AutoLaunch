@@ -1901,10 +1901,13 @@ def _teammate_blocked_vins(uid: str) -> set:
         return set()
 
 
-def _auto_post_filtered(uid: str) -> int:
+def _auto_post_filtered(uid: str, only_vins=None) -> int:
     """Queue post jobs for every unposted car matching the user's
     location x condition filter, up to today's remaining daily
-    allowance. Returns the number of CARS queued. Never raises."""
+    allowance. Returns the number of CARS queued. Never raises.
+    only_vins (scoped syncs, decision D2): when given, only cars the
+    crawl actually saw this run may queue — a scoped sync never posts
+    stale candidates from sections it did not crawl."""
     try:
         res = (
             db.table("user_settings")
@@ -2084,6 +2087,8 @@ def _auto_post_filtered(uid: str) -> int:
                 continue
             vin = car.get("vin")
             if not vin:
+                continue
+            if only_vins is not None and vin not in only_vins:
                 continue
             if vin in blocked_vins:
                 guard_skipped += 1
@@ -2365,7 +2370,29 @@ def _flush_prod_sync_summaries():
 # =============================================================================
 
 
-def mark_stale_inventory(uid: str, seen_vins: set) -> int:
+# =============================================================================
+# ======================== SCOPED SYNC (2026-11-03) ===========================
+# =============================================================================
+# An app-requested job may carry sync_scope: a list of the user's own
+# settings keys (used_url / certified_url / new_url). A scoped run
+# crawls ONLY those feeds, stamps every record it writes with
+# source_key = the feed's key, and fences its stale pass to rows whose
+# source_key is in scope. Rows with source_key NULL (never stamped —
+# every row written before this feature) are treated as OUT of scope:
+# a scoped run can never exit a car whose source is unknown. Scheduled
+# runs (no job row) are always full scope. See
+# scoped-sync-spec-2026-11-03.md.
+
+def _scope_filter_rows(rows, scope_keys):
+    """The rows a scoped stale pass may consider: only rows stamped
+    with one of the crawled scope keys. Pure; scope_keys None = no
+    filtering (full-scope run)."""
+    if scope_keys is None:
+        return rows
+    return [r for r in rows if r.get("source_key") in scope_keys]
+
+
+def mark_stale_inventory(uid: str, seen_vins: set, scope_keys=None) -> int:
     """Flag inventory that a fully successful crawl did not see.
 
     Uses only fields the scraper already writes (is_active, status):
@@ -2387,7 +2414,7 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
         while True:
             res = (
                 db.table("scraped_inventory")
-                .select("vin, marketplace_posted_at, marketplace_posted_price, year, make, model, price, stock_number")
+                .select("vin, marketplace_posted_at, marketplace_posted_price, year, make, model, price, stock_number, source_key")
                 .eq("user_id", uid)
                 .eq("is_active", True)
                 .order("vin")
@@ -2400,6 +2427,14 @@ def mark_stale_inventory(uid: str, seen_vins: set) -> int:
                 break
             offset += page_size
 
+        if scope_keys is not None:
+            _before = len(active_rows)
+            active_rows = _scope_filter_rows(active_rows, scope_keys)
+            print(
+                f"[*] Stale pass for user {uid[:8]} is SCOPED to "
+                f"{sorted(scope_keys)}: {len(active_rows)} of {_before} "
+                "active rows in scope."
+            )
         active_vins = [r["vin"] for r in active_rows]
         stale = [v for v in active_vins if v not in seen_vins]
         if not stale:
@@ -2757,6 +2792,7 @@ async def run_scraper():
 
     total_synced_all = 0
     auto_post_uids = set()
+    scoped_seen = {}
 
     async with async_playwright() as p:
 
@@ -2799,20 +2835,50 @@ async def run_scraper():
             if user_cfg.get("used_url") and user_cfg.get("used_url").strip():
                 feeds_to_crawl.append({
                     "url": user_cfg["used_url"].strip(),
-                    "condition": "Used"
+                    "condition": "Used",
+                    "key": "used_url"
                 })
 
             if user_cfg.get("certified_url") and user_cfg.get("certified_url").strip():
                 feeds_to_crawl.append({
                     "url": user_cfg["certified_url"].strip(),
-                    "condition": "Certified Pre-Owned"
+                    "condition": "Certified Pre-Owned",
+                    "key": "certified_url"
                 })
 
             if user_cfg.get("new_url") and user_cfg.get("new_url").strip():
                 feeds_to_crawl.append({
                     "url": user_cfg["new_url"].strip(),
-                    "condition": "New"
+                    "condition": "New",
+                    "key": "new_url"
                 })
+
+            # SCOPED SYNC: only the run serving the job owner's own
+            # pending job may be scoped, and only to that job's keys.
+            job_scope = None
+            if active_job is not None and active_uid == (target_uid or "").strip():
+                _raw_scope = active_job.get("sync_scope")
+                if isinstance(_raw_scope, list):
+                    _picked = [
+                        k for k in _raw_scope
+                        if k in ("used_url", "certified_url", "new_url")
+                    ]
+                    if _picked:
+                        job_scope = set(_picked)
+            if job_scope is not None:
+                feeds_to_crawl = [
+                    f for f in feeds_to_crawl if f["key"] in job_scope
+                ]
+                print(
+                    f"[*] Scoped sync for {store_name}: crawling only "
+                    f"{sorted(job_scope)} ({len(feeds_to_crawl)} feed(s))."
+                )
+                if not feeds_to_crawl:
+                    print(
+                        f"[-] Scoped sync for {store_name}: none of the "
+                        "scoped sources are configured. Nothing to do."
+                    )
+                    continue
 
             if not feeds_to_crawl:
 
@@ -2979,6 +3045,12 @@ async def run_scraper():
                             f"[++] VDP enrichment: {enriched}/{len(cars)} cars got full photo galleries"
                         )
 
+                    # Stamp the producing source on every record
+                    # (scoped-sync bookkeeping; the column is nullable
+                    # and pre-feature rows simply stay NULL).
+                    for _car in cars:
+                        _car["source_key"] = feed["key"]
+
                     saved = push_batch_to_supabase(cars)
 
                     _prod_tally_register_push(active_uid, cars, saved)
@@ -3005,7 +3077,7 @@ async def run_scraper():
 
             elif user_seen_vins and not user_had_error:
 
-                mark_stale_inventory(active_uid, user_seen_vins)
+                mark_stale_inventory(active_uid, user_seen_vins, scope_keys=job_scope)
 
                 # Listing price sync: queue one price-update job per
                 # live listing whose dealer price has drifted from
@@ -3018,6 +3090,8 @@ async def run_scraper():
                 # (it runs once per user after the crawl loop).
                 if active_uid:
                     auto_post_uids.add(active_uid)
+                    if job_scope is not None:
+                        scoped_seen[active_uid] = set(user_seen_vins)
 
             elif user_seen_vins and user_had_error:
 
@@ -3034,7 +3108,9 @@ async def run_scraper():
         # Auto-post pass (location x condition filter): once per user
         # whose crawl was clean and complete. Fail-open inside.
         for _uid in auto_post_uids:
-            _prod_tally_note_posts(_uid, _auto_post_filtered(_uid))
+            _prod_tally_note_posts(
+                _uid, _auto_post_filtered(_uid, only_vins=scoped_seen.get(_uid))
+            )
             _prod_tally_restamp_finished(_uid)
 
         await browser.close()
