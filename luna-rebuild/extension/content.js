@@ -5599,11 +5599,17 @@
         // below never resume; if execution continues past the
         // wait on an edit surface, this same incarnation must
         // drive the editor itself.
+        recordStepNote("price_editor_continuation",
+          "href=" + window.location.href.slice(0, 100));
         await sleep(1500);
-        if (/facebook\.com\/(marketplace\/edit|edit\/listing)/.test(window.location.href)) {
-          recordStepNote("price_editor_open", "soft_nav_continuation");
-          await runUpdatePriceEditor();
-        }
+        recordStepNote("price_editor_continuation",
+          "after_wait href=" + window.location.href.slice(0, 100));
+        // The stage marker governs: the editor is next no matter
+        // which edit surface (or transient URL) this tab landed
+        // on. Its own hunt, identity gate and watchdog decide the
+        // outcome — never return silently here (a silent return
+        // on a URL test wedged a live attempt, 2026-11-03).
+        await runUpdatePriceEditor();
         return;
       }
     }
@@ -5629,6 +5635,8 @@
 
   async function runUpdatePriceEditorBody() {
     say("Updating this listing's price…");
+    recordStepNote("price_editor_enter",
+      window.location.href.slice(0, 100));
     const plan = priceUpdatePlan(job);
     if (!plan.ok) {
       await fail(plan.reason, "price_update_plan",
@@ -5639,6 +5647,9 @@
     for (let i = 0; i < 24 && !field; i++) {
       field = findPriceFieldInEditor();
       if (!field) {
+        if (i % 6 === 5) {
+          recordStepNote("price_editor_hunting", "miss " + (i + 1));
+        }
         if (i % 4 === 3) { try { window.scrollBy(0, 700); } catch (_) {} }
         await sleep(500);
       }

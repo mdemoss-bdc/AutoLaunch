@@ -1238,6 +1238,12 @@ const jitter = (min, max) => sleep(min + Math.random() * (max - min));
 // but no legitimate run approaches 45 minutes, so a "processing"
 // row older than that has no living content script behind it.
 const JOB_STALE_MS = 45 * 60 * 1000;
+// Price updates are phase-bounded (120s editor watchdog plus
+// bounded scans — well under 8 minutes end to end), so a
+// processing update row older than this is wedged, not working:
+// fail it early with the orphan diagnostics instead of holding
+// the slot for the generic 45 minutes (live wedge 2026-11-03).
+const UPDATE_JOB_STALE_MS = 8 * 60 * 1000;
 // Orphan recovery (v2.52, header note 26): how long a stale POST
 // row's recovery scan may run before the watchdog falls back to
 // the blind fail. The scan's own budget is ~4 minutes of rescans
@@ -1372,7 +1378,9 @@ async function reconcileActiveJob(job) {
     // A claim that cannot prove it is fresh (no readable
     // claimedAt) does not get to wedge the queue forever.
     const ageMs = isFinite(claimedAtMs) ? Date.now() - claimedAtMs : Infinity;
-    if (ageMs <= JOB_STALE_MS) return true; // genuinely running
+    const staleLimitMs = job.action === "update_price"
+      ? UPDATE_JOB_STALE_MS : JOB_STALE_MS;
+    if (ageMs <= staleLimitMs) return true; // genuinely running
     // Orphan recovery (v2.52, header note 26): a stale POST row
     // is verified against Facebook BEFORE it may be failed —
     // the Prius lesson (2026-10-28) is that "processing" past
