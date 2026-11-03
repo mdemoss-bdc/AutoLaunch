@@ -1377,6 +1377,39 @@ async function reconcileActiveJob(job) {
     const claimedAtMs = Date.parse(job.claimedAt || "");
     // A claim that cannot prove it is fresh (no readable
     // claimedAt) does not get to wedge the queue forever.
+    // Phase watchdog for price updates (v2.1.73): the edit and
+    // verify phases run inside a Facebook tab whose script can
+    // stall without settling (soft-navigation handoff, frozen
+    // timers — the 2026-11-03 E2E wedges). The phases stamp
+    // stageAt when they start; if a phase runs past 150s (past
+    // its own 120s watchdog) with the row still processing,
+    // reload the job tab from OUTSIDE the page — a fresh script
+    // boots and resumes from the stage marker. At most 2 reloads
+    // per phase; beyond that the stale path below settles it.
+    const pu = job.priceUpdate || {};
+    if (job.action === "update_price" &&
+        (pu.stage === "edit" || pu.stage === "verify") &&
+        job.tabId != null) {
+      if (job.phaseReloadStage !== pu.stage) {
+        job.phaseReloadStage = pu.stage;
+        job.phaseReloads = 0;
+      }
+      const stageAgeMs = Date.now() - (Date.parse(pu.stageAt || "") || 0);
+      if (isFinite(stageAgeMs) && stageAgeMs > 150 * 1000 &&
+          (job.phaseReloads || 0) < 2) {
+        try {
+          job.phaseReloads = (job.phaseReloads || 0) + 1;
+          job.priceUpdate = Object.assign({}, pu,
+            { stageAt: new Date().toISOString() });
+          await chrome.storage.local.set({ current_posting_job: job });
+          await chrome.tabs.reload(job.tabId);
+          console.warn("[AutoLaunch] Price-update phase " + pu.stage +
+            " stalled — reloaded the job tab (reload " +
+            job.phaseReloads + " of 2).");
+        } catch (e) { /* tab gone — the stale path settles it */ }
+        return true;
+      }
+    }
     const ageMs = isFinite(claimedAtMs) ? Date.now() - claimedAtMs : Infinity;
     const staleLimitMs = job.action === "update_price"
       ? UPDATE_JOB_STALE_MS : JOB_STALE_MS;

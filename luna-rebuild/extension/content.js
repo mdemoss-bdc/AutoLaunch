@@ -5424,7 +5424,8 @@
   // this tab to the edit page) resumes at the right phase.
   async function setPriceUpdateStage(stage) {
     try {
-      job.priceUpdate = Object.assign({}, job.priceUpdate || {}, { stage });
+      job.priceUpdate = Object.assign({}, job.priceUpdate || {},
+        { stage, stageAt: new Date().toISOString() });
       await chrome.storage.local.set({ current_posting_job: job });
     } catch (_) { /* fail-open: worst case a phase re-runs */ }
   }
