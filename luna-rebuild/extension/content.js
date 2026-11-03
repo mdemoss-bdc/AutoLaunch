@@ -5341,7 +5341,7 @@
       '[role="menuitem"], [role="option"], a, button, [role="button"], [tabindex]'
     ));
     const matches = clickables.filter(el => {
-      if (!isVisible(el)) return false;
+      if (!isVisibleEl(el)) return false;
       const t = normText(el.getAttribute("aria-label") || el.textContent);
       return /^edit( listing)?$/i.test(t);
     });
@@ -5382,7 +5382,7 @@
   function findPriceFieldInEditor() {
     const inputs = Array.from(document.querySelectorAll(
       'input:not([type="hidden"]), textarea, [contenteditable="true"]'
-    )).filter(el => isVisible(el));
+    )).filter(el => isVisibleEl(el));
     const scored = [];
     for (const el of inputs) {
       let score = 0;
@@ -5397,7 +5397,7 @@
   function findEditSaveButton() {
     const cands = Array.from(document.querySelectorAll(
       'button, [role="button"], a, input[type="submit"]'
-    )).filter(el => isVisible(el) && !el.disabled);
+    )).filter(el => isVisibleEl(el) && !el.disabled);
     const scored = [];
     for (const el of cands) {
       const t = normText(el.getAttribute("aria-label") || el.value || el.textContent);
