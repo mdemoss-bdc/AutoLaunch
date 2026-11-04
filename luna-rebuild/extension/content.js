@@ -3575,6 +3575,28 @@
       if (c === last) break;
       last = c;
     }
+    // v2.1.75 bottom-chase: the rounds above can settle on the
+    // first lazy batch alone — live failure 2026-11-03: five
+    // price updates died on a 5-card census of a 72-listing
+    // page because the target cards were never rendered.
+    // Dwell at the true bottom until the census stops growing
+    // across two consecutive dwells, so the whole list is in
+    // the DOM before any scan runs. Bounded at 12 dwells.
+    let chaseLast = countSellingCards();
+    let chaseStable = 0;
+    for (let i = 0; i < 12 && chaseStable < 2; i++) {
+      try {
+        window.scrollTo(0, Math.max(
+          document.body ? document.body.scrollHeight : 0,
+          document.documentElement ? document.documentElement.scrollHeight : 0));
+      } catch (e) {}
+      await sleep(1300);
+      const c = countSellingCards();
+      if (c > chaseLast) { chaseLast = c; chaseStable = 0; }
+      else chaseStable++;
+    }
+    try { window.scrollTo(0, 0); } catch (e) {}
+    await sleep(600);
   }
   // The card's ⋯ (options) button. Searched inside the card first,
   // then up the ancestor chain — but a level is only trusted while it
