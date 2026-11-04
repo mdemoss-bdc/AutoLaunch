@@ -2286,6 +2286,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> <span id="needsPriceCount">0</span> need attention
     </button>
   </div>
+  <div id="autoPostHealthBar" style="display:none" class="flex flex-wrap items-center gap-1.5 pt-1.5 text-xs"></div>
 
   <!-- Selection Counter + Post Selected (moved here from the page header:
        it acts on the selection, so it lives with the selection, above the
@@ -8070,6 +8071,7 @@ updateLastSyncDisplay();
 
       // Phase 4: ribbon switches reflect the saved settings on load
       if (data.auto_post_enabled !== undefined && data.auto_post_enabled !== null) {
+        autoPostEnabledSetting = !!data.auto_post_enabled;
         const ribbonArrivals = document.getElementById("chkRibbonArrivals");
         if (ribbonArrivals) ribbonArrivals.checked = !!data.auto_post_enabled;
         const settingsAutoPost = document.getElementById("chkSettingsAutoPost");
@@ -9346,6 +9348,7 @@ if (filterMileageRange) {
     if (activePillFilter === 'POSTED' && !car.marketplace_posted_at) return false;
     if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
     if (needsAttentionOnly && !carNeedsAttention(car)) return false;
+    if (autoPostBlockerFilter && autoPostBlockerOf(car) !== autoPostBlockerFilter) return false;
 
     return carMatchesInventorySearch(car, query);
   });
@@ -9395,6 +9398,7 @@ if (npChip) {
   npChip.classList.toggle("ring-amber-800", needsAttentionOnly);
   npChip.classList.toggle("bg-amber-700", needsAttentionOnly);
 }
+renderAutoPostHealth();
 }
 // Button Audit: list/grid view toggle. Only ONE view is rendered at a
 // time. Bulk selection is stored by VIN in selectedCarVins, so switching
@@ -9671,6 +9675,133 @@ function noPriceButton(car, vinAttr) {
     return `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">No price listed — tap to add</button>`;
   }
   return `<button data-action="change-price" data-vin="${vinAttr}" class="px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-[11px] font-bold cursor-pointer">⚠ Price needed — tap to add</button>`;
+}
+
+
+// ============================================================
+// AUTO-POST HEALTH (Matthew, 2026-11-03): the "why isn't this
+// posting" readout. The scraper's auto-post pass silently skips
+// cars that fail its filters; the rep saw NOTHING and had no way
+// to know whether the poster was broken or the cars were. These
+// functions re-derive, per unposted car, the FIRST reason the
+// auto-poster would skip it — mirroring the scraper's filter
+// order and semantics exactly (location -> condition -> price ->
+// colors -> photos) — and renderAutoPostHealth paints the counts
+// as clickable chips above the inventory table; clicking one
+// filters the table to exactly those cars.
+let autoPostBlockerFilter = null;
+let autoPostEnabledSetting = false;
+
+// Usable photos, counted exactly like the scraper: http(s) URLs
+// across image_url + photos + custom_photo_urls, deduped by path
+// (query/fragment stripped), skipping /static/ paths and the
+// assets/no-photo.png placeholder.
+function usablePhotoCountJS(car) {
+  const urls = new Set();
+  const add = (u) => {
+    if (typeof u !== "string") return;
+    u = u.trim();
+    if (!u) return;
+    if (u.startsWith("//")) u = "https:" + u;
+    if (!u.startsWith("http://") && !u.startsWith("https://")) return;
+    if (u.indexOf("/static/") !== -1) return;
+    const path = u.split("?")[0].split("#")[0];
+    if (path.endsWith("assets/no-photo.png")) return;
+    urls.add(path);
+  };
+  if (car) {
+    add(car.image_url);
+    ["photos", "custom_photo_urls"].forEach(k => {
+      const v = car[k];
+      if (Array.isArray(v)) v.forEach(add);
+    });
+  }
+  return urls.size;
+}
+
+function missingColorJS(v) {
+  const t = String(v == null ? "" : v).trim().toLowerCase();
+  return !t || t === "standard";
+}
+
+// Prefix matching, same as the scraper: empty selection = all.
+function autoPostConditionMatches(condition, selected) {
+  if (!selected || !selected.length) return true;
+  const c = String(condition || "").trim().toLowerCase();
+  for (const s of selected) {
+    const sl = String(s).trim().toLowerCase();
+    if (sl === "new" && c.startsWith("new")) return true;
+    if (sl === "used" && c.startsWith("used")) return true;
+    if (sl.startsWith("certified") && c.startsWith("certified")) return true;
+  }
+  return false;
+}
+
+// The set of raw location names the saved selection covers
+// (group names expand to their members), lowercased for the
+// comparison — or null when the selection is empty (= all).
+function autoPostAllowedLocationSet() {
+  const sel = (typeof autoPostFilter !== "undefined" && autoPostFilter && Array.isArray(autoPostFilter.locations)) ? autoPostFilter.locations : [];
+  if (!sel.length) return null;
+  const byName = {};
+  (Array.isArray(locationGroups) ? locationGroups : []).forEach(g => {
+    if (g && g.name) byName[String(g.name)] = (Array.isArray(g.members) ? g.members : []).map(String);
+  });
+  const out = new Set();
+  sel.forEach(name => {
+    const n = String(name);
+    if (Object.prototype.hasOwnProperty.call(byName, n)) byName[n].forEach(m => out.add(m.trim().toLowerCase()));
+    else out.add(n.trim().toLowerCase());
+  });
+  return out;
+}
+
+// null = not an auto-post candidate at all (inactive, already
+// posted, or sold). Otherwise the first skip reason in the
+// scraper's own order, or "ready".
+function autoPostBlockerOf(car) {
+  if (!car || car.is_active === false) return null;
+  if (car.marketplace_posted_at) return null;
+  if (isSold(car)) return null;
+  const allowed = autoPostAllowedLocationSet();
+  if (allowed && !allowed.has(String(car.location_name || "").trim().toLowerCase())) return "filter";
+  if (!autoPostConditionMatches(car.condition || "", autoPostFilter.conditions)) return "filter";
+  const price = parseFloat(car.price);
+  if (!(price > 0)) return "price";
+  if (missingColorJS(car.color) || missingColorJS(car.interior_color)) return "colors";
+  if (usablePhotoCountJS(car) < selectedMinPhotos) return "photos";
+  return "ready";
+}
+
+function setAutoPostBlockerFilter(kind) {
+  autoPostBlockerFilter = autoPostBlockerFilter === kind ? null : kind;
+  applyFilters();
+}
+
+function renderAutoPostHealth() {
+  const bar = document.getElementById("autoPostHealthBar");
+  if (!bar) return;
+  if (!autoPostEnabledSetting || !Array.isArray(rawInventory)) { bar.style.display = "none"; return; }
+  const counts = { ready: 0, price: 0, colors: 0, photos: 0, filter: 0 };
+  rawInventory.forEach(car => { const b = autoPostBlockerOf(car); if (b) counts[b]++; });
+  const held = counts.price + counts.colors + counts.photos;
+  const total = counts.ready + held + counts.filter;
+  if (!total) { bar.style.display = "none"; return; }
+  const chip = (kind, label, cls, title) => {
+    const active = autoPostBlockerFilter === kind;
+    return `<button type="button" onclick="setAutoPostBlockerFilter('${kind}')" title="${title}" class="px-2.5 py-0.5 rounded-full border font-semibold cursor-pointer ${cls}${active ? " ring-2 ring-slate-700" : ""}">${label}</button>`;
+  };
+  let html = `<span class="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Auto-post</span>`;
+  html += chip("ready", `✓ ${counts.ready} ready to post`, "bg-emerald-50 text-emerald-700 border-emerald-300", "Pass every auto-post filter — these queue on the next sync");
+  if (held) {
+    html += `<span class="text-slate-400">held back:</span>`;
+    if (counts.price) html += chip("price", `${counts.price} need a price`, "bg-amber-50 text-amber-700 border-amber-300", "No usable price — the auto-poster skips cars without one");
+    if (counts.colors) html += chip("colors", `${counts.colors} missing colors`, "bg-amber-50 text-amber-700 border-amber-300", "Exterior or interior color missing (or still 'Standard') in the dealer feed");
+    if (counts.photos) html += chip("photos", `${counts.photos} need photos`, "bg-amber-50 text-amber-700 border-amber-300", `Fewer than your minimum of ${selectedMinPhotos} usable photos`);
+  }
+  if (counts.filter) html += chip("filter", `${counts.filter} outside your posting filter`, "bg-white text-slate-500 border-slate-300", "Outside the locations / conditions picked in Automation — widen the filter there to include them");
+  bar.innerHTML = html;
+  bar.style.display = "flex";
 }
 
 let needsAttentionOnly = false;
@@ -15940,6 +16071,8 @@ async function toggleRibbonSetting(k) {
     });
   }
   if (fields.includes("auto_post_enabled")) {
+    autoPostEnabledSetting = value;
+    renderAutoPostHealth();
     const settingsChk = document.getElementById("chkSettingsAutoPost");
     if (settingsChk) settingsChk.checked = value;
     const arrivalsChk = document.getElementById("chkRibbonArrivals");
@@ -17528,6 +17661,7 @@ async function saveAutoPostPreferences() {
 
     // This save switches auto-post ON in the database — the ribbon switch,
     // the Settings switch and the status line must say the same thing.
+    autoPostEnabledSetting = true;
     ribbonState.autoPostMode = "all";
     const ribbonArrivals = document.getElementById("chkRibbonArrivals");
     if (ribbonArrivals) ribbonArrivals.checked = true;
