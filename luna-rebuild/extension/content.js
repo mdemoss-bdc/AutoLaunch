@@ -717,6 +717,22 @@
 //     with field_diag notes in the delete flow's style and
 //     changes NOTHING on Facebook. A price update is not a
 //     post: nothing here touches the car's posted stamp.
+//
+// 36. HONEST SCAN VERDICTS — LIST_NEVER_GREW (v2.1.76 —
+//     Matthew, 2026-11-05; background.js header note 35
+//     carries the worker's side): the Selling scans now
+//     sample document.visibilityState across every
+//     settleSellingList, and the latest sample rides the
+//     scan step notes (price_match_scan, price_verify_scan,
+//     delete_match_scan, share_match_scan). A scan that
+//     ends not-found after a settle that sampled the tab
+//     hidden fails as list_never_grew, not
+//     listing_not_found: on a hidden page Facebook never
+//     paginates past the first chunk of cards, so "not
+//     found" would accuse a listing the scan never had
+//     the chance to see. Match semantics are unchanged —
+//     a small list on a visible tab still reads
+//     listing_not_found exactly as before.
 
 
 (async function () {
@@ -3547,6 +3563,31 @@
     return btns.filter(b => isVisibleEl(b) &&
       /^\s*mark as (sold|available)\b/i.test(b.textContent || "")).length;
   }
+  // [SETTLE-VISIBILITY-BEGIN] — extracted and unit-exercised
+  // by the settle harness; keep free of chrome references
+  // (document is read, nothing else).
+  // The latest settle's visibility samples (v2.1.76, header
+  // note 36): Facebook paginates the Selling list only on a
+  // page the browser is rendering, so a settle served by a
+  // hidden tab can end on the boot chunk with the target
+  // card never rendered. sawHidden is sticky across one
+  // settle's samples; settleSellingList resets both fields
+  // (by mutation, never reassignment) at the start of
+  // every run.
+  let settleVisibility = { state: null, sawHidden: false };
+  function sampleSettleVisibility() {
+    let v = null;
+    try { v = document.visibilityState || null; } catch (e) {}
+    if (v) settleVisibility.state = v;
+    if (v === "hidden") settleVisibility.sawHidden = true;
+  }
+  // The honest name for a scan that found nothing: if the
+  // settle that served it sampled a hidden tab, the list
+  // may simply never have grown.
+  function settleNotFoundReason() {
+    return settleVisibility.sawHidden ? "list_never_grew" : "listing_not_found";
+  }
+  // [SETTLE-VISIBILITY-END]
   // Scroll the selling list end to end (bounded) so lazy cards
   // enter the DOM, repeating until the card census is stable across
   // a round. The delete flow's scans are only trustworthy on a
@@ -3554,6 +3595,13 @@
   // 2026-10-23 a delete declared a live, under-review listing
   // "already gone" from one early scan of a still-loading page).
   async function settleSellingList() {
+    // Visibility sampling (v2.1.76, header note 36): reset
+    // per settle, sampled again on the way out — a scan
+    // that finds nothing after this settle reads the
+    // samples to name its failure honestly.
+    settleVisibility.state = null;
+    settleVisibility.sawHidden = false;
+    sampleSettleVisibility();
     // Trimmed in v2.1.15: on a long list the original 5 rounds x 16
     // steps scrolled so much the user noticed and worried. Three
     // rounds with an early exit on a stable census settles every
@@ -3597,6 +3645,7 @@
     }
     try { window.scrollTo(0, 0); } catch (e) {}
     await sleep(600);
+    sampleSettleVisibility();
   }
   // The card's ⋯ (options) button. Searched inside the card first,
   // then up the ancestor chain — but a level is only trusted while it
@@ -5228,12 +5277,12 @@
       await settleSellingList();
       const cards = findListingCards();
       recordStepNote("Share", "share_match_scan",
-        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()}`,
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"}`,
         String(cards.length));
       if (!cards.length) {
         await fail(
           `Could not find the ${title} listing on your selling page — nothing was shared. It may have been removed.`,
-          "listing_not_found");
+          settleNotFoundReason());
         return;
       }
       if (cards.length > 1) {
@@ -5491,7 +5540,7 @@
         rendered: sellingRenderedFromSignals(sellingChromeSignals()),
         url: window.location.href.slice(0, 100)
       };
-      await fail("listing_not_found", "price_update_probe", JSON.stringify(probe));
+      await fail(settleNotFoundReason(), "price_update_probe", JSON.stringify(probe));
       return;
     }
     // Strict match AT THE FROM PRICE — the price the listing
@@ -5503,7 +5552,8 @@
     recordStepNote("price_match_scan",
       "strict:" + matches.length + " title:" + titleProbe.length +
       " rendered:" + sellingRenderedFromSignals(sellingChromeSignals()) +
-      " cards:" + countSellingCards());
+      " cards:" + countSellingCards() +
+      " vis:" + (settleVisibility.state || "unknown"));
     if (!matches.length) {
       const probe = {
         strict: 0,
@@ -5513,7 +5563,7 @@
         samples: findListingCardsByTitle(plan.fromCar)
           .slice(0, 3).map(c => normText(c.textContent).slice(0, 80))
       };
-      await fail("listing_not_found", "price_update_probe", JSON.stringify(probe));
+      await fail(settleNotFoundReason(), "price_update_probe", JSON.stringify(probe));
       return;
     }
     if (matches.length > 1) {
@@ -5770,7 +5820,7 @@
     await settleSellingList();
     if (!countSellingCards()) {
       if (await recoverToSellingPageForUpdate("verify_scan")) return;
-      await fail("listing_not_found", "price_verify_probe",
+      await fail(settleNotFoundReason(), "price_verify_probe",
         JSON.stringify({ reason: "selling_list_never_settled" }));
       return;
     }
@@ -5810,7 +5860,8 @@
     });
     let s = scan();
     recordStepNote("price_verify_scan",
-      "new:" + s.atNew + " old:" + s.atOld + " cards:" + countSellingCards());
+      "new:" + s.atNew + " old:" + s.atOld + " cards:" + countSellingCards() +
+      " vis:" + (settleVisibility.state || "unknown"));
     if (s.atOld > 0 && s.atNew <= 1) {
       // Facebook can lag the card paint after an edit; one
       // patient re-look before declaring the edit unproven.
@@ -5879,7 +5930,7 @@
       await settleSellingList();
       let cards = findListingCards();
       recordStepNote("Delete", "delete_match_scan",
-        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()}`,
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"}`,
         String(cards.length));
       if (!cards.length) {
         // GOAL-ACHIEVED (v2.1.7, header note 18): the desired end
@@ -5932,7 +5983,7 @@
         if (!cards.length) {
           await fail(
             `Could not find the ${title} listing on your selling page — nothing was deleted. It may already be gone.`,
-            "listing_not_found");
+            settleNotFoundReason());
           return;
         }
         // The second look FOUND the card — fall through and delete

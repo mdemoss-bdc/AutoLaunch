@@ -546,6 +546,26 @@
 //     (priceUpdateClaimGate) fails the row untouched when
 //     the drift it was queued for is no longer the drift
 //     that exists; the next sync re-queues the truth.
+//
+// 35. FOREGROUND FOR SCAN JOBS (v2.1.76 — Matthew,
+//     2026-11-05; content.js header note 36 carries the
+//     scan's side): Facebook only paginates the Selling
+//     list on a page the browser is actually rendering —
+//     a tab created active:false and never shown keeps
+//     exactly its first chunk of cards (five, live
+//     2026-11-05) no matter how long the settle scrolls,
+//     so scan jobs (update_price, delete, share) died
+//     listing_not_found on a list that was never loaded.
+//     The worker now fronts a scan job's tab before its
+//     flow begins: the tab the user was on in that window
+//     is remembered on the job (restoreTabId) and the job
+//     tab is activated; when the job ends — finish, fail,
+//     exception, watchdog reconcile — the remembered tab
+//     is re-activated. Tab activation only: the window is
+//     never focused, and post jobs keep the v2.1.12
+//     background rule untouched. A window that stays
+//     minimized keeps its hidden page — the scan then
+//     fails list_never_grew (content note 36), honestly.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1352,6 +1372,9 @@ async function reconcileActiveJob(job) {
   }
   const row = Array.isArray(rows) && rows.length ? rows[0] : null;
   const clearSlot = async reason => {
+    // The job is over by every path that lands here — a scan
+    // job's borrowed foreground goes back too (v2.1.76).
+    await restoreJobTabFocus(job);
     await chrome.storage.local.remove(["current_posting_job"]);
     console.log(`[AutoLaunch] Job slot cleared (${reason}) for queue item ${queueId}.`);
   };
@@ -1775,6 +1798,10 @@ async function checkQueue() {
     // that after watching his son's test — the filled tab simply
     // waits in the background with its review banner, and the user
     // clicks over to it when they are ready to publish.
+    // Qualified in v2.1.76 (header note 35): a SCAN job's tab is
+    // activated right after creation (below) — a never-shown page
+    // never paginates its Selling list — and the tab the user was
+    // on is re-activated when the job ends.
     const jobTab = await chrome.tabs.create({
       active: false,
       url: (isDelete || isShare || isUpdatePrice)
@@ -1798,7 +1825,25 @@ async function checkQueue() {
         await chrome.storage.local.get(["current_posting_job"]);
       if (j && j.queueId === item.id) {
         j.tabId = jobTab.id;
+        // Foreground for scan jobs (v2.1.76, header note 35):
+        // remember the tab the user was on in this window so
+        // the finish paths can give the foreground back once
+        // the job ends. Recorded BEFORE the activation below,
+        // on the same merge that records tabId, so a stored
+        // scan job always carries its way back.
+        if (isDelete || isShare || isUpdatePrice) {
+          j.restoreTabId = await activeTabIdInWindow(jobTab.windowId, jobTab.id);
+        }
         await chrome.storage.local.set({ current_posting_job: j });
+      }
+      if ((isDelete || isShare || isUpdatePrice) &&
+          chrome.tabs && typeof chrome.tabs.update === "function") {
+        try {
+          // Activate — never focus the window. If this fails
+          // the scan still runs and reports honestly
+          // (list_never_grew) when its page stays hidden.
+          await chrome.tabs.update(jobTab.id, { active: true });
+        } catch (e) { /* non-fatal: see above */ }
       }
     }
   } catch (err) {
@@ -2344,6 +2389,36 @@ async function flushPendingFinish() {
   }
 }
 
+// The tab currently active in a window, other than a given tab
+// (v2.1.76, header note 35). Null when there is no other tab to
+// remember — the job tab is then the window's only tab and there
+// is nothing to give the foreground back to.
+async function activeTabIdInWindow(windowId, excludeTabId) {
+  if (windowId == null || !chrome.tabs ||
+      typeof chrome.tabs.query !== "function") return null;
+  try {
+    const tabs = await chrome.tabs.query({ active: true, windowId });
+    const t = (tabs || []).find(t => t && t.id != null && t.id !== excludeTabId);
+    return t ? t.id : null;
+  } catch (e) { return null; }
+}
+
+// Give the foreground back (v2.1.76, header note 35): re-activate
+// the tab the user was on before a scan job fronted its own tab.
+// Only scan jobs ever carry restoreTabId, so for every other job
+// this is a no-op. Called from paths no terminal state can skip:
+// the scan finishes' try/finally, finishJobFailed's finally, and
+// the watchdog's clearSlot. Tab activation only — the window is
+// never focused — and a remembered tab the user has since closed
+// is a silent no-op.
+async function restoreJobTabFocus(job) {
+  if (!job || job.restoreTabId == null) return;
+  if (!chrome.tabs || typeof chrome.tabs.update !== "function") return;
+  try {
+    await chrome.tabs.update(job.restoreTabId, { active: true });
+  } catch (e) { /* the remembered tab is gone — nothing to give back to */ }
+}
+
 // Tab auto-close on success (v2.1.7, header note 14): ~4s after a
 // successful finish — long enough for the success banner to be
 // read — close the tab this worker opened for the job. Called
@@ -2457,6 +2532,10 @@ async function finishJobDeleted(queueId) {
       return;
     }
     throw err;
+  } finally {
+    // Success, stash-and-return, and rethrow all end the job —
+    // the borrowed foreground goes back on every one (v2.1.76).
+    await restoreJobTabFocus(job);
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Delete confirmed for queue item", queueId);
@@ -2486,6 +2565,10 @@ async function finishJobShared(queueId) {
       return;
     }
     throw err;
+  } finally {
+    // Success, stash-and-return, and rethrow all end the job —
+    // the borrowed foreground goes back on every one (v2.1.76).
+    await restoreJobTabFocus(job);
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Share confirmed for queue item", queueId);
@@ -2521,6 +2604,10 @@ async function finishJobPriceUpdated(queueId) {
       return;
     }
     throw err;
+  } finally {
+    // Success, stash-and-return, and rethrow all end the job —
+    // the borrowed foreground goes back on every one (v2.1.76).
+    await restoreJobTabFocus(job);
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Price update confirmed for queue item", queueId);
@@ -2567,6 +2654,9 @@ async function finishJobFailed(queueId, reason, diags) {
   } finally {
     await logFailure(queueId, reason || "unknown");
     await chrome.storage.local.remove(["current_posting_job"]);
+    // A failed scan job's borrowed foreground goes back too
+    // (v2.1.76) — the failed tab itself stays open as evidence.
+    await restoreJobTabFocus(job);
     console.warn("[AutoLaunch] Job failed:", queueId, reason);
   }
 }
