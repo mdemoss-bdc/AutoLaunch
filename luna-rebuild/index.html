@@ -2249,6 +2249,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <i class="fa-solid fa-wand-magic-sparkles w-4"></i>
     <span>✨ Listing copy (AI)</span>
   </button>
+  <button id="dropdownVinReelItem" onclick="handleDropdownAction('create_reel')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-clapperboard w-4 text-slate-400"></i>
+    <span id="dropdownVinReelLabel">Create reel</span>
+  </button>
   <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-solid fa-link w-4 text-slate-400"></i>
     <span>Already on Facebook? Add its link</span>
@@ -4257,6 +4261,8 @@ document.addEventListener("click", function (e) {
   } else if (action === "listing-copy") {
     const car = rawInventory.find(c => c.vin === vin);
     if (car) openListingCopyModal(car);
+  } else if (action === "vin-reel") {
+    vinReelAction(vin);
   } else if (action === "row-dropdown") {
     toggleRowDropdown({
       stopPropagation: () => e.stopPropagation(),
@@ -4552,6 +4558,7 @@ const TIER_FEATURES = {
   wishlist: "automate",    // Customer Wishlist
   trade: "automate",       // Trade Appraisals
   intro_videos: "automate",// My Intro Videos
+  vin_reels: "automate",   // VIN Reels — per-car narrated showcase video (worker-rendered)
   teams: "group"           // future team/org features — nothing calls this yet
 };
 
@@ -4776,6 +4783,7 @@ const FEATURE_LABELS = {
   wishlist: "Customer Wishlist",
   trade: "Trade Appraisals",
   intro_videos: "Intro videos",
+  vin_reels: "VIN Reels",
   post_delay: "Time between posts",
   teams: "Team features"
 };
@@ -10187,6 +10195,7 @@ function gridCardHtml(car) {
         <div class="text-[11px] text-slate-500 mt-1">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')} &bull; VIN: ${escapeHtml(car.vin || 'N/A')}</div>
         ${carColorsHtml(car)}
         ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(displayLocation(car.location_name))}</span></div>` : ''}
+        ${vinReelChipHtml(car)}
         <div class="flex items-baseline gap-2.5 pt-2">
           ${hasPrice(car)
             ? `<span class="text-sm font-bold text-blue-600">${priceText}</span>`
@@ -10198,6 +10207,9 @@ function gridCardHtml(car) {
         ${actions}
         <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="ai-gradient-btn w-8 h-8 shrink-0 rounded-xl flex items-center justify-center cursor-pointer">
           <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+        </button>
+        <button data-action="vin-reel" data-vin="${vinAttr}" title="VIN Reel — a narrated showcase video of this car" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+          <i class="fa-solid fa-clapperboard text-xs"></i>
         </button>
         <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
           <i class="fa-solid fa-ellipsis text-xs"></i>
@@ -10381,7 +10393,7 @@ ${car.location_name ? `
         </span>
       `
   }
-
+  ${vinReelChipHtml(car)}
 </td>
       <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2 relative">
@@ -10431,6 +10443,9 @@ ${car.location_name ? `
           <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="ai-gradient-btn w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer">
             <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
           </button>
+          <button data-action="vin-reel" data-vin="${vinAttr}" title="VIN Reel — a narrated showcase video of this car" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+            <i class="fa-solid fa-clapperboard text-xs"></i>
+          </button>
           <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
             <i class="fa-solid fa-ellipsis text-xs"></i>
           </button>
@@ -10461,6 +10476,16 @@ function toggleRowDropdown(event, vin) {
   const ddCar = rawInventory.find(c => c.vin === vin);
   const addItem = document.getElementById("dropdownAddPhotosItem");
   if (addItem) addItem.classList.toggle("hidden", !!ddCar && !addPhotosOffered(ddCar));
+
+  // VIN Reel item label follows the car's reel state.
+  const reelLabel = document.getElementById("dropdownVinReelLabel");
+  if (reelLabel && ddCar) {
+    const ddReel = vinReelFor(ddCar);
+    reelLabel.innerText = !ddReel ? "Create reel"
+      : ddReel.status === "ready" ? "View reel"
+      : ddReel.status === "failed" ? "Create reel (failed last time)"
+      : vinReelStatusText(ddReel);
+  }
 
   // The menu is position:fixed, so its coordinates are viewport
   // coordinates — scroll offsets must NOT be added (the old code
@@ -10514,6 +10539,7 @@ function handleDropdownAction(action) {
     case "add_photos": openAddPhotosModal(car.vin); break;
     case "sync_one": syncSingleCar(car.vin); break;
     case "listing_copy": openListingCopyModal(car); break;
+    case "create_reel": vinReelAction(vin); break;
     case "add_link": openAddFbLinkModal(car.vin); break;
     case "remove_inventory": removeVehicleFromInventory(car.vin); break;
   }
@@ -11399,9 +11425,167 @@ async function saveExistingFbLink() {
   }
 }
 
+// =====================================================================
+// VIN REELS (Matthew, 2026-11-05): a per-car narrated showcase video,
+// rendered off-app by the VIN Reels worker from the car's real photos
+// and data. The app only queues (an insert into vin_reels) and
+// reflects state — chips on inventory cards/rows, the player in this
+// details modal. Creating a reel is an Automate feature
+// (TIER_FEATURES.vin_reels, so trial phase 1 sees the locked button
+// and phase 2 can create); watching a finished reel is never gated.
+// State refresh rides the queue poller (pollQueueTick) — no new
+// timers. The finished file lives at a stable public URL
+// (vin-reels bucket, <user_id>/<vin>.mp4) so the poster and the
+// TikTok channel can attach it later.
+// =====================================================================
+let vinReelsByVin = {};
+let vinReelsSig = "";
+let detailsReelVin = null;
+let detailsReelRenderedSig = "";
+
+function vinReelFor(car) {
+  return (car && vinReelsByVin[car.vin]) || null;
+}
+
+function vinReelStatusText(reel) {
+  if (!reel) return "";
+  if (reel.status === "queued") return "Reel queued…";
+  if (reel.status === "generating") return "Rendering reel…";
+  if (reel.status === "ready") return "Reel ready";
+  if (reel.status === "failed") return "Reel failed";
+  return "";
+}
+
+function vinReelChipHtml(car) {
+  const reel = vinReelFor(car);
+  if (!reel) return "";
+  const cls = reel.status === "ready"
+    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+    : reel.status === "failed"
+    ? "bg-rose-50 text-rose-700 border-rose-200"
+    : "bg-amber-50 text-amber-700 border-amber-200";
+  return `<div class="mt-1.5"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}"><i class="fa-solid fa-clapperboard mr-1"></i>${vinReelStatusText(reel)}</span></div>`;
+}
+
+async function refreshVinReels() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("vin_reels")
+      .select("id, vin, stock_number, status, video_url, error, created_at")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    // One display row per VIN: a live render wins, then the newest
+    // ready reel, then the newest failure (rows arrive newest-first,
+    // so the first row seen at the winning rank is the newest of it).
+    const rank = { queued: 0, generating: 0, ready: 1, failed: 2 };
+    const byVin = {};
+    (data || []).forEach(r => {
+      const cur = byVin[r.vin];
+      if (!cur || rank[r.status] < rank[cur.status]) byVin[r.vin] = r;
+    });
+    vinReelsByVin = byVin;
+    const sig = Object.keys(byVin).sort().map(v => {
+      const r = byVin[v];
+      return v + ":" + r.status + ":" + (r.video_url || "");
+    }).join(";");
+    if (sig !== vinReelsSig) {
+      vinReelsSig = sig;
+      if (typeof applyFilters === "function") applyFilters();
+    }
+    renderDetailsReelSection();
+  } catch (e) { /* reel state is decoration on the inventory view — a failed read must never break it */ }
+}
+
+async function vinReelAction(vin) {
+  const car = rawInventory.find(c => c.vin === vin);
+  if (!car || !currentUser) return;
+  const reel = vinReelFor(car);
+  if (reel && reel.status !== "failed") { openVehicleDetailsModal(car); return; }
+  if (!requireTier("vin_reels")) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("vin_reels")
+      .insert({ user_id: currentUser.id, vin: car.vin, stock_number: car.stock_num || car.stock_number || null, status: "queued" })
+      .select()
+      .single();
+    if (error) throw error;
+    vinReelsByVin[car.vin] = data;
+    if (typeof applyFilters === "function") applyFilters();
+    openVehicleDetailsModal(car);
+    refreshVinReels();
+  } catch (err) {
+    // 23505 = a live reel already exists for this VIN (double-click or
+    // a second device beat us to it) — that is the state we wanted.
+    if (err && (err.code === "23505" || /duplicate/i.test(err.message || ""))) {
+      refreshVinReels();
+      openVehicleDetailsModal(car);
+      return;
+    }
+    alert("Could not queue the reel: " + (err.message || err));
+  }
+}
+
+function vinReelSectionHtml(car) {
+  return `<div id="detailsReelSection">${vinReelSectionInnerHtml(car)}</div>`;
+}
+
+function renderDetailsReelSection() {
+  const el = document.getElementById("detailsReelSection");
+  if (!el || !detailsReelVin) return;
+  const car = rawInventory.find(c => c.vin === detailsReelVin);
+  if (!car) return;
+  const reel = vinReelFor(car);
+  const sig = detailsReelVin + ":" + (reel ? reel.status + ":" + (reel.video_url || "") : "none");
+  if (sig === detailsReelRenderedSig) return; // never restart a playing video on a poll tick
+  detailsReelRenderedSig = sig;
+  el.innerHTML = vinReelSectionInnerHtml(car);
+}
+
+function vinReelSectionInnerHtml(car) {
+  const reel = vinReelFor(car);
+  const head = `<div class="flex items-center gap-2 pt-1">
+      <i class="fa-solid fa-clapperboard text-slate-400 text-xs"></i>
+      <span class="text-[10px] uppercase font-bold text-slate-500">VIN Reel</span>
+    </div>`;
+  if (reel && reel.status === "ready" && reel.video_url) {
+    return `${head}
+    <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-900 mt-2">
+      <video controls playsinline preload="metadata" src="${escapeHtml(reel.video_url)}" class="w-full max-h-96"></video>
+    </div>
+    <div class="pt-2 flex items-center justify-end gap-2">
+      <a href="${escapeHtml(reel.video_url)}" download class="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-sm">
+        <i class="fa-solid fa-download text-[10px]"></i><span>Download</span>
+      </a>
+      <button type="button" onclick="vinReelAction('${escapeHtml(car.vin)}')" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-rotate text-[10px]"></i><span>Re-create</span>
+      </button>
+    </div>`;
+  }
+  if (reel && (reel.status === "queued" || reel.status === "generating")) {
+    return `${head}
+    <div class="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 font-semibold flex items-center gap-2">
+      <i class="fa-solid fa-hourglass-half"></i><span>${vinReelStatusText(reel)} — it will appear here when it's done.</span>
+    </div>`;
+  }
+  const failedNote = reel && reel.status === "failed"
+    ? `<div class="mt-2 p-3 bg-rose-50 rounded-xl border border-rose-200 text-xs text-rose-700">${escapeHtml(reel.error || "The last render failed.")}</div>` : "";
+  const allowed = tierAllows("vin_reels");
+  return `${head}${failedNote}
+  <div class="pt-2 flex justify-end">
+    <button type="button" onclick="vinReelAction('${escapeHtml(car.vin)}')" class="px-4 py-2 rounded-xl ${allowed ? "btn-gradient text-white" : "border border-slate-300 text-slate-500 bg-slate-50"} text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+      <i class="fa-solid ${allowed ? "fa-clapperboard" : "fa-lock"} text-[10px]"></i><span>${reel && reel.status === "failed" ? "Try again" : "Create reel"}</span>
+    </button>
+  </div>`;
+}
+
 function openVehicleDetailsModal(car) {
   document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'} ${car.trim || ''}`;
   document.getElementById("detailsModalVin").innerText = `VIN: ${car.vin || 'N/A'} • Stock: ${car.stock_num || car.stock_number || 'N/A'}`;
+  detailsReelVin = car.vin;
+  detailsReelRenderedSig = "";
 
   // PHOTO GALLERY (Matthew, 2026-11-05): show ALL of the car's
   // pictures in the modal — a thumbnail strip under the big photo,
@@ -11458,9 +11642,11 @@ function openVehicleDetailsModal(car) {
         <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
       </a>
     </div>
+    ${vinReelSectionHtml(car)}
   `;
 
   document.getElementById("vehicleDetailsModal").classList.remove("hidden");
+  refreshVinReels();
 }
 
 async function removeVehicleFromInventory(vin) {
@@ -11955,6 +12141,7 @@ async function pollQueueTick() {
 
         if (modalOpen) await loadPostingQueue();       // list + sidebar badge
         if (invVisible) await pollInventoryDelta(); // rows + Posted pills (delta — full reload stays on sign-in/Sync)
+        await refreshVinReels(); // VIN Reel chips + details-modal player ride this poller — no new timers
 
         if (card) card.scrollTop = cardScroll;
         if (window.scrollY !== winScroll) window.scrollTo(0, winScroll);
