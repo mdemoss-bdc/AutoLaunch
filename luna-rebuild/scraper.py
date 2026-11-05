@@ -1061,6 +1061,530 @@ def _mileage_int(raw) -> int:
     return v if 0 <= v <= 2000000 else None
 
 
+# ==============================================================================
+# ==================== DEALERCENTER DWS PLATFORM (2026-11-05) ==================
+# ==============================================================================
+# DealerCenter "DWS" dealer sites (WordPress theme dws-v3; media on
+# imagescf.dealercenter.net; first account: Clear Choice Auto Sales of
+# Ashland, Mike Thompson) render inventory in a structure the two
+# generic strategies above cannot see: cards are
+# <div class="vehicle-container ..." data-vehicle-id="vehicle-id-<VIN>">
+# (no [data-vin], no .vehicle-card class, VIN never printed in card
+# text), so both capped proof crawls for that account checked 0 cars
+# on a lot whose page header reads "50 Available Vehicles".
+#
+# The platform's own data path, verified live 2026-11-05:
+# * Page 1 of a listing is server-rendered in the feed HTML (13 cards);
+#   the load-more container carries data-total-pages / data-perpage.
+# * Pages 2..N come from the site's own AJAX: POST
+#   <origin>/wp-admin/admin-ajax.php with action=dws_inventory_vehicles
+#   and page_no=N (the remaining fields the site's JS sends are empty
+#   for an unfiltered listing) -> an HTML fragment of the same cards.
+#   Pages 1-4 assembled this way yield exactly the site's 50 VINs.
+# * Card fields are fenced per card by construction (each segment is
+#   one car's container): VIN + stock suffix (data-sn), title (year
+#   make model trim, ALL CAPS), odometer / transmission detail rows,
+#   the VDP link (page-1 cards point at /inventory/<make>/<model>/<sn>/;
+#   AJAX-fragment cards point at /get-prequalified/<same slugs> — the
+#   VDP is the /inventory/ form), one photo (srcset), and the price
+#   block. Card price rule: the fee anchor's data-total-price (vehicle
+#   price + dealer fees) IS the advertised final price — the same
+#   figure the VDP prints as its headline (verified: $19,983 + $499 doc
+#   = $20,482). A struck-through "Price:" row is the pre-discount line
+#   and never wins; "Sale Price" rows and data-total-price outrank it.
+# * VDPs are server-rendered too: spec rows are
+#   dws-label__<field> + .vehicle-value pairs (stocknumber, trim,
+#   odometer, exteriorcolor, interiorcolor, vin, ...; "-" means the
+#   dealer publishes no value), the price field is
+#   dws-field-vehicleprice carrying data-total-price (or the
+#   dws-call-for-price class), and the photo gallery is the
+#   .dws-vehicles-slider-item-container slider (data-lazy 1024w
+#   images) — fenced to the car's own gallery, so cross-sell thumbs
+#   elsewhere on the page can never leak in.
+# * The site serves ONE shared default image as the entire gallery of
+#   cars that have no photos (the same imagescf file was the sole
+#   photo of two unrelated cars). _strip_shared_placeholder_photos
+#   removes a file that is the SOLE photo of 2+ cars in one batch:
+#   an identical file on two VINs is not either car's real photo, and
+#   a photo-less car must stay photo-less (no-photo rule).
+#
+# Everything here is ADDITIVE: crawl_dws_feed returns None unless the
+# fetched feed page carries the platform fingerprint, and the
+# parse_vdp_details branch triggers only on DWS-only class names, so
+# every existing site's behavior is byte-identical.
+
+_DWS_VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$", re.I)
+
+
+def _dws_is_platform(html: str) -> bool:
+    """Fingerprint of a DealerCenter DWS listing page."""
+    if not html:
+        return False
+    return (
+        'data-vehicle-id="vehicle-id-' in html
+        and "dealercenter" in html.lower()
+    )
+
+
+def _dws_card_price(segment: str):
+    """(price, price_status) from ONE card's own price block.
+
+    The fee anchor's data-total-price (vehicle price + dealer fees) is
+    the advertised final figure; a "Sale Price" row outranks the
+    struck-through "Price:" row, which never wins while any other row
+    exists. No figure at all -> the dealer's own state: 'call' when the
+    card says Call for Price, else 'none'."""
+    if "dws-call-for-price" in segment or re.search(
+        r"call\s+for\s+price", segment, re.I
+    ):
+        return None, "call"
+    pi = segment.find("vehicle-price-container")
+    zone = segment[pi:pi + 5000] if pi >= 0 else segment
+    m = re.search(r'data-total-price="(\d+)"', zone)
+    if m:
+        v = _money_int(m.group(1))
+        if v:
+            return v, None
+    rows = []
+    for rm in re.finditer(
+        r'<div class="vehicle-price-col([^"]*)"[^>]*>\s*'
+        r'<span class="vehicle-price-label">([^<]+)</span>\s*'
+        r'<span class="vehicle-price-value[^"]*">\s*\$?\s*'
+        r"([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})",
+        zone,
+        re.S,
+    ):
+        v = _money_int(rm.group(3))
+        if v:
+            rows.append((rm.group(2).strip().lower(), v, "line-through" in rm.group(1)))
+    if rows:
+        for label, v, _struck in rows:
+            if label.startswith("sale"):
+                return v, None
+        plain = [v for _l, v, struck in rows if not struck]
+        if plain:
+            return plain[-1], None
+        return rows[0][1], None
+    return None, "none"
+
+
+_DWS_TWO_WORD_MAKES = ("LAND ROVER", "ALFA ROMEO", "ASTON MARTIN")
+_DWS_TWO_WORD_MODELS = {
+    "GRAND CHEROKEE", "GRAND WAGONEER", "GRAND CARAVAN",
+    "SANTA FE", "SANTA CRUZ", "LAND CRUISER",
+}
+
+
+def _dws_parse_title(title: str):
+    """'2017 FORD F150 SUPERCREW CAB' -> (2017, 'Ford', 'F-150',
+    'Supercrew Cab'). DealerCenter titles are ALL CAPS; casing rules
+    mirror parseFromUrl's (badge models keep their form)."""
+    tokens = (title or "").split()
+    year = 2026
+    if tokens and re.fullmatch(r"(19|20)\d{2}", tokens[0]):
+        year = int(tokens[0])
+        tokens = tokens[1:]
+    if not tokens:
+        return year, "Other", "Vehicle", ""
+    upper = [t.upper() for t in tokens]
+    make = None
+    used = 1
+    for cand in _DWS_TWO_WORD_MAKES + ("MERCEDES-BENZ",):
+        parts = cand.split()
+        if upper[:len(parts)] == [p.upper() for p in parts]:
+            make = cand.title().replace("-Benz", "-Benz")
+            used = len(parts)
+            break
+    if make is None:
+        raw = upper[0]
+        make = raw if raw in ("GMC", "BMW") else tokens[0].title()
+    rest = tokens[used:]
+    if not rest:
+        return year, make, "Vehicle", ""
+    mtok = rest[0].upper()
+    pair = mtok + " " + (rest[1].upper() if len(rest) > 1 else "")
+    if pair in _DWS_TWO_WORD_MODELS:
+        model = pair.title()
+        rest = rest[2:]
+    else:
+        fm = re.fullmatch(r"F(\d{3})(SD)?", mtok)
+        cxm = re.fullmatch(r"CX(\d+)", mtok)
+        if fm:
+            model = "F-" + fm.group(1)
+        elif cxm:
+            model = "CX-" + cxm.group(1)
+        elif mtok == "RAV4":
+            model = "RAV4"
+        elif mtok == "4RUNNER":
+            model = "4Runner"
+        elif re.search(r"\d", mtok) or len(mtok) <= 3:
+            model = mtok
+        else:
+            model = rest[0].title()
+        rest = rest[1:]
+    trim = " ".join(t.title() if not re.search(r"\d", t) else t for t in rest)
+    trim = re.sub(r"\b(SUV|Sedan|Truck|Coupe)\b", "", trim, flags=re.I)
+    trim = " ".join(trim.split())
+    return year, make, model, trim
+
+
+def _dws_field_value(segment: str, field_class: str):
+    """The printed value of one vehicle-field-* detail row inside a
+    card segment (odometer / transmission), or None."""
+    idx = segment.find(field_class)
+    if idx < 0:
+        return None
+    m = re.search(
+        r'class="vehicle-info-value"[^>]*>([^<]+)<', segment[idx:idx + 500]
+    )
+    return m.group(1).strip() if m else None
+
+
+def parse_dws_listing_html(html: str, base_url: str, default_condition: str, uid: str) -> list:
+    """Parse every DealerCenter DWS card in one listing page/fragment.
+
+    Segments are sliced container-to-container so each car's fields
+    come from its own card only. Dedupes by VIN, first card wins (the
+    load-more fragments repeat occasional cars). Returns car dicts in
+    the exact shape the generic strategies produce."""
+    if not html:
+        return []
+    html = html.lstrip("\ufeff")
+    origin = ""
+    p = urlparse(base_url or "")
+    if p.scheme and p.netloc:
+        origin = f"{p.scheme}://{p.netloc}"
+    starts = [
+        (m.start(), m.group(1).upper())
+        for m in re.finditer(
+            r'<div class="vehicle-container[^"]*"[^>]*data-vehicle-id="vehicle-id-([A-HJ-NPR-Z0-9]{17})"',
+            html,
+        )
+    ]
+    cars = []
+    seen = set()
+    for i, (start, vin) in enumerate(starts):
+        if vin in seen or not _DWS_VIN_RE.match(vin):
+            continue
+        seg = html[start:starts[i + 1][0] if i + 1 < len(starts) else len(html)]
+
+        tm = re.search(r'<a class="vehicle-title" href="([^"]+)"[^>]*>([^<]+)</a>', seg)
+        title = tm.group(2).strip() if tm else ""
+        detail_url = None
+        href = tm.group(1) if tm else None
+        if not href:
+            hm = re.search(r'href="([^"]*(?:inventory|get-prequalified)/[^"]*)"', seg)
+            href = hm.group(1) if hm else None
+        if href:
+            # AJAX-fragment cards link the /get-prequalified/ twin of
+            # the VDP; the detail page lives under /inventory/.
+            href = href.replace("/get-prequalified/", "/inventory/")
+            detail_url = href if href.startswith("http") else (origin + href if href.startswith("/") else href)
+
+        year, make, model, trim = _dws_parse_title(title)
+
+        stock = None
+        sm = re.search(r'data-sn="([^"]+)"', seg)
+        if sm and sm.group(1).strip():
+            stock = sm.group(1).strip()
+        if not stock:
+            sm = re.search(r'data-stock-number="([^"]+)"', seg)
+            if sm and sm.group(1).strip():
+                stock = sm.group(1).strip().rsplit("-", 1)[-1]
+        if not stock:
+            stock = vin[-8:]
+
+        mileage = None
+        odo = _dws_field_value(seg, "vehicle-field-odometer")
+        if odo:
+            dm = re.search(r"[0-9][0-9,]*", odo)
+            if dm:
+                mileage = _mileage_int(dm.group(0))
+        if mileage is None and (default_condition or "").lower().startswith("new"):
+            mileage = 1000
+
+        trans = _dws_field_value(seg, "vehicle-field-transmission")
+        transmission = trans.title() if trans else "Automatic"
+
+        photo = None
+        im = re.search(r'<img[^>]*class="vehicle-image"[^>]*>', seg)
+        if im:
+            tag = im.group(0)
+            ss = re.search(r'srcset="([^"]+)"', tag)
+            if ss:
+                best, best_w = None, -1
+                for part in ss.group(1).split(","):
+                    pm = re.match(r"\s*(\S+)\s+(\d+)w", part.strip())
+                    if pm and int(pm.group(2)) > best_w:
+                        best, best_w = pm.group(1), int(pm.group(2))
+                photo = best
+            if not photo:
+                sm2 = re.search(r'src="([^"]+)"', tag)
+                photo = sm2.group(1) if sm2 else None
+
+        price, price_status = _dws_card_price(seg)
+
+        body_type = "Other"
+        if re.search(r"sport utility|\bsuv\b|crossover", title, re.I):
+            body_type = "SUV"
+        elif re.search(r"truck|pickup|crew cab|supercrew", title, re.I):
+            body_type = "Truck"
+        elif re.search(r"sedan", title, re.I):
+            body_type = "Sedan"
+        elif re.search(r"coupe", title, re.I):
+            body_type = "Coupe"
+        elif re.search(r"minivan|\bvan\b", title, re.I):
+            body_type = "Van"
+
+        seen.add(vin)
+        cars.append({
+            "vin": vin,
+            "stock_number": stock,
+            "user_id": uid,
+            "year": year,
+            "make": make,
+            "model": model,
+            "trim": trim,
+            "price": price,
+            "price_status": price_status,
+            "mileage": mileage,
+            "location_name": "Dealership Lot",
+            "image_url": photo,
+            "photos": [photo] if photo else [],
+            "interior_color": None,
+            "detail_url": detail_url,
+            "color": "Standard",
+            "body_type": body_type,
+            "transmission": transmission,
+            "status": "Available",
+            "condition": default_condition,
+            "is_active": True,
+        })
+    return cars
+
+
+def _dws_listing_meta(html: str, base_url: str):
+    """(total_pages, ajax_url) from a DWS listing page. The load-more
+    container carries the page count; the AJAX endpoint rides in the
+    page's ajaxObject (fallback: the standard WP path)."""
+    total = 1
+    m = re.search(r'data-total-pages="(\d+)"', html or "")
+    if m:
+        total = max(1, int(m.group(1)))
+    ajax_url = None
+    m = re.search(r'"ajaxUrl"\s*:\s*"([^"]+)"', html or "")
+    if m:
+        ajax_url = m.group(1).replace("\\/", "/")
+    if not ajax_url:
+        p = urlparse(base_url or "")
+        if p.scheme and p.netloc:
+            ajax_url = f"{p.scheme}://{p.netloc}/wp-admin/admin-ajax.php"
+    return total, ajax_url
+
+
+def _strip_shared_placeholder_photos(cars: list) -> int:
+    """Remove a photo file that is the SOLE photo of 2+ cars in the
+    batch (the platform's shared default image — see the section
+    header). Returns how many cars were stripped."""
+    sole = {}
+    for c in cars:
+        ph = c.get("photos") or []
+        if len(ph) == 1:
+            sole.setdefault(ph[0], []).append(c)
+    stripped = 0
+    for url, owners in sole.items():
+        if len(owners) >= 2:
+            for c in owners:
+                c["photos"] = []
+                c["image_url"] = None
+                stripped += 1
+    return stripped
+
+
+async def crawl_dws_feed(context, page, base_url: str, default_condition: str, uid: str, limit: int = 0):
+    """Enumerate one DealerCenter DWS feed over plain HTTP (the
+    platform's own server-render + admin-ajax data path).
+
+    Returns None when the feed is not a DWS listing (the caller falls
+    through to the generic browser crawl, unchanged), else
+    (cars, complete): complete=False when a later page failed to load,
+    which the caller treats like any other crawl error (no stale
+    pass). `limit` is a soft stop: no further listing pages are
+    fetched once enough cars are in hand."""
+    html1 = None
+    transport = None
+    try:
+        resp = await context.request.get(base_url, timeout=20000)
+        if resp.status == 200:
+            t = await resp.text()
+            if _dws_is_platform(t):
+                html1, transport = t, "request"
+    except Exception:
+        pass
+    if html1 is None:
+        try:
+            r = await page.goto(base_url, wait_until="commit", timeout=30000)
+            if r is not None and r.status == 404:
+                return None
+            await asyncio.sleep(2)
+            t = await page.content()
+            if _dws_is_platform(t):
+                html1, transport = t, "browser"
+        except Exception:
+            pass
+    if html1 is None:
+        return None
+
+    total_pages, ajax_url = _dws_listing_meta(html1, base_url)
+    cars = parse_dws_listing_html(html1, base_url, default_condition, uid)
+    seen = {c["vin"] for c in cars}
+    complete = True
+
+    async def fetch_fragment(pno: int):
+        form = {
+            "action": "dws_inventory_vehicles",
+            "page_no": str(pno),
+            "template_id": "",
+            "dg_dcid": "",
+            "advance_filter_id": "",
+            "make": "",
+            "model": "",
+            "get_params": "",
+        }
+        if transport == "request":
+            resp = await context.request.post(ajax_url, form=form, timeout=20000)
+            if resp.status != 200:
+                return None
+            return await resp.text()
+        return await page.evaluate(
+            """async (args) => {
+                const params = new URLSearchParams();
+                for (const k in args.form) params.set(k, args.form[k]);
+                const r = await fetch(args.url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+                    body: params.toString(),
+                    credentials: 'same-origin'
+                });
+                return await r.text();
+            }""",
+            {"url": ajax_url, "form": form},
+        )
+
+    for pno in range(2, total_pages + 1):
+        if limit and len(cars) >= limit:
+            break
+        try:
+            frag = await fetch_fragment(pno)
+        except Exception:
+            frag = None
+        if not frag:
+            complete = False
+            break
+        for c in parse_dws_listing_html(frag, base_url, default_condition, uid):
+            if c["vin"] not in seen:
+                seen.add(c["vin"])
+                cars.append(c)
+    return cars, complete
+
+
+def _parse_dws_vdp(html: str, out: dict) -> dict:
+    """DealerCenter DWS VDP: gallery slider photos, the advertised
+    final price from the price field, and the spec-row colors /
+    odometer / trim. Fills the standard parse_vdp_details contract."""
+    # ---- PHOTOS: the car's own gallery slider only. Each item is a
+    # .dws-vehicles-slider-item-container whose img carries the 1024w
+    # file in data-lazy; cross-sell / recently-viewed thumbs elsewhere
+    # on the page never carry the slider's popup class + "- Image N"
+    # alt pairing, so they cannot leak in.
+    photos = []
+    seen_files = set()
+    for m in re.finditer(r"<img[^>]+>", html):
+        tag = m.group(0)
+        if "imagescf.dealercenter.net" not in tag:
+            continue
+        if "dws-img-with-popup" not in tag and "- Image" not in tag:
+            continue
+        src = None
+        for attr in ("data-lazy", "src"):
+            am = re.search(attr + r'="([^"]+)"', tag)
+            if am:
+                src = am.group(1).replace("&amp;", "&")
+                break
+        if not src:
+            continue
+        fname = src.rsplit("/", 1)[-1]
+        if fname in seen_files:
+            continue
+        seen_files.add(fname)
+        photos.append(src)
+        if len(photos) >= MAX_PHOTOS_PER_VEHICLE:
+            break
+    out["photos"] = photos
+
+    # ---- PRICE: the VDP price field. data-total-price (vehicle price
+    # + dealer fees) is the advertised final figure the dealer prints
+    # as the headline; the call-for-price class is the dealer's own
+    # no-price state.
+    idx = html.find("dws-field-vehicleprice")
+    if idx >= 0:
+        block = html[idx:idx + 2000]
+        if "dws-call-for-price" in block:
+            out["price_status"] = "call"
+        else:
+            m = re.search(r'data-total-price="(\d+)"', block)
+            v = _money_int(m.group(1)) if m else None
+            if v is None:
+                m2 = re.search(r"\$\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})", block)
+                v = _money_int(m2.group(1)) if m2 else None
+            if v:
+                out["price"] = v
+                out["price_is_final"] = True
+                out["price_status"] = None
+            else:
+                out["price_status"] = "none"
+    else:
+        out["price_status"] = "call" if "dws-call-for-price" in html else "none"
+
+    # ---- SPEC ROWS: dws-label__<field> + .vehicle-value pairs.
+    pairs = {}
+    for m in re.finditer(
+        r'dws-label__([a-z0-9_]+)"[^>]*>[^<]*</span>\s*'
+        r'<span class="vehicle-value">([^<]*)</span>',
+        html,
+    ):
+        pairs.setdefault(m.group(1), m.group(2).strip())
+    ext = pairs.get("exteriorcolor")
+    if ext and ext != "-":
+        out["color"] = ext
+    intc = pairs.get("interiorcolor")
+    if intc and intc != "-":
+        out["interior_color"] = intc
+    odo = pairs.get("odometer")
+    if odo:
+        dm = re.search(r"[0-9][0-9,]*", odo)
+        if dm:
+            mv = _mileage_int(dm.group(0))
+            if mv is not None:
+                out["mileage"] = mv
+    trim = (pairs.get("trim") or "").upper()
+    if re.search(r"SPORT UTILITY|\bSUV\b|CROSSOVER", trim):
+        out["body_type"] = "SUV"
+    elif re.search(r"PICKUP|CREW CAB", trim):
+        out["body_type"] = "Truck"
+    elif "SEDAN" in trim:
+        out["body_type"] = "Sedan"
+    elif "COUPE" in trim:
+        out["body_type"] = "Coupe"
+    elif "MINIVAN" in trim:
+        out["body_type"] = "Van"
+    elif "CONVERTIBLE" in trim:
+        out["body_type"] = "Convertible"
+    elif "HATCHBACK" in trim:
+        out["body_type"] = "Hatchback"
+    return out
+
+
 def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     """Extract gallery photos, advertised final price, and spec colors from a
     DealerOn VDP's raw HTML. Returns a dict; missing pieces stay None/[]."""
@@ -1076,6 +1600,14 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     }
     if not html or not vin:
         return out
+
+    # DEALERCENTER DWS (2026-11-05): a VDP from that platform carries
+    # none of the DealerOn shapes below (no /inventoryphotos/ sequence,
+    # no pricing stack) — it has its own complete extraction. The
+    # trigger strings are DWS-only class names, so every other
+    # platform's page walks past this branch untouched.
+    if "dws-field-vehicleprice" in html or "dws-label__" in html:
+        return _parse_dws_vdp(html, out)
 
     vin_l = vin.lower()
     origin = ""
@@ -3243,6 +3775,57 @@ async def run_scraper():
                 print(
                     f"[*] Crawling feed: {condition} -> {base_url}"
                 )
+
+                # DEALERCENTER DWS (2026-11-05): if this feed's listing
+                # is a DealerCenter DWS page, enumerate it over the
+                # platform's own HTTP data path instead of the browser
+                # card matrix (which cannot see its cards at all).
+                # crawl_dws_feed returns None for every other platform,
+                # so existing sites fall through byte-identically.
+                _dws = await crawl_dws_feed(
+                    context,
+                    page,
+                    base_url,
+                    condition,
+                    active_uid,
+                    (effective_limit - user_units_synced) if effective_limit else 0,
+                )
+                if _dws is not None:
+                    dws_cars, dws_complete = _dws
+                    if not dws_complete:
+                        # A later listing page failed: this run does
+                        # not know the whole lot, so it must not feed
+                        # the stale pass (same rule as a crawl error).
+                        user_had_error = True
+                    if effective_limit and len(dws_cars) > effective_limit - user_units_synced:
+                        dws_cars = dws_cars[: effective_limit - user_units_synced]
+                    if dws_cars:
+                        user_seen_vins.update(
+                            c["vin"] for c in dws_cars if c.get("vin")
+                        )
+                        enriched = await enrich_cars_with_vdp(context, dws_cars)
+                        if enriched:
+                            print(
+                                f"[++] VDP enrichment: {enriched}/{len(dws_cars)} cars got full photo galleries"
+                            )
+                        _stripped = _strip_shared_placeholder_photos(dws_cars)
+                        if _stripped:
+                            print(
+                                f"[*] DealerCenter DWS: dropped the shared default photo from {_stripped} car(s) with no real photos"
+                            )
+                        for _car in dws_cars:
+                            _car["source_key"] = feed["key"]
+                        saved = push_batch_to_supabase(dws_cars)
+                        _prod_tally_register_push(active_uid, dws_cars, saved)
+                        user_units_synced += saved
+                        print(
+                            f"[+] [{store_name}] Page 1 (DealerCenter DWS): Synced {saved} units"
+                        )
+                    else:
+                        print(
+                            f"[-] DealerCenter DWS: no cars parsed on {condition}."
+                        )
+                    continue
 
                 seen_vins = set()
 
