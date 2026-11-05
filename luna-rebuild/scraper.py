@@ -56,6 +56,12 @@ except ValueError:
 # workflow passes its capped default (15) on every app-triggered run.
 # Manual Actions runs with no pending job keep honoring the env input
 # exactly as before (0 = the full refill Matthew runs by hand).
+# 'postpass' (2026-11-05): a NO-CRAWL row left behind by a completed
+# helper-side DWS sync (source_job_id -> that sync's row, which
+# carries helper_seen_vins). The run that adopts it only calls
+# _auto_post_filtered over the helper's seen set — see the POSTPASS
+# block in run_scraper. Postpass rows never set the cadence clock
+# and are exempt from it, like test rows.
 TEST_SYNC_LIMIT = 15
 
 def build_page_url(base_url: str, modifier_pattern: str, page_num: int) -> str:
@@ -3441,7 +3447,10 @@ def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now)
     clock — the clock is the most recent prior NON-TEST job."""
     if not job:
         return None
-    if job.get("sync_mode") == "test":
+    if job.get("sync_mode") in ("test", "postpass"):
+        # 'postpass' rows crawl nothing (they only ask the auto-post
+        # pass to consider a helper sync's seen set) — exempt, and
+        # excluded from the clock itself in the priors filter below.
         return None
     if job.get("force_override"):
         # Owner-panel force scrape with the cadence override set
@@ -3453,7 +3462,8 @@ def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now)
         return None
     priors = [
         j for j in (prior_jobs or [])
-        if j.get("id") != job.get("id") and j.get("sync_mode") != "test"
+        if j.get("id") != job.get("id")
+        and j.get("sync_mode") not in ("test", "postpass")
     ]
     if not priors:
         return None  # first real sync — the initial scrape never counts
@@ -3515,6 +3525,12 @@ def _apply_sync_cadence_guard(uid, job, settings_row):
     when the job was refused: it is marked failed (cars_synced 0) and
     the caller must skip the crawl."""
     if job.get("sync_mode") == "test":
+        return False
+    if job.get("sync_mode") == "postpass":
+        # Postpass jobs crawl nothing — they only run the auto-post
+        # pass over a helper sync's seen set. Cadence-exempt like
+        # test rows (and _sync_cadence_block_reason returns None for
+        # them regardless); they also never set the clock.
         return False
     # Single-car refreshes (scoped-sync phase 2) are exempt: the job
     # fetches ONE detail page, and a refresh must never eat the
@@ -3759,6 +3775,60 @@ async def run_scraper():
         )
 
         users_to_scrape = res.data or []
+
+    # POSTPASS (2026-11-05): a helper-side DWS sync that completes a
+    # full crawl stamps its assembled seen-VIN set on its job row
+    # (helper_seen_vins) and leaves ONE 'postpass' job behind
+    # (source_job_id -> the sync row). The adoption above just picked
+    # it up. The pass is the ONLY work here: no crawl (the server
+    # cannot reach these sites at all — that is why the helper syncs
+    # them), no stale pass, no cadence involvement. It calls the
+    # EXISTING _auto_post_filtered over exactly the helper's seen
+    # set, so every posting rule (filters, waiver, dedupe, daily
+    # allowance) stays single-sourced in that one function. A
+    # missing/empty seen set runs the pass with an EMPTY fence —
+    # which queues nothing — and never falls back to an unfenced
+    # pass. cars_synced on the postpass row carries the pass's
+    # queued count (semantic reuse: on sync rows it counts cars the
+    # job landed; here it counts posts the pass queued).
+    if active_job is not None and active_job.get("sync_mode") == "postpass":
+        pp_uid = (target_uid or "").strip()
+        pp_seen = set()
+        pp_src = active_job.get("source_job_id")
+        if pp_src:
+            try:
+                src_rows = (
+                    db.table("scrape_jobs")
+                    .select("helper_seen_vins")
+                    .eq("id", pp_src)
+                    .execute()
+                ).data or []
+                if src_rows and isinstance(
+                    src_rows[0].get("helper_seen_vins"), list
+                ):
+                    pp_seen = {
+                        str(v) for v in src_rows[0]["helper_seen_vins"] if v
+                    }
+            except Exception as e:
+                print(
+                    f"[!] Postpass {active_job['id']}: source-job read "
+                    f"failed ({e}); running with an empty seen set."
+                )
+        pp_queued = _auto_post_filtered(pp_uid, only_vins=pp_seen)
+        try:
+            db.table("scrape_jobs").update({
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "cars_synced": pp_queued,
+            }).eq("id", active_job["id"]).execute()
+        except Exception as e:
+            print(f"[!] Postpass {active_job['id']}: completion write failed ({e})")
+        print(
+            f"[✓] Postpass job {active_job['id']}: queued {pp_queued} "
+            f"post(s) for user {pp_uid[:8]} from {len(pp_seen)} "
+            "helper-seen VIN(s). No crawl performed."
+        )
+        return
 
     # AUTO-SYNC SWITCH (Matthew, 2026-10-29): in an AUTO run (this
     # run serves no pending job), drop users who turned auto-sync

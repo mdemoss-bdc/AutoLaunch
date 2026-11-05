@@ -1677,7 +1677,15 @@ async def run_next(opts_override: dict = None) -> list:
             pj = (db.table("scrape_jobs").select("*")
                   .eq("user_id", target_uid).eq("status", "pending").execute())
             if pj.data:
-                active_job_id = max(pj.data, key=lambda x: x["started_at"])["id"]
+                # 'postpass' rows are production's no-crawl auto-post
+                # requests (2026-11-05): never adopt one here — a
+                # shadow crawl would complete it with a crawl count
+                # and silently eat the pass it exists to trigger.
+                _cands = [j for j in pj.data
+                          if j.get("sync_mode") != "postpass"]
+                if _cands:
+                    active_job_id = max(
+                        _cands, key=lambda x: x["started_at"])["id"]
         except Exception as e:
             print(f"[!] Pending-job lookup warning: {e}")
     try:

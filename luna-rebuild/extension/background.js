@@ -2663,7 +2663,7 @@ async function finishJobFailed(queueId, reason, diags) {
   }
 }
 
-// --- DealerCenter DWS helper-side sync (v2.1.80; fetch shape 2.81) ----
+// --- DealerCenter DWS helper-side sync (v2.1.80; fetch shape 2.81; postpass wiring 2.82) ----
 // dws_sync.js (importScripts at the top of this file) crawls
 // Cloudflare-blocked DealerCenter sites from THIS browser over
 // plain fetch and lands the cars itself. Background fetch only:
@@ -2701,6 +2701,7 @@ function checkDwsSyncSafe() {
     storageSet: (obj) => chrome.storage.local.set(obj),
     sbGet: sbGet,
     sbPatch: sbPatch,
+    sbPost: sbPost,
     sbUpsert: sbUpsert,
     getInstanceId: getOrCreateInstanceId,
     leaseDecision: helperLeaseDecision,

@@ -1,6 +1,6 @@
 "use strict";
 /* =====================================================================
-   DealerCenter DWS — HELPER-SIDE INVENTORY SYNC (v2.1.81)
+   DealerCenter DWS — HELPER-SIDE INVENTORY SYNC (v2.1.82)
    =====================================================================
    Why this exists (2026-11-05): DealerCenter "DWS" dealer sites sit
    behind a Cloudflare rule that hard-blocks datacenter egress — our
@@ -66,15 +66,31 @@
      server-visible difference left).
    * The lease is honored exactly like posting claims: a foreign,
      unexpired lease means stand down.
-   * This path QUEUES NOTHING: no auto-post pass, no price-update
-     rows, no exit-delete rows (the server's stale pass queues those
-     via _queue_exit_listing_removals; the helper only flips
-     is_active on verified exits, under the same >50%-of->=20
-     mass-exit brake). It also never writes sync_summaries — RLS
-     denies owner inserts there (proven 2026-11-05), and the
-     helper's sb layer reads any 403 as a dead session, so the
-     attempt itself would do harm. The job row in scrape_jobs is
-     the completion record, same as the app's status display reads.
+   * This path queues no posts ITSELF: no price-update rows, no
+     exit-delete rows (the server's stale pass queues those via
+     _queue_exit_listing_removals; the helper only flips is_active
+     on verified exits, under the same >50%-of->=20 mass-exit
+     brake). It also never writes sync_summaries — RLS denies owner
+     inserts there (proven 2026-11-05), and the helper's sb layer
+     reads any 403 as a dead session, so the attempt itself would
+     do harm. The job row in scrape_jobs is the completion record,
+     same as the app's status display reads.
+   * 2.82 (2026-11-05): AUTO-POST WIRING. The server scraper's
+     auto-post pass only ever considers VINs its OWN crawl saw —
+     for DWS accounts that set is permanently empty (the crawl
+     403s), so auto-post could never queue for these accounts even
+     with it switched on. Now, when the helper COMPLETES a
+     full-mode sync job (claimed path or repair path — never a
+     test-mode capped run), it stamps the crawl's assembled
+     seen-VIN set on the job row (helper_seen_vins) and, ONLY when
+     the account's auto_post_enabled is true, leaves ONE follow-up
+     scrape_jobs row with sync_mode='postpass' (source_job_id ->
+     the sync job). The SERVER's pickup runs the existing Python
+     _auto_post_filtered over exactly that set — the filter stays
+     single-sourced in Python; no posting rule is ported here.
+     Postpass rows are fenced out of every selector below
+     (sync_mode=neq.postpass in the shared base query): the helper
+     must never claim one as a sync.
    ===================================================================== */
 
 // ---------------------------------------------------------------------
@@ -887,6 +903,39 @@ async function dwsMarkIncomplete(deps, incomplete, jobId) {
   } catch (e) { /* bookkeeping only */ }
 }
 
+// AUTO-POST WIRING (2.82): after a full-mode sync completes with the
+// account's auto_post_enabled on, leave ONE 'postpass' job for the
+// server. The server's pickup runs its own _auto_post_filtered over
+// the source job's helper_seen_vins — this helper makes no posting
+// decision of its own. Deduped: an unprocessed (pending) postpass
+// for the same source job suppresses a second insert. Bookkeeping
+// only — any failure here is logged and swallowed; the sync's own
+// completion never depends on it.
+async function dwsInsertPostpass(deps, job, userId) {
+  try {
+    const existing = await deps.sbGet(
+      `scrape_jobs?user_id=eq.${userId}&sync_mode=eq.postpass` +
+      `&source_job_id=eq.${job.id}&status=eq.pending&select=id`);
+    if (existing && existing.length) return false;
+    const rows = await deps.sbPost("scrape_jobs", {
+      user_id: userId,
+      status: "pending",
+      sync_mode: "postpass",
+      source_job_id: job.id,
+      started_at: new Date(deps.now()).toISOString(),
+    });
+    if (rows && rows.length) {
+      deps.log(
+        `[AutoLaunch] DWS sync: postpass job ${rows[0].id} queued ` +
+        `for sync job ${job.id}.`);
+      return true;
+    }
+  } catch (e) {
+    deps.log("[AutoLaunch] DWS sync: postpass insert failed:", e && e.message || e);
+  }
+  return false;
+}
+
 let _dwsSyncRunning = false;
 
 // One poll cycle of the DWS sync path. Called from the same alarm
@@ -922,7 +971,10 @@ async function dwsSyncMain(deps) {
   const incompleteJobs = Array.isArray(store.dws_incomplete_jobs)
     ? store.dws_incomplete_jobs : [];
 
-  const base = `scrape_jobs?user_id=eq.${userId}&sync_vin=is.null&sync_scope=is.null`;
+  // sync_mode=neq.postpass (2.82): postpass rows are the SERVER's
+  // no-crawl auto-post requests — this helper must never claim,
+  // reclaim, or "repair" one as a sync job.
+  const base = `scrape_jobs?user_id=eq.${userId}&sync_vin=is.null&sync_scope=is.null&sync_mode=neq.postpass`;
   let job = null;
   let mode = null;
   // 1) A pending job — newest first, the server's adoption order.
@@ -973,7 +1025,7 @@ async function dwsSyncMain(deps) {
 
   const srows = await deps.sbGet(
     `user_settings?user_id=eq.${userId}` +
-    `&select=used_url,extra_used_urls,certified_url,new_url,helper_lease_id,helper_lease_expires_at`);
+    `&select=used_url,extra_used_urls,certified_url,new_url,helper_lease_id,helper_lease_expires_at,auto_post_enabled`);
   const settings = srows && srows.length ? srows[0] : null;
   if (!settings) {
     if (mode === "repair") await dwsMarkAttempted(deps, attempted, job.id);
@@ -1084,6 +1136,10 @@ async function dwsSyncMain(deps) {
   if (mode === "repair") {
     await dwsMarkAttempted(deps, attempted, job.id);
     if (anyComplete && totalSaved > 0) {
+      // The seen-set stamp (2.82) is a FULL-mode record only: a
+      // test-mode crawl's set is a capped slice and must never be
+      // mistaken for the whole lot by a later pass.
+      const seenStamp = isTest ? {} : { helper_seen_vins: Array.from(seenVins) };
       if (job.status === "failed") {
         // A cadence-shaped failure the crawl has now genuinely
         // served: the row tells the truth — completed, with the
@@ -1092,11 +1148,20 @@ async function dwsSyncMain(deps) {
           status: "completed",
           completed_at: new Date(deps.now()).toISOString(),
           cars_synced: totalSaved,
+          ...seenStamp,
         });
       } else {
-        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, { cars_synced: totalSaved });
+        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+          cars_synced: totalSaved,
+          ...seenStamp,
+        });
       }
       deps.log(`[AutoLaunch] DWS sync repair for job ${job.id}: landed ${totalSaved} car(s).`);
+      // 2.82: a repaired FULL-mode sync is a completed sync — it
+      // earns the same auto-post handoff as the claimed path.
+      if (!isTest && settings.auto_post_enabled === true) {
+        await dwsInsertPostpass(deps, job, userId);
+      }
       return { repaired: job.id, saved: totalSaved };
     }
     // Incomplete repair: what the crawl had is landed, but the
@@ -1134,8 +1199,15 @@ async function dwsSyncMain(deps) {
     status: "completed",
     completed_at: new Date(deps.now()).toISOString(),
     cars_synced: totalSaved,
+    // Full-mode completions only (see the repair path's stamp).
+    ...(isTest ? {} : { helper_seen_vins: Array.from(seenVins) }),
   });
   deps.log(`[AutoLaunch] DWS sync completed job ${job.id}: ${totalSaved} car(s).`);
+  // 2.82: hand the server's auto-post pass this crawl's seen set —
+  // full-mode completions only, and only with auto-post switched on.
+  if (!isTest && settings.auto_post_enabled === true) {
+    await dwsInsertPostpass(deps, job, userId);
+  }
   return { completed: job.id, saved: totalSaved };
 }
 
