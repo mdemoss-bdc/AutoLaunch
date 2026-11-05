@@ -3078,6 +3078,40 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         </div>
 
+        <!-- POST WITHOUT COLORS (Matthew, 2026-11-05) -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Allow posting cars without colors
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                For inventory feeds that don't publish colors. Cars missing an exterior or interior color can still auto-post.
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkAllowPostWithoutColors"
+                onchange="toggleAllowPostWithoutColorsSetting(this)"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
         <!-- SYNDICATION CHANNELS (Phase 6) -->
 
         <div class="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
@@ -3554,6 +3588,14 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <div id="autoPostConditions" class="flex flex-wrap gap-2"></div>
         <p class="text-[11px] text-slate-500 mt-2">Nothing picked = new, used and certified all post.</p>
       </div>
+
+      <label class="flex items-start gap-2.5 cursor-pointer">
+        <input type="checkbox" id="chkModalAllowPostWithoutColors" onchange="toggleAllowPostWithoutColorsSetting(this)" class="mt-0.5">
+        <span>
+          <span class="block font-semibold text-slate-800">Allow posting cars without colors</span>
+          <span class="block text-[11px] text-slate-500 mt-0.5">For inventory feeds that don't publish colors. Cars missing an exterior or interior color can still auto-post.</span>
+        </span>
+      </label>
     </div>
 
     <div class="pt-2">
@@ -8188,6 +8230,14 @@ updateLastSyncDisplay();
         const chkShareFeed = document.getElementById("chkShareToFeed");
         if (chkShareFeed) chkShareFeed.checked = shareToFeedEnabled;
       }
+      // Post without colors: absent column leaves the default (OFF — opt-in).
+      if (data.allow_post_without_colors !== undefined && data.allow_post_without_colors !== null) {
+        allowPostWithoutColorsSetting = !!data.allow_post_without_colors;
+        const chkNoColors = document.getElementById("chkAllowPostWithoutColors");
+        if (chkNoColors) chkNoColors.checked = allowPostWithoutColorsSetting;
+        const chkModalNoColors = document.getElementById("chkModalAllowPostWithoutColors");
+        if (chkModalNoColors) chkModalNoColors.checked = allowPostWithoutColorsSetting;
+      }
       if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
 
@@ -9784,6 +9834,11 @@ function noPriceButton(car, vinAttr) {
 // filters the table to exactly those cars.
 let autoPostBlockerFilter = null;
 let autoPostEnabledSetting = false;
+// Post-without-colors waiver (Matthew, 2026-11-05): mirrors
+// user_settings.allow_post_without_colors. When true the health
+// bar's blocker walk skips the colors leg, exactly like the
+// scraper's auto-post pass does.
+let allowPostWithoutColorsSetting = false;
 
 // Usable photos, counted exactly like the scraper: http(s) URLs
 // across image_url + photos + custom_photo_urls, deduped by path
@@ -9913,7 +9968,7 @@ function autoPostBlockerOf(car) {
   if (!autoPostConditionMatches(car.condition || "", autoPostFilter.conditions)) return "filter";
   const price = parseFloat(car.price);
   if (!(price > 0)) return "price";
-  if (missingColorJS(car.color) || missingColorJS(car.interior_color)) return "colors";
+  if (!allowPostWithoutColorsSetting && (missingColorJS(car.color) || missingColorJS(car.interior_color))) return "colors";
   if (usablePhotoCountJS(car) < selectedMinPhotos) return "photos";
   return "ready";
 }
@@ -16565,7 +16620,7 @@ function toggleAutoPostCondition(c) {
   renderAutoPostFilterControls();
 }
 
-function openAutoPostModal() { if (!requireTier("autopost")) return; renderAutoPostFilterControls(); document.getElementById("autoPostModal").classList.remove("hidden"); }
+function openAutoPostModal() { if (!requireTier("autopost")) return; renderAutoPostFilterControls(); const chkModalNC = document.getElementById("chkModalAllowPostWithoutColors"); if (chkModalNC) chkModalNC.checked = allowPostWithoutColorsSetting; document.getElementById("autoPostModal").classList.remove("hidden"); }
 function openAutoRepostModal() { if (!requireTier("auto_repost")) return; document.getElementById("autoRepostModal").classList.remove("hidden"); }
 function openAutoPhotoEditsModal() {
   document.getElementById("autoPhotoEditsModal").classList.remove("hidden");
@@ -16876,6 +16931,42 @@ async function toggleShareToFeedSetting(el) {
   } catch (err) {
     el.checked = !value;
     alert("Could not save the share-to-feed setting: " + (err.message || "Unknown error"));
+  }
+}
+
+// Post without colors (Matthew, 2026-11-05): an opt-in waiver of the
+// auto-post color requirement for feeds that publish no colors at all
+// (DealerCenter DWS serves "-"). Writes
+// user_settings.allow_post_without_colors immediately, like Share to
+// feed, and keeps the Settings switch and the Auto-post modal
+// checkbox in sync. The scraper's auto-post pass reads the same
+// column; the waiver lifts ONLY the color leg — price, photos and
+// every other filter still apply. Turning it ON belongs to the
+// auto-post apparatus, so it carries the same plan gate as Full
+// Auto; turning it off is always allowed.
+async function toggleAllowPostWithoutColorsSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  // PLANS: the waiver only matters for auto-posting (enabling only).
+  if (value && !requireTier("autopost")) { el.checked = false; return; }
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        allow_post_without_colors: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    allowPostWithoutColorsSetting = value;
+    ["chkAllowPostWithoutColors", "chkModalAllowPostWithoutColors"].forEach(id => {
+      const other = document.getElementById(id);
+      if (other) other.checked = value;
+    });
+    renderAutoPostHealth();
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the post-without-colors setting: " + (err.message || "Unknown error"));
   }
 }
 

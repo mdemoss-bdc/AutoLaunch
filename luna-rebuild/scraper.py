@@ -2695,7 +2695,7 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
     try:
         res = (
             db.table("user_settings")
-            .select("auto_post_enabled, auto_post_min_photos, auto_post_locations, auto_post_conditions, location_groups, daily_post_limit, channel_instagram_enabled, channel_tiktok_enabled, channel_facebook_page_enabled")
+            .select("auto_post_enabled, auto_post_min_photos, auto_post_locations, auto_post_conditions, location_groups, daily_post_limit, channel_instagram_enabled, channel_tiktok_enabled, channel_facebook_page_enabled, allow_post_without_colors")
             .eq("user_id", uid)
             .limit(1)
             .execute()
@@ -2710,6 +2710,13 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
             min_photos = max(1, int(s.get("auto_post_min_photos") or 1))
         except Exception:
             min_photos = 1
+        # COLOR WAIVER (Matthew, 2026-11-05): an account whose feed
+        # publishes no colors at all (DealerCenter DWS serves "-") can
+        # opt in to posting without them — Facebook does not require
+        # colors, the both-colors rule is ours. The flag waives ONLY
+        # the color leg below; every other leg is untouched, and an
+        # absent/false flag keeps filtering byte-identical to before.
+        allow_no_colors = s.get("allow_post_without_colors") is True
         conditions = s.get("auto_post_conditions")
         if not isinstance(conditions, list):
             conditions = []
@@ -2824,6 +2831,7 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
             f"[*] Auto-post for user {uid[:8]}: filter locations="
             f"{'all' if allowed_locations is None else sorted(allowed_locations)}, "
             f"conditions={conditions or 'all'}, photos>={min_photos}, "
+            f"colors={'waived' if allow_no_colors else 'required'}, "
             f"allowance={allowance if allowance is not None else 'unlimited'}, "
             f"unposted active cars in inventory={len(inv)}."
         )
@@ -2865,7 +2873,9 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
                 price_ok = False
             if not price_ok:
                 continue
-            if _missing_color(car.get("color")) or _missing_color(car.get("interior_color")):
+            if not allow_no_colors and (
+                _missing_color(car.get("color")) or _missing_color(car.get("interior_color"))
+            ):
                 continue
             if _usable_photo_count(car) < min_photos:
                 continue
