@@ -2675,6 +2675,11 @@ def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now)
         return None
     if job.get("sync_mode") == "test":
         return None
+    if job.get("force_override"):
+        # Owner-panel force scrape with the cadence override set
+        # (owner-grant force_scrape {override:true} stamps the row):
+        # the owner's explicit call beats the plan window.
+        return None
     hours = _sync_cooldown_hours(uid, settings_row, covered)
     if hours is None:
         return None

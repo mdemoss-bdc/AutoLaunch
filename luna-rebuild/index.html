@@ -3351,6 +3351,14 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             Everyone registered. Force scrape queues a fresh inventory sync for that account — the same sync their own Sync Inventory button runs.
           </p>
           <p id="ownerUsersMsg" class="text-xs font-medium mb-3 hidden"></p>
+          <div id="ownerForceAnywayWrap" class="mb-3 hidden">
+            <button
+              type="button"
+              onclick="ownerForceScrapeAnyway(this)"
+              class="px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold cursor-pointer">
+              Force anyway
+            </button>
+          </div>
           <select
             id="ownerUserSelect"
             onchange="ownerUserSelectChanged()"
@@ -5034,6 +5042,7 @@ function renderOwnerUserDetails() {
 }
 
 function ownerUserSelectChanged() {
+  ownerForceAnywayHide();
   renderOwnerUserDetails();
 }
 
@@ -5062,10 +5071,48 @@ async function loadOwnerUsers() {
 async function ownerForceScrape(targetUserId, btn) {
   if (!isOwnerGrantUser()) return;
   if (btn) btn.disabled = true;
+  ownerForceAnywayHide();
   const res = await ownerGrantInvoke({ action: "force_scrape", target_user_id: targetUserId });
   if (btn) btn.disabled = false;
   if (res.ok) {
     ownerUsersMsg("Scrape queued for " + (res.target_email || "that account") + " \u2014 their inventory will begin updating shortly, same as their Sync Inventory button.", false);
+  } else {
+    ownerUsersMsg(res.message || "Couldn\'t queue that scrape.", true);
+    if (res.error === "cadence_blocked" && res.override_available) ownerForceAnywayShow(targetUserId);
+  }
+}
+
+// The cadence override (Matthew, 2026-11-05): a cadence_blocked
+// refusal offers "Force anyway" for the SAME user whose scrape was
+// refused; the wrap remembers who it was offered for, and picking a
+// different user (or starting a fresh attempt) hides it again. The
+// override skips only the plan sync cadence \u2014 the owner-grant
+// function stamps the queued row force_override so the scraper's
+// own guard honors it too.
+let ownerForceAnywayTargetId = "";
+
+function ownerForceAnywayShow(targetUserId) {
+  ownerForceAnywayTargetId = targetUserId || "";
+  const wrap = document.getElementById("ownerForceAnywayWrap");
+  if (wrap && ownerForceAnywayTargetId) wrap.classList.remove("hidden");
+}
+
+function ownerForceAnywayHide() {
+  ownerForceAnywayTargetId = "";
+  const wrap = document.getElementById("ownerForceAnywayWrap");
+  if (wrap) wrap.classList.add("hidden");
+}
+
+async function ownerForceScrapeAnyway(btn) {
+  if (!isOwnerGrantUser()) return;
+  const targetUserId = ownerForceAnywayTargetId;
+  if (!targetUserId) { ownerForceAnywayHide(); return; }
+  if (btn) btn.disabled = true;
+  const res = await ownerGrantInvoke({ action: "force_scrape", target_user_id: targetUserId, override: true });
+  if (btn) btn.disabled = false;
+  ownerForceAnywayHide();
+  if (res.ok) {
+    ownerUsersMsg("Queued anyway \u2014 cadence overridden. Scrape queued for " + (res.target_email || "that account") + " \u2014 their inventory will begin updating shortly, same as their Sync Inventory button.", false);
   } else {
     ownerUsersMsg(res.message || "Couldn\'t queue that scrape.", true);
   }

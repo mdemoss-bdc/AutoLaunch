@@ -59,18 +59,21 @@
 //     webhook dispatches to the scraper workflow for that user.
 //     The one honest limit: the production scraper's cadence guard
 //     enforces the plan sync window (trial 24h / Post 18h /
-//     Automate 12h / Group 6h) on user-requested jobs and there is
-//     no sanctioned force flag that skips it for a full scrape —
-//     so this action pre-checks the same cadence (mirroring the
-//     scraper's rules: owners exempt, 'test' rows never set the
-//     clock, a first sync is never blocked, dealership-covered
-//     members resolve to the dealership flavor) and refuses with
-//     the next-open time instead of queueing a job the scraper
-//     would fail. Refusals: no such user; account has no settings
-//     row (setup never finished — nothing to scrape); a sync is
-//     already pending for them. Every outcome (queued /
-//     already_pending / cadence_refused) is audit-logged in
-//     public.owner_actions.
+//     Automate 12h / Group 6h) on user-requested jobs — so this
+//     action pre-checks the same cadence (mirroring the scraper's
+//     rules: owners exempt, 'test' rows never set the clock, a
+//     first sync is never blocked, dealership-covered members
+//     resolve to the dealership flavor) and refuses with the
+//     next-open time instead of queueing a job the scraper would
+//     fail. The refusal carries override_available: the owner may
+//     re-send with {override: true} (Matthew, 2026-11-05 — "make
+//     my panel over-ride rules"), which skips ONLY this cadence
+//     check and stamps the queued row force_override = true so
+//     the scraper's own guard honors it too. The factual refusals
+//     (no such user; account has no settings row; a sync already
+//     pending) apply with or without the override. Every outcome
+//     (queued / queued_override / already_pending /
+//     cadence_refused) is audit-logged in public.owner_actions.
 //
 // verify_jwt=false at the platform level; the caller's JWT is
 // verified manually (same pattern as trial-start / dealership-admin).
@@ -113,8 +116,8 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function refuse(error: string, message: string) {
-  return json({ ok: false, error, message });
+function refuse(error: string, message: string, extra: Record<string, unknown> = {}) {
+  return json({ ok: false, error, message, ...extra });
 }
 
 function serviceClient() {
@@ -531,6 +534,12 @@ Deno.serve(async (req) => {
   if (action === "force_scrape") {
     const targetId = typeof body.target_user_id === "string" ? body.target_user_id.trim() : "";
     if (!targetId) return refuse("invalid_target", "Missing the account to scrape for.");
+    // The owner's cadence override (Matthew, 2026-11-05): skips
+    // ONLY the cadence refusal below and stamps the queued row
+    // force_override so the scraper honors it. Every factual
+    // refusal (bad target, no such user, no settings, a sync
+    // already pending) applies exactly as without it.
+    const override = body.override === true;
     let target: any = null;
     try {
       const { data } = await svc.auth.admin.getUserById(targetId);
@@ -565,9 +574,11 @@ Deno.serve(async (req) => {
     }
     // The scraper's cadence guard would fail a full job queued
     // inside the plan window. Answer truthfully instead of
-    // queueing a doomed row (see the cadence mirror above).
+    // queueing a doomed row (see the cadence mirror above) —
+    // unless the owner overrides: then the row below is stamped
+    // force_override and the scraper's guard lets it through.
     const block = await cadenceBlock(svc, targetId, settings);
-    if (block) {
+    if (block && !override) {
       await auditOwnerAction(svc, callerId, "force_scrape", targetId, targetEmail, {
         outcome: "cadence_refused",
         hours: block.hours,
@@ -578,6 +589,7 @@ Deno.serve(async (req) => {
         "cadence_blocked",
         "Can't force one yet — " + (targetEmail || "that account") + " synced " + fmtET(block.lastSyncAt) +
           " and their plan's next sync opens " + fmtET(block.nextAt) + ". A forced sync uses the same path as their Sync button, and the plan cadence still applies.",
+        { override_available: true },
       );
     }
     // The trigger artifact: the same row the app's Sync Inventory
@@ -594,11 +606,20 @@ Deno.serve(async (req) => {
         status: "pending",
         triggered_by: "owner-force" + (callerEmail ? ":" + callerEmail : ""),
         sync_mode: "full",
+        ...(override ? { force_override: true } : {}),
       })
       .select("id")
       .single();
     if (jobErr || !job) {
       return refuse("queue_failed", "The scrape didn't queue — try again.");
+    }
+    if (override) {
+      await auditOwnerAction(svc, callerId, "force_scrape", targetId, targetEmail, {
+        outcome: "queued_override",
+        job_id: job.id,
+        ...(block ? { hours: block.hours, last_sync_at: block.lastSyncAt, next_at: block.nextAt } : {}),
+      });
+      return json({ ok: true, target_email: targetEmail, job_id: job.id, override: true });
     }
     await auditOwnerAction(svc, callerId, "force_scrape", targetId, targetEmail, { outcome: "queued", job_id: job.id });
     return json({ ok: true, target_email: targetEmail, job_id: job.id });
