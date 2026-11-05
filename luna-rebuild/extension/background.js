@@ -2663,7 +2663,7 @@ async function finishJobFailed(queueId, reason, diags) {
   }
 }
 
-// --- DealerCenter DWS helper-side sync (v2.1.80) -----------------------
+// --- DealerCenter DWS helper-side sync (v2.1.80; fetch shape 2.81) ----
 // dws_sync.js (importScripts at the top of this file) crawls
 // Cloudflare-blocked DealerCenter sites from THIS browser over
 // plain fetch and lands the cars itself. Background fetch only:
@@ -2674,9 +2674,20 @@ async function finishJobFailed(queueId, reason, diags) {
 async function dwsFetchText(url, opts) {
   const init = {};
   if (opts && opts.method) init.method = opts.method;
+  // 2.81: ride the browser's own cookies for the dealer site
+  // (including any Cloudflare clearance it earned by browsing), so
+  // a sync request is server-visibly the dealer's own browser —
+  // the premise of the whole feature. The 2.80 wrapper sent no
+  // cookies, the one remaining difference from the site's own
+  // same-origin requests; its page 2-4 fragment POSTs came back
+  // as HTTP-200 bodies with no cards in them on the live run.
+  init.credentials = (opts && opts.credentials) || "include";
   if (opts && opts.form) {
     init.headers = { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" };
     init.body = new URLSearchParams(opts.form).toString();
+  }
+  if (opts && opts.headers) {
+    init.headers = { ...(init.headers || {}), ...opts.headers };
   }
   const res = await fetch(url, init);
   return { status: res.status, text: await res.text() };

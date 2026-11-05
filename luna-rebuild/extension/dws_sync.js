@@ -1,6 +1,6 @@
 "use strict";
 /* =====================================================================
-   DealerCenter DWS — HELPER-SIDE INVENTORY SYNC (v2.1.80)
+   DealerCenter DWS — HELPER-SIDE INVENTORY SYNC (v2.1.81)
    =====================================================================
    Why this exists (2026-11-05): DealerCenter "DWS" dealer sites sit
    behind a Cloudflare rule that hard-blocks datacenter egress — our
@@ -46,6 +46,24 @@
      newest such job is fresh (< 30 min) and this account's site
      fingerprints as DWS, the helper re-runs the crawl for it and
      corrects cars_synced. One attempt per job, ever.
+   * 2.81 (2026-11-05, live-proof fixes): completeness is judged by
+     ASSEMBLED CONTENT, never by transport success. A fragment that
+     parses to zero card containers is a failed page (one retry,
+     then the crawl is INCOMPLETE); a short crawl lands what it has
+     but finishes the job FAILED, stale-marks nothing, and records
+     the job for one repair re-run. The repair pass also covers
+     server-FAILED jobs of the cadence shape (failed + cars_synced
+     0 — the server cadence guard is scraper.py's only 'failed'
+     writer, and its anchor can be a poisoned window the helper's
+     crawl is not subject to) and jobs the helper itself finished
+     incomplete. Live trigger: the first full crawl assembled page
+     1 only (13 cars) when its page 2-4 fragments came back as
+     HTTP-200 bodies with no cards in them, yet reported success
+     and stale-flipped real cars. The fragment fetches now also
+     carry the browser's cookies for the dealer site and jQuery's
+     X-Requested-With header, matching the request the site's own
+     JS makes (the cookieless service-worker POST was the one
+     server-visible difference left).
    * The lease is honored exactly like posting claims: a foreign,
      unexpired lease means stand down.
    * This path QUEUES NOTHING: no auto-post pass, no price-update
@@ -69,6 +87,7 @@ const DWS_MAX_PHOTOS = 20;          // MAX_PHOTOS_PER_VEHICLE
 const DWS_TEST_SYNC_LIMIT = 15;     // TEST_SYNC_LIMIT
 const DWS_MAX_USED_FEEDS = 5;       // MAX_USED_FEEDS
 const DWS_STALE_MAX_FRACTION = 0.5; // STALE_MAX_FRACTION
+const DWS_FRAG_RETRY_DELAY_MS = 2000; // one retry per listing fragment
 
 function dwsIsPlatform(html) {
   if (!html) return false;
@@ -332,11 +351,11 @@ function dwsParseListingHtml(html, baseUrl, defaultCondition, uid) {
   return cars;
 }
 
-// {totalPages, ajaxUrl, totalVehicles} from a DWS listing page. The
-// load-more container carries the page count; the AJAX endpoint
-// rides in the page's ajaxObject (fallback: the standard WP path).
-// totalVehicles is null unless the page publishes
-// data-total-vehicles (Clear Choice's template does not).
+// {totalPages, ajaxUrl, totalVehicles, perpage} from a DWS listing
+// page. The load-more container carries the page count and page
+// size; the AJAX endpoint rides in the page's ajaxObject (fallback:
+// the standard WP path). totalVehicles is null unless the page
+// publishes data-total-vehicles (Clear Choice's template does not).
 function dwsListingMeta(html, baseUrl) {
   let total = 1;
   const m = /data-total-pages="(\d+)"/.exec(html || "");
@@ -351,7 +370,10 @@ function dwsListingMeta(html, baseUrl) {
   let totalVehicles = null;
   const tv = /data-total-vehicles="(\d+)"/.exec(html || "");
   if (tv) totalVehicles = parseInt(tv[1], 10);
-  return { totalPages: total, ajaxUrl: ajaxUrl, totalVehicles: totalVehicles };
+  let perpage = null;
+  const pp = /data-perpage="(\d+)"/.exec(html || "");
+  if (pp) perpage = parseInt(pp[1], 10);
+  return { totalPages: total, ajaxUrl: ajaxUrl, totalVehicles: totalVehicles, perpage: perpage };
 }
 
 // Remove a photo file that is the SOLE photo of 2+ cars in the batch
@@ -634,11 +656,23 @@ function dwsBuildFeeds(settings) {
 // server-rendered + admin-ajax fragments), mirroring
 // crawl_dws_feed's request transport. Returns null when the feed
 // does not fingerprint as DWS (not ours — the server keeps it),
-// else {cars, complete}. `limit` is a soft stop like the Python
-// one: no further listing pages once enough cars are in hand.
+// else {cars, complete, diag}. `limit` is a soft stop like the
+// Python one: no further listing pages once enough cars are in
+// hand (stopping at the cap is by design and stays "complete").
 // firstHtml, when given, is the already-fetched page 1 (the probe
 // fetch doubles as the crawl's first page).
-async function dwsCrawlFeed(fetchText, feed, uid, limit, firstHtml) {
+//
+// COMPLETENESS IS JUDGED BY CONTENT (2.81): a fragment response is
+// only a page when it parses to at least one card container. An
+// HTTP-200 body with no cards in it (a WordPress "0" die, a bot
+// interstitial, an empty render) is a FAILED page: one retry after
+// a short delay, then the crawl is incomplete — the caller lands
+// what it has but may not stale-mark or report success. diag
+// records every fragment's status/length/card count/body head so
+// a recurrence is diagnosable from the worker log alone.
+async function dwsCrawlFeed(fetchText, feed, uid, limit, firstHtml, opts) {
+  const retryDelayMs = (opts && opts.retryDelayMs != null)
+    ? opts.retryDelayMs : DWS_FRAG_RETRY_DELAY_MS;
   let html1 = firstHtml;
   if (html1 === null || html1 === undefined) {
     let r = null;
@@ -649,7 +683,17 @@ async function dwsCrawlFeed(fetchText, feed, uid, limit, firstHtml) {
   const meta = dwsListingMeta(html1, feed.url);
   let cars = dwsParseListingHtml(html1, feed.url, feed.condition, uid);
   const seen = new Set(cars.map(c => c.vin));
+  const diag = {
+    totalPages: meta.totalPages, perpage: meta.perpage,
+    pagesOk: 1, fragments: [],
+  };
   let complete = true;
+  // Page 1 itself is short while more pages are published: the
+  // enumeration cannot be trusted (a full first page is exactly
+  // perpage cards whenever a page 2 exists).
+  if (meta.totalPages > 1 && meta.perpage && cars.length < meta.perpage) {
+    complete = false;
+  }
   for (let pno = 2; pno <= meta.totalPages; pno++) {
     if (limit && cars.length >= limit) break;
     const form = {
@@ -662,13 +706,32 @@ async function dwsCrawlFeed(fetchText, feed, uid, limit, firstHtml) {
       model: "",
       get_params: "",
     };
-    let frag = null;
-    try {
-      const fr = await fetchText(meta.ajaxUrl, { method: "POST", form: form });
-      if (fr && fr.status === 200) frag = fr.text;
-    } catch (e) { /* incomplete below */ }
-    if (!frag) { complete = false; break; }
-    for (const c of dwsParseListingHtml(frag, feed.url, feed.condition, uid)) {
+    let pageCars = null;
+    for (let attempt = 0; attempt < 2 && pageCars === null; attempt++) {
+      if (attempt > 0 && retryDelayMs > 0) {
+        await new Promise(r => setTimeout(r, retryDelayMs));
+      }
+      let fr = null;
+      try {
+        fr = await fetchText(meta.ajaxUrl, {
+          method: "POST", form: form,
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+      } catch (e) { /* failed page below */ }
+      const text = (fr && fr.status === 200) ? fr.text : null;
+      const parsed = text
+        ? dwsParseListingHtml(text, feed.url, feed.condition, uid) : [];
+      diag.fragments.push({
+        pno: pno, attempt: attempt + 1,
+        status: fr ? fr.status : 0,
+        len: text ? text.length : 0, cards: parsed.length,
+        head: text ? text.slice(0, 120) : "",
+      });
+      if (parsed.length > 0) pageCars = parsed;
+    }
+    if (pageCars === null) { complete = false; break; }
+    diag.pagesOk += 1;
+    for (const c of pageCars) {
       if (!seen.has(c.vin)) { seen.add(c.vin); cars.push(c); }
     }
   }
@@ -677,7 +740,7 @@ async function dwsCrawlFeed(fetchText, feed, uid, limit, firstHtml) {
   if (meta.totalVehicles && cars.length !== meta.totalVehicles) {
     complete = false;
   }
-  return { cars: cars, complete: complete };
+  return { cars: cars, complete: complete, diag: diag };
 }
 
 // Fetch each car's VDP (5 at a time, like the Python pass) and
@@ -811,6 +874,19 @@ async function dwsMarkAttempted(deps, attempted, jobId) {
   } catch (e) { /* bookkeeping only */ }
 }
 
+// Jobs the helper itself finished INCOMPLETE (a short crawl landed
+// cars but was not allowed to report success). A failed row whose
+// cars_synced is no longer 0 would otherwise fall outside the
+// repair selector; this ledger keeps exactly those jobs eligible
+// for the one repair re-run.
+async function dwsMarkIncomplete(deps, incomplete, jobId) {
+  try {
+    await deps.storageSet({
+      dws_incomplete_jobs: incomplete.concat([jobId]).slice(-50),
+    });
+  } catch (e) { /* bookkeeping only */ }
+}
+
 let _dwsSyncRunning = false;
 
 // One poll cycle of the DWS sync path. Called from the same alarm
@@ -832,7 +908,7 @@ async function dwsSyncMain(deps) {
   const store = await deps.storageGet([
     "autolaunch_user_id", "autolaunch_access_token",
     "autolaunch_session_expired", "current_posting_job",
-    "dws_attempted_jobs",
+    "dws_attempted_jobs", "dws_incomplete_jobs",
   ]);
   const userId = store.autolaunch_user_id;
   if (!userId) return { skipped: "no_user" };
@@ -843,6 +919,8 @@ async function dwsSyncMain(deps) {
   if (store.current_posting_job) return { skipped: "posting_active" };
   const attempted = Array.isArray(store.dws_attempted_jobs)
     ? store.dws_attempted_jobs : [];
+  const incompleteJobs = Array.isArray(store.dws_incomplete_jobs)
+    ? store.dws_incomplete_jobs : [];
 
   const base = `scrape_jobs?user_id=eq.${userId}&sync_vin=is.null&sync_scope=is.null`;
   let job = null;
@@ -869,6 +947,26 @@ async function dwsSyncMain(deps) {
       `&completed_at=gte.${encodeURIComponent(since)}` +
       `&order=completed_at.desc&limit=5`);
     if (jobs) job = jobs.find(j => !attempted.includes(j.id)) || null;
+    if (job) mode = "repair";
+  }
+  // 4) Repair, failed shape: the server FAILED a fresh job instead
+  // of completing it empty. scraper.py's only 'failed' writer is
+  // the cadence guard, whose anchor can be a poisoned window (a
+  // zero-car run earlier in the day starts the plan clock) — the
+  // helper's crawl is not cadence-bound, so it re-runs the job.
+  // Eligible: cars_synced 0 (the guard's exact shape), or a job
+  // this helper itself finished incomplete (ledger above). One
+  // attempt each, same freshness window.
+  if (!job) {
+    const since = new Date(deps.now() - 30 * 60 * 1000).toISOString();
+    jobs = await deps.sbGet(
+      `${base}&status=eq.failed` +
+      `&completed_at=gte.${encodeURIComponent(since)}` +
+      `&order=completed_at.desc&limit=5`);
+    if (jobs) {
+      job = jobs.find(j => !attempted.includes(j.id) &&
+        (j.cars_synced === 0 || incompleteJobs.includes(j.id))) || null;
+    }
     if (job) mode = "repair";
   }
   if (!job) return { skipped: "no_job" };
@@ -933,9 +1031,19 @@ async function dwsSyncMain(deps) {
   try {
     for (const entry of dwsFeeds) {
       const res = await dwsCrawlFeed(
-        deps.fetchText, entry.feed, userId, limitLeft, entry.html1);
+        deps.fetchText, entry.feed, userId, limitLeft, entry.html1,
+        deps.fragRetryDelayMs != null
+          ? { retryDelayMs: deps.fragRetryDelayMs } : undefined);
       if (!res) { anyComplete = false; continue; }
       if (!res.complete) anyComplete = false;
+      if (res.diag) {
+        deps.log(
+          `[AutoLaunch] DWS crawl ${entry.feed.key}: pages ` +
+          `${res.diag.pagesOk}/${res.diag.totalPages} ok, ` +
+          `${res.cars.length} car(s), complete=${res.complete}` +
+          (res.complete ? "" :
+            `, fragments=${JSON.stringify(res.diag.fragments)}`));
+      }
       let cars = res.cars;
       if (limitLeft && cars.length > limitLeft) cars = cars.slice(0, limitLeft);
       await dwsFetchAllVdp(deps.fetchText, cars);
@@ -956,7 +1064,10 @@ async function dwsSyncMain(deps) {
       await dwsMarkAttempted(deps, attempted, job.id);
     } else {
       try {
-        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, { status: "failed" });
+        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+          status: "failed",
+          completed_at: new Date(deps.now()).toISOString(),
+        });
       } catch (e2) { /* row state is the least of it */ }
     }
     throw e;
@@ -972,17 +1083,52 @@ async function dwsSyncMain(deps) {
 
   if (mode === "repair") {
     await dwsMarkAttempted(deps, attempted, job.id);
-    if (totalSaved > 0) {
-      await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, { cars_synced: totalSaved });
+    if (anyComplete && totalSaved > 0) {
+      if (job.status === "failed") {
+        // A cadence-shaped failure the crawl has now genuinely
+        // served: the row tells the truth — completed, with the
+        // real count and completion time.
+        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+          status: "completed",
+          completed_at: new Date(deps.now()).toISOString(),
+          cars_synced: totalSaved,
+        });
+      } else {
+        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, { cars_synced: totalSaved });
+      }
+      deps.log(`[AutoLaunch] DWS sync repair for job ${job.id}: landed ${totalSaved} car(s).`);
+      return { repaired: job.id, saved: totalSaved };
     }
-    deps.log(`[AutoLaunch] DWS sync repair for job ${job.id}: landed ${totalSaved} car(s).`);
-    return { repaired: job.id, saved: totalSaved };
+    // Incomplete repair: what the crawl had is landed, but the
+    // job row is left exactly as it was (failed stays failed,
+    // completed-0 keeps its 0) and the attempt is spent.
+    deps.log(`[AutoLaunch] DWS sync repair for job ${job.id}: crawl incomplete, landed ${totalSaved} car(s); job left uncorrected.`);
+    return { repair_incomplete: job.id, saved: totalSaved };
   }
   if (!anyCars) {
     // Claimed a DWS job but the crawl landed nothing (the site
     // died mid-run): an honest failure, never a fake success.
-    await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, { status: "failed" });
+    await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+      status: "failed",
+      completed_at: new Date(deps.now()).toISOString(),
+    });
+    if (!anyComplete) await dwsMarkIncomplete(deps, incompleteJobs, job.id);
     return { failed: job.id };
+  }
+  if (!anyComplete) {
+    // A SHORT CRAWL landed cars but must not report success (the
+    // 2.80 live failure: page 1 only, job "completed", real cars
+    // stale-flipped). Finish failed with the honest landed count
+    // and a completion stamp (the repair selector keys on fresh
+    // failed rows, exactly like the server's own cadence failures
+    // carry); the ledger makes the job eligible for one re-run.
+    await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+      status: "failed", cars_synced: totalSaved,
+      completed_at: new Date(deps.now()).toISOString(),
+    });
+    await dwsMarkIncomplete(deps, incompleteJobs, job.id);
+    deps.log(`[AutoLaunch] DWS sync job ${job.id}: crawl incomplete — landed ${totalSaved} car(s), finished failed for repair.`);
+    return { incomplete: job.id, saved: totalSaved };
   }
   await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
     status: "completed",
