@@ -9754,6 +9754,17 @@ function colorMissingValue(v) {
 function postingGaps(car) {
   const gaps = [];
   if (!car) return gaps;
+  // COLOR WAIVER (Matthew, 2026-11-05): an account whose feed doesn't
+  // publish colors can opt in (Settings -> "Allow posting cars without
+  // colors" / user_settings.allow_post_without_colors). For those
+  // accounts a missing color is not a posting gap at all — the helper
+  // fills a default at the Facebook form (2.83+), which is exactly how
+  // the scraper's auto-post pass and the health bar already treat it.
+  // Every surface that asks postingGaps (the queue "Missing info"
+  // pill, the inventory row buttons, the needs-attention chip and both
+  // enqueue gates) inherits the waiver from this one place. Waiver OFF
+  // (the default) leaves every answer below byte-identical.
+  if (allowPostWithoutColorsSetting) return gaps;
   if (colorMissingValue(car.color)) gaps.push({ key: "color", label: "Exterior color" });
   if (colorMissingValue(car.interior_color)) gaps.push({ key: "interior_color", label: "Interior color" });
   return gaps;
