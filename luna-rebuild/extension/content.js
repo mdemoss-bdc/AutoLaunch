@@ -765,6 +765,50 @@
 //     does not match, by search or by scroll. The box is
 //     also cleared at every flow end (report/fail), so a
 //     job never leaves the tab filtered.
+// 40. SEARCH-ASSIST HARDENING + NAMED BANNERS (v2.1.79 —
+//     Matthew, 2026-11-05): the 2.1.78 live proof came back
+//     search:none on eight straight scans, and the watched
+//     diagnostic (2023 Outback HA4229) failed search:none /
+//     cards:5 with the search box plainly on screen and
+//     EMPTY in every frame of the user's recording. The
+//     audit of the assist found the likeliest hole first:
+//     searchAssistRender probed for the box exactly ONCE,
+//     the moment the flow arrived — and the price flow
+//     arrives with no render wait at all, while the box
+//     mounts with the list app. A one-shot probe against a
+//     still-booting page reads "no box" forever. Three
+//     fixes, all inside the scan machinery:
+//     (1) INPUT WAIT: the assist now polls for the box on
+//     a 10s wall-clock budget before concluding no-input.
+//     (2) BREADCRUMBS: the assist records the furthest it
+//     got — assist:noinput / found-notyped /
+//     typed-norender / typed-nomatch / matched — beside
+//     search:/vis: in the scan notes, so the next live
+//     failure names its own stage instead of needing
+//     another watched diagnostic. typed-norender vs
+//     typed-nomatch is decided by a page-text fingerprint:
+//     if the DOM never changed while the matcher polled,
+//     the search never ran; if it changed without a
+//     match, Facebook answered with other cards.
+//     (3) PAGE PREP: before searching, the assist dismisses
+//     Facebook's "Keep your listings up to date" promo
+//     card when it is up — Matthew proved by hand that
+//     with the card up, typing in the search box does
+//     nothing at all until the card is closed. The prep
+//     is best-effort (absence is normal) and its outcome
+//     rides the notes as card:dismissed / present /
+//     absent. The settle/scroll machinery is deliberately
+//     UNTOUCHED: the audit found no evidence its window
+//     scroll target is wrong (it is the only mechanism
+//     that has ever read the full census), and the
+//     breadcrumbs now exist to convict or clear it with
+//     data instead of theory.
+//     And the banners name the car: fail()'s red banner
+//     and every flow's opening banner carry the stock
+//     number + year/make/model ("HA4229 · 2023 Subaru
+//     Outback"), because a stack of failure tabs that
+//     don't say which car failed is a guessing game
+//     (Matthew, 2026-11-05).
 
 
 (async function () {
@@ -869,6 +913,22 @@
     if (color) banner.style.background = color;
   };
 
+  // The car's banner identity (v2.1.79, header note 40):
+  // the failure banner and every flow's opening banner
+  // name the car — stock number + year/make/model — so a
+  // screenshot of a stopped tab says WHICH car stopped
+  // (Matthew, 2026-11-05, over a stack of identical
+  // failure tabs: "i dont know what vehicle it was").
+  const carBannerLabel = (() => {
+    const stockRaw = car && (car.stock_num != null && String(car.stock_num).trim()
+      ? car.stock_num : car.stock_number);
+    const stock = stockRaw != null ? String(stockRaw).trim() : "";
+    const title = `${(car && car.year) || ""} ${(car && car.make) || ""} ${(car && car.model) || ""}`.trim();
+    return [stock, title].filter(Boolean).join(" · ");
+  })();
+  const sayJobStart = text =>
+    say(text + (carBannerLabel ? " — " + carBannerLabel : "") + "…");
+
   const report = async (type, payload) => {
     // Search-assist hygiene (v2.1.78, header note 38): every
     // flow ends here — fail() reports through this too — and
@@ -890,7 +950,8 @@
   // (fields_unfilled:…) can differ from the human wording.
   const fail = async (bannerText, storedReason) => {
     await cdpDetach(); // a trusted-input session never outlives its job
-    say("Stopped — " + bannerText + " This car was marked FAILED in your queue, not posted.", "#b91c1c");
+    say("Stopped — " + (carBannerLabel ? carBannerLabel + " — " : "") +
+      bannerText + " This car was marked FAILED in your queue, not posted.", "#b91c1c");
     // The per-field forensic records ride THIS message (v3.1): the
     // worker writes them into the queue row's error_message, where
     // they can be read from the database. jobDiags is declared with
@@ -3692,6 +3753,9 @@
   // page primitives the Selling flows already share
   // (document, sleep, the strict matchers, the typing rungs,
   // the CDP rungs, the visibility sampler of note 36).
+  // v2.1.79 (header note 40) adds the page prep, the input
+  // wait, and the assist/card breadcrumbs inside this same
+  // block — no new primitives.
   // Search-assist (v2.1.78, header note 38): a scan that must
   // FIND one card no longer needs the whole list rendered.
   // The Selling page's own search box, given the car's stock
@@ -3703,6 +3767,99 @@
   // recent scan's world ("stock" | "title" | "none") and
   // rides the scan step notes beside the vis: sample.
   let scanSearchPath = "none";
+  // Breadcrumbs (v2.1.79, header note 40): scanAssistStage
+  // records the FURTHEST the most recent assist got —
+  // "noinput" (the box never appeared inside the wait
+  // budget), "found-notyped" (box found, no query ever
+  // read back), "typed-norender" (a query landed but the
+  // page's DOM never changed — the search did not run),
+  // "typed-nomatch" (the search answered with other
+  // cards; the strict matcher refused them all),
+  // "matched" (the probe saw its target). scanCardState
+  // records the page prep's outcome for the "Keep your
+  // listings up to date" promo card. Both ride the same
+  // step notes as search:/vis: (assist:<stage>
+  // card:<state>).
+  let scanAssistStage = "noinput";
+  let scanCardState = "absent";
+  const ASSIST_STAGE_RANK = {
+    "noinput": 0, "found-notyped": 1, "typed-norender": 2,
+    "typed-nomatch": 3, "matched": 4
+  };
+  function noteAssistStage(stage) {
+    if ((ASSIST_STAGE_RANK[stage] || 0) >
+        (ASSIST_STAGE_RANK[scanAssistStage] || 0)) {
+      scanAssistStage = stage;
+    }
+  }
+  // A cheap fingerprint of the rendered page — enough to
+  // tell "the search re-rendered something" from "nothing
+  // on the page moved".
+  function searchDomSignature() {
+    try {
+      const t = (document.body && document.body.innerText) || "";
+      let h = 0;
+      for (let i = 0; i < t.length; i++) h = ((h * 31) + t.charCodeAt(i)) | 0;
+      return t.length + ":" + h;
+    } catch (e) { return "sig-unavailable"; }
+  }
+  // PAGE PREP (v2.1.79, header note 40): dismiss
+  // Facebook's "Keep your listings up to date" promo card
+  // when it is up. The card is found by its heading text;
+  // the dismiss control is the close/dismiss button
+  // inside the smallest ancestor that also carries the
+  // card's "Learn more" affordance — both must be present
+  // before anything is clicked. Returns "dismissed"
+  // (clicked, and the heading is gone), "present" (the
+  // card is up but no dismiss control was found —
+  // nothing clicked), or "absent" (no card; the normal
+  // case, returned silently).
+  async function dismissListingsPromoCard() {
+    const HEADING = "keep your listings up to date";
+    const findHeading = () => {
+      try {
+        const heads = Array.from(document.querySelectorAll(
+          "h1, h2, h3, h4, h5, h6, [role='heading']"));
+        const hit = heads.find(h =>
+          normText(h.textContent).includes(HEADING));
+        if (hit) return hit;
+        const leaves = Array.from(document.querySelectorAll("span, div"));
+        let scanned = 0;
+        for (const el of leaves) {
+          if (scanned++ > 6000) break;
+          const raw = String(el.textContent || "");
+          if (raw.length > 200) continue;
+          if (normText(raw) !== HEADING) continue;
+          // Leaf-most only: a child repeating the text
+          // means this element is a wrapper, not the label.
+          const kids = typeof el.querySelectorAll === "function"
+            ? Array.from(el.querySelectorAll("span, div")) : [];
+          if (kids.some(k => normText(k.textContent) === HEADING)) continue;
+          return el;
+        }
+      } catch (e) { /* fall through: no heading */ }
+      return null;
+    };
+    const heading = findHeading();
+    if (!heading) return "absent";
+    let node = heading;
+    for (let depth = 0; depth < 8 && node; depth++) {
+      node = node.parentElement || null;
+      if (!node || typeof node.querySelectorAll !== "function") continue;
+      if (!/learn more/i.test(String(node.textContent || ""))) continue;
+      const btns = Array.from(node.querySelectorAll(
+        '[role="button"], button, a'));
+      const closer = btns.find(b =>
+        /^(close|dismiss)$/i.test(normText(
+          (typeof b.getAttribute === "function" &&
+            b.getAttribute("aria-label")) || "")));
+      if (!closer) continue;
+      try { realisticClick(closer); } catch (e) {}
+      await sleep(500);
+      return findHeading() ? "present" : "dismissed";
+    }
+    return "present";
+  }
   function findListingsSearchInput() {
     const inputs = Array.from(document.querySelectorAll("input"));
     if (!inputs.length) return null;
@@ -3785,10 +3942,31 @@
   // could stretch far past its intent.
   async function searchAssistRender(probeFn) {
     scanSearchPath = "none";
+    scanAssistStage = "noinput";
+    scanCardState = "absent";
     sampleSettleVisibility();
+    // PAGE PREP (v2.1.79, header note 40): if Facebook's
+    // "Keep your listings up to date" promo card is up,
+    // dismiss it before anything else — Matthew proved by
+    // hand (2026-11-05) that with the card up the page's
+    // own search does not respond to typing at all.
+    try { scanCardState = await dismissListingsPromoCard(); } catch (e) {}
+    // INPUT WAIT (v2.1.79, header note 40): the one-shot
+    // probe this replaces read the DOM once, the moment
+    // the flow arrived — but the box mounts with the list
+    // app, which can lag the content script (the price
+    // flow runs this scan with no render wait at all).
+    // Poll for the box on a wall-clock budget instead.
     let input = null;
-    try { input = findListingsSearchInput(); } catch (e) {}
+    const inputDeadline = Date.now() + 10000;
+    for (;;) {
+      try { input = findListingsSearchInput(); } catch (e) { input = null; }
+      if (input) break;
+      if (Date.now() >= inputDeadline) break;
+      await sleep(400);
+    }
     if (!input) return null;
+    noteAssistStage("found-notyped");
     const stockRaw = (car.stock_num != null && String(car.stock_num).trim())
       ? car.stock_num : car.stock_number;
     const stock = stockRaw != null ? String(stockRaw).trim() : "";
@@ -3807,20 +3985,31 @@
       await sleep(600);
     }
     for (const att of attempts) {
+      // The page's fingerprint before this query: if it
+      // never changes while the matcher polls, the search
+      // rendered nothing (typed-norender); if it changes
+      // without a match, Facebook answered with other
+      // cards (typed-nomatch). The distinction is the
+      // assist:<stage> breadcrumb in the scan notes.
+      const sigBefore = searchDomSignature();
       const typed = await typeListingsSearch(input, att.query, true);
       if (!typed) continue;
       const deadline = Date.now() + 12000;
+      let rendered = false;
       for (;;) {
         let hit = false;
         try { hit = !!probeFn(); } catch (e) { hit = false; }
         if (hit) {
           scanSearchPath = att.via;
+          noteAssistStage("matched");
           sampleSettleVisibility();
           return att.via;
         }
+        if (!rendered && searchDomSignature() !== sigBefore) rendered = true;
         if (Date.now() >= deadline) break;
         await sleep(700);
       }
+      noteAssistStage(rendered ? "typed-nomatch" : "typed-norender");
     }
     await typeListingsSearch(input, "", true);
     await sleep(600);
@@ -5010,7 +5199,7 @@
         await chrome.storage.local.set({ current_posting_job: j });
       }
     } catch (e) { /* the reload is still the best next step */ }
-    say("Confirming the removal on a fresh page load…");
+    sayJobStart("Confirming the removal on a fresh page load");
     await sleep(600);
     try { window.location.reload(); } catch (e) { /* no-op */ }
   }
@@ -5043,7 +5232,7 @@
 
   async function runDelayedDeleteProof() {
     try {
-      say("Re-checking the removal on a fresh page load…");
+      sayJobStart("Re-checking the removal on a fresh page load");
       const dp = (job && job.deleteDelayedProof) || {};
       const armedAt = Number(dp.armedAt) || Date.now();
       const waitMs = Math.max(0, 75000 - (Date.now() - armedAt));
@@ -5073,7 +5262,7 @@
       const foundCount = strict.length + titleOnly.length;
       const tries = (Number(dp.tries) || 0) + 1;
       recordStepNote("Delete", "delete_delayed_proof",
-        `check ${tries}/2 on a fresh page load after a wait: strict:${strict.length} title:${titleOnly.length} search:${scanSearchPath}`,
+        `check ${tries}/2 on a fresh page load after a wait: strict:${strict.length} title:${titleOnly.length} search:${scanSearchPath} assist:${scanAssistStage} card:${scanCardState}`,
         String(foundCount));
 
       if (!foundCount) {
@@ -5115,7 +5304,7 @@
 
   async function runDeleteProof() {
     try {
-      say("Confirming the removal on a fresh page load…");
+      sayJobStart("Confirming the removal on a fresh page load");
       await sleep(3000); // let the selling page render
 
       const pageText = (document.body.innerText || "").toLowerCase();
@@ -5142,7 +5331,7 @@
       const titleOnly = strict.length ? [] : findListingCardsByTitle();
       const found = strict[0] || titleOnly[0] || null;
       recordStepNote("Delete", "delete_fresh_proof",
-        `strict:${strict.length} title:${titleOnly.length} on a fresh page load search:${scanSearchPath}`,
+        `strict:${strict.length} title:${titleOnly.length} on a fresh page load search:${scanSearchPath} assist:${scanAssistStage} card:${scanCardState}`,
         String(strict.length));
 
       if (!found) {
@@ -5436,7 +5625,7 @@
   // stamp is never touched.
   async function runShareListing() {
     try {
-      say("Sharing your listing to your feed…");
+      sayJobStart("Sharing your listing to your feed");
       await sleep(3000); // let the selling page render
 
       const pageText = (document.body.innerText || "").toLowerCase();
@@ -5473,7 +5662,7 @@
       if (scanSearchPath === "none") await settleSellingList();
       const cards = findListingCards();
       recordStepNote("Share", "share_match_scan",
-        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"} search:${scanSearchPath}`,
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"} search:${scanSearchPath} assist:${scanAssistStage} card:${scanCardState}`,
         String(cards.length));
       if (!cards.length) {
         await fail(
@@ -5713,7 +5902,7 @@
   }
 
   async function runUpdatePriceListing() {
-    say("Updating this listing's price…");
+    sayJobStart("Updating this listing's price");
     if (job.listingCheckpoint && job.listingCheckpoint.stage === "done") {
       // A previous incarnation finished the edit; the verdict
       // still belongs to the verifying scan, never to memory.
@@ -5754,7 +5943,8 @@
       " rendered:" + sellingRenderedFromSignals(sellingChromeSignals()) +
       " cards:" + countSellingCards() +
       " vis:" + (settleVisibility.state || "unknown") +
-      " search:" + scanSearchPath);
+      " search:" + scanSearchPath +
+      " assist:" + scanAssistStage + " card:" + scanCardState);
     if (!matches.length) {
       const probe = {
         strict: 0,
@@ -5919,7 +6109,7 @@
   }
 
   async function runUpdatePriceEditorBody() {
-    say("Updating this listing's price…");
+    sayJobStart("Updating this listing's price");
     recordStepNote("price_editor_enter",
       window.location.href.slice(0, 100));
     const plan = priceUpdatePlan(job);
@@ -6070,7 +6260,8 @@
     recordStepNote("price_verify_scan",
       "new:" + s.atNew + " old:" + s.atOld + " cards:" + countSellingCards() +
       " vis:" + (settleVisibility.state || "unknown") +
-      " search:" + scanSearchPath);
+      " search:" + scanSearchPath +
+      " assist:" + scanAssistStage + " card:" + scanCardState);
     if (s.atOld > 0 && s.atNew <= 1) {
       // Facebook can lag the card paint after an edit; one
       // patient re-look before declaring the edit unproven.
@@ -6098,7 +6289,7 @@
 
   async function runDeleteListing() {
     try {
-      say("Removing your listing from Facebook…");
+      sayJobStart("Removing your listing from Facebook");
       await sleep(3000); // let the selling page render
 
       const pageText = (document.body.innerText || "").toLowerCase();
@@ -6144,7 +6335,7 @@
       if (scanSearchPath === "none") await settleSellingList();
       let cards = findListingCards();
       recordStepNote("Delete", "delete_match_scan",
-        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"} search:${scanSearchPath}`,
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"} search:${scanSearchPath} assist:${scanAssistStage} card:${scanCardState}`,
         String(cards.length));
       if (!cards.length) {
         // GOAL-ACHIEVED (v2.1.7, header note 18): the desired end
@@ -6186,7 +6377,7 @@
           cards = findListingCards();
           titleCards = findListingCardsByTitle();
           recordStepNote("Delete", "delete_zero_match_second_look",
-            `strict:${cards.length} title:${titleCards.length} after settle + 20s wait search:${scanSearchPath}`,
+            `strict:${cards.length} title:${titleCards.length} after settle + 20s wait search:${scanSearchPath} assist:${scanAssistStage} card:${scanCardState}`,
             String(cards.length));
         }
         if (!cards.length && !titleCards.length && rendered) {
@@ -6475,7 +6666,7 @@
         try { window.location.href = SELLING_PAGE_URL; } catch (e) { /* no-op */ }
         return;
       }
-      say("Checking your Selling page to confirm the listing…");
+      sayJobStart("Checking your Selling page to confirm the listing");
       await sleep(3000); // let the selling page render
 
       const pageText = (document.body.innerText || "").toLowerCase();
@@ -6636,7 +6827,7 @@
   }
 
   try {
-    say("Preparing your listing…");
+    sayJobStart("Preparing your listing");
     await sleep(3500); // let Facebook render the form
 
     const pageText = (document.body.innerText || "").toLowerCase();
