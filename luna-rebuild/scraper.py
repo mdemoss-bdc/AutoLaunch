@@ -1411,6 +1411,11 @@ async def crawl_dws_feed(context, page, base_url: str, default_condition: str, u
     which the caller treats like any other crawl error (no stale
     pass). `limit` is a soft stop: no further listing pages are
     fetched once enough cars are in hand."""
+    def _snip(t):
+        s = re.sub(r"<script.*?</script>|<style.*?</style>", " ", t or "", flags=re.S | re.I)
+        s = re.sub(r"<[^>]+>", " ", s)
+        return " ".join(s.split())[:240]
+
     html1 = None
     transport = None
     why = []
@@ -1426,7 +1431,11 @@ async def crawl_dws_feed(context, page, base_url: str, default_condition: str, u
                     f"vehicle-id={'data-vehicle-id' in t})"
                 )
         else:
-            why.append(f"request: HTTP {resp.status}")
+            t = await resp.text()
+            why.append(
+                f"request: HTTP {resp.status} "
+                f"server={resp.headers.get('server', '?')} body={_snip(t)!r}"
+            )
     except Exception as e:
         why.append(f"request: {type(e).__name__} {str(e)[:160]}")
     if html1 is None:
@@ -1442,7 +1451,8 @@ async def crawl_dws_feed(context, page, base_url: str, default_condition: str, u
             else:
                 why.append(
                     f"browser: no DWS fingerprint (len={len(t)}, "
-                    f"vehicle-id={'data-vehicle-id' in t}, url={page.url})"
+                    f"vehicle-id={'data-vehicle-id' in t}, url={page.url}, "
+                    f"status={r.status if r else '?'}, body={_snip(t)!r})"
                 )
         except Exception as e:
             why.append(f"browser: {type(e).__name__} {str(e)[:160]}")
