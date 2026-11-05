@@ -1307,7 +1307,7 @@
   // Charcoal, else the first offered option. The caller records a
   // color_defaulted step note whenever this fires, so a defaulted
   // color is never a silent one.
-  function defaultColorOption(optionTexts) {
+  function defaultColorOption(optionTexts, prefs) {
     if (!Array.isArray(optionTexts)) return null;
     const offered = [];
     for (const t of optionTexts) {
@@ -1315,11 +1315,45 @@
       if (normText(text) && !offered.some(o => normText(o) === normText(text))) offered.push(text);
     }
     if (!offered.length) return null;
-    for (const pref of ["gray", "charcoal"]) {
+    const prefList = (Array.isArray(prefs) && prefs.length) ? prefs : ["gray", "charcoal"];
+    for (const pref of prefList) {
       const hit = offered.find(t => normText(t) === pref);
       if (hit) return hit;
     }
     return offered[0];
+  }
+  // v2.1.83 — the last-resort default is FIELD-aware. The exterior
+  // keeps the v2.1.19 chain (Gray, else Charcoal, else first
+  // offered); the interior defaults to Black when offered (then the
+  // same Gray/Charcoal/first chain), because an interior left blank
+  // is the one that strands the form: DealerCenter feeds store no
+  // interior color at all, and on 2026-11-05 every such car died at
+  // "could not reach the Publish button" even with the color waiver
+  // on. The caller still records color_defaulted whenever this
+  // fires, so the default is never silent.
+  function defaultColorOptionForField(fieldName, optionTexts) {
+    if (/interior/i.test(String(fieldName || ""))) {
+      return defaultColorOption(optionTexts, ["black", "gray", "charcoal"]);
+    }
+    return defaultColorOption(optionTexts);
+  }
+  // v2.1.83 — the combobox trigger's text is the field's LABEL glued
+  // to the chosen value ("Exterior colorGray"); an UNSET field shows
+  // the label alone ("Interior color"). Return just the value
+  // portion ("" when nothing is chosen), longest label first. The
+  // old already-set check in fillColorDropdown read the raw trigger
+  // text, so an unset field looked "already set" whenever the
+  // request was empty and the fill never happened.
+  function colorValueFromTriggerText(triggerText, labelTexts) {
+    const t = normText(triggerText);
+    if (!t) return "";
+    const labels = (Array.isArray(labelTexts) ? labelTexts : [labelTexts])
+      .map(x => normText(x)).filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+    for (const lbl of labels) {
+      if (t.startsWith(lbl)) return t.slice(lbl.length).trim();
+    }
+    return t;
   }
   // [PURE-COLOR-END]
 
@@ -2401,7 +2435,7 @@
         let rankedSel = rankColorOptions(requested, optTexts);
         let defaultedSel = false;
         if (!rankedSel.length) {
-          const dflt = defaultColorOption(optTexts);
+          const dflt = defaultColorOptionForField(fieldName, optTexts);
           if (dflt) { rankedSel = [dflt]; defaultedSel = true; }
         }
         if (!rankedSel.length) {
@@ -2428,9 +2462,15 @@
         return goodSel;
       }
       // Already showing a defensible color (a re-run, or an earlier
-      // step pass set it)? Don't churn the dropdown.
+      // step pass set it)? Don't churn the dropdown. v2.1.83: judge
+      // by the VALUE portion of the trigger text (label stripped via
+      // colorValueFromTriggerText) — an unset field's raw text is
+      // just its label ("Interior color"), which the old check
+      // mistook for a set color whenever the request was empty, so
+      // the dropdown stayed blank and Facebook kept Next disabled.
       const before = extractValue(trigger);
-      if (before && (rankColorOptions(requested, [before]).length || !normText(requested))) {
+      const beforeValue = colorValueFromTriggerText(before, keywords);
+      if (beforeValue && (rankColorOptions(requested, [before]).length || !normText(requested))) {
         recordStepNote(fieldName, "color_already_set",
           "requested '" + requested + "'", before, trigger);
         return true;
@@ -2452,7 +2492,8 @@
         options.map(o => String(o.textContent || "")));
       let defaulted = false;
       if (!ranked.length) {
-        const dflt = defaultColorOption(options.map(o => String(o.textContent || "")));
+        const dflt = defaultColorOptionForField(fieldName,
+          options.map(o => String(o.textContent || "")));
         if (dflt) { ranked.push(dflt); defaulted = true; }
       }
       if (!ranked.length) {
