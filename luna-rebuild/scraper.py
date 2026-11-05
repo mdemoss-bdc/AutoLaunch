@@ -752,6 +752,43 @@ def push_batch_to_supabase(records: List[dict]) -> int:
     except Exception as e:
         print(f"[!] Existing-price preservation warning (non-fatal): {e}")
 
+    # Preserve a real stored gallery against a not-really-collected
+    # scrape (photo under-collection repair, 2026-11-05 — see the
+    # PHOTO UNDER-COLLECTION REPAIR banner at enrich_cars_with_vdp).
+    # When this scrape's photo set for a car holds ZERO real photos
+    # (empty, stock-render-only or placeholder-only — the stripped
+    # DealerOn variant's signature) but the stored row holds real
+    # ones, the stored photos + image_url win, exactly as a stored
+    # price wins over a price-less scrape above. An incoming set with
+    # any real photo replaces the stored one normally, so a dealer's
+    # genuine gallery change is never blocked.
+    try:
+        thin_by_user = {}
+        for r in unique_by_vin.values():
+            if r.get("user_id") and _real_photo_count(r) == 0:
+                thin_by_user.setdefault(r["user_id"], []).append(r["vin"])
+        for uid, vins in thin_by_user.items():
+            stored_photos = {}
+            for i in range(0, len(vins), 200):
+                chunk = vins[i:i + 200]
+                res = (
+                    db.table("scraped_inventory")
+                    .select("vin, photos, image_url")
+                    .eq("user_id", uid)
+                    .in_("vin", chunk)
+                    .execute()
+                )
+                for row in res.data or []:
+                    if _real_photo_count(row) > 0:
+                        stored_photos[row["vin"]] = row
+            for r in unique_by_vin.values():
+                if r.get("user_id") == uid and r.get("vin") in stored_photos:
+                    r["photos"] = stored_photos[r["vin"]].get("photos") or []
+                    if stored_photos[r["vin"]].get("image_url"):
+                        r["image_url"] = stored_photos[r["vin"]]["image_url"]
+    except Exception as e:
+        print(f"[!] Stored-gallery preservation warning (non-fatal): {e}")
+
     # Preserve user-added photos with the same precedence as a manually
     # typed price (the block above). Photos a user shoots for a car the
     # dealer site shows without any live in scraped_inventory
@@ -1933,6 +1970,73 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     return out
 
 
+# ==============================================================================
+# ============ PHOTO UNDER-COLLECTION REPAIR (Matthew, 2026-11-05) ============
+# ==============================================================================
+# DealerOn intermittently serves a STRIPPED VDP variant (proven
+# 2026-11-05: the same Accord URL returned a 718,620-char document
+# with JSON-LD price null and NO /inventoryphotos/ gallery, vs the
+# full 836,066-char document an hour apart; the 2026 Wrangler
+# HT70058A sat at one stock render in the database for ~2 weeks of
+# bulk crawls while its live VDP carried 21 real photos, and a lone
+# "Sync this car" fetch in a fresh context healed it to 20). A bulk
+# crawl lands on the stripped variant for some cars and — because the
+# push upsert used to write whatever the crawl produced — the thin
+# result persisted and re-persisted. Two collection-side repairs,
+# neither of which touches posting policy (_usable_photo_count and
+# every gate that reads it are unchanged):
+#
+# * _real_photo_count: a COLLECTION-QUALITY count. A manufacturer's
+#   stock render (/assets/stock/...) or a placeholder asset is not a
+#   collected gallery, however usable it is as a URL. A photo set
+#   with zero real photos is "not really collected".
+# * enrich_cars_with_vdp: when a car's VDP parse yields zero real
+#   photos (or the fetch failed outright), refetch ONCE in a fresh
+#   browser context — the conditions the proven single-car heal ran
+#   under — and keep whichever parse found the real gallery.
+# * push_batch_to_supabase: a not-really-collected incoming set never
+#   replaces a stored set that has real photos (the photo mirror of
+#   the manual-price preservation above it).
+
+_VDP_FETCH_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+)
+
+_NOT_REAL_PHOTO_MARKERS = (
+    "/assets/stock/",
+    "photo_unavailable",
+    "/missing/",
+    "placeholder",
+    "assets/no-photo.png",
+)
+
+
+def _real_photo_count(car: dict) -> int:
+    """Count REAL collected photos in a record's `photos` list:
+    http(s) URLs, deduped by path, excluding stock renders and
+    placeholder assets. Collection quality only — posting gates keep
+    using _usable_photo_count, whose semantics are unchanged."""
+    urls = set()
+    v = (car or {}).get("photos")
+    if isinstance(v, list):
+        for u in v:
+            if not isinstance(u, str):
+                continue
+            u = u.strip()
+            if u.startswith("//"):
+                u = "https:" + u
+            if not (u.startswith("http://") or u.startswith("https://")):
+                continue
+            low = u.lower()
+            if any(m in low for m in _NOT_REAL_PHOTO_MARKERS):
+                continue
+            if "/static/" in low:
+                continue
+            urls.add(u.split("?", 1)[0].split("#", 1)[0])
+    return len(urls)
+
+
 async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
     """Fetch each car's VDP once and fill in the full photo gallery, the
     advertised final price, and spec colors. Any failure leaves the SRP
@@ -1940,6 +2044,31 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
     Returns how many cars got a multi-photo gallery."""
     sem = asyncio.Semaphore(VDP_FETCH_CONCURRENCY)
     enriched = 0
+    retry_ctx = None
+
+    async def fresh_fetch(url):
+        """Refetch one VDP in a brand-new browser context (no cookies
+        or state carried from the crawl's shared context) — the
+        conditions under which the single-car refresh provably
+        collects the full gallery. Lazily creates ONE sibling context
+        per enrich call and reuses it for every retry in the batch.
+        Returns the HTML or None; never raises."""
+        nonlocal retry_ctx
+        try:
+            if retry_ctx is None:
+                browser = getattr(context, "browser", None)
+                if browser is None:
+                    return None
+                retry_ctx = await browser.new_context(
+                    user_agent=_VDP_FETCH_UA,
+                    viewport={"width": 1920, "height": 1080},
+                )
+            resp = await retry_ctx.request.get(url, timeout=20000)
+            if resp.status == 200:
+                return await resp.text()
+        except Exception:
+            return None
+        return None
 
     async def one(car: dict):
         nonlocal enriched
@@ -1960,10 +2089,27 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
             except Exception:
                 html = None
         if not html:
+            # The shared-context fetch failed outright: one fresh-
+            # context attempt before settling for the SRP photo.
+            async with sem:
+                html = await fresh_fetch(detail_url)
+        if not html:
             if fallback:
                 car["photos"] = fallback
             return
         d = parse_vdp_details(html, car.get("vin") or "", detail_url)
+        if _real_photo_count({"photos": d["photos"]}) == 0:
+            # Stripped-variant suspect: the page parsed but carries
+            # no real gallery (zero photos, or only a stock render /
+            # placeholder from the JSON-LD rung). Refetch once in the
+            # fresh context and keep the parse that found real photos.
+            html2 = None
+            async with sem:
+                html2 = await fresh_fetch(detail_url)
+            if html2:
+                d2 = parse_vdp_details(html2, car.get("vin") or "", detail_url)
+                if _real_photo_count({"photos": d2["photos"]}) > 0:
+                    d = d2
         if d["photos"]:
             car["photos"] = d["photos"]
             car["image_url"] = d["photos"][0]
@@ -2033,6 +2179,11 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
             print(f"[!] CARFAX capture warning (non-fatal): {e}")
 
     await asyncio.gather(*(one(c) for c in cars), return_exceptions=True)
+    if retry_ctx is not None:
+        try:
+            await retry_ctx.close()
+        except Exception:
+            pass
     return enriched
 
 
@@ -3775,7 +3926,22 @@ async def run_scraper():
                 _synced_one = await _sync_single_vin(context, active_uid, job_vin)
                 total_synced_all += _synced_one
                 _prod_tally_finish_user(active_uid, 1 if _synced_one else 0)
-                if _synced_one:
+                if active_job_mode == "repair":
+                    # PHOTO-REPAIR job (2026-11-05): a maintenance
+                    # refresh of one car's collected data (the bulk
+                    # photo under-collection fleet repair). It queues
+                    # NOTHING — no price updates, no auto-post
+                    # consideration; the car simply becomes eligible
+                    # at the user's next regular sync like any other
+                    # inventory change. Only rows inserted with
+                    # sync_mode='repair' take this quiet path; the
+                    # app's own Sync-this-car jobs ('full') keep the
+                    # drift + auto-post behavior below, byte-identical.
+                    print(
+                        f"[✓] Photo-repair refresh for {store_name}: "
+                        f"{job_vin} refreshed, nothing queued."
+                    )
+                elif _synced_one:
                     # The drift pass is DB-only and global: if the
                     # refresh moved a posted car's price, its update
                     # queues here. Auto-post may consider ONLY the
