@@ -733,6 +733,38 @@
 //     the chance to see. Match semantics are unchanged —
 //     a small list on a visible tab still reads
 //     listing_not_found exactly as before.
+//
+// 38. SEARCH-ASSIST FOR SELLING SCANS (v2.1.78 — Matthew,
+//     2026-11-05; background.js header note 39 carries the
+//     worker's side): the foreground experiments are over.
+//     Fronting the job tab in the user's window (v2.1.76)
+//     stole his typing focus; the dedicated helper window
+//     (v2.1.77) stayed hidden under his maximized window
+//     (uniform cards:5 vis:hidden, live the same day). Both
+//     mechanisms are removed worker-side, and scan jobs are
+//     back in plain inactive tabs — because a scan no
+//     longer needs the whole list rendered at all. Before
+//     its settle, every Selling scan (price match + verify,
+//     delete match + both proofs, share match) now asks
+//     Facebook's own "Search your listings" box to render
+//     the target card into the DOM: the job's stock number
+//     first (listing descriptions carry "Stock #:" and the
+//     seller search may index it), then the car's
+//     year/make/model. Query text goes in through the
+//     established typing rungs (execCommand insertText,
+//     per-character typing, CDP insertText); after each
+//     query the UNCHANGED strict matcher is polled against
+//     a wall-clock deadline — hidden tabs throttle timers,
+//     so no wait is ever a tick count. Which attempt
+//     produced the scan rides its step note (search:stock
+//     / search:title / search:none, beside the vis: sample
+//     of note 36). A fruitless assist clears the box and
+//     the settle runs exactly as before — match semantics,
+//     goal-achieved delete semantics, and proof semantics
+//     never relax: a same-title card at the wrong price
+//     does not match, by search or by scroll. The box is
+//     also cleared at every flow end (report/fail), so a
+//     job never leaves the tab filtered.
 
 
 (async function () {
@@ -837,14 +869,22 @@
     if (color) banner.style.background = color;
   };
 
-  const report = (type, payload) => new Promise(resolve => {
-    try {
-      chrome.runtime.sendMessage(Object.assign({ type, queueId }, payload || {}), () => {
-        void chrome.runtime.lastError;
-        resolve();
-      });
-    } catch (e) { resolve(); }
-  });
+  const report = async (type, payload) => {
+    // Search-assist hygiene (v2.1.78, header note 38): every
+    // flow ends here — fail() reports through this too — and
+    // no flow may leave the Selling list filtered by its own
+    // search. Best-effort and DOM-only; on pages without the
+    // listings search box (create, edit) it is a no-op.
+    await clearListingsSearch();
+    return new Promise(resolve => {
+      try {
+        chrome.runtime.sendMessage(Object.assign({ type, queueId }, payload || {}), () => {
+          void chrome.runtime.lastError;
+          resolve();
+        });
+      } catch (e) { resolve(); }
+    });
+  };
   // fail(bannerText) or fail(bannerText, storedReason) — the stored
   // reason defaults to the banner text, but machine-readable reasons
   // (fields_unfilled:…) can differ from the human wording.
@@ -3647,6 +3687,147 @@
     await sleep(600);
     sampleSettleVisibility();
   }
+  // [SEARCH-ASSIST-BEGIN] — extracted and unit-exercised by
+  // the search-assist harness; the block leans only on the
+  // page primitives the Selling flows already share
+  // (document, sleep, the strict matchers, the typing rungs,
+  // the CDP rungs, the visibility sampler of note 36).
+  // Search-assist (v2.1.78, header note 38): a scan that must
+  // FIND one card no longer needs the whole list rendered.
+  // The Selling page's own search box, given the car's stock
+  // number (then its year/make/model), makes Facebook render
+  // the matching cards into the DOM — and DOM reads work on
+  // a page the browser is not painting, which is the whole
+  // point: the job tab stays a plain background tab.
+  // scanSearchPath records which attempt produced the most
+  // recent scan's world ("stock" | "title" | "none") and
+  // rides the scan step notes beside the vis: sample.
+  let scanSearchPath = "none";
+  function findListingsSearchInput() {
+    const inputs = Array.from(document.querySelectorAll("input"));
+    if (!inputs.length) return null;
+    const label = i =>
+      (String((typeof i.getAttribute === "function" && i.getAttribute("placeholder")) || "") +
+      " " + String((typeof i.getAttribute === "function" && i.getAttribute("aria-label")) || ""))
+        .toLowerCase();
+    const pools = [inputs.filter(i => isVisibleEl(i)), inputs];
+    for (const pool of pools) {
+      // Rung 1: the box names itself — "Search your listings"
+      // (the placeholder on the live page).
+      let hit = pool.find(i => label(i).includes("search your listings"));
+      if (hit) return hit;
+      // Rung 2: any search box about listings — the same
+      // signal sellingChromeSignals trusts as rendered proof.
+      hit = pool.find(i => label(i).includes("search") && label(i).includes("listing"));
+      if (hit) return hit;
+      // Rung 3: a type=search field with a listings label.
+      hit = pool.find(i =>
+        String((typeof i.getAttribute === "function" && i.getAttribute("type")) || "")
+          .toLowerCase() === "search" && label(i).includes("listing"));
+      if (hit) return hit;
+    }
+    return null;
+  }
+  // Type into the search box through the established rungs —
+  // the field ladder's focus + select-all/Delete +
+  // execCommand insertText, the per-character climb, then
+  // CDP trusted input mirroring rung3Fill. Returns whether
+  // the box reads back the intended value.
+  async function typeListingsSearch(input, value, allowCdp) {
+    try { realisticClick(input); } catch (e) {}
+    try { input.focus(); } catch (e) {}
+    await sleep(120);
+    dispatchKeyboard(input, "keydown", { key: "a", code: "KeyA", ctrlKey: true });
+    try { document.execCommand("selectAll"); } catch (e) {}
+    dispatchKeyboard(input, "keyup", { key: "a", code: "KeyA", ctrlKey: true });
+    dispatchKeyboard(input, "keydown", { key: "Delete", code: "Delete" });
+    try { document.execCommand("delete"); } catch (e) {}
+    dispatchKeyboard(input, "keyup", { key: "Delete", code: "Delete" });
+    if (value) {
+      let inserted = false;
+      try { inserted = document.execCommand("insertText", false, value); } catch (e) {}
+      if (!inserted || normText(extractValue(input)) !== normText(value)) {
+        if (extractValue(input)) { try { nativeSetValue(input, ""); } catch (e) {} }
+        await rung2TypeText(input, value);
+      }
+      if (normText(extractValue(input)) !== normText(value) && allowCdp &&
+          await cdpEnsure("Search")) {
+        await cdpClickEl(input);
+        await sleep(250);
+        await cdpRequest(buildCdpKey("a", "KeyA", { modifiers: 2 })); // Ctrl+A
+        await cdpRequest(buildCdpKey("Backspace", "Backspace"));
+        await cdpRequest(buildCdpInsertText(value));
+        await sleep(300);
+      }
+    }
+    return normText(extractValue(input)) === normText(value);
+  }
+  // Leave the list unfiltered. DOM rungs only and fully
+  // guarded: hygiene runs inside report()/fail() and must
+  // never become a failure of its own.
+  async function clearListingsSearch() {
+    try {
+      const input = findListingsSearchInput();
+      if (!input) return;
+      if (!String(input.value || "").trim()) return;
+      await typeListingsSearch(input, "", false);
+      await sleep(500); // let the un-filtered list start restoring
+    } catch (e) { /* best-effort */ }
+  }
+  // Run the search attempts for one scan. probeFn() must
+  // answer "the scan's own matcher can see its target in
+  // the DOM now". Resolves to the winning attempt's name
+  // ("stock" | "title") or null — in which case the box has
+  // been cleared again and the caller runs its settle
+  // fallback on the unfiltered list, exactly as before
+  // v2.1.78. Every wait is a WALL-CLOCK deadline: hidden
+  // tabs throttle timers, so a budget counted in sleeps
+  // could stretch far past its intent.
+  async function searchAssistRender(probeFn) {
+    scanSearchPath = "none";
+    sampleSettleVisibility();
+    let input = null;
+    try { input = findListingsSearchInput(); } catch (e) {}
+    if (!input) return null;
+    const stockRaw = (car.stock_num != null && String(car.stock_num).trim())
+      ? car.stock_num : car.stock_number;
+    const stock = stockRaw != null ? String(stockRaw).trim() : "";
+    const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim();
+    const attempts = [];
+    if (stock) attempts.push({ via: "stock", query: stock });
+    if (title && normText(title) !== normText(stock)) {
+      attempts.push({ via: "title", query: title });
+    }
+    if (!attempts.length) return null;
+    // A stale filter from an earlier scan in this same tab
+    // must not narrow this scan's world before its own
+    // attempts run.
+    if (String(input.value || "").trim()) {
+      await typeListingsSearch(input, "", true);
+      await sleep(600);
+    }
+    for (const att of attempts) {
+      const typed = await typeListingsSearch(input, att.query, true);
+      if (!typed) continue;
+      const deadline = Date.now() + 12000;
+      for (;;) {
+        let hit = false;
+        try { hit = !!probeFn(); } catch (e) { hit = false; }
+        if (hit) {
+          scanSearchPath = att.via;
+          sampleSettleVisibility();
+          return att.via;
+        }
+        if (Date.now() >= deadline) break;
+        await sleep(700);
+      }
+    }
+    await typeListingsSearch(input, "", true);
+    await sleep(600);
+    sampleSettleVisibility();
+    return null;
+  }
+  // [SEARCH-ASSIST-END]
   // The card's ⋯ (options) button. Searched inside the card first,
   // then up the ancestor chain — but a level is only trusted while it
   // still contains exactly ONE matching listing, so a neighbouring
@@ -4881,13 +5062,18 @@
 
       if (!(await recoverToSellingPage("delayed_proof_start"))) return;
 
-      await settleSellingList();
+      // Search-assist first (v2.1.78, header note 38): a
+      // card the search renders is present, full stop; only
+      // the settled scan may still conclude absence.
+      await searchAssistRender(() =>
+        findListingCards().length > 0 || findListingCardsByTitle().length > 0);
+      if (scanSearchPath === "none") await settleSellingList();
       const strict = findListingCards();
       const titleOnly = strict.length ? [] : findListingCardsByTitle();
       const foundCount = strict.length + titleOnly.length;
       const tries = (Number(dp.tries) || 0) + 1;
       recordStepNote("Delete", "delete_delayed_proof",
-        `check ${tries}/2 on a fresh page load after a wait: strict:${strict.length} title:${titleOnly.length}`,
+        `check ${tries}/2 on a fresh page load after a wait: strict:${strict.length} title:${titleOnly.length} search:${scanSearchPath}`,
         String(foundCount));
 
       if (!foundCount) {
@@ -4946,12 +5132,17 @@
       if (!(await recoverToSellingPage("proof_start"))) return;
 
       const title = `${car.year || ""} ${car.make || ""} ${car.model || ""}`.trim() || "vehicle";
-      await settleSellingList();
+      // Search-assist first (v2.1.78, header note 38): a
+      // card the search renders is present, full stop; only
+      // the settled scan may still conclude absence.
+      await searchAssistRender(() =>
+        findListingCards().length > 0 || findListingCardsByTitle().length > 0);
+      if (scanSearchPath === "none") await settleSellingList();
       const strict = findListingCards();
       const titleOnly = strict.length ? [] : findListingCardsByTitle();
       const found = strict[0] || titleOnly[0] || null;
       recordStepNote("Delete", "delete_fresh_proof",
-        `strict:${strict.length} title:${titleOnly.length} on a fresh page load`,
+        `strict:${strict.length} title:${titleOnly.length} on a fresh page load search:${scanSearchPath}`,
         String(strict.length));
 
       if (!found) {
@@ -5274,10 +5465,15 @@
       }
 
       say(`Looking for your ${title} listing…`);
-      await settleSellingList();
+      // Search-assist first (v2.1.78, header note 38): the
+      // list's own search renders the target card; the settle
+      // remains the fallback when search yields nothing.
+      await searchAssistRender(() =>
+        findListingCards().length > 0 || findListingCardsByTitle().length > 0);
+      if (scanSearchPath === "none") await settleSellingList();
       const cards = findListingCards();
       recordStepNote("Share", "share_match_scan",
-        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"}`,
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"} search:${scanSearchPath}`,
         String(cards.length));
       if (!cards.length) {
         await fail(
@@ -5531,7 +5727,15 @@
         JSON.stringify({ from: updateFromPrice, to: updateToPrice }));
       return;
     }
-    await settleSellingList();
+    // Strict match AT THE FROM PRICE — the price the listing
+    // still shows. Matching at the current price is the bug
+    // this feature exists to fix.
+    const fromMatcher = t => listingTextMatches(t, plan.fromCar);
+    // Search-assist first (v2.1.78, header note 38): the
+    // list's own search renders the target card; the settle
+    // remains the fallback when search yields nothing.
+    await searchAssistRender(() => listingCardsIn(null, fromMatcher).length > 0);
+    if (scanSearchPath === "none") await settleSellingList();
     if (!countSellingCards()) {
       if (await recoverToSellingPageForUpdate("listing_scan")) return;
       const probe = {
@@ -5543,17 +5747,14 @@
       await fail(settleNotFoundReason(), "price_update_probe", JSON.stringify(probe));
       return;
     }
-    // Strict match AT THE FROM PRICE — the price the listing
-    // still shows. Matching at the current price is the bug
-    // this feature exists to fix.
-    const fromMatcher = t => listingTextMatches(t, plan.fromCar);
     const matches = listingCardsIn(null, fromMatcher);
     const titleProbe = listingCardsIn(null, t => listingTitleMatches(t, plan.fromCar));
     recordStepNote("price_match_scan",
       "strict:" + matches.length + " title:" + titleProbe.length +
       " rendered:" + sellingRenderedFromSignals(sellingChromeSignals()) +
       " cards:" + countSellingCards() +
-      " vis:" + (settleVisibility.state || "unknown"));
+      " vis:" + (settleVisibility.state || "unknown") +
+      " search:" + scanSearchPath);
     if (!matches.length) {
       const probe = {
         strict: 0,
@@ -5817,13 +6018,6 @@
         JSON.stringify({ from: updateFromPrice, to: updateToPrice }));
       return;
     }
-    await settleSellingList();
-    if (!countSellingCards()) {
-      if (await recoverToSellingPageForUpdate("verify_scan")) return;
-      await fail(settleNotFoundReason(), "price_verify_probe",
-        JSON.stringify({ reason: "selling_list_never_settled" }));
-      return;
-    }
     // A price DROP renders on the Selling card as the new price
     // with the old one struck through beside it — the card's raw
     // text contains BOTH prices forever, so a naive FROM match
@@ -5858,10 +6052,25 @@
       atOld: listingCardsIn(null, t => listingTextMatches(t, plan.fromCar))
         .filter(c => listingTextMatches(cardTextSansStrike(c), plan.fromCar)).length
     });
+    // Search-assist first (v2.1.78, header note 38): the
+    // list's own search renders the edited card; the settle
+    // remains the fallback when search yields nothing.
+    await searchAssistRender(() => {
+      const s0 = scan();
+      return s0.atNew > 0 || s0.atOld > 0;
+    });
+    if (scanSearchPath === "none") await settleSellingList();
+    if (!countSellingCards()) {
+      if (await recoverToSellingPageForUpdate("verify_scan")) return;
+      await fail(settleNotFoundReason(), "price_verify_probe",
+        JSON.stringify({ reason: "selling_list_never_settled" }));
+      return;
+    }
     let s = scan();
     recordStepNote("price_verify_scan",
       "new:" + s.atNew + " old:" + s.atOld + " cards:" + countSellingCards() +
-      " vis:" + (settleVisibility.state || "unknown"));
+      " vis:" + (settleVisibility.state || "unknown") +
+      " search:" + scanSearchPath);
     if (s.atOld > 0 && s.atNew <= 1) {
       // Facebook can lag the card paint after an edit; one
       // patient re-look before declaring the edit unproven.
@@ -5927,10 +6136,15 @@
       // the posted stamp cleared over a listing that still exists.
       // "Gone" must now survive a SETTLED list (scrolled through,
       // card census stable) AND a delayed second look.
-      await settleSellingList();
+      // Search-assist first (v2.1.78, header note 38): the
+      // list's own search renders the target card; the settle
+      // remains the fallback when search yields nothing.
+      await searchAssistRender(() =>
+        findListingCards().length > 0 || findListingCardsByTitle().length > 0);
+      if (scanSearchPath === "none") await settleSellingList();
       let cards = findListingCards();
       recordStepNote("Delete", "delete_match_scan",
-        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"}`,
+        `strict matches: ${cards.length} for ${title} @ $${Number(car.price).toLocaleString()} vis:${settleVisibility.state || "unknown"} search:${scanSearchPath}`,
         String(cards.length));
       if (!cards.length) {
         // GOAL-ACHIEVED (v2.1.7, header note 18): the desired end
@@ -5966,11 +6180,13 @@
           // If the card shows up, fall through and delete it for
           // real; only a second settled zero earns "already gone".
           await sleep(20000);
-          await settleSellingList();
+          await searchAssistRender(() =>
+            findListingCards().length > 0 || findListingCardsByTitle().length > 0);
+          if (scanSearchPath === "none") await settleSellingList();
           cards = findListingCards();
           titleCards = findListingCardsByTitle();
           recordStepNote("Delete", "delete_zero_match_second_look",
-            `strict:${cards.length} title:${titleCards.length} after settle + 20s wait`,
+            `strict:${cards.length} title:${titleCards.length} after settle + 20s wait search:${scanSearchPath}`,
             String(cards.length));
         }
         if (!cards.length && !titleCards.length && rendered) {

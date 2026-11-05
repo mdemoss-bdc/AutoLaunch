@@ -595,6 +595,27 @@
 //     than fall back to the user's window. Post jobs are
 //     untouched — inactive tabs in the user's window,
 //     nothing to scan.
+//
+// 39. SEARCH-ASSIST, WORKER SIDE (v2.1.78 — Matthew,
+//     2026-11-05; content.js header note 38 carries the
+//     scan's side): notes 35 and 37's mechanisms are both
+//     REMOVED. The helper window bought a rendered page at
+//     the price of a second window the user's maximized
+//     window then hid anyway (uniform cards:5 vis:hidden,
+//     live 2026-11-05), and fronting in the user's window
+//     (note 35) remains forbidden by his ruling. A scan no
+//     longer needs its page rendered at all: the content
+//     side renders the one target card through the Selling
+//     list's own search (note 38) and reads it from the
+//     DOM of an ordinary background tab. The claim site is
+//     therefore back to a single creation path for every
+//     job — chrome.tabs.create({ active: false }) in the
+//     user's window, the v2.1.12 rule whole again: no tab
+//     is activated for any job, no window is created or
+//     focused, and the helper-window block and its
+//     al_helper_window storage key are gone with the
+//     mechanism. Post jobs were never touched by any of
+//     this and are byte-identical.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1824,31 +1845,18 @@ async function checkQueue() {
     // that after watching his son's test — the filled tab simply
     // waits in the background with its review banner, and the user
     // clicks over to it when they are ready to publish.
-    // Qualified in v2.1.76 (header note 35), then moved in
-    // v2.1.77 (header note 37): a SCAN job's tab must be a
-    // window's active tab — a never-shown page never paginates
-    // its Selling list — but fronting it inside the user's own
-    // window switched the tab out from under him mid-typing.
-    // Scan tabs are therefore created in the helper's own
-    // window and activated THERE; post tabs keep the rule
-    // above, exactly as written.
+    // v2.1.76 fronted scan tabs in this window and v2.1.77
+    // moved them to a helper window (header notes 35/37);
+    // both mechanisms are REMOVED in v2.1.78 (header
+    // note 39): a scan no longer needs its page rendered —
+    // the content side renders the target card through the
+    // Selling list's own search (content.js header note 38)
+    // — so every job's tab is created the same plain way
+    // again, scan jobs included.
     const jobUrl = (isDelete || isShare || isUpdatePrice)
       ? "https://www.facebook.com/marketplace/you/selling"
       : "https://www.facebook.com/marketplace/create/vehicle";
-    let jobTab = null;
-    if (isDelete || isShare || isUpdatePrice) {
-      jobTab = await helperWindowScanTab(jobUrl);
-      if (!jobTab || jobTab.id == null) {
-        // No helper window, no scan (v2.1.77, header note 37):
-        // fail honestly through the ordinary failed finish
-        // rather than borrow the user's window — the fallback
-        // is the exact behavior Matthew rejected.
-        await finishJobFailed(item.id, "helper_window_unavailable");
-        return;
-      }
-    } else {
-      jobTab = await chrome.tabs.create({ active: false, url: jobUrl });
-    }
+    const jobTab = await chrome.tabs.create({ active: false, url: jobUrl });
     if (jobTab && jobTab.id != null && chrome.tabs.update) {
       try {
         // A background tab must not be discarded by Memory Saver
@@ -1867,19 +1875,6 @@ async function checkQueue() {
       if (j && j.queueId === item.id) {
         j.tabId = jobTab.id;
         await chrome.storage.local.set({ current_posting_job: j });
-      }
-      if ((isDelete || isShare || isUpdatePrice) &&
-          chrome.tabs && typeof chrome.tabs.update === "function") {
-        try {
-          // Activate the scan tab inside the HELPER window
-          // (v2.1.77, header note 37): it becomes that window's
-          // active tab — a rendered page the Selling list will
-          // paginate — while the user's window, and every
-          // window's focus, stay exactly as they were. If this
-          // fails the scan still runs and reports honestly
-          // (list_never_grew) when its page stays hidden.
-          await chrome.tabs.update(jobTab.id, { active: true });
-        } catch (e) { /* non-fatal: see above */ }
       }
     }
   } catch (err) {
@@ -2425,69 +2420,6 @@ async function flushPendingFinish() {
   }
 }
 
-// [HELPER-WINDOW-BEGIN]
-// The helper window (v2.1.77, header note 37): scan jobs run in
-// a dedicated Chrome window owned by the helper, so the tab a
-// scan fronts is never a tab in the user's window. The window
-// is created unfocused on first need, remembered in
-// chrome.storage.local, reused across jobs, and recreated
-// lazily when it is gone (the user closed it, or a browser
-// restart made the stored id meaningless — onStartup forgets
-// it before any job can trust it). Returns the freshly created
-// job tab to run in, or null when no helper window can be had;
-// the caller fails the scan job honestly rather than fall back
-// to the user's window — the fallback is the behavior Matthew
-// rejected. Only the id is stored: within a browser session
-// window ids are stable and never reused, so an id that still
-// resolves through chrome.windows.get is the same window.
-const HELPER_WINDOW_KEY = "al_helper_window";
-
-async function helperWindowScanTab(url) {
-  if (!chrome.windows || typeof chrome.windows.create !== "function" ||
-      typeof chrome.windows.get !== "function" ||
-      !chrome.tabs || typeof chrome.tabs.create !== "function") {
-    return null;
-  }
-  let windowId = null;
-  try {
-    const stored = await chrome.storage.local.get([HELPER_WINDOW_KEY]);
-    const rec = stored && stored[HELPER_WINDOW_KEY];
-    if (rec && rec.windowId != null) windowId = rec.windowId;
-  } catch (e) { /* storage unreadable: create fresh below */ }
-  if (windowId != null) {
-    try {
-      await chrome.windows.get(windowId);
-    } catch (e) {
-      windowId = null; // the helper window is gone — recreate it
-    }
-  }
-  if (windowId == null) {
-    let win = null;
-    try {
-      win = await chrome.windows.create({ focused: false, type: "normal", url });
-    } catch (e) { return null; }
-    if (!win || win.id == null) return null;
-    windowId = win.id;
-    try {
-      await chrome.storage.local.set({ [HELPER_WINDOW_KEY]: { windowId } });
-    } catch (e) { /* the next job re-derives or recreates */ }
-    // The window was created on the job's first navigation
-    // target: its initial tab IS this job's tab.
-    let tab = Array.isArray(win.tabs) && win.tabs.length ? win.tabs[0] : null;
-    if (!tab || tab.id == null) {
-      try {
-        const tabs = await chrome.tabs.query({ windowId });
-        tab = tabs && tabs.length ? tabs[0] : null;
-      } catch (e) { tab = null; }
-    }
-    return tab && tab.id != null ? tab : null;
-  }
-  try {
-    const tab = await chrome.tabs.create({ windowId, active: false, url });
-    return tab && tab.id != null ? tab : null;
-  } catch (e) { return null; }
-}
-// [HELPER-WINDOW-END]
 
 // Tab auto-close on success (v2.1.7, header note 14): ~4s after a
 // successful finish — long enough for the success banner to be
@@ -2722,14 +2654,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: POLL_MINUTES });
   checkQueue();
 });
-chrome.runtime.onStartup.addListener(async () => {
-  // A stored helper-window id names a window from a previous
-  // browser session, whose window ids mean nothing in this one
-  // (v2.1.77, header note 37): forget it before any scan job can
-  // trust it, so the session's first scan creates a fresh
-  // helper window instead of borrowing whatever window reused
-  // the id.
-  try { await chrome.storage.local.remove(["al_helper_window"]); } catch (e) { /* non-fatal */ }
+chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: POLL_MINUTES });
   checkQueue();
 });
