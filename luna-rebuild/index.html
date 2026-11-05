@@ -11480,9 +11480,13 @@ async function refreshVinReels() {
     // One display row per VIN: a live render wins, then the newest
     // ready reel, then the newest failure (rows arrive newest-first,
     // so the first row seen at the winning rank is the newest of it).
+    // 'consumed' rows (phase 2: the poster attached the reel, then
+    // deleted the file) are history only — their video_url is dead,
+    // so they must never render a chip or a player.
     const rank = { queued: 0, generating: 0, ready: 1, failed: 2 };
     const byVin = {};
     (data || []).forEach(r => {
+      if (r.status === "consumed") return;
       const cur = byVin[r.vin];
       if (!cur || rank[r.status] < rank[cur.status]) byVin[r.vin] = r;
     });

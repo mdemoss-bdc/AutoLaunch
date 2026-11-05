@@ -108,6 +108,41 @@ VM loop is the rebuild's proof mode. A `generating` row older than
 45 minutes is logged as likely stale (a crashed run); there is no
 automatic requeue yet.
 
+## Phase 2 lifecycle (designed 2026-11-05 — NOT built)
+
+An Automation-tab toggle will later make the poster generate the
+reel **before** posting, hold the post until the reel is ready,
+attach it to the Marketplace post, then delete the video from the
+user's storage (Facebook keeps its own copy). The schema already
+supports that lifecycle — no migration needed when it is built:
+
+- **States:** `queued → generating → ready → consumed` (terminal),
+  with `failed` as the error terminal. `consumed` is in the status
+  CHECK constraint now, and `consumed_at` records when the poster
+  consumed the reel. The partial unique index only covers
+  queued/generating, so once a reel is consumed a fresh reel for the
+  same VIN can be queued again (the re-post case).
+- **Provenance:** `source` is `'manual'` (default — every app/UI
+  insert, including all phase-1 rows) or `'poster'` (phase-2
+  automation inserts). **Cleanup may only ever touch `source =
+  'poster'` rows** — a manually created reel is never auto-cleaned.
+- **Claim-gate lookup:** the poster's gate consults the latest reel
+  for a car with one query, served by
+  `vin_reels_user_vin_latest_idx` on `(user_id, vin, created_at
+  DESC)`:
+  `SELECT * FROM vin_reels WHERE user_id = $1 AND vin = $2 ORDER BY
+  created_at DESC LIMIT 1`.
+- **Consumption sequence (for the phase-2 builder):** poster inserts
+  its row (`source='poster'`) → worker renders → poster polls the
+  lookup until `ready` (or `failed` → post without the reel) →
+  attaches `video_url` to the post → on post success, deletes the
+  storage object `<user_id>/<vin>.mp4` and sets `status='consumed',
+  consumed_at=now()`. The app already ignores `consumed` rows for
+  display (their URLs are dead by design).
+- The `vin-reels` bucket lifecycle is unchanged: consumption deletes
+  the object, so a consumed reel's URL 404s — anything that stored
+  the URL (the Facebook post) holds its own copy, per the design.
+
 ## Cost
 
 ~5 minutes of CPU per car on this VM (the per-frame PIL push-in
