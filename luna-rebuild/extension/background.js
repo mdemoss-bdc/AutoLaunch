@@ -566,6 +566,35 @@
 //     background rule untouched. A window that stays
 //     minimized keeps its hidden page — the scan then
 //     fails list_never_grew (content note 36), honestly.
+//
+// 37. SCAN JOBS LIVE IN A HELPER WINDOW (v2.1.77 —
+//     Matthew, 2026-11-05; supersedes the same-window
+//     half of note 35): the v2.1.76 fix itself was proven
+//     live the morning it shipped — a fronted job tab's
+//     match scan settled at the full census (cards:72,
+//     vis:visible) after ~25 hidden-tab failures — but
+//     fronting inside the USER's window switched the tab
+//     out from under him while he was typing in another
+//     one, and his ruling was plain: that can't happen.
+//     Scan jobs now run in a dedicated Chrome window the
+//     helper owns: created unfocused on first need, its
+//     id kept in chrome.storage.local (al_helper_window),
+//     reused across jobs, and recreated lazily when it is
+//     gone (closed by hand, or forgotten at browser
+//     startup, when a stored id could name a stranger's
+//     window). The job tab is activated inside that
+//     window only — being a window's active tab is what
+//     makes the page render and paginate — no window is
+//     ever focused, and no tab in the user's window is
+//     ever activated for a scan. Note 35's borrowed-
+//     foreground machinery (restoreTabId, and the
+//     restore calls on the terminal paths) is removed:
+//     there is no borrowed foreground left to give back.
+//     If the helper window cannot be had, the scan job
+//     fails honestly (helper_window_unavailable) rather
+//     than fall back to the user's window. Post jobs are
+//     untouched — inactive tabs in the user's window,
+//     nothing to scan.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1372,9 +1401,6 @@ async function reconcileActiveJob(job) {
   }
   const row = Array.isArray(rows) && rows.length ? rows[0] : null;
   const clearSlot = async reason => {
-    // The job is over by every path that lands here — a scan
-    // job's borrowed foreground goes back too (v2.1.76).
-    await restoreJobTabFocus(job);
     await chrome.storage.local.remove(["current_posting_job"]);
     console.log(`[AutoLaunch] Job slot cleared (${reason}) for queue item ${queueId}.`);
   };
@@ -1798,16 +1824,31 @@ async function checkQueue() {
     // that after watching his son's test — the filled tab simply
     // waits in the background with its review banner, and the user
     // clicks over to it when they are ready to publish.
-    // Qualified in v2.1.76 (header note 35): a SCAN job's tab is
-    // activated right after creation (below) — a never-shown page
-    // never paginates its Selling list — and the tab the user was
-    // on is re-activated when the job ends.
-    const jobTab = await chrome.tabs.create({
-      active: false,
-      url: (isDelete || isShare || isUpdatePrice)
-        ? "https://www.facebook.com/marketplace/you/selling"
-        : "https://www.facebook.com/marketplace/create/vehicle"
-    });
+    // Qualified in v2.1.76 (header note 35), then moved in
+    // v2.1.77 (header note 37): a SCAN job's tab must be a
+    // window's active tab — a never-shown page never paginates
+    // its Selling list — but fronting it inside the user's own
+    // window switched the tab out from under him mid-typing.
+    // Scan tabs are therefore created in the helper's own
+    // window and activated THERE; post tabs keep the rule
+    // above, exactly as written.
+    const jobUrl = (isDelete || isShare || isUpdatePrice)
+      ? "https://www.facebook.com/marketplace/you/selling"
+      : "https://www.facebook.com/marketplace/create/vehicle";
+    let jobTab = null;
+    if (isDelete || isShare || isUpdatePrice) {
+      jobTab = await helperWindowScanTab(jobUrl);
+      if (!jobTab || jobTab.id == null) {
+        // No helper window, no scan (v2.1.77, header note 37):
+        // fail honestly through the ordinary failed finish
+        // rather than borrow the user's window — the fallback
+        // is the exact behavior Matthew rejected.
+        await finishJobFailed(item.id, "helper_window_unavailable");
+        return;
+      }
+    } else {
+      jobTab = await chrome.tabs.create({ active: false, url: jobUrl });
+    }
     if (jobTab && jobTab.id != null && chrome.tabs.update) {
       try {
         // A background tab must not be discarded by Memory Saver
@@ -1825,22 +1866,17 @@ async function checkQueue() {
         await chrome.storage.local.get(["current_posting_job"]);
       if (j && j.queueId === item.id) {
         j.tabId = jobTab.id;
-        // Foreground for scan jobs (v2.1.76, header note 35):
-        // remember the tab the user was on in this window so
-        // the finish paths can give the foreground back once
-        // the job ends. Recorded BEFORE the activation below,
-        // on the same merge that records tabId, so a stored
-        // scan job always carries its way back.
-        if (isDelete || isShare || isUpdatePrice) {
-          j.restoreTabId = await activeTabIdInWindow(jobTab.windowId, jobTab.id);
-        }
         await chrome.storage.local.set({ current_posting_job: j });
       }
       if ((isDelete || isShare || isUpdatePrice) &&
           chrome.tabs && typeof chrome.tabs.update === "function") {
         try {
-          // Activate — never focus the window. If this fails
-          // the scan still runs and reports honestly
+          // Activate the scan tab inside the HELPER window
+          // (v2.1.77, header note 37): it becomes that window's
+          // active tab — a rendered page the Selling list will
+          // paginate — while the user's window, and every
+          // window's focus, stay exactly as they were. If this
+          // fails the scan still runs and reports honestly
           // (list_never_grew) when its page stays hidden.
           await chrome.tabs.update(jobTab.id, { active: true });
         } catch (e) { /* non-fatal: see above */ }
@@ -2389,35 +2425,69 @@ async function flushPendingFinish() {
   }
 }
 
-// The tab currently active in a window, other than a given tab
-// (v2.1.76, header note 35). Null when there is no other tab to
-// remember — the job tab is then the window's only tab and there
-// is nothing to give the foreground back to.
-async function activeTabIdInWindow(windowId, excludeTabId) {
-  if (windowId == null || !chrome.tabs ||
-      typeof chrome.tabs.query !== "function") return null;
+// [HELPER-WINDOW-BEGIN]
+// The helper window (v2.1.77, header note 37): scan jobs run in
+// a dedicated Chrome window owned by the helper, so the tab a
+// scan fronts is never a tab in the user's window. The window
+// is created unfocused on first need, remembered in
+// chrome.storage.local, reused across jobs, and recreated
+// lazily when it is gone (the user closed it, or a browser
+// restart made the stored id meaningless — onStartup forgets
+// it before any job can trust it). Returns the freshly created
+// job tab to run in, or null when no helper window can be had;
+// the caller fails the scan job honestly rather than fall back
+// to the user's window — the fallback is the behavior Matthew
+// rejected. Only the id is stored: within a browser session
+// window ids are stable and never reused, so an id that still
+// resolves through chrome.windows.get is the same window.
+const HELPER_WINDOW_KEY = "al_helper_window";
+
+async function helperWindowScanTab(url) {
+  if (!chrome.windows || typeof chrome.windows.create !== "function" ||
+      typeof chrome.windows.get !== "function" ||
+      !chrome.tabs || typeof chrome.tabs.create !== "function") {
+    return null;
+  }
+  let windowId = null;
   try {
-    const tabs = await chrome.tabs.query({ active: true, windowId });
-    const t = (tabs || []).find(t => t && t.id != null && t.id !== excludeTabId);
-    return t ? t.id : null;
+    const stored = await chrome.storage.local.get([HELPER_WINDOW_KEY]);
+    const rec = stored && stored[HELPER_WINDOW_KEY];
+    if (rec && rec.windowId != null) windowId = rec.windowId;
+  } catch (e) { /* storage unreadable: create fresh below */ }
+  if (windowId != null) {
+    try {
+      await chrome.windows.get(windowId);
+    } catch (e) {
+      windowId = null; // the helper window is gone — recreate it
+    }
+  }
+  if (windowId == null) {
+    let win = null;
+    try {
+      win = await chrome.windows.create({ focused: false, type: "normal", url });
+    } catch (e) { return null; }
+    if (!win || win.id == null) return null;
+    windowId = win.id;
+    try {
+      await chrome.storage.local.set({ [HELPER_WINDOW_KEY]: { windowId } });
+    } catch (e) { /* the next job re-derives or recreates */ }
+    // The window was created on the job's first navigation
+    // target: its initial tab IS this job's tab.
+    let tab = Array.isArray(win.tabs) && win.tabs.length ? win.tabs[0] : null;
+    if (!tab || tab.id == null) {
+      try {
+        const tabs = await chrome.tabs.query({ windowId });
+        tab = tabs && tabs.length ? tabs[0] : null;
+      } catch (e) { tab = null; }
+    }
+    return tab && tab.id != null ? tab : null;
+  }
+  try {
+    const tab = await chrome.tabs.create({ windowId, active: false, url });
+    return tab && tab.id != null ? tab : null;
   } catch (e) { return null; }
 }
-
-// Give the foreground back (v2.1.76, header note 35): re-activate
-// the tab the user was on before a scan job fronted its own tab.
-// Only scan jobs ever carry restoreTabId, so for every other job
-// this is a no-op. Called from paths no terminal state can skip:
-// the scan finishes' try/finally, finishJobFailed's finally, and
-// the watchdog's clearSlot. Tab activation only — the window is
-// never focused — and a remembered tab the user has since closed
-// is a silent no-op.
-async function restoreJobTabFocus(job) {
-  if (!job || job.restoreTabId == null) return;
-  if (!chrome.tabs || typeof chrome.tabs.update !== "function") return;
-  try {
-    await chrome.tabs.update(job.restoreTabId, { active: true });
-  } catch (e) { /* the remembered tab is gone — nothing to give back to */ }
-}
+// [HELPER-WINDOW-END]
 
 // Tab auto-close on success (v2.1.7, header note 14): ~4s after a
 // successful finish — long enough for the success banner to be
@@ -2532,10 +2602,6 @@ async function finishJobDeleted(queueId) {
       return;
     }
     throw err;
-  } finally {
-    // Success, stash-and-return, and rethrow all end the job —
-    // the borrowed foreground goes back on every one (v2.1.76).
-    await restoreJobTabFocus(job);
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Delete confirmed for queue item", queueId);
@@ -2565,10 +2631,6 @@ async function finishJobShared(queueId) {
       return;
     }
     throw err;
-  } finally {
-    // Success, stash-and-return, and rethrow all end the job —
-    // the borrowed foreground goes back on every one (v2.1.76).
-    await restoreJobTabFocus(job);
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Share confirmed for queue item", queueId);
@@ -2604,10 +2666,6 @@ async function finishJobPriceUpdated(queueId) {
       return;
     }
     throw err;
-  } finally {
-    // Success, stash-and-return, and rethrow all end the job —
-    // the borrowed foreground goes back on every one (v2.1.76).
-    await restoreJobTabFocus(job);
   }
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Price update confirmed for queue item", queueId);
@@ -2654,9 +2712,6 @@ async function finishJobFailed(queueId, reason, diags) {
   } finally {
     await logFailure(queueId, reason || "unknown");
     await chrome.storage.local.remove(["current_posting_job"]);
-    // A failed scan job's borrowed foreground goes back too
-    // (v2.1.76) — the failed tab itself stays open as evidence.
-    await restoreJobTabFocus(job);
     console.warn("[AutoLaunch] Job failed:", queueId, reason);
   }
 }
@@ -2667,7 +2722,14 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: POLL_MINUTES });
   checkQueue();
 });
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
+  // A stored helper-window id names a window from a previous
+  // browser session, whose window ids mean nothing in this one
+  // (v2.1.77, header note 37): forget it before any scan job can
+  // trust it, so the session's first scan creates a fresh
+  // helper window instead of borrowing whatever window reused
+  // the id.
+  try { await chrome.storage.local.remove(["al_helper_window"]); } catch (e) { /* non-fatal */ }
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: POLL_MINUTES });
   checkQueue();
 });
