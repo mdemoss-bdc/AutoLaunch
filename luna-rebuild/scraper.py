@@ -1180,19 +1180,45 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     # JSON-LD offers.price is the dealer's own structured final price
     # (verified against the stack on used + new) — trust it first; fall
     # back to the LARGEST highlight amount (the price dwarfs the savings).
+    #
+    # SECTION FENCE (2026-11-05): the highlight scan and the label
+    # fallback below read price candidates from THIS car's own section
+    # only — the page up to the "Vehicles You Might Like" cross-sell
+    # rail, the same scoping the price_status rule further down already
+    # applies. Rail cards carry their own pricing stacks (an MSRP
+    # highlight for a car that is not this one). Proven live on the
+    # 2026 Accord HA4236: in the crawl's fetch the car's own featured
+    # amount renders as the text "Call for Price" and its JSON-LD
+    # offers.price is empty, so the unfenced highlight scan found only
+    # rail amounts and stored a 2013 Elantra's $9,999 MSRP as this
+    # car's price. The JSON-LD rung above is deliberately NOT fenced:
+    # DealerOn emits structured data for the subject car only, and
+    # those blocks sit in the document footer — after the rail — on
+    # every observed page, so a positional cut would break the rung.
+    _price_cut = len(html)
+    for _marker in (
+        "vehicles you might like",
+        "you may also like",
+        "similar vehicles",
+        "recommended vehicles",
+    ):
+        _idx = html.lower().find(_marker)
+        if 0 <= _idx < _price_cut:
+            _price_cut = _idx
+    _own_html = html[:_price_cut]
     feat_amounts = [
         _money_int(m.group(1))
         for m in re.finditer(
             r"vehiclePricingHighlightAmount[^>]*>\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,6})",
-            html,
+            _own_html,
         )
     ]
     feat_amounts = [v for v in feat_amounts if v]
     feat_price = max(feat_amounts) if feat_amounts else None
     has_stack = (
         feat_price is not None
-        or "vehiclePricingStack" in html
-        or "priceBlockItemPrice" in html
+        or "vehiclePricingStack" in _own_html
+        or "priceBlockItemPrice" in _own_html
     )
     if jsonld_price is not None:
         out["price"] = jsonld_price
@@ -1215,7 +1241,7 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
             # on the flattened text: a $ amount qualifies when a "price"
             # label sits within ~80 chars before it (or ~40 after) with no
             # adjustment word in between. Last qualifying amount wins.
-            _text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
+            _text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", _own_html, flags=re.S | re.I)
             _text = re.sub(r"<[^>]+>", " ", _text).replace("&nbsp;", " ")
             _text = re.sub(r"\s+", " ", _text)
             _bad = re.compile(r"msrp|retail|savings|discount|rebate|doc fee|payment|per mo|/mo|list price|estimate|trade", re.I)
