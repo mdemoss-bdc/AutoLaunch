@@ -1413,30 +1413,51 @@ async def crawl_dws_feed(context, page, base_url: str, default_condition: str, u
     fetched once enough cars are in hand."""
     html1 = None
     transport = None
+    why = []
     try:
         resp = await context.request.get(base_url, timeout=20000)
         if resp.status == 200:
             t = await resp.text()
             if _dws_is_platform(t):
                 html1, transport = t, "request"
-    except Exception:
-        pass
+            else:
+                why.append(
+                    f"request: 200 but no DWS fingerprint (len={len(t)}, "
+                    f"vehicle-id={'data-vehicle-id' in t})"
+                )
+        else:
+            why.append(f"request: HTTP {resp.status}")
+    except Exception as e:
+        why.append(f"request: {type(e).__name__} {str(e)[:160]}")
     if html1 is None:
         try:
             r = await page.goto(base_url, wait_until="commit", timeout=30000)
             if r is not None and r.status == 404:
+                print(f"[-] DealerCenter DWS probe: {base_url} is 404 in the browser too; not a DWS feed.")
                 return None
             await asyncio.sleep(2)
             t = await page.content()
             if _dws_is_platform(t):
                 html1, transport = t, "browser"
-        except Exception:
-            pass
+            else:
+                why.append(
+                    f"browser: no DWS fingerprint (len={len(t)}, "
+                    f"vehicle-id={'data-vehicle-id' in t}, url={page.url})"
+                )
+        except Exception as e:
+            why.append(f"browser: {type(e).__name__} {str(e)[:160]}")
     if html1 is None:
+        # Not a DWS feed (every existing site lands here silently-ish):
+        # one line so a platform regression is never invisible again.
+        print(f"[-] DealerCenter DWS probe: not detected on {base_url} — " + "; ".join(why))
         return None
 
     total_pages, ajax_url = _dws_listing_meta(html1, base_url)
     cars = parse_dws_listing_html(html1, base_url, default_condition, uid)
+    print(
+        f"[*] DealerCenter DWS: detected via {transport}; page 1 parsed "
+        f"{len(cars)} cars; {total_pages} listing page(s) total."
+    )
     seen = {c["vin"] for c in cars}
     complete = True
 
@@ -1476,9 +1497,11 @@ async def crawl_dws_feed(context, page, base_url: str, default_condition: str, u
             break
         try:
             frag = await fetch_fragment(pno)
-        except Exception:
+        except Exception as e:
+            print(f"[!] DealerCenter DWS: listing page {pno} fetch error: {type(e).__name__} {str(e)[:160]}")
             frag = None
         if not frag:
+            print(f"[!] DealerCenter DWS: listing page {pno} came back empty; enumeration incomplete.")
             complete = False
             break
         for c in parse_dws_listing_html(frag, base_url, default_condition, uid):
