@@ -2215,7 +2215,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 <!-- ============================================================================== -->
 
 <!-- 1. Floating Actions Dropdown Menu -->
-<div id="vehicleActionDropdown" class="fixed hidden z-50 w-64 glass-card rounded-2xl border border-slate-200 p-1.5 shadow-xl text-xs space-y-0.5 bg-white backdrop-blur-xl">
+<div id="vehicleActionDropdown" class="fixed hidden z-50 w-64 glass-card rounded-2xl border border-slate-200 p-1.5 shadow-xl text-xs space-y-0.5 bg-white backdrop-blur-xl" style="max-height: calc(100vh - 12px); overflow-y: auto;">
   <button onclick="handleDropdownAction('view_details')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-regular fa-eye w-4 text-slate-400"></i>
     <span>View details & photos</span>
@@ -2232,7 +2232,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <i class="fa-solid fa-gauge w-4 text-slate-400"></i>
     <span>Change miles</span>
   </button>
-  <button onclick="handleDropdownAction('add_photos')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+  <button id="dropdownAddPhotosItem" onclick="handleDropdownAction('add_photos')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-solid fa-camera w-4 text-slate-400"></i>
     <span>Add / manage photos</span>
   </button>
@@ -9812,6 +9812,58 @@ function usablePhotoCountJS(car) {
   return urls.size;
 }
 
+// PLACEHOLDER PHOTOS (Matthew, 2026-11-05): a dealer's "no photo"
+// stock asset is not a photo. Moses serves it as
+// .../components/missing/photo_unavailable_640.png; other platforms
+// use a "placeholder" asset (the scraper's own in-page photo hunt
+// already treats 'placeholder' URLs as garbage). The counting
+// predicates above only know the /static/ path and our own fallback
+// asset, so a placeholder-only car counts as having a photo: it
+// renders a Post button and the Add Photos modal refuses it. These
+// helpers give the ADD-PHOTOS surfaces one shared usable-zero test;
+// the posting gates keep their existing predicates, untouched.
+function isPlaceholderPhotoUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  const u = url.trim().toLowerCase();
+  if (!u) return false;
+  return u.includes("photo_unavailable") || u.includes("/missing/") || u.includes("placeholder");
+}
+
+// The car's usable custom (user-added) photo URLs.
+function usableCustomPhotoUrls(car) {
+  return car && Array.isArray(car.custom_photo_urls) ? car.custom_photo_urls.filter(isUsablePhotoUrl) : [];
+}
+
+// Usable DEALER photos (image_url + photos[]), counted exactly like
+// usablePhotoCountJS but with placeholder assets filtered out first.
+function dealerUsablePhotoCount(car) {
+  if (!car) return 0;
+  const keep = (u) => typeof u === "string" && !isPlaceholderPhotoUrl(u);
+  return usablePhotoCountJS({
+    image_url: keep(car.image_url) ? car.image_url : null,
+    photos: Array.isArray(car.photos) ? car.photos.filter(keep) : [],
+    custom_photo_urls: []
+  });
+}
+
+// The row/card action slot shows "Add photos to post" when the car
+// has no real photo at all (hasRealPhoto, the shipped rule) OR when
+// its only dealer "photos" are placeholders and the user has not
+// added any of their own yet.
+function showsAddPhotosButton(car) {
+  if (!car) return false;
+  if (!hasRealPhoto(car)) return true;
+  return dealerUsablePhotoCount(car) === 0 && usableCustomPhotoUrls(car).length === 0;
+}
+
+// The (⋯) menu offers "Add / manage photos" exactly when the modal
+// would admit the car: no usable dealer photos (placeholder-only
+// included), or the user already added photos of their own to manage.
+function addPhotosOffered(car) {
+  if (!car) return false;
+  return dealerUsablePhotoCount(car) === 0 || usableCustomPhotoUrls(car).length > 0;
+}
+
 function missingColorJS(v) {
   const t = String(v == null ? "" : v).trim().toLowerCase();
   return !t || t === "standard";
@@ -9958,7 +10010,7 @@ function gridCardHtml(car) {
            <i class="fa-solid fa-handshake text-[10px]"></i>
            <span>Sold</span>
          </span>`
-      : !hasRealPhoto(car)
+      : showsAddPhotosButton(car)
       ? `<button data-action="add-photos" data-vin="${vinAttr}" class="flex-1 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
            <i class="fa-solid fa-camera text-[10px]"></i>
            <span>Add photos to post</span>
@@ -10216,7 +10268,7 @@ ${car.location_name ? `
                  <i class="fa-solid fa-handshake text-[10px]"></i>
                  <span>Sold</span>
                </span>`
-            : !hasRealPhoto(car)
+            : showsAddPhotosButton(car)
             ? `<button data-action="add-photos" data-vin="${vinAttr}" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs inline-flex items-center gap-2 cursor-pointer shadow-sm transition">
                  <i class="fa-solid fa-camera text-[10px]"></i>
                  <span>Add photos to post</span>
@@ -10263,9 +10315,34 @@ function toggleRowDropdown(event, vin) {
 
   activeDropdownVin = vin;
   const rect = event.currentTarget.getBoundingClientRect();
-  dropdown.style.top = `${rect.bottom + window.scrollY + 6}px`;
-  dropdown.style.left = `${Math.min(window.innerWidth - 270, rect.right - 240 + window.scrollX)}px`;
+
+  // Per-car item visibility: "Add / manage photos" shows exactly
+  // where the modal would admit the car (placeholder-only included).
+  const ddCar = rawInventory.find(c => c.vin === vin);
+  const addItem = document.getElementById("dropdownAddPhotosItem");
+  if (addItem) addItem.classList.toggle("hidden", !!ddCar && !addPhotosOffered(ddCar));
+
+  // The menu is position:fixed, so its coordinates are viewport
+  // coordinates — scroll offsets must NOT be added (the old code
+  // added them, pushing the menu down by the scroll amount, and it
+  // never checked the bottom edge, so a low trigger put the menu's
+  // lower items off-screen for good). Now: open upward when the
+  // trigger sits low, clamp inside the viewport either way, and let
+  // the menu's own max-height + scroll cover a too-short viewport.
+  // Measured while invisible so it never paints at a stale spot.
   dropdown.classList.remove("hidden");
+  dropdown.style.visibility = "hidden";
+  const menuH = dropdown.offsetHeight;
+  const menuW = dropdown.offsetWidth;
+  let top = rect.bottom + 6;
+  if (top + menuH > window.innerHeight - 6 && rect.top - menuH - 6 >= 6) {
+    top = rect.top - menuH - 6;
+  }
+  top = Math.max(6, Math.min(top, Math.max(6, window.innerHeight - menuH - 6)));
+  const left = Math.max(6, Math.min(rect.right - menuW, window.innerWidth - menuW - 6));
+  dropdown.style.top = `${top}px`;
+  dropdown.style.left = `${left}px`;
+  dropdown.style.visibility = "";
 }
 
 document.addEventListener("click", function(e) {
@@ -10838,8 +10915,8 @@ function addPhotosCar() {
 function openAddPhotosModal(vin) {
   const car = rawInventory.find(c => c.vin === vin);
   if (!car) return;
-  const customs = Array.isArray(car.custom_photo_urls) ? car.custom_photo_urls.filter(isUsablePhotoUrl) : [];
-  const dealerCount = usablePhotoCountJS({ image_url: car.image_url, photos: car.photos, custom_photo_urls: [] });
+  const customs = usableCustomPhotoUrls(car);
+  const dealerCount = dealerUsablePhotoCount(car);
   if (dealerCount > 0 && !customs.length) {
     alert("This car already has photos from the dealer's site — nothing to add. (Photos you add yourself are for cars the dealer's site shows with none.)");
     return;
