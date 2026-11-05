@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -2814,6 +2815,119 @@ def _auto_sync_skipped_uids(users, serving_job):
 # ====================== SCRAPER ENTRYPOINT START ==============================
 # ==============================================================================
 
+# ==============================================================================
+# ==================== MULTI USED LINKS (2026-11-05) ============================
+# ==============================================================================
+# An account may save up to five USED inventory links: the primary
+# (user_settings.used_url, the only used link that existed before
+# today) plus extras in user_settings.extra_used_urls (jsonb list,
+# added 2026-11-05). The account's USED lot list is [primary if
+# non-empty] + extras — trimmed, deduped, order preserved, capped at
+# MAX_USED_FEEDS total. New and Certified stay single-link, so the
+# storage generalizes by condition later without a migration.
+#
+# Lot identity: the primary keeps feed key "used_url", so every
+# source_key stamp, scoped-sync fence and playbook written before
+# this feature stays valid byte-for-byte. Extras get positional keys
+# "used_url_2".."used_url_5" plus a lot_tag ("#u" + 6 hex chars of
+# the sha1 of the full URL) which scraper_next appends to its
+# host|condition site_key — two used pages on ONE host (say
+# /used-cars/ and /used-trucks/) must never share a playbook, a
+# learned count band, a quarantine, or a resume slot. Primary /
+# Certified / New feeds carry lot_tag "" so their site keys remain
+# exactly today's.
+
+MAX_USED_FEEDS = 5
+
+
+def _clean_url_list(values):
+    """Trim, drop empties and non-strings, dedupe (exact string,
+    first occurrence wins). Pure."""
+    out = []
+    for v in values or []:
+        if not isinstance(v, str):
+            continue
+        s = v.strip()
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def used_feed_urls(user_cfg):
+    """The account's ordered USED source URLs: primary first, then
+    extra_used_urls, deduped across both, capped at MAX_USED_FEEDS
+    total. Pure."""
+    cfg = user_cfg or {}
+    urls = []
+    primary = cfg.get("used_url")
+    if isinstance(primary, str) and primary.strip():
+        urls.append(primary.strip())
+    extras = cfg.get("extra_used_urls")
+    if isinstance(extras, str):
+        try:
+            extras = json.loads(extras)
+        except Exception:
+            extras = []
+    if isinstance(extras, list):
+        urls.extend(_clean_url_list(extras))
+    return _clean_url_list(urls)[:MAX_USED_FEEDS]
+
+
+def _lot_tag(url):
+    return "#u" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:6]
+
+
+def enumerate_feeds(user_cfg):
+    """The account's crawl lots, in crawl order: every USED link
+    (primary first), then Certified, then New — the historical order
+    of the three original lots is unchanged. Each feed is
+    {url, condition, key, lot_tag}. Pure: scraper_next enumerates
+    through this same function so the two crawlers can never
+    disagree about what a lot is."""
+    cfg = user_cfg or {}
+    feeds = []
+    for i, url in enumerate(used_feed_urls(cfg)):
+        if i == 0:
+            feeds.append({
+                "url": url, "condition": "Used",
+                "key": "used_url", "lot_tag": ""
+            })
+        else:
+            feeds.append({
+                "url": url, "condition": "Used",
+                "key": f"used_url_{i + 1}",
+                "lot_tag": _lot_tag(url)
+            })
+    certified = cfg.get("certified_url")
+    if isinstance(certified, str) and certified.strip():
+        feeds.append({
+            "url": certified.strip(), "condition": "Certified Pre-Owned",
+            "key": "certified_url", "lot_tag": ""
+        })
+    new = cfg.get("new_url")
+    if isinstance(new, str) and new.strip():
+        feeds.append({
+            "url": new.strip(), "condition": "New",
+            "key": "new_url", "lot_tag": ""
+        })
+    return feeds
+
+
+def expand_scope_keys(picked, feeds):
+    """Scope keys for a scoped run: the job's picked settings keys,
+    with "used_url" expanded to every used lot key the account
+    actually has (primary + extras), so a 'Used only' run crawls all
+    the used links and its stale-pass fence covers all their cars.
+    Pure."""
+    scope = set(picked or [])
+    if "used_url" in scope:
+        for f in feeds or []:
+            k = f.get("key") or ""
+            if k == "used_url" or k.startswith("used_url_"):
+                scope.add(k)
+    return scope
+
+
 async def run_scraper():
 
     active_job_id = None
@@ -2968,28 +3082,11 @@ async def run_scraper():
                 or "?pt={page}"
             )
 
-            feeds_to_crawl = []
-
-            if user_cfg.get("used_url") and user_cfg.get("used_url").strip():
-                feeds_to_crawl.append({
-                    "url": user_cfg["used_url"].strip(),
-                    "condition": "Used",
-                    "key": "used_url"
-                })
-
-            if user_cfg.get("certified_url") and user_cfg.get("certified_url").strip():
-                feeds_to_crawl.append({
-                    "url": user_cfg["certified_url"].strip(),
-                    "condition": "Certified Pre-Owned",
-                    "key": "certified_url"
-                })
-
-            if user_cfg.get("new_url") and user_cfg.get("new_url").strip():
-                feeds_to_crawl.append({
-                    "url": user_cfg["new_url"].strip(),
-                    "condition": "New",
-                    "key": "new_url"
-                })
+            # MULTI USED LINKS (2026-11-05): the lot list comes from
+            # the one shared enumeration — primary + extra USED links,
+            # then Certified, then New. For an account with no extras
+            # this returns exactly the historical three lots.
+            feeds_to_crawl = enumerate_feeds(user_cfg)
 
             # SINGLE-CAR REFRESH (phase 2): the job owner's own job
             # may name one VIN; that run refreshes just that car.
@@ -3010,7 +3107,12 @@ async def run_scraper():
                         if k in ("used_url", "certified_url", "new_url")
                     ]
                     if _picked:
-                        job_scope = set(_picked)
+                        # "used_url" in a job's scope means the whole
+                        # USED family (primary + extra links) — expand
+                        # to the lot keys this account actually has so
+                        # the feed filter and the stale-pass fence
+                        # both cover every used link.
+                        job_scope = expand_scope_keys(_picked, feeds_to_crawl)
             if job_scope is not None:
                 feeds_to_crawl = [
                     f for f in feeds_to_crawl if f["key"] in job_scope

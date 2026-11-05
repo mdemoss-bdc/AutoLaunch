@@ -128,6 +128,18 @@ def site_key_for(feed_url: str, condition: str) -> str:
     return f"{host}|{condition}"
 
 
+def feed_site_key(feed: dict) -> str:
+    """The lot key for a feed dict from S.enumerate_feeds: the
+    historical host|condition key plus the feed's lot_tag. Only
+    extra USED links carry a tag ("#u" + a short hash of the full
+    URL, assigned by the shared enumeration) — two used pages on
+    one host would otherwise share a single playbook, learned count
+    band, quarantine and resume slot. Primary, Certified and New
+    feeds carry no tag and resolve to exactly the keys they have
+    always had."""
+    return site_key_for(feed["url"], feed["condition"]) + (feed.get("lot_tag") or "")
+
+
 # =============================================================================
 # EXTRACTION LADDER (HTML-string strategies)
 # =============================================================================
@@ -1102,7 +1114,7 @@ async def process_feed(feed: dict, ctx_base: dict, fetcher, eff_pb: dict,
     t_start = time.monotonic()
     uid = ctx_base["uid"]
     condition = feed["condition"]
-    site_key = site_key_for(feed["url"], condition)
+    site_key = feed_site_key(feed)
     host = urlparse(feed["url"]).netloc.lower()
     outcome = {
         "site_key": site_key, "host": host, "condition": condition,
@@ -1300,7 +1312,7 @@ async def crawl_feed(feed: dict, ctx_base: dict, fetcher_factory, eff_pb: dict,
                 delay = RETRY_BACKOFFS[attempt] * random.uniform(0.7, 1.3)
                 print(f"[!] Feed {feed['url']} attempt {attempt + 1} failed ({e}); retrying in {delay:.1f}s")
                 await sleep_fn(delay)
-    site_key = site_key_for(feed["url"], feed["condition"])
+    site_key = feed_site_key(feed)
     _tally_mark_feed_failed(run_id, ctx_base.get("uid"), site_key)
     return {
         "site_key": site_key, "host": urlparse(feed["url"]).netloc.lower(),
@@ -1729,18 +1741,18 @@ async def run_next(opts_override: dict = None) -> list:
             if not uid:
                 continue
             store_name = user_cfg.get("dealership_name") or user_cfg.get("store_name") or "User Store"
-            feeds = []
-            for key, cond in (("used_url", "Used"), ("certified_url", "Certified Pre-Owned"), ("new_url", "New")):
-                u = (user_cfg.get(key) or "").strip()
-                if u:
-                    feeds.append({"url": u, "condition": cond})
+            # MULTI USED LINKS (2026-11-05): enumerate through the
+            # production scraper's shared helper — primary + extra
+            # USED links, then Certified, then New. Accounts without
+            # extras get exactly the historical three lots.
+            feeds = S.enumerate_feeds(user_cfg)
             if not feeds:
                 continue
             user_seen, user_trusted = set(), True
             quarantined_feeds = []
             user_outcomes = []
             for feed in feeds:
-                sk = site_key_for(feed["url"], feed["condition"])
+                sk = feed_site_key(feed)
                 if sk in done_feeds:
                     print(f"[*] Resume: skipping completed feed {sk}")
                     continue
@@ -1811,7 +1823,7 @@ async def run_next(opts_override: dict = None) -> list:
             # One re-crawl attempt for quarantined feeds.
             for feed, first in quarantined_feeds:
                 print(f"[*] Re-crawling quarantined feed once: {feed['url']}")
-                sk = site_key_for(feed["url"], feed["condition"])
+                sk = feed_site_key(feed)
                 lot_pb = load_playbook("lot", sk, uid)
                 plat_pb = load_playbook("platform", f"platform:{lot_pb.get('platform')}", None) if lot_pb.get("platform") else default_playbook()
                 eff_pb = merge_playbooks(plat_pb, lot_pb)

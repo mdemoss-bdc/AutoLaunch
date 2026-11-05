@@ -2736,6 +2736,16 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
                 id="settingsUsedUrl"
                 class="w-full border border-slate-300 rounded-xl px-4 py-3">
 
+              <div id="settingsUsedExtras" class="space-y-2 mt-2"></div>
+
+              <button type="button" onclick="addUsedExtraRow('settingsUsedExtras', 'settingsUsedUrl')" class="mt-2 text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer">
+                + Add another used link
+              </button>
+
+              <p class="text-xs text-slate-400 mt-2">
+                More than one used-car page (a separate trucks page, a second lot)? Add each link — up to 5 used links total. They all sync as your used inventory.
+              </p>
+
             </div>
 
             <div>
@@ -4189,6 +4199,7 @@ let selectedPrefLength = "Medium";
 let currentStore = {
   name: "Dealership Inventory",
   usedUrl: "",
+  usedExtras: [],
   newUrl: "",
   cpoUrl: ""
 };
@@ -7846,6 +7857,113 @@ async function initAppSession(user) {
   probeHelperVersionOnce();
 }
 
+// ==============================================================================
+// ====================== MULTI USED LINKS (2026-11-05) ==========================
+// ==============================================================================
+// An account may save up to five USED inventory links: the primary
+// (user_settings.used_url, the only used link that existed before
+// today) plus extras (user_settings.extra_used_urls, a jsonb list).
+// currentStore.usedExtras mirrors the extras. Every save path writes
+// the pair together, and every source consumer — the sync setup
+// guard, the trial source claims, the scoped-sync menu, the Get
+// Started website step — reads the COMBINED list, so no surface can
+// disagree about an account's sources. The scraper expands the same
+// pair server-side (its enumerate_feeds), crawler and app in lockstep.
+
+const MAX_USED_URLS = 5;
+
+// The extras for a given primary: trimmed, non-empty, deduped
+// (an extra repeating the primary is the same lot), capped so
+// primary + extras never exceed MAX_USED_URLS. Pure.
+function cleanUsedExtras(primary, extras) {
+  const seen = {};
+  const out = [];
+  const prim = typeof primary === "string" ? primary.trim() : "";
+  if (prim) seen[prim] = true;
+  const list = Array.isArray(extras) ? extras : [];
+  for (let i = 0; i < list.length; i++) {
+    const v = typeof list[i] === "string" ? list[i].trim() : "";
+    if (!v || seen[v]) continue;
+    seen[v] = true;
+    out.push(v);
+    if (out.length + 1 >= MAX_USED_URLS) break;
+  }
+  return out;
+}
+
+// The account's USED source URLs in crawl order: primary first,
+// then the cleaned extras. Pure read of currentStore.
+function usedUrlsFromStore() {
+  const cs = (typeof currentStore !== "undefined" && currentStore) ? currentStore : {};
+  const out = [];
+  const prim = typeof cs.usedUrl === "string" ? cs.usedUrl.trim() : "";
+  if (prim) out.push(prim);
+  const extras = cleanUsedExtras(prim, cs.usedExtras);
+  for (let i = 0; i < extras.length; i++) out.push(extras[i]);
+  return out;
+}
+
+// Every inventory source URL on the account: all used links, then
+// New, then Certified — the list the trial source-claim gate checks,
+// so an extra link can never slip a farmed source past the claim.
+function allInventoryUrls() {
+  const cs = (typeof currentStore !== "undefined" && currentStore) ? currentStore : {};
+  const out = usedUrlsFromStore();
+  const n = typeof cs.newUrl === "string" ? cs.newUrl.trim() : "";
+  if (n) out.push(n);
+  const c = typeof cs.cpoUrl === "string" ? cs.cpoUrl.trim() : "";
+  if (c) out.push(c);
+  return out;
+}
+
+// The extras list editor shared by the Settings modal and the Get
+// Started website step: each extra link is a row (input + remove
+// button) inside a container; "Add another used link" appends a row
+// up to the cap. Rows are read back by container, so the two
+// surfaces never see each other's rows.
+function usedExtraRowHtml(value) {
+  return '<div class="flex items-center gap-2 used-extra-row">' +
+    '<input type="text" class="used-extra-input w-full border border-slate-300 rounded-xl px-4 py-3" placeholder="https://" value="' + escapeHtml(value || "") + '">' +
+    '<button type="button" onclick="removeUsedExtraRow(this)" class="shrink-0 px-3 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold cursor-pointer" title="Remove this link"><i class="fa-solid fa-xmark"></i></button></div>';
+}
+
+function renderUsedExtras(containerId, extras) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const list = Array.isArray(extras) ? extras : [];
+  box.innerHTML = list.map(function (u) { return usedExtraRowHtml(u); }).join("");
+}
+
+function collectUsedExtras(containerId) {
+  const box = document.getElementById(containerId);
+  if (!box) return [];
+  const out = [];
+  box.querySelectorAll(".used-extra-input").forEach(function (inp) {
+    const v = (inp.value || "").trim();
+    if (v) out.push(v);
+  });
+  return out;
+}
+
+function addUsedExtraRow(containerId, primaryInputId) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const current = collectUsedExtras(containerId);
+  if (1 + current.length >= MAX_USED_URLS) {
+    alert("Up to " + MAX_USED_URLS + " used inventory links total — that's the cap.");
+    return;
+  }
+  box.insertAdjacentHTML("beforeend", usedExtraRowHtml(""));
+  const inputs = box.querySelectorAll(".used-extra-input");
+  const last = inputs[inputs.length - 1];
+  if (last) last.focus();
+}
+
+function removeUsedExtraRow(btn) {
+  const row = btn ? btn.closest(".used-extra-row") : null;
+  if (row) row.remove();
+}
+
 async function loadUserStoreSettings() {
   if (!currentUser) return;
   // DEALERSHIP (Phase 1): resolve this account's membership first.
@@ -7936,23 +8054,26 @@ async function loadUserStoreSettings() {
 }
       currentStore.name = data.dealership_name || data.store_name || "Dealership Inventory";
       currentStore.usedUrl = data.used_url || "";
+      currentStore.usedExtras = cleanUsedExtras(currentStore.usedUrl, data.extra_used_urls);
       currentStore.newUrl = data.new_url || "";
       currentStore.cpoUrl = data.certified_url || "";
 
       document.getElementById("settingsStoreName").value = currentStore.name;
       document.getElementById("settingsUsedUrl").value = currentStore.usedUrl;
+      renderUsedExtras("settingsUsedExtras", currentStore.usedExtras);
       document.getElementById("settingsNewUrl").value = currentStore.newUrl;
       const certField =
     document.getElementById("settingsCertifiedUrl");
 
 if (certField)
     certField.value = currentStore.cpoUrl || "";
-      const domain = currentStore.usedUrl
-    ? currentStore.usedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0]
+      const firstUsedUrl = usedUrlsFromStore()[0] || "";
+      const domain = firstUsedUrl
+    ? firstUsedUrl.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0]
     : "www.dealershipinventory.com";
 
 document.getElementById("dealerUrlDisplay").innerText = "www." + domain;
-document.getElementById("dealerUrlDisplay").href = currentStore.usedUrl || "#";
+document.getElementById("dealerUrlDisplay").href = firstUsedUrl || "#";
 
 updateLastSyncDisplay();
 
@@ -8390,6 +8511,7 @@ function openSyncSummaryDetails() {
   const addressEl = document.getElementById("settingsAddress");
   const storeAddress = addressEl ? addressEl.value.trim() : "";
   const usedUrl = document.getElementById("settingsUsedUrl").value.trim();
+  const usedExtras = cleanUsedExtras(usedUrl, collectUsedExtras("settingsUsedExtras"));
   const newUrl = document.getElementById("settingsNewUrl").value.trim();
 const certifiedUrl =
     document.getElementById("settingsCertifiedUrl").value.trim();
@@ -8400,6 +8522,7 @@ const certifiedUrl =
   store_name: storeName,
   dealership_address: storeAddress,
   used_url: usedUrl,
+  extra_used_urls: usedExtras,
   new_url: newUrl,
   certified_url: certifiedUrl,
   full_auto_enabled: !!(document.getElementById("chkFullAuto") && document.getElementById("chkFullAuto").checked),
@@ -8414,13 +8537,14 @@ const certifiedUrl =
     // already trialed by another account is stopped here (the
     // claim gate renders the notice + purchase gate; the settings
     // themselves stay saved).
-    if (!(await trialSourceClaimGate([usedUrl, newUrl, certifiedUrl]))) {
+    if (!(await trialSourceClaimGate([usedUrl].concat(usedExtras, [newUrl, certifiedUrl])))) {
       closeModal("settingsModal");
       return;
     }
 
     currentStore.name = storeName;
 currentStore.usedUrl = usedUrl;
+currentStore.usedExtras = usedExtras;
 currentStore.newUrl = newUrl;
 currentStore.cpoUrl = certifiedUrl;
     closeModal("settingsModal");
@@ -9857,7 +9981,7 @@ function gridCardHtml(car) {
 // exclude them all, the original copy below is unchanged.
 function inventoryEmptyStateHtml(kind) {
   const noCarsAtAll = typeof rawInventory !== "undefined" && Array.isArray(rawInventory) && rawInventory.length === 0;
-  const noSource = !(typeof currentStore !== "undefined" && currentStore && (currentStore.usedUrl || currentStore.newUrl || currentStore.cpoUrl));
+  const noSource = !(typeof currentStore !== "undefined" && currentStore && allInventoryUrls().length > 0);
   if (noCarsAtAll && noSource) {
     const inner = 'No inventory yet. Add your dealership\'s inventory website and your cars will sync in. <button type="button" onclick="showGetStartedPage()" class="font-bold text-blue-600 underline cursor-pointer">Add your inventory website</button>';
     return kind === "table"
@@ -11660,7 +11784,7 @@ async function refreshSyncButtonState() {
 function syncScopeMenuOptions() {
     const opts = [];
     if (typeof currentStore !== "undefined" && currentStore) {
-        if (currentStore.usedUrl) opts.push({ key: "used_url", label: "Used only" });
+        if (usedUrlsFromStore().length) opts.push({ key: "used_url", label: "Used only" });
         if (currentStore.cpoUrl) opts.push({ key: "certified_url", label: "Certified only" });
         if (currentStore.newUrl) opts.push({ key: "new_url", label: "New only" });
     }
@@ -11730,7 +11854,7 @@ async function triggerLiveLotCrawl(event, scopeKeys) {
     // with 0 vehicles and tell the user nothing (the Mike Thompson
     // setup failure). Route to the website step instead.
     if (typeof currentStore !== "undefined" && currentStore &&
-        !currentStore.usedUrl && !currentStore.newUrl && !currentStore.cpoUrl) {
+        allInventoryUrls().length === 0) {
         alert("Add your dealership's inventory website first — there's no inventory source to sync yet. Taking you to that setup step.");
         showGetStartedPage();
         return;
@@ -11764,7 +11888,7 @@ async function triggerLiveLotCrawl(event, scopeKeys) {
     // another account already trialed stops the trial here (the
     // claim gate renders the notice + purchase gate). Exempt
     // accounts pass straight through.
-    if (!(await trialSourceClaimGate([currentStore.usedUrl, currentStore.newUrl, currentStore.cpoUrl]))) return;
+    if (!(await trialSourceClaimGate(allInventoryUrls()))) return;
 
     btn.dataset.syncing = "1";
     const originalHTML = btn.innerHTML;
@@ -11898,7 +12022,8 @@ let gsRenderedIndex = null;  // currentIndex at last render (form-wipe guard)
 function gsComputeSteps(input) {
   const inp = input || {};
   const nonEmpty = function (v) { return typeof v === "string" && v.trim().length > 0; };
-  const hasUrl = nonEmpty(inp.usedUrl) || nonEmpty(inp.newUrl) || nonEmpty(inp.certifiedUrl);
+  const extraUsed = Array.isArray(inp.extraUsedUrls) ? inp.extraUsedUrls : [];
+  const hasUrl = nonEmpty(inp.usedUrl) || extraUsed.some(nonEmpty) || nonEmpty(inp.newUrl) || nonEmpty(inp.certifiedUrl);
   const rawName = nonEmpty(inp.dealershipName) ? inp.dealershipName : (typeof inp.storeName === "string" ? inp.storeName : "");
   const name = rawName.trim();
   const nameOk = !!name && GS_PLACEHOLDER_NAMES.indexOf(name.toLowerCase()) === -1;
@@ -11938,7 +12063,7 @@ async function gsLoadSetupState() {
   let row = null;
   try {
     const r = await supabaseClient.from("user_settings")
-      .select(GS_COLS + ", fb_ready_confirmed_at")
+      .select(GS_COLS + ", fb_ready_confirmed_at, extra_used_urls")
       .eq("user_id", uid).maybeSingle();
     if (r.error) throw r.error;
     row = r.data;
@@ -11976,6 +12101,7 @@ async function gsLoadSetupState() {
     helperSeenAtMs: row.helper_seen_at ? Date.parse(row.helper_seen_at) : null,
     nowMs: Date.now(),
     usedUrl: row.used_url || "",
+    extraUsedUrls: Array.isArray(row.extra_used_urls) ? row.extra_used_urls : [],
     newUrl: row.new_url || "",
     certifiedUrl: row.certified_url || "",
     activeCars: activeCars,
@@ -12153,6 +12279,9 @@ function gsStepFormHtml(key, isDoneStep) {
     return '<div class="space-y-4 mt-4">' +
       '<div><label class="block text-xs font-bold uppercase text-slate-500 mb-2">Used Inventory URL</label>' +
       '<input type="text" id="onboardingUsedUrl" class="w-full border border-slate-300 rounded-xl px-4 py-3" placeholder="https://"></div>' +
+      '<div id="gsUsedExtras" class="space-y-2"></div>' +
+      '<div><button type="button" onclick="addUsedExtraRow(\'gsUsedExtras\', \'onboardingUsedUrl\')" class="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer">+ Add another used link</button>' +
+      '<p class="text-xs text-slate-400 mt-1.5">More than one used-car page? Add each link — up to 5 used links total.</p></div>' +
       '<div><label class="block text-xs font-bold uppercase text-slate-500 mb-2">New Inventory URL</label>' +
       '<input type="text" id="onboardingNewUrl" class="w-full border border-slate-300 rounded-xl px-4 py-3" placeholder="https://"></div>' +
       '<div><label class="block text-xs font-bold uppercase text-slate-500 mb-2">Certified Inventory URL (Optional)</label>' +
@@ -12294,10 +12423,11 @@ async function gsSaveWebsite(btn) {
   const newEl = document.getElementById("onboardingNewUrl");
   const certEl = document.getElementById("onboardingCertifiedUrl");
   const usedUrl = usedEl ? usedEl.value.trim() : "";
+  const usedExtras = cleanUsedExtras(usedUrl, collectUsedExtras("gsUsedExtras"));
   const newUrl = newEl ? newEl.value.trim() : "";
   const certifiedUrl = certEl ? certEl.value.trim() : "";
   const msg = document.getElementById("gsWebsiteMsg");
-  if (!usedUrl && !newUrl && !certifiedUrl) {
+  if (!usedUrl && !usedExtras.length && !newUrl && !certifiedUrl) {
     if (msg) msg.textContent = "Enter at least one inventory website address first.";
     return;
   }
@@ -12315,6 +12445,7 @@ async function gsSaveWebsite(btn) {
     const payload = {
       user_id: currentUser.id,
       used_url: usedUrl,
+      extra_used_urls: usedExtras,
       new_url: newUrl,
       certified_url: certifiedUrl,
       updated_at: new Date().toISOString()
@@ -12324,12 +12455,14 @@ async function gsSaveWebsite(btn) {
       .upsert(payload, { onConflict: "user_id" });
     if (error) throw error;
     currentStore.usedUrl = usedUrl;
+    currentStore.usedExtras = usedExtras;
     currentStore.newUrl = newUrl;
     currentStore.cpoUrl = certifiedUrl;
     // DEALERSHIP SOURCE CLAIM (2026-10-30): setup saves are a claim
     // point, exactly like Settings saves — a trialing account whose
     // source was already trialed stops here (the settings stay saved).
-    const claimOk = await trialSourceClaimGate([usedUrl, newUrl, certifiedUrl]);
+    // Every saved source is claimed, extra used links included.
+    const claimOk = await trialSourceClaimGate([usedUrl].concat(usedExtras, [newUrl, certifiedUrl]));
     await gsRefreshSteps();
     gsRenderStaircase();
     if (!claimOk) return;
@@ -12434,6 +12567,9 @@ function populateOnboardingFields() {
     if (usedField)
         usedField.value = currentStore.usedUrl || "";
 
+    renderUsedExtras("gsUsedExtras",
+        (typeof currentStore !== "undefined" && currentStore && Array.isArray(currentStore.usedExtras)) ? currentStore.usedExtras : []);
+
     if (newField)
         newField.value = currentStore.newUrl || "";
 
@@ -12510,7 +12646,7 @@ function showGetStartedPage() {
 // load assigns the real URL. If no inventory URL is configured yet, send
 // the user to Settings instead of a dead jump to the top of the page.
 function handleDealerUrlClick(event) {
-  if (currentStore && currentStore.usedUrl) return true;
+  if (currentStore && usedUrlsFromStore().length) return true;
   if (event) event.preventDefault();
   openSettingsModal();
   return false;
