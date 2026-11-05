@@ -3711,6 +3711,234 @@ def expand_scope_keys(picked, feeds):
     return scope
 
 
+# ==============================================================================
+# ==================== HELPER-SERVED DWS SERVER SKIP ===========================
+# ==============================================================================
+# HELPER-SERVED DWS SERVER SKIP (Matthew, 2026-11-05): DealerCenter
+# DWS accounts that a live helper syncs are the HELPER's territory —
+# the server must never crawl them. The 2026-11-05 incident: a server
+# run adopted Mike Thompson's owner-force sync job before the helper's
+# claim poll, crawled his two DWS storefronts in degraded form (38 of
+# the real 54 VINs), retired 16 live cars via the stale pass, and
+# overwrote rich galleries with thin 1-2-photo sets. Helper 2.84
+# hardened the helper's side of those holes; this skip removes the
+# server's side by construction: for a helper-served DWS account the
+# server does not crawl at all, in any run shape.
+#
+# DETECTION — BOTH prongs must hold:
+#   (b) HELPER SERVICE (checked first; pure DB/settings reads):
+#       a user_settings heartbeat (helper_seen_at within 7 days with
+#       a helper_version on file), OR a scrape_jobs row stamped with
+#       helper_seen_vins within the last 30 days (only the helper
+#       writes those stamps).
+#   (a) DWS PLATFORM: the account's inventory carries the DWS media
+#       fingerprint (photo covers on imagescf.dealercenter.net — the
+#       platform's own media host, stored evidence the platform
+#       itself served), OR a live probe of a feed URL passes the
+#       parser's existing fingerprint gate (_dws_is_platform) on
+#       crawl_dws_feed's own transports.
+# A DWS account with NO helper service is still crawled (the server
+# is its only path); a non-DWS account is never skipped (its feeds
+# fail the fingerprint and its media is not DWS). Fail-open
+# throughout: any error answers "not skipped" — today's behavior.
+#
+# HOOKS (all in run_scraper):
+#   * USER_ID job runs: evaluated BEFORE the cadence guard, so a
+#     skipped job is left PENDING — never crawled, never completed,
+#     never cadence-failed — for the helper's claim/repair cycle.
+#     force_override jobs included: an owner Force Scrape for such an
+#     account thereby hands the job to the helper (intended).
+#   * The crawl loop (sweeps and no-job USER_ID runs): the account is
+#     skipped whole — no crawl, no stale marks, no sync summary, no
+#     auto-post pass (its queueing arrives via postpass only).
+#   * 'postpass' jobs are NEVER skipped: they are the server's own
+#     no-crawl work, handled (and returned) before this check is
+#     reached, and the job-shape exclusion below fences them again.
+#   * Job shapes the helper never claims (its claim selector excludes
+#     sync_vin and sync_scope rows) are also excluded: the server
+#     stays their only path, exactly as today.
+# Every skip writes a scraper_run_log row (event 'server_skip') and a
+# print line naming the account; a skip is never a failure anywhere.
+_HELPER_DWS_VERDICTS = {}  # uid -> (verdict, full_probe_done)
+_HELPER_DWS_DETAILS = {}   # uid -> evidence detail for the log row
+_HELPER_DWS_RUN_ID = None
+
+
+def _helper_service_evidence(uid, settings_row):
+    """Prong (b): (True, detail) when the account shows live helper
+    service, else (False, {}). Settings heartbeat first (no query),
+    then the stamped-jobs leg (one bounded query)."""
+    now = datetime.now(timezone.utc)
+    row = settings_row or {}
+    seen = _parse_job_ts(row.get("helper_seen_at"))
+    if seen is not None and row.get("helper_version"):
+        if now - seen <= timedelta(days=7):
+            return True, {
+                "leg": "heartbeat",
+                "helper_seen_at": row.get("helper_seen_at"),
+                "helper_version": row.get("helper_version"),
+            }
+    try:
+        cutoff = (now - timedelta(days=30)).isoformat()
+        rows = (
+            db.table("scrape_jobs")
+            .select("id, started_at, helper_seen_vins")
+            .eq("user_id", uid)
+            .gte("started_at", cutoff)
+            .execute()
+        ).data or []
+        for r in rows:
+            vins = r.get("helper_seen_vins")
+            if isinstance(vins, list) and len(vins) > 0:
+                return True, {
+                    "leg": "stamped_job",
+                    "job_id": r.get("id"),
+                    "started_at": r.get("started_at"),
+                    "vins": len(vins),
+                }
+    except Exception as e:
+        print(f"[!] Helper-service evidence warning ({uid[:8]}): {e}")
+    return False, {}
+
+
+def _inventory_dws_media_evidence(uid):
+    """Stored rung of prong (a): any active inventory row whose cover
+    photo lives on imagescf.dealercenter.net — the DWS platform's
+    media host (see the DEALERCENTER DWS PLATFORM notes: all DWS
+    gallery media, including the shared placeholder, is served from
+    it). A sample of covers is representative: on a DWS account every
+    cover is that host."""
+    try:
+        rows = (
+            db.table("scraped_inventory")
+            .select("image_url")
+            .eq("user_id", uid)
+            .eq("is_active", True)
+            .limit(1000)
+            .execute()
+        ).data or []
+        return any(
+            "imagescf.dealercenter.net" in (r.get("image_url") or "")
+            for r in rows
+        )
+    except Exception:
+        return False
+
+
+async def _dws_probe_fingerprint(request, page, url):
+    """Prong (a), live rung: True when `url`'s listing page carries
+    the DWS fingerprint, over crawl_dws_feed's own two transports
+    (request first, browser page second). Either transport may be
+    None (pre-browser calls pass only a request context); a transport
+    that errors or misses simply falls through to the next."""
+    if request is not None:
+        try:
+            resp = await request.get(url, timeout=20000)
+            if resp.status == 200 and _dws_is_platform(await resp.text()):
+                return True
+        except Exception:
+            pass
+    if page is not None:
+        try:
+            r = await page.goto(url, wait_until="commit", timeout=30000)
+            if r is not None and r.status != 404:
+                await asyncio.sleep(2)
+                if _dws_is_platform(await page.content()):
+                    return True
+        except Exception:
+            pass
+    return False
+
+
+async def _helper_served_dws(uid, settings_row, request=None, page=None):
+    """True when this account is helper-served DWS (both prongs).
+    Cached per run: a positive verdict is final; a negative one is
+    re-probed only when a later call brings the browser page rung the
+    earlier call lacked. Fail-open: any error answers False."""
+    cached = _HELPER_DWS_VERDICTS.get(uid)
+    if cached and (cached[0] or cached[1]):
+        return cached[0]
+    verdict = False
+    detail = {}
+    try:
+        ev_ok, ev_detail = _helper_service_evidence(uid, settings_row)
+        detail["evidence"] = ev_detail
+        if ev_ok:
+            dws = _inventory_dws_media_evidence(uid)
+            detail["media"] = dws
+            if not dws:
+                for f in enumerate_feeds(settings_row):
+                    if await _dws_probe_fingerprint(request, page, f["url"]):
+                        dws = True
+                        detail["probe_url"] = f["url"]
+                        break
+            verdict = bool(dws)
+    except Exception as e:
+        print(
+            f"[!] Helper-served DWS check warning ({uid[:8]}): {e} "
+            "(proceeding with the crawl)"
+        )
+        verdict = False
+    _HELPER_DWS_VERDICTS[uid] = (verdict, page is not None or verdict)
+    if verdict:
+        _HELPER_DWS_DETAILS[uid] = detail
+    return verdict
+
+
+def _helper_dws_job_excluded(job):
+    """Job shapes the server-skip must never strand: 'postpass' (the
+    server's own no-crawl work — fenced again here although the
+    postpass block returns before this is consulted) and the shapes
+    the helper never claims (single-VIN refreshes and scoped syncs;
+    its claim selector excludes both), for which the server remains
+    the only path."""
+    if not job:
+        return True
+    if job.get("sync_mode") == "postpass":
+        return True
+    if job.get("sync_vin"):
+        return True
+    if job.get("sync_scope"):
+        return True
+    return False
+
+
+def _log_helper_dws_skip(uid, settings_row, job):
+    """One print line + one scraper_run_log row per skip (the row
+    shape mirrors scraper_next's heartbeat rows). Fail-open: logging
+    never disturbs the run."""
+    global _HELPER_DWS_RUN_ID
+    row = settings_row or {}
+    store = row.get("dealership_name") or row.get("store_name") or "User Store"
+    print(
+        f"[*] Helper-served DWS — server skip: user {uid[:8]} ({store}); "
+        "the helper is this account's sync of record."
+    )
+    try:
+        if _HELPER_DWS_RUN_ID is None:
+            _HELPER_DWS_RUN_ID = (
+                f"prod-{os.getpid()}-"
+                + datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            )
+        db.table("scraper_run_log").insert({
+            "run_id": _HELPER_DWS_RUN_ID,
+            "user_id": uid,
+            "site_key": None,
+            "event": "server_skip",
+            "detail": {
+                "reason": "helper-served DWS — server skip",
+                "job_id": (job or {}).get("id"),
+                "sync_mode": (job or {}).get("sync_mode"),
+                "evidence": _HELPER_DWS_DETAILS.get(uid) or {},
+            },
+        }).execute()
+    except Exception as e:
+        print(f"[!] Helper-served DWS skip log warning ({uid[:8]}): {e}")
+# ==============================================================================
+# ==================== HELPER-SERVED DWS SERVER SKIP END =======================
+# ==============================================================================
+
+
 async def run_scraper():
 
     active_job_id = None
@@ -3830,6 +4058,43 @@ async def run_scraper():
         )
         return
 
+    # HELPER-SERVED DWS SERVER SKIP (Matthew, 2026-11-05): this run
+    # adopted a job for an account the helper serves on a DWS site —
+    # hand the job to the helper untouched: no crawl, no completion,
+    # and (by sitting BEFORE the cadence guard below) never a
+    # cadence failure. 'postpass' jobs returned above and never reach
+    # here; sync_vin / sync_scope jobs are excluded (the helper never
+    # claims those shapes). The stored-evidence rungs usually decide
+    # without any fetch; when they miss, one live probe over a
+    # throwaway request context gets its chance before the guard.
+    if active_job is not None and not _helper_dws_job_excluded(active_job):
+        _skip_uid = (target_uid or "").strip()
+        _skip = False
+        try:
+            _skip = await _helper_served_dws(_skip_uid, target_settings_row)
+            if not _skip:
+                async with async_playwright() as _pw:
+                    _req = await _pw.request.new_context()
+                    try:
+                        _skip = await _helper_served_dws(
+                            _skip_uid, target_settings_row, request=_req
+                        )
+                    finally:
+                        await _req.dispose()
+        except Exception as e:
+            print(
+                f"[!] Helper-served DWS skip warning ({_skip_uid[:8]}): "
+                f"{e} (proceeding as a normal job run)"
+            )
+            _skip = False
+        if _skip:
+            _log_helper_dws_skip(_skip_uid, target_settings_row, active_job)
+            print(
+                f"[*] Job {active_job_id} left pending for the helper "
+                "(helper-served DWS — server skip)."
+            )
+            return
+
     # AUTO-SYNC SWITCH (Matthew, 2026-10-29): in an AUTO run (this
     # run serves no pending job), drop users who turned auto-sync
     # off — visibly, never silently. A run serving a user-requested
@@ -3882,6 +4147,7 @@ async def run_scraper():
     total_synced_all = 0
     auto_post_uids = set()
     scoped_seen = {}
+    _helper_dws_skipped_uids = set()
 
     async with async_playwright() as p:
 
@@ -3972,6 +4238,30 @@ async def run_scraper():
                 )
 
                 continue
+
+            # HELPER-SERVED DWS SERVER SKIP (Matthew, 2026-11-05):
+            # sweeps and no-job runs skip such an account whole — no
+            # crawl, no tally, no stale pass, no auto-post pass. When
+            # this run serves a job for THIS user, the pre-guard check
+            # already had its say; this is the same verdict with the
+            # browser rung available — but never for the job shapes
+            # the helper cannot claim (those stay the server's job).
+            _serving_this_user = (
+                active_job is not None
+                and active_uid == (target_uid or "").strip()
+            )
+            if not (
+                _serving_this_user and _helper_dws_job_excluded(active_job)
+            ):
+                if await _helper_served_dws(
+                    active_uid, user_cfg, context.request, page
+                ):
+                    _helper_dws_skipped_uids.add(active_uid)
+                    _log_helper_dws_skip(
+                        active_uid, user_cfg,
+                        active_job if _serving_this_user else None,
+                    )
+                    continue
 
             print("\n=======================================================")
             print(f"[*] Crawling for User: {active_uid}")
@@ -4292,7 +4582,14 @@ async def run_scraper():
     # inside — reporting never disturbs the run's outcome.
     _flush_prod_sync_summaries()
 
-    if active_job_id:
+    if active_job_id and (target_uid or "").strip() in _helper_dws_skipped_uids:
+
+        print(
+            f"[*] Job {active_job_id} left pending for the helper "
+            "(helper-served DWS — server skip)."
+        )
+
+    elif active_job_id:
 
         try:
 
