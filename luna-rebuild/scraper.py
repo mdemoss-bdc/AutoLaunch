@@ -752,6 +752,47 @@ def push_batch_to_supabase(records: List[dict]) -> int:
     except Exception as e:
         print(f"[!] Existing-price preservation warning (non-fatal): {e}")
 
+    # Preserve user-added photos with the same precedence as a manually
+    # typed price (the block above). Photos a user shoots for a car the
+    # dealer site shows without any live in scraped_inventory
+    # .custom_photo_urls; scrape records never carry that column, so
+    # the upsert below leaves it untouched and the user's set survives
+    # every sync on its own. The one active step: when THIS scrape
+    # found real dealer photos for a car whose stored row still
+    # carries user photos, the dealer's gallery takes over — retire
+    # the manual set (clear it on the record) so hand-shot photos
+    # never trail along behind the dealer's own. "Real" is the
+    # counter's own test, so a scrape that surfaced only the
+    # placeholder (the degraded-document variant) retires nothing.
+    try:
+        retire_by_user = {}
+        for r in unique_by_vin.values():
+            if r.get("user_id") and _usable_photo_count({
+                "image_url": r.get("image_url"),
+                "photos": r.get("photos"),
+                "custom_photo_urls": [],
+            }) > 0:
+                retire_by_user.setdefault(r["user_id"], []).append(r["vin"])
+        for uid, vins in retire_by_user.items():
+            stored_custom = {}
+            for i in range(0, len(vins), 200):
+                chunk = vins[i:i + 200]
+                res = (
+                    db.table("scraped_inventory")
+                    .select("vin, custom_photo_urls")
+                    .eq("user_id", uid)
+                    .in_("vin", chunk)
+                    .execute()
+                )
+                for row in res.data or []:
+                    if row.get("custom_photo_urls"):
+                        stored_custom[row["vin"]] = row["custom_photo_urls"]
+            for r in unique_by_vin.values():
+                if r.get("user_id") == uid and r.get("vin") in stored_custom:
+                    r["custom_photo_urls"] = []
+    except Exception as e:
+        print(f"[!] Custom-photo retirement warning (non-fatal): {e}")
+
     try:
         res = db.table("scraped_inventory").upsert(
             list(unique_by_vin.values()),
