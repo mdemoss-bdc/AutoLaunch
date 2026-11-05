@@ -1,3 +1,5 @@
+importScripts("dws_sync.js");
+
 // AutoLaunch Vehicle Assistant — background service worker (v2)
 //
 // Phase 2 changes vs the original:
@@ -774,6 +776,19 @@ async function sbPost(path, body) {
     method: "POST",
     headers: await sbHeaders({ "Prefer": "return=representation" }),
     body: JSON.stringify(body)
+  });
+}
+
+// Upsert with an explicit conflict target (v2.1.80, for the DWS
+// helper-side sync's inventory push — mirrors the Python scraper's
+// on_conflict="vin, user_id").
+async function sbUpsert(path, rows) {
+  return sbFetch(path, {
+    method: "POST",
+    headers: await sbHeaders({
+      "Prefer": "resolution=merge-duplicates,return=representation"
+    }),
+    body: JSON.stringify(rows)
   });
 }
 
@@ -2648,18 +2663,57 @@ async function finishJobFailed(queueId, reason, diags) {
   }
 }
 
+// --- DealerCenter DWS helper-side sync (v2.1.80) -----------------------
+// dws_sync.js (importScripts at the top of this file) crawls
+// Cloudflare-blocked DealerCenter sites from THIS browser over
+// plain fetch and lands the cars itself. Background fetch only:
+// no tab is created, navigated, or focused for a sync — the user
+// keeps working wherever they are. The deps below hand the sync
+// this worker's own Supabase plumbing and lease machinery; the
+// sync path honors the lease exactly like the posting claims do.
+async function dwsFetchText(url, opts) {
+  const init = {};
+  if (opts && opts.method) init.method = opts.method;
+  if (opts && opts.form) {
+    init.headers = { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" };
+    init.body = new URLSearchParams(opts.form).toString();
+  }
+  const res = await fetch(url, init);
+  return { status: res.status, text: await res.text() };
+}
+
+function checkDwsSyncSafe() {
+  if (typeof AutoLaunchDwsSync === "undefined" ||
+      !AutoLaunchDwsSync || !AutoLaunchDwsSync.checkDwsSync) return;
+  AutoLaunchDwsSync.checkDwsSync({
+    storageGet: (keys) => chrome.storage.local.get(keys),
+    storageSet: (obj) => chrome.storage.local.set(obj),
+    sbGet: sbGet,
+    sbPatch: sbPatch,
+    sbUpsert: sbUpsert,
+    getInstanceId: getOrCreateInstanceId,
+    leaseDecision: helperLeaseDecision,
+    leaseTtlMs: HELPER_LEASE_TTL_MS,
+    fetchText: dwsFetchText,
+    now: () => Date.now(),
+    log: (...args) => console.log(...args)
+  }).catch(err => console.warn("[AutoLaunch] DWS sync cycle failed:", err));
+}
+
 // --- Wiring ---------------------------------------------------------------
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: POLL_MINUTES });
   checkQueue();
+  checkDwsSyncSafe();
 });
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: POLL_MINUTES });
   checkQueue();
+  checkDwsSyncSafe();
 });
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === POLL_ALARM) { checkQueue(); checkOutboundReplies(); }
+  if (alarm.name === POLL_ALARM) { checkQueue(); checkOutboundReplies(); checkDwsSyncSafe(); }
 });
 
 // The app is served from two first-party origins: the custom domain
