@@ -1143,123 +1143,21 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
           </div>
 
           <p class="text-slate-500 mt-2">
-            Let's connect your inventory and get your vehicles ready for posting.
+            Six steps, one at a time. Each step unlocks when the one before it is verified done — nothing here is taken on faith.
           </p>
 
-          <div class="space-y-5 mt-8">
+          <div id="gsGateBanner" class="hidden mt-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-sm text-amber-800 font-semibold"></div>
 
-            <div>
-              <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
-                Dealership Name
-              </label>
-              <input
-                type="text"
-                id="onboardingDealershipName"
-                class="w-full border border-slate-300 rounded-xl px-4 py-3"
-                placeholder="Enter dealership name">
+          <div id="gsStaircase" class="space-y-4 mt-8">
+            <p class="text-sm text-slate-400">Loading your setup…</p>
+          </div>
+
+          <div id="gsCompleteCard" class="hidden mt-8 p-6 rounded-2xl bg-emerald-50 border border-emerald-200">
+            <h3 class="text-lg font-bold text-slate-900">🎉 Setup complete</h3>
+            <p class="text-sm text-slate-600 mt-1">Everything verified: helper connected, inventory in, first car posted. The rest of AutoLaunch is unlocked.</p>
+            <div class="mt-4">
+              <button type="button" onclick="showInventoryPage()" class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">Go to my cars</button>
             </div>
-
-            <div>
-              <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
-                Used Inventory URL
-              </label>
-              <input
-                type="text"
-                id="onboardingUsedUrl"
-                class="w-full border border-slate-300 rounded-xl px-4 py-3"
-                placeholder="https://">
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
-                New Inventory URL
-              </label>
-              <input
-                type="text"
-                id="onboardingNewUrl"
-                class="w-full border border-slate-300 rounded-xl px-4 py-3"
-                placeholder="https://">
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold uppercase text-slate-500 mb-2">
-                Certified Inventory URL (Optional)
-              </label>
-              <input
-                type="text"
-                id="onboardingCertifiedUrl"
-                class="w-full border border-slate-300 rounded-xl px-4 py-3"
-                placeholder="https://">
-            </div>
-
-            <button
-              id="btnTestInventory"
-              onclick="testInventory()"
-              class="btn-gradient px-8 py-3 rounded-xl text-white font-bold">
-
-              Test Inventory
-
-            </button>
-
-            <!-- TEST RESULTS -->
-
-            <div
-              id="inventoryTestResults"
-              class="hidden mt-8 p-6 rounded-2xl bg-blue-50 border border-blue-200">
-
-              <h3 class="text-lg font-bold text-slate-900 mb-4">
-                ✅ Inventory Test Results
-              </h3>
-
-              <div class="space-y-2 text-sm">
-                <div>✅ Used Inventory Found</div>
-                <div>✅ New Inventory Found</div>
-                <div>✅ Photos Detected</div>
-                <div>✅ VIN Numbers Detected</div>
-                <div>✅ Pricing Detected</div>
-              </div>
-
-              <div class="mt-6">
-                <button
-                  onclick="continueSetup()"
-                  class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
-
-                  Continue
-
-                </button>
-              </div>
-
-            </div>
-
-            <!-- SYNC PAGE -->
-
-            <div
-              id="inventorySyncPage"
-              class="hidden mt-8 p-6 rounded-2xl bg-emerald-50 border border-emerald-200">
-
-              <h3 class="text-lg font-bold text-slate-900 mb-4">
-                🚀 Inventory Sync Started
-              </h3>
-
-              <div class="space-y-3 text-sm">
-                <div>✅ Inventory Connected</div>
-                <div>✅ URLs Saved</div>
-                <div>✅ Initial Sync Started</div>
-                <div>📦 Importing first vehicles...</div>
-              </div>
-
-              <div class="mt-6">
-                <button
-                  onclick="finishSetup()"
-                  class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
-
-                  Complete Setup
-
-                </button>
-              </div>
-
-            </div>
-
           </div>
 
         </div>
@@ -1276,37 +1174,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       Setup Progress
     </div>
 
-    <div class="space-y-5">
-
-      <div class="flex items-center gap-3">
-        <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
-        <span id="stepDealership" class="font-semibold">
-          Dealership Setup
-        </span>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-        <span id="stepInventoryTest" class="text-slate-500">
-          Inventory Test
-        </span>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-        <span id="stepInventorySync" class="text-slate-500">
-          Inventory Sync
-        </span>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <div class="w-3 h-3 bg-slate-300 rounded-full"></div>
-        <span id="stepComplete" class="text-slate-500">
-          Complete
-        </span>
-      </div>
-
-    </div>
+    <div class="space-y-5" id="gsProgressList"></div>
 
   </div>
 
@@ -8203,6 +8071,13 @@ updateLastSyncDisplay();
       refreshSafetyCounter();
     }
   } catch (e) {}
+
+  // GATED SETUP (2026-11-05): every settings load re-derives the
+  // staircase state and re-applies the nav gate; on the first load
+  // it also lands anyone missing an essential on Get Started —
+  // whatever the stored onboarding_complete flag claims. Leaders
+  // are exempt inside applySetupGate (manage-only accounts).
+  await applySetupGate();
 }
 // ==============================================================================
 // ====================== LAST SYNC DISPLAY START ===============================
@@ -9926,6 +9801,27 @@ function gridCardHtml(car) {
 // GRID_CHUNK_SIZE cards + a "Show more cars" button) so a 2,000-car lot
 // does not jank the phone; selection is unaffected because checkbox state
 // comes from selectedCarVins, not from the DOM.
+
+// SETUP RIDER (2026-11-05): an account with no cars AND no inventory
+// website isn't a filters problem — the "loosen filters" copy sent a
+// stuck new user hunting through filters that were already wide open
+// (Mike Thompson's empty account, 2026-11-05). Say what is actually
+// missing, with the way to fix it. When cars exist but the filters
+// exclude them all, the original copy below is unchanged.
+function inventoryEmptyStateHtml(kind) {
+  const noCarsAtAll = typeof rawInventory !== "undefined" && Array.isArray(rawInventory) && rawInventory.length === 0;
+  const noSource = !(typeof currentStore !== "undefined" && currentStore && (currentStore.usedUrl || currentStore.newUrl || currentStore.cpoUrl));
+  if (noCarsAtAll && noSource) {
+    const inner = 'No inventory yet. Add your dealership\'s inventory website and your cars will sync in. <button type="button" onclick="showGetStartedPage()" class="font-bold text-blue-600 underline cursor-pointer">Add your inventory website</button>';
+    return kind === "table"
+      ? '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">' + inner + '</td></tr>'
+      : '<div class="col-span-full py-16 text-center text-slate-400 text-xs">' + inner + '</div>';
+  }
+  return kind === "table"
+    ? '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</td></tr>'
+    : '<div class="col-span-full py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</div>';
+}
+
 function renderGridRows(cars) {
   const grid = document.getElementById("inventoryGridView");
   const tbody = document.getElementById("inventoryTableBody");
@@ -9935,7 +9831,7 @@ function renderGridRows(cars) {
   gridChunkState = { cars: cars, shown: cars.length };
 
   if (!cars.length) {
-    grid.innerHTML = '<div class="col-span-full py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</div>';
+    grid.innerHTML = inventoryEmptyStateHtml("grid");
     return;
   }
 
@@ -9957,7 +9853,7 @@ function renderTableRows(cars) {
   if (gridEl) gridEl.innerHTML = "";
 
   if (!cars.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="py-16 text-center text-slate-400 text-xs">No cars match those filters. Loosen one up and they\'ll roll right back in.</td></tr>';
+    tbody.innerHTML = inventoryEmptyStateHtml("table");
     return;
   }
 
@@ -11782,6 +11678,17 @@ async function triggerLiveLotCrawl(event, scopeKeys) {
 
     if (!currentUser) return;
 
+    // SETUP GUARD (2026-11-05): with no inventory website saved
+    // there is nothing to crawl — queueing a job would "succeed"
+    // with 0 vehicles and tell the user nothing (the Mike Thompson
+    // setup failure). Route to the website step instead.
+    if (typeof currentStore !== "undefined" && currentStore &&
+        !currentStore.usedUrl && !currentStore.newUrl && !currentStore.cpoUrl) {
+        alert("Add your dealership's inventory website first — there's no inventory source to sync yet. Taking you to that setup step.");
+        showGetStartedPage();
+        return;
+    }
+
     const btn =
         event.currentTarget;
 
@@ -11892,188 +11799,572 @@ async function triggerLiveLotCrawl(event, scopeKeys) {
 // ====================== SYNC INVENTORY END ====================================
 // ==============================================================================
   
-  function continueSetup() {
+// ==============================================================================
+// ====================== GATED SETUP STAIRCASE (2026-11-05) ====================
+// ==============================================================================
+// WHY: the old setup was an honor system. finishSetup() stamped
+// onboarding_complete=true over whatever the onboarding form happened
+// to hold — empty website fields included — so a real tester
+// "completed" setup with NO inventory website and NO helper, then ran
+// a sync that reported success with 0 vehicles (Mike Thompson,
+// 2026-11-05). This staircase replaces that flow end to end:
+//   * six steps in a fixed order; a step is DONE only when live
+//     account state proves it (helper check-in row, saved URLs,
+//     landed cars, a real dealership name, a posted car) — never a
+//     checkbox the user can simply assert;
+//   * the next step stays locked until the one before it verifies;
+//   * onboarding_complete is an OUTCOME: it is written when the last
+//     step verifies (and healed for legacy accounts whose state
+//     already proves everything), never an input a form can fake.
+// ONE documented exception: step 5 (Facebook ready) has no server-side
+// signal at all — nothing in user_settings can prove "signed in to
+// Facebook in this Chrome" (the fb_page_id / fb_access_token columns
+// are legacy and unread by this app). It is therefore an explicit
+// stored confirmation (fb_ready_confirmed_at), and accounts whose
+// onboarding_complete flag was ALREADY true keep the step satisfied —
+// nobody who was onboarded before this staircase gets trapped by it.
+// The nav gate keys off the first five steps (the essentials): until
+// they verify, the feature pages stay locked, so step 6's trip to the
+// inventory is possible the moment the essentials are real.
 
-    document
-        .getElementById(
-            "inventoryTestResults"
-        )
-        .classList.add("hidden");
+const GS_PLACEHOLDER_NAMES = ["my inventory", "dealership inventory"];
+const GS_GATED_NAV_KEYS = ["inventory", "wishlist", "prospects", "trade", "closer", "dealership"];
+const GS_STEP_DEFS = [
+  { key: "extension", title: "Install the Chrome extension" },
+  { key: "website", title: "Add your inventory website" },
+  { key: "sync", title: "Sync your first cars" },
+  { key: "dealership", title: "Name your dealership" },
+  { key: "facebook", title: "Get Facebook ready" },
+  { key: "post", title: "Post your first car" }
+];
+let gsState = null;          // last gsComputeSteps() result
+let gsRaw = null;            // the raw input that state was computed from
+let gsLandingApplied = false; // the first-load landing happens once per session
+let gsNavLockedNow = false;
+let gsPollTimer = null;
+let gsRenderedIndex = null;  // currentIndex at last render (form-wipe guard)
 
-    document
-        .getElementById(
-            "inventorySyncPage"
-        )
-        .classList.remove("hidden");
-
-    const testStep =
-        document.getElementById(
-            "stepInventoryTest"
-        );
-
-    if (testStep) {
-        testStep.classList.remove(
-            "text-slate-500"
-        );
-
-        testStep.classList.add(
-            "text-emerald-600",
-            "font-semibold"
-        );
-    }
-
-    const syncStep =
-        document.getElementById(
-            "stepInventorySync"
-        );
-
-    if (syncStep) {
-        syncStep.classList.remove(
-            "text-slate-500"
-        );
-
-        syncStep.classList.add(
-            "text-blue-600",
-            "font-semibold"
-        );
-    }
-
+// PURE predicate core: plain input in, staircase state out. The Node
+// harness (getstarted-tools) extracts this function verbatim and runs
+// it against recorded account states — keep it free of DOM, globals
+// beyond GS_STEP_DEFS / GS_PLACEHOLDER_NAMES, and side effects.
+function gsComputeSteps(input) {
+  const inp = input || {};
+  const nonEmpty = function (v) { return typeof v === "string" && v.trim().length > 0; };
+  const hasUrl = nonEmpty(inp.usedUrl) || nonEmpty(inp.newUrl) || nonEmpty(inp.certifiedUrl);
+  const rawName = nonEmpty(inp.dealershipName) ? inp.dealershipName : (typeof inp.storeName === "string" ? inp.storeName : "");
+  const name = rawName.trim();
+  const nameOk = !!name && GS_PLACEHOLDER_NAMES.indexOf(name.toLowerCase()) === -1;
+  const seenMs = typeof inp.helperSeenAtMs === "number" ? inp.helperSeenAtMs : NaN;
+  const nowMs = typeof inp.nowMs === "number" ? inp.nowMs : 0;
+  const helperOk = !!inp.helperVersion || (isFinite(seenMs) && (nowMs - seenMs) <= 24 * 60 * 60 * 1000);
+  const activeCars = typeof inp.activeCars === "number" ? inp.activeCars : 0;
+  const postedCars = typeof inp.postedCars === "number" ? inp.postedCars : 0;
+  const fbOk = !!inp.fbConfirmedAtMs || inp.onboardingComplete === true;
+  const doneList = [helperOk, hasUrl, activeCars > 0, nameOk, fbOk, postedCars > 0];
+  const steps = GS_STEP_DEFS.map(function (def, i) {
+    return { key: def.key, title: def.title, done: !!doneList[i], current: false, locked: false };
+  });
+  let currentIndex = -1;
+  for (let i = 0; i < steps.length; i++) { if (!steps[i].done) { currentIndex = i; break; } }
+  steps.forEach(function (st, i) {
+    st.current = i === currentIndex;
+    st.locked = currentIndex !== -1 && i > currentIndex;
+  });
+  return {
+    steps: steps,
+    currentIndex: currentIndex,
+    complete: currentIndex === -1,
+    firstFiveDone: steps.slice(0, 5).every(function (st) { return st.done; }),
+    syncZeroWarning: activeCars === 0 && inp.lastSyncCarsChecked === 0
+  };
 }
 
-async function finishSetup() {
+// Reads the live state the predicates judge: the account's own
+// user_settings row plus two exact counts and the newest sync summary.
+// Any read failure returns null and the caller fails OPEN — a state
+// read error must never trap a user behind a gate that can't verify.
+async function gsLoadSetupState() {
+  if (!currentUser || typeof supabaseClient === "undefined") return null;
+  const uid = currentUser.id;
+  const GS_COLS = "onboarding_complete, dealership_name, store_name, used_url, new_url, certified_url, helper_version, helper_seen_at";
+  let row = null;
+  try {
+    const r = await supabaseClient.from("user_settings")
+      .select(GS_COLS + ", fb_ready_confirmed_at")
+      .eq("user_id", uid).maybeSingle();
+    if (r.error) throw r.error;
+    row = r.data;
+  } catch (e) {
+    try {
+      const r2 = await supabaseClient.from("user_settings")
+        .select(GS_COLS)
+        .eq("user_id", uid).maybeSingle();
+      if (r2.error) throw r2.error;
+      row = r2.data;
+    } catch (e2) { return null; }
+  }
+  if (!row) row = {};
+  let activeCars = 0, postedCars = 0, lastSyncCarsChecked = null;
+  try {
+    const c1 = await supabaseClient.from("scraped_inventory")
+      .select("vin", { count: "exact", head: true })
+      .eq("user_id", uid).eq("is_active", true);
+    if (typeof c1.count === "number") activeCars = c1.count;
+    const c2 = await supabaseClient.from("scraped_inventory")
+      .select("vin", { count: "exact", head: true })
+      .eq("user_id", uid).not("marketplace_posted_at", "is", null);
+    if (typeof c2.count === "number") postedCars = c2.count;
+    const s1 = await supabaseClient.from("sync_summaries")
+      .select("vehicles_checked")
+      .eq("user_id", uid)
+      .order("run_started_at", { ascending: false })
+      .limit(1);
+    if (s1.data && s1.data.length && typeof s1.data[0].vehicles_checked === "number") {
+      lastSyncCarsChecked = s1.data[0].vehicles_checked;
+    }
+  } catch (e) { /* per-field fail-closed: zeros keep steps open, never fake-done */ }
+  const input = {
+    helperVersion: row.helper_version || null,
+    helperSeenAtMs: row.helper_seen_at ? Date.parse(row.helper_seen_at) : null,
+    nowMs: Date.now(),
+    usedUrl: row.used_url || "",
+    newUrl: row.new_url || "",
+    certifiedUrl: row.certified_url || "",
+    activeCars: activeCars,
+    postedCars: postedCars,
+    dealershipName: row.dealership_name || "",
+    storeName: row.store_name || "",
+    fbConfirmedAtMs: row.fb_ready_confirmed_at ? Date.parse(row.fb_ready_confirmed_at) : null,
+    onboardingComplete: row.onboarding_complete === true,
+    lastSyncCarsChecked: lastSyncCarsChecked
+  };
+  gsRaw = input;
+  gsState = gsComputeSteps(input);
+  return gsState;
+}
 
-  if (currentUser) {
+function gsPageVisible() {
+  const p = document.getElementById("getStartedPage");
+  return !!(p && !p.classList.contains("hidden"));
+}
 
-    const dealershipName =
-        document.getElementById("onboardingDealershipName").value.trim();
+// The gate itself: while the essentials (steps 1-5) are unverified,
+// the feature pages wear a lock and the capture-phase click guard
+// below routes their clicks back here. Get Started, Chrome Extension,
+// Settings and Ask Luna stay reachable — setup itself needs them.
+function gsApplyNavGate() {
+  const locked = !!(gsState && !gsState.firstFiveDone);
+  gsNavLockedNow = locked;
+  document.querySelectorAll("aside a[data-nav]").forEach(function (a) {
+    if (GS_GATED_NAV_KEYS.indexOf(a.getAttribute("data-nav")) === -1) return;
+    const was = a.getAttribute("data-gs-locked") === "1";
+    if (locked && !was) {
+      a.setAttribute("data-gs-locked", "1");
+      a.classList.add("opacity-50");
+      const badge = document.createElement("span");
+      badge.className = "gs-lock-badge ml-auto text-slate-400";
+      badge.innerHTML = '<i class="fa-solid fa-lock text-[10px]"></i>';
+      a.appendChild(badge);
+    } else if (!locked && was) {
+      a.removeAttribute("data-gs-locked");
+      a.classList.remove("opacity-50");
+      const badge = a.querySelector(".gs-lock-badge");
+      if (badge) badge.remove();
+    }
+  });
+  const syncItem = document.getElementById("navSyncItem");
+  if (syncItem) syncItem.classList.toggle("opacity-50", locked);
+  const syncCaret = document.getElementById("navSyncCaret");
+  if (syncCaret) syncCaret.classList.toggle("opacity-50", locked);
+}
 
-    const usedUrl =
-        document.getElementById("onboardingUsedUrl").value.trim();
+function gsBounceToSetup() {
+  showGetStartedPage();
+  const banner = document.getElementById("gsGateBanner");
+  if (banner) {
+    banner.textContent = "Finish setup first — each step unlocks when the one before it is verified done.";
+    banner.classList.remove("hidden");
+  }
+}
 
-    const newUrl =
-        document.getElementById("onboardingNewUrl").value.trim();
+// One capture-phase guard for the whole sidebar: while the gate is
+// locked, a click on a feature page (or Sync) never reaches its
+// handler — it lands on the staircase with the reason showing.
+document.addEventListener("click", function (e) {
+  if (!gsNavLockedNow) return;
+  const t = e.target;
+  if (!t || typeof t.closest !== "function") return;
+  const navA = t.closest("aside a[data-nav]");
+  if (navA && GS_GATED_NAV_KEYS.indexOf(navA.getAttribute("data-nav")) !== -1) {
+    e.preventDefault();
+    e.stopPropagation();
+    gsBounceToSetup();
+    return;
+  }
+  if (t.closest("#navSyncItem, #navSyncCaret")) {
+    e.preventDefault();
+    e.stopPropagation();
+    gsBounceToSetup();
+  }
+}, true);
 
-    const certifiedUrl =
-        document.getElementById("onboardingCertifiedUrl").value.trim();
+// Runs from loadUserStoreSettings on every settings load. Dealership
+// leaders are exempt (manage-only accounts; their home is the
+// Dealership page, not the staircase). Fails open on any state error.
+async function applySetupGate() {
+  if (!currentUser || typeof isDealershipLeader === "function" && isDealershipLeader()) return;
+  const state = await gsLoadSetupState();
+  if (!state) return;
+  gsApplyNavGate();
+  // Heal: state proves setup complete but the stored flag disagrees —
+  // write it so every other reader of the flag agrees with reality.
+  if (state.complete && gsRaw && gsRaw.onboardingComplete !== true) {
+    try {
+      const { error } = await supabaseClient.from("user_settings")
+        .update({ onboarding_complete: true })
+        .eq("user_id", currentUser.id);
+      if (!error) gsRaw.onboardingComplete = true;
+    } catch (e) { /* best-effort: the derived gate already protects the user */ }
+  }
+  if (!gsLandingApplied) {
+    gsLandingApplied = true;
+    if (!state.firstFiveDone) {
+      showGetStartedPage();
+      return;
+    }
+  }
+  gsMaybeRender();
+  if (state.firstFiveDone && !state.complete) gsEnsurePoll(); // watch for the first post
+}
 
-    // PLANS: a brand-new account's first settings row starts on the
-    // 'post' tier. If a row already carries any tier value, leave it
-    // exactly as it is — setup never changes an existing account's plan.
+// Reload state, re-apply the gate, repaint the staircase if visible.
+// Explicit step actions (saves, checks) call gsRenderStaircase()
+// directly afterwards; background refreshes go through gsMaybeRender
+// so a poll tick can never wipe a half-typed form.
+async function gsRefreshSteps() {
+  const state = await gsLoadSetupState();
+  if (!state) return;
+  gsApplyNavGate();
+  gsMaybeRender();
+}
+
+function gsMaybeRender() {
+  if (!gsState || !gsPageVisible()) return;
+  const ci = gsState.currentIndex;
+  const formStep = ci === 1 || ci === 3; // website / dealership steps hold typed input
+  if (formStep && gsRenderedIndex === ci) return;
+  gsRenderStaircase();
+}
+
+// While the staircase is on screen, re-check every 12s: the events
+// that complete steps happen OUTSIDE this page (the helper checks in,
+// the scraper lands cars, a post completes). Self-clears when the
+// page is hidden or setup completes.
+function gsEnsurePoll() {
+  if (gsPollTimer) return;
+  gsPollTimer = setInterval(async function () {
+    if (!gsPageVisible()) { clearInterval(gsPollTimer); gsPollTimer = null; return; }
+    await applySetupGate();
+    if (gsState && gsState.complete) { clearInterval(gsPollTimer); gsPollTimer = null; }
+  }, 12000);
+}
+
+function gsProofLine(key) {
+  const r = gsRaw || {};
+  switch (key) {
+    case "extension": {
+      let s = "Helper checked in on this account";
+      if (r.helperVersion) s += " · v" + r.helperVersion;
+      if (r.helperSeenAtMs) s += " · last seen " + new Date(r.helperSeenAtMs).toLocaleString();
+      return s;
+    }
+    case "website": return "Inventory website saved";
+    case "sync": return (r.activeCars || 0) + (r.activeCars === 1 ? " car" : " cars") + " in your inventory";
+    case "dealership": {
+      const n = (r.dealershipName && r.dealershipName.trim()) || (r.storeName || "").trim();
+      return "Dealership: " + n;
+    }
+    case "facebook":
+      return r.fbConfirmedAtMs
+        ? "You confirmed you're signed in to Facebook in this Chrome"
+        : "Already covered — this account's setup was completed before this checklist existed";
+    case "post": return (r.postedCars || 0) + (r.postedCars === 1 ? " car" : " cars") + " posted";
+    default: return "Done";
+  }
+}
+
+function gsStepFormHtml(key, isDoneStep) {
+  if (key === "extension") {
+    return '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      '<a href="https://chromewebstore.google.com/detail/cnicmlnclohognndlpfgoklikhdolejj" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl btn-gradient text-white font-bold text-sm shadow-sm cursor-pointer"><i class="fa-brands fa-chrome"></i><span>Install the AutoLaunch extension — free, from the Chrome Web Store</span></a>' +
+      '<button type="button" onclick="gsPingHelper()" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-bold text-sm shadow-sm cursor-pointer">Check again</button>' +
+      '<span id="gsHelperCheckMsg" class="text-sm text-slate-500"></span></div>' +
+      '<p class="text-xs text-slate-400 mt-3">The helper is what posts your cars. After it installs, come back to this tab, hard-refresh (Ctrl+Shift+R), then click Check again — this step completes on its own when the helper checks in on your account.</p>';
+  }
+  if (key === "website") {
+    return '<div class="space-y-4 mt-4">' +
+      '<div><label class="block text-xs font-bold uppercase text-slate-500 mb-2">Used Inventory URL</label>' +
+      '<input type="text" id="onboardingUsedUrl" class="w-full border border-slate-300 rounded-xl px-4 py-3" placeholder="https://"></div>' +
+      '<div><label class="block text-xs font-bold uppercase text-slate-500 mb-2">New Inventory URL</label>' +
+      '<input type="text" id="onboardingNewUrl" class="w-full border border-slate-300 rounded-xl px-4 py-3" placeholder="https://"></div>' +
+      '<div><label class="block text-xs font-bold uppercase text-slate-500 mb-2">Certified Inventory URL (Optional)</label>' +
+      '<input type="text" id="onboardingCertifiedUrl" class="w-full border border-slate-300 rounded-xl px-4 py-3" placeholder="https://"></div>' +
+      '<div class="flex flex-wrap items-center gap-3">' +
+      '<button type="button" onclick="gsSaveWebsite(this)" class="btn-gradient px-6 py-3 rounded-xl text-white font-bold text-sm">Save website</button>' +
+      '<span id="gsWebsiteMsg" class="text-sm text-slate-500"></span></div></div>';
+  }
+  if (key === "sync") {
+    return '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      '<button type="button" onclick="gsSyncNow(this)" class="btn-gradient px-6 py-3 rounded-xl text-white font-bold text-sm"><i class="fa-solid fa-rotate mr-2"></i>Sync Inventory</button>' +
+      '<button type="button" onclick="gsRefreshSteps()" class="px-5 py-3 rounded-xl border border-slate-300 text-slate-700 font-bold text-sm cursor-pointer">Check again</button>' +
+      '<span class="text-sm text-slate-500">The first sync pulls up to 15 cars to prove the connection; after that, Sync pulls your full lot. Cars can take a few minutes to land — this step completes by itself when they do.</span></div>';
+  }
+  if (key === "dealership") {
+    return '<div class="space-y-4 mt-4">' +
+      '<div><label class="block text-xs font-bold uppercase text-slate-500 mb-2">Dealership Name</label>' +
+      '<input type="text" id="onboardingDealershipName" class="w-full border border-slate-300 rounded-xl px-4 py-3" placeholder="Enter dealership name"></div>' +
+      '<div class="flex flex-wrap items-center gap-3">' +
+      '<button type="button" onclick="gsSaveDealershipName(this)" class="btn-gradient px-6 py-3 rounded-xl text-white font-bold text-sm">Save name</button>' +
+      '<span id="gsDealershipMsg" class="text-sm text-slate-500"></span></div></div>';
+  }
+  if (key === "facebook") {
+    return '<p class="text-sm text-slate-500 mt-2">The helper posts through <strong>your own Facebook sign-in</strong> in this Chrome — AutoLaunch never sees your Facebook password, and there is no way for us to check this from the server. So this one step runs on your word:</p>' +
+      '<label class="flex items-start gap-3 mt-4 cursor-pointer">' +
+      '<input type="checkbox" id="gsFbConfirmChk" class="mt-1 w-4 h-4">' +
+      '<span class="text-sm text-slate-700">I\'m signed in to Facebook in this Chrome, on the account I post cars with.</span></label>' +
+      '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      '<button type="button" onclick="gsConfirmFacebook(this)" class="btn-gradient px-6 py-3 rounded-xl text-white font-bold text-sm">Confirm &amp; continue</button>' +
+      '<span id="gsFacebookMsg" class="text-sm text-slate-500"></span></div>';
+  }
+  if (key === "post") {
+    return '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+      '<button type="button" onclick="showInventoryPage()" class="btn-gradient px-6 py-3 rounded-xl text-white font-bold text-sm">Go to my cars</button>' +
+      '<span class="text-sm text-slate-500">Pick a car and Post to Facebook. This step completes by itself the moment your first listing is live.</span></div>';
+  }
+  return "";
+}
+
+function gsStepWarningHtml(key) {
+  if (key === "sync" && gsState && gsState.syncZeroWarning) {
+    return '<div class="mt-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-sm text-amber-800">' +
+      '<strong>Your last sync finished but found no cars.</strong> The website address in the step above may be wrong, or that page lists no cars right now. Check the address, save it, and sync again.</div>';
+  }
+  return "";
+}
+
+function gsStepCardHtml(st, i) {
+  let cls, badge, body;
+  if (st.done) {
+    cls = "border-emerald-200 bg-emerald-50";
+    badge = '<span class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-bold"><i class="fa-solid fa-check"></i> Done</span>';
+    body = '<p class="text-sm text-emerald-700 font-semibold mt-2">' + escapeHtml(gsProofLine(st.key)) + "</p>" +
+      (st.key === "website" || st.key === "dealership" ? gsStepFormHtml(st.key, true) : "");
+  } else if (st.current) {
+    cls = "border-blue-300 bg-white shadow-sm";
+    badge = '<span class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-600 text-white text-[11px] font-bold">Step ' + (i + 1) + " of 6</span>";
+    body = gsStepWarningHtml(st.key) + gsStepFormHtml(st.key, false);
+  } else {
+    cls = "border-slate-200 bg-slate-50 opacity-70";
+    badge = '<span class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-400 text-white text-[11px] font-bold"><i class="fa-solid fa-lock"></i> Locked</span>';
+    body = '<p class="text-sm text-slate-400 mt-2">Finish the step above first — this one unlocks when it verifies.</p>';
+  }
+  return '<div class="p-5 rounded-2xl border ' + cls + '">' +
+    '<div class="flex items-center justify-between gap-3">' +
+    '<h3 class="font-extrabold text-slate-900 text-sm">' + (i + 1) + ". " + escapeHtml(st.title) + "</h3>" + badge +
+    "</div>" + body + "</div>";
+}
+
+function gsRenderStaircase() {
+  const wrap = document.getElementById("gsStaircase");
+  const prog = document.getElementById("gsProgressList");
+  const doneCard = document.getElementById("gsCompleteCard");
+  if (!wrap) return;
+  if (!gsState) {
+    wrap.innerHTML = '<p class="text-sm text-slate-400">Loading your setup…</p>';
+    return;
+  }
+  wrap.innerHTML = gsState.steps.map(function (st, i) { return gsStepCardHtml(st, i); }).join("");
+  if (prog) {
+    prog.innerHTML = gsState.steps.map(function (st, i) {
+      const dotCls = st.done ? "bg-emerald-500" : (st.current ? "bg-blue-600" : "bg-slate-300");
+      const icon = st.done ? '<i class="fa-solid fa-check text-[8px] text-white"></i>'
+        : (st.locked ? '<i class="fa-solid fa-lock text-[7px] text-white"></i>' : "");
+      const labelCls = st.done ? "text-emerald-600 font-semibold" : (st.current ? "text-blue-600 font-semibold" : "text-slate-500");
+      return '<div class="flex items-center gap-3"><div class="w-3 h-3 ' + dotCls + ' rounded-full flex items-center justify-center shrink-0">' + icon + '</div><span class="' + labelCls + '">' + (i + 1) + ". " + escapeHtml(st.title) + "</span></div>";
+    }).join("");
+  }
+  if (doneCard) doneCard.classList.toggle("hidden", !gsState.complete);
+  gsRenderedIndex = gsState.currentIndex;
+  populateOnboardingFields();
+}
+
+// Step 1 action: ask the helper in THIS tab directly (the same bridge
+// the Extension page uses). A PONG funnels through persistHelperVersion,
+// which writes the check-in the predicate reads; then state reloads.
+function gsPingHelper() {
+  const msg = document.getElementById("gsHelperCheckMsg");
+  if (msg) msg.textContent = "Asking the helper…";
+  let settled = false;
+  const finish = async function (found, version) {
+    if (settled) return;
+    settled = true;
+    window.removeEventListener("message", listener);
+    if (found) {
+      if (version) { try { await persistHelperVersion(version); } catch (e) {} }
+      await gsRefreshSteps();
+      const m2 = document.getElementById("gsHelperCheckMsg");
+      if (m2 && gsState && !gsState.steps[0].done) {
+        m2.textContent = "The helper answered, but its check-in hasn't landed yet — wait a few seconds and check again.";
+      }
+    } else {
+      const m3 = document.getElementById("gsHelperCheckMsg");
+      if (m3) m3.textContent = "No helper answered in this tab. Install it above, hard-refresh (Ctrl+Shift+R), then check again.";
+    }
+  };
+  const listener = function (event) {
+    if (event.source !== window) return;
+    if (event.origin !== window.location.origin) return;
+    const data = event.data;
+    if (!data || data.type !== "AUTOLAUNCH_EXT_PONG") return;
+    finish(true, data.version || null);
+  };
+  window.addEventListener("message", listener);
+  setTimeout(function () { finish(false); }, 2000);
+  try {
+    window.postMessage({ type: "AUTOLAUNCH_EXT_PING" }, "*");
+  } catch (e) { finish(false); }
+}
+
+// Step 2 action: save the three website fields. Same upsert shape the
+// old finishSetup used — including its plan seeding for a brand-new
+// row and the trial source-claim point every other save honors —
+// minus the one thing that made it dangerous: it never touches
+// onboarding_complete.
+async function gsSaveWebsite(btn) {
+  if (!currentUser) return;
+  const usedEl = document.getElementById("onboardingUsedUrl");
+  const newEl = document.getElementById("onboardingNewUrl");
+  const certEl = document.getElementById("onboardingCertifiedUrl");
+  const usedUrl = usedEl ? usedEl.value.trim() : "";
+  const newUrl = newEl ? newEl.value.trim() : "";
+  const certifiedUrl = certEl ? certEl.value.trim() : "";
+  const msg = document.getElementById("gsWebsiteMsg");
+  if (!usedUrl && !newUrl && !certifiedUrl) {
+    if (msg) msg.textContent = "Enter at least one inventory website address first.";
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
     let planTierForSetup = null;
     try {
-        const { data: existingSettings } = await supabaseClient
-            .from("user_settings")
-            .select("plan_tier")
-            .eq("user_id", currentUser.id)
-            .maybeSingle();
-        if (!existingSettings || existingSettings.plan_tier === null || existingSettings.plan_tier === undefined) {
-            planTierForSetup = "post";
-        }
+      const { data: existingSettings } = await supabaseClient
+        .from("user_settings").select("plan_tier")
+        .eq("user_id", currentUser.id).maybeSingle();
+      if (!existingSettings || existingSettings.plan_tier === null || existingSettings.plan_tier === undefined) {
+        planTierForSetup = "post";
+      }
     } catch (e) {}
-
-    const setupPayload = {
-            user_id: currentUser.id,
-            store_name: dealershipName,
-            used_url: usedUrl,
-            new_url: newUrl,
-            certified_url: certifiedUrl,
-            onboarding_complete: true,
-            updated_at: new Date().toISOString()
-        };
-    if (planTierForSetup) setupPayload.plan_tier = planTierForSetup;
-
-    const { error } = await supabaseClient
-        .from("user_settings")
-        .upsert(setupPayload);
-
-    if (error) {
-        console.error(error);
-        alert("Could not save your dealership settings: " + (error.message || "Unknown error") + "\n\nYour inventory URLs were NOT saved. Please try again.");
-        return;
-    }
-
-    // DEALERSHIP SOURCE CLAIM (2026-10-30): setup is a claim
-    // point — a trialing account whose source was already trialed
-    // by another account is stopped before the test sync queues
-    // (the claim gate renders the notice + purchase gate). The
-    // settings themselves stay saved.
+    const payload = {
+      user_id: currentUser.id,
+      used_url: usedUrl,
+      new_url: newUrl,
+      certified_url: certifiedUrl,
+      updated_at: new Date().toISOString()
+    };
+    if (planTierForSetup) payload.plan_tier = planTierForSetup;
+    const { error } = await supabaseClient.from("user_settings")
+      .upsert(payload, { onConflict: "user_id" });
+    if (error) throw error;
+    currentStore.usedUrl = usedUrl;
+    currentStore.newUrl = newUrl;
+    currentStore.cpoUrl = certifiedUrl;
+    // DEALERSHIP SOURCE CLAIM (2026-10-30): setup saves are a claim
+    // point, exactly like Settings saves — a trialing account whose
+    // source was already trialed stops here (the settings stay saved).
     const claimOk = await trialSourceClaimGate([usedUrl, newUrl, certifiedUrl]);
+    await gsRefreshSteps();
+    gsRenderStaircase();
     if (!claimOk) return;
-
-    // SETUP TEST SYNC (Matthew, 2026-10-23): finishing setup kicks off
-    // the capped TEST sync (up to 15 cars) so the dealer sees real
-    // inventory land before setup completes. Once it succeeds, the
-    // account is out of the testing phase and Sync Inventory runs
-    // uncapped. Non-fatal: if this insert fails, setup still completes
-    // and the first manual Sync runs as the test instead.
-    try {
-        await supabaseClient
-            .from("scrape_jobs")
-            .insert({
-                user_id: currentUser.id,
-                status: "pending",
-                triggered_by: currentUser.email,
-                sync_mode: "test"
-            });
-    } catch (e) {
-        console.warn("Setup test sync could not be queued:", e);
-    }
-
+    if (msg) msg.textContent = "Saved ✓";
+  } catch (e) {
+    if (msg) msg.textContent = "Could not save: " + (e.message || "unknown error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
-    const syncStep =
-        document.getElementById(
-            "stepInventorySync"
-        );
-
-    if (syncStep) {
-        syncStep.classList.remove(
-            "text-blue-600"
-        );
-
-        syncStep.classList.add(
-            "text-emerald-600"
-        );
-    }
-const completeStep =
-    document.getElementById(
-        "stepComplete"
-    );
-
-if (completeStep) {
-
-    completeStep.classList.remove(
-        "text-slate-500"
-    );
-
-    completeStep.classList.add(
-        "text-emerald-600",
-        "font-semibold"
-    );
-
+// Step 4 action: save the dealership name to BOTH name fields, the
+// same write saveAllSettings makes from the Settings modal.
+async function gsSaveDealershipName(btn) {
+  if (!currentUser) return;
+  const nameEl = document.getElementById("onboardingDealershipName");
+  const name = nameEl ? nameEl.value.trim() : "";
+  const msg = document.getElementById("gsDealershipMsg");
+  if (!name) {
+    if (msg) msg.textContent = "Enter your dealership's name first.";
+    return;
+  }
+  if (GS_PLACEHOLDER_NAMES.indexOf(name.toLowerCase()) !== -1) {
+    if (msg) msg.textContent = "That's the placeholder name — enter your real dealership name.";
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const { error } = await supabaseClient.from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        dealership_name: name,
+        store_name: name,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    currentStore.name = name;
+    const settingsNameEl = document.getElementById("settingsStoreName");
+    if (settingsNameEl) settingsNameEl.value = name;
+    await gsRefreshSteps();
+    gsRenderStaircase();
+  } catch (e) {
+    if (msg) msg.textContent = "Could not save: " + (e.message || "unknown error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
-    document
-        .getElementById(
-            "getStartedPage"
-        )
-        .classList.add("hidden");
 
-    const ep4 = document.getElementById("extensionPage");
-    if (ep4) ep4.classList.add("hidden");
+// Step 5 action: the one confirmation-based step (see the header
+// note). The confirmation is stored on the account, timestamped.
+async function gsConfirmFacebook(btn) {
+  if (!currentUser) return;
+  const chk = document.getElementById("gsFbConfirmChk");
+  const msg = document.getElementById("gsFacebookMsg");
+  if (!chk || !chk.checked) {
+    if (msg) msg.textContent = "Tick the box first — only if it's true.";
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const { error } = await supabaseClient.from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        fb_ready_confirmed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    await gsRefreshSteps();
+    gsRenderStaircase();
+  } catch (e) {
+    if (msg) msg.textContent = "Could not save: " + (e.message || "unknown error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
-    const tpA = document.getElementById("tradePage");
-    if (tpA) tpA.classList.add("hidden");
-
-    document
-        .querySelector("main")
-        .classList.remove("hidden");
-
-    setActiveNav("inventory");
-
-    syncQueuePoller();
-
-    alert("🎉 Setup Complete");
-
+// Step 3 action: the existing Sync control does the work (cooldown,
+// source claim, job insert, capped first run) — the staircase just
+// drives it and then watches for the cars to land.
+function gsSyncNow(btn) {
+  if (btn) triggerLiveLotCrawl({ currentTarget: btn }, null);
+  gsEnsurePoll();
 }
 
 function populateOnboardingFields() {
@@ -12103,146 +12394,6 @@ function populateOnboardingFields() {
         certField.value = currentStore.cpoUrl || "";
 
 }
-  // Phase 4: REAL inventory URL check (replaces the old fake 1.5s
-  // always-success timeout). From a browser we can honestly verify:
-  //   1. the text is a valid URL with a reachable host (fetch, no-cors),
-  //   2. nothing more — dealer sites block cross-origin reads (CORS), so
-  //      the response body, car count, photos and VINs CANNOT be inspected
-  //      from here. That deeper check happens when the scraper runs.
-  // Results say exactly which of those happened. No fake checkmarks.
-  async function probeInventoryUrl(rawUrl) {
-    let parsed;
-    try {
-      parsed = new URL(rawUrl);
-      if (!/^https?:$/.test(parsed.protocol)) throw new Error("protocol");
-    } catch (e) {
-      return { ok: false, reason: "Not a valid web address — check for typos and include https://" };
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 9000);
-    try {
-      // mode:"no-cors" resolves with an opaque response for ANY HTTP reply
-      // (even a 404), and rejects only when the host cannot be reached at
-      // all (DNS, connection refused, mixed-content block, timeout).
-      await fetch(parsed.href, { mode: "no-cors", signal: controller.signal, credentials: "omit" });
-      return { ok: true, reason: "Address answers from a browser" };
-    } catch (e) {
-      const why = e.name === "AbortError"
-        ? "Timed out after 9 seconds — the site did not answer"
-        : "Could not reach this address from a browser (offline host, wrong domain, or the page blocks the check)";
-      return { ok: false, reason: why };
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  async function testInventory() {
-
-    const dealerName =
-        document.getElementById(
-            "onboardingDealershipName"
-        ).value.trim();
-
-    const usedUrl =
-        document.getElementById(
-            "onboardingUsedUrl"
-        ).value.trim();
-
-    const newUrl =
-        document.getElementById(
-            "onboardingNewUrl"
-        ).value.trim();
-
-    const certifiedField = document.getElementById("onboardingCertifiedUrl");
-    const certifiedUrl = certifiedField ? certifiedField.value.trim() : "";
-
-    if (!dealerName) {
-        alert("Please enter a dealership name.");
-        return;
-    }
-
-    if (!usedUrl) {
-        alert("Please enter a Used Inventory URL.");
-        return;
-    }
-
-    if (!newUrl) {
-        alert("Please enter a New Inventory URL.");
-        return;
-    }
-
-    const btn =
-        document.getElementById(
-            "btnTestInventory"
-        );
-
-    btn.disabled = true;
-
-    btn.innerHTML =
-        "Testing Inventory...";
-
-    const targets = [
-        { label: "Used Inventory", url: usedUrl },
-        { label: "New Inventory", url: newUrl }
-    ];
-    if (certifiedUrl) targets.push({ label: "Certified Inventory", url: certifiedUrl });
-
-    const results = [];
-    for (const t of targets) {
-        const r = await probeInventoryUrl(t.url);
-        results.push({ label: t.label, url: t.url, ok: r.ok, reason: r.reason });
-    }
-
-    const resultsEl = document.getElementById("inventoryTestResults");
-    const allOk = results.every(r => r.ok);
-    const lines = results.map(r =>
-        `<div>${r.ok ? "✅" : "❌"} <strong>${r.label}:</strong> ${r.ok ? "Reachable" : "Not reachable"} — ${r.reason}<br><span class="text-xs text-slate-500">${escapeHtml(r.url)}</span></div>`
-    ).join("");
-    resultsEl.innerHTML = `
-        <h3 class="text-lg font-bold text-slate-900 mb-4">
-            ${allOk ? "✅" : "⚠️"} Inventory Test Results
-        </h3>
-        <div class="space-y-2 text-sm">${lines}</div>
-        <p class="text-xs text-slate-500 mt-4">
-            This check confirms each address answers from a browser. Dealer sites block
-            other websites from reading their pages (CORS), so cars, photos and VINs can't
-            be verified here — the scraper confirms those on its first run.
-        </p>
-        <div class="mt-6">
-            <button
-                onclick="continueSetup()"
-                class="btn-gradient px-6 py-3 rounded-xl text-white font-bold">
-                Continue
-            </button>
-        </div>`;
-    resultsEl.classList.remove("hidden");
-
-    const testStep =
-        document.getElementById(
-            "stepInventoryTest"
-        );
-
-    if (testStep) {
-
-        testStep.classList.remove(
-            "text-slate-500"
-        );
-
-        testStep.classList.add(
-            allOk ? "text-blue-600" : "text-amber-600",
-            "font-semibold"
-        );
-
-    }
-
-    btn.disabled = false;
-
-    btn.innerHTML =
-        "Test Inventory";
-
-}
-
 // Sidebar active state: exactly one nav item wears the active treatment
 // (the .nav-selected pill + font-bold, without the muted/hover classes).
 // Every view switch routes through setActiveNav so the highlight follows
@@ -12298,6 +12449,13 @@ function showGetStartedPage() {
 
     document.getElementById("getStartedPage")
         .classList.remove("hidden");
+
+    // GATED SETUP (2026-11-05): refresh the staircase from live
+    // state on every visit, and watch for the outside events that
+    // complete steps (helper check-in, sync landing, first post)
+    // while it is on screen.
+    gsRefreshSteps();
+    gsEnsurePoll();
 
     syncQueuePoller();
 }
