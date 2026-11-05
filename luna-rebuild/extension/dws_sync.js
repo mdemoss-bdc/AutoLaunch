@@ -1,6 +1,6 @@
 "use strict";
 /* =====================================================================
-   DealerCenter DWS — HELPER-SIDE INVENTORY SYNC (v2.1.82)
+   DealerCenter DWS — HELPER-SIDE INVENTORY SYNC (v2.1.84)
    =====================================================================
    Why this exists (2026-11-05): DealerCenter "DWS" dealer sites sit
    behind a Cloudflare rule that hard-blocks datacenter egress — our
@@ -91,6 +91,44 @@
      Postpass rows are fenced out of every selector below
      (sync_mode=neq.postpass in the shared base query): the helper
      must never claim one as a sync.
+   * 2.84 (2026-11-05, degraded-crawl hardening — the 20:15Z
+     incident): a degraded crawl of Mike's lot landed 38 of 54
+     cars with thinned galleries and blanked prices, retired 16
+     live cars, and — the completing writer being the server that
+     time — left no seen-set stamp and no postpass. The helper's
+     own holes of the same shapes are now closed:
+     - NEVER-DOWNGRADE INGEST: a crawl may not replace a stored
+       photo set with a thinner one (real-photo count, the
+       server's photofix taxonomy), may not blank a known price,
+       and may not blank known colors. Mirrors
+       push_batch_to_supabase's preservation blocks, strengthened
+       from the server's zero-real-only rule to any-thinner —
+       the incident's degraded sets carried 1-2 real photos and
+       slipped the zero-only guard.
+     - STALE-PASS CIRCUIT BREAKER: retirements require a
+       verified-complete crawl — content-complete (2.81) AND at
+       or above the VIN-count watermark of the last
+       verified-complete crawl (chrome.storage, helper-verified
+       state the server's rows cannot pollute). A content-
+       complete crawl below the watermark retires NOTHING and
+       finishes incomplete, unless the site's own published
+       totals corroborate the smaller lot, or a later crawl
+       assembles the identical set (a genuine shrink confirms
+       itself; the intermittent degraded seam does not repeat
+       car-for-car). The watermark advances only on verified
+       crawls.
+     - ONE COMPLETION PATH: every route that finishes a sync
+       (claim, reclaim, repair, and the new verify pass below)
+       ends in dwsFinishSync — the only place terminal job
+       state, the seen-set stamp, and the postpass are written.
+     - VERIFY PASS (repair shape 5): a fresh full-mode job some
+       other writer completed WITH cars but WITHOUT a seen-set
+       stamp (the server's shape — it cannot stamp, and its
+       completions earn no postpass) is adopted once: the helper
+       re-crawls, and on a verified-complete crawl stamps its
+       own seen set, corrects cars_synced, and hands off the
+       postpass exactly like its own completion. An unverified
+       verify crawl stamps nothing and spends the attempt.
    ===================================================================== */
 
 // ---------------------------------------------------------------------
@@ -540,6 +578,51 @@ function dwsUsablePhotoCount(car) {
   return urls.size;
 }
 
+// Mirror of the Python _NOT_REAL_PHOTO_MARKERS + _real_photo_count:
+// a COLLECTION-QUALITY count over the record's photos list only.
+// A manufacturer's stock render or a placeholder asset is not a
+// collected gallery, however usable it is as a URL. Posting gates
+// keep using dwsUsablePhotoCount; this count drives the 2.84
+// never-downgrade ingest guard in dwsPushBatch.
+const DWS_NOT_REAL_PHOTO_MARKERS = [
+  "/assets/stock/", "photo_unavailable", "/missing/",
+  "placeholder", "assets/no-photo.png",
+];
+
+function dwsRealPhotoCount(car) {
+  const urls = new Set();
+  const v = car ? car.photos : null;
+  if (Array.isArray(v)) {
+    for (let u of v) {
+      if (typeof u !== "string") continue;
+      u = u.trim();
+      if (u.startsWith("//")) u = "https:" + u;
+      if (!u.startsWith("http://") && !u.startsWith("https://")) continue;
+      const low = u.toLowerCase();
+      if (DWS_NOT_REAL_PHOTO_MARKERS.some(m => low.includes(m))) continue;
+      if (low.includes("/static/")) continue;
+      urls.add(u.split("?")[0].split("#")[0]);
+    }
+  }
+  return urls.size;
+}
+
+// Stable fingerprint of a crawl's assembled VIN set (FNV-1a over
+// the sorted set). The stale-pass circuit breaker compares a
+// below-watermark crawl's set against the previous short crawl's:
+// two crawls agreeing car-for-car corroborate a genuinely
+// smaller lot; the intermittent degraded seam does not repeat
+// exactly.
+function dwsVinSetHash(vins) {
+  const s = Array.from(vins || []).sort().join(",");
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return ("0000000" + h.toString(16)).slice(-8) + ":" + s.length;
+}
+
 // Mirror of the Python hi_res_photo_url(url) with add_width=False:
 // rewrite a numeric width/w query param below 1600 up to 1600. Raw
 // query pairs are preserved verbatim unless a rewrite actually
@@ -798,6 +881,16 @@ async function dwsSelectIn(deps, userId, cols, vins) {
 // photos where this scrape found real dealer photos, then upsert
 // on (vin, user_id). The preservation reads are fail-open exactly
 // like the Python blocks — a read failure never blocks the push.
+//
+// 2.84 NEVER-DOWNGRADE GUARD (the degraded-crawl incident): the
+// Python gallery block restores the stored set only when the
+// scrape's set holds ZERO real photos; the degraded crawl that
+// damaged Mike's lot carried 1-2 real photos per car and slipped
+// under it. Here the guard is any-thinner: a crawl whose real-
+// photo count for a car is BELOW the stored count keeps the
+// stored photos + image_url; a crawl that found no real color
+// keeps the stored colors. Richer crawl data always wins, and
+// cars absent from the crawl are never read or touched.
 async function dwsPushBatch(deps, userId, records) {
   if (!records.length) return 0;
   const unique = new Map();
@@ -809,12 +902,39 @@ async function dwsPushBatch(deps, userId, records) {
       const stored = await dwsSelectIn(deps, userId, "vin,price", missVins);
       for (const r of recs) {
         if (!r.price && stored.has(r.vin) && stored.get(r.vin).price) {
+          // The stored price wins; price_status is left as the
+          // crawl reported it — it records the DEALER's published
+          // state (call/none), against which a held price is a
+          // designed state in the app (the Python block likewise
+          // restores the price and never touches the status).
           r.price = stored.get(r.vin).price;
         }
       }
     }
   } catch (e) {
     deps.log("[AutoLaunch] DWS price-preservation warning:", e && e.message || e);
+  }
+  try {
+    const stored = await dwsSelectIn(
+      deps, userId, "vin,photos,image_url,color,interior_color",
+      recs.map(r => r.vin));
+    for (const r of recs) {
+      const s = stored.get(r.vin);
+      if (!s) continue;
+      if (dwsRealPhotoCount(s) > dwsRealPhotoCount(r)) {
+        r.photos = Array.isArray(s.photos) ? s.photos.slice() : [];
+        if (s.image_url) r.image_url = s.image_url;
+      }
+      if ((!r.color || r.color === "Standard" || r.color === "-") &&
+          s.color && s.color !== "Standard" && s.color !== "-") {
+        r.color = s.color;
+      }
+      if (!r.interior_color && s.interior_color && s.interior_color !== "-") {
+        r.interior_color = s.interior_color;
+      }
+    }
+  } catch (e) {
+    deps.log("[AutoLaunch] DWS downgrade-guard warning:", e && e.message || e);
   }
   try {
     const usableVins = recs.filter(r =>
@@ -953,11 +1073,129 @@ async function checkDwsSync(deps) {
   }
 }
 
+// ONE COMPLETION PATH (2.84): every route that finishes a sync —
+// claim, reclaim, both repair shapes, the verify pass — ends
+// here. Terminal job state, the helper_seen_vins stamp, and the
+// postpass handoff are written in this function and nowhere else,
+// so a completion route that skips the stamp cannot exist.
+// `complete` is the caller's verdict (content-completeness plus,
+// in full mode, the circuit breaker's verification); `crashed`
+// carries a crawl exception, whose handling stays what it always
+// was (a repair attempt is spent silently; a claimed job is
+// failed honestly) before the exception propagates to the caller.
+async function dwsFinishSync(deps, ctx) {
+  const job = ctx.job, mode = ctx.mode, userId = ctx.userId;
+  const settings = ctx.settings, isTest = ctx.isTest;
+  const totalSaved = ctx.totalSaved, anyCars = ctx.anyCars;
+  const complete = ctx.complete, crashed = ctx.crashed;
+  const seenVins = ctx.seenVins, attempted = ctx.attempted;
+  const incompleteJobs = ctx.incompleteJobs;
+  const repairFamily = mode === "repair" || mode === "verify";
+  if (repairFamily) await dwsMarkAttempted(deps, attempted, job.id);
+  const nowIso = () => new Date(deps.now()).toISOString();
+
+  if (crashed) {
+    if (repairFamily) return { attempted_only: job.id };
+    try {
+      await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+        status: "failed", completed_at: nowIso(),
+      });
+    } catch (e2) { /* row state is the least of it */ }
+    return { failed: job.id };
+  }
+
+  if (repairFamily) {
+    if (complete && totalSaved > 0) {
+      // The seen-set stamp (2.82) is a FULL-mode record only: a
+      // test-mode crawl's set is a capped slice and must never be
+      // mistaken for the whole lot by a later pass.
+      const seenStamp = isTest ? {} : { helper_seen_vins: Array.from(seenVins) };
+      if (job.status === "failed") {
+        // A cadence-shaped failure the crawl has now genuinely
+        // served: the row tells the truth — completed, with the
+        // real count and completion time.
+        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+          status: "completed",
+          completed_at: nowIso(),
+          cars_synced: totalSaved,
+          ...seenStamp,
+        });
+      } else {
+        // A completed row being corrected (the server's empty or
+        // unstamped completion): count + stamp; status and the
+        // original completion time untouched.
+        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+          cars_synced: totalSaved,
+          ...seenStamp,
+        });
+      }
+      deps.log(`[AutoLaunch] DWS sync repair for job ${job.id}: landed ${totalSaved} car(s).`);
+      // A repaired/verified FULL-mode sync is a completed sync —
+      // it earns the same auto-post handoff as the claimed path.
+      if (!isTest && settings.auto_post_enabled === true) {
+        await dwsInsertPostpass(deps, job, userId);
+      }
+      return { repaired: job.id, saved: totalSaved };
+    }
+    // Incomplete repair/verify: what the crawl had is landed, but
+    // the job row is left exactly as it was (failed stays failed,
+    // a completed row keeps its count and no stamp is written)
+    // and the attempt is spent.
+    deps.log(`[AutoLaunch] DWS sync repair for job ${job.id}: crawl incomplete, landed ${totalSaved} car(s); job left uncorrected.`);
+    return mode === "verify"
+      ? { verify_incomplete: job.id, saved: totalSaved }
+      : { repair_incomplete: job.id, saved: totalSaved };
+  }
+
+  if (!anyCars) {
+    // Claimed a DWS job but the crawl landed nothing (the site
+    // died mid-run): an honest failure, never a fake success.
+    await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+      status: "failed",
+      completed_at: nowIso(),
+    });
+    if (!complete) await dwsMarkIncomplete(deps, incompleteJobs, job.id);
+    return { failed: job.id };
+  }
+  if (!complete) {
+    // A SHORT or UNVERIFIED crawl landed cars but must not report
+    // success (the 2.80 live failure: page 1 only, job
+    // "completed", real cars stale-flipped; the 2.84 breaker: a
+    // degraded assembly believed at face value). Finish failed
+    // with the honest landed count and a completion stamp (the
+    // repair selector keys on fresh failed rows, exactly like the
+    // server's own cadence failures carry); the ledger makes the
+    // job eligible for one re-run.
+    await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+      status: "failed", cars_synced: totalSaved,
+      completed_at: nowIso(),
+    });
+    await dwsMarkIncomplete(deps, incompleteJobs, job.id);
+    deps.log(`[AutoLaunch] DWS sync job ${job.id}: crawl not verified-complete — landed ${totalSaved} car(s), finished failed for repair.`);
+    return { incomplete: job.id, saved: totalSaved };
+  }
+  await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
+    status: "completed",
+    completed_at: nowIso(),
+    cars_synced: totalSaved,
+    // Full-mode completions only (see the repair path's stamp).
+    ...(isTest ? {} : { helper_seen_vins: Array.from(seenVins) }),
+  });
+  deps.log(`[AutoLaunch] DWS sync completed job ${job.id}: ${totalSaved} car(s).`);
+  // 2.82: hand the server's auto-post pass this crawl's seen set —
+  // full-mode completions only, and only with auto-post switched on.
+  if (!isTest && settings.auto_post_enabled === true) {
+    await dwsInsertPostpass(deps, job, userId);
+  }
+  return { completed: job.id, saved: totalSaved };
+}
+
 async function dwsSyncMain(deps) {
   const store = await deps.storageGet([
     "autolaunch_user_id", "autolaunch_access_token",
     "autolaunch_session_expired", "current_posting_job",
     "dws_attempted_jobs", "dws_incomplete_jobs",
+    "dws_vin_watermark", "dws_pending_short",
   ]);
   const userId = store.autolaunch_user_id;
   if (!userId) return { skipped: "no_user" };
@@ -1021,14 +1259,36 @@ async function dwsSyncMain(deps) {
     }
     if (job) mode = "repair";
   }
+  // 5) Verify (2.84): another writer — in practice the server —
+  // completed a fresh FULL-mode job WITH cars but left no
+  // helper_seen_vins stamp. Its completions cannot stamp, so they
+  // earn no postpass and no helper verification (the 20:15Z
+  // incident job was exactly this shape). Adopt it once: the
+  // crawl below verifies the lot, and the shared epilogue stamps
+  // + hands off the postpass like any helper completion. An
+  // unverified crawl stamps nothing and spends the attempt.
+  if (!job) {
+    const since = new Date(deps.now() - 30 * 60 * 1000).toISOString();
+    jobs = await deps.sbGet(
+      `${base}&status=eq.completed` +
+      `&completed_at=gte.${encodeURIComponent(since)}` +
+      `&order=completed_at.desc&limit=5`);
+    if (jobs) {
+      job = jobs.find(j => !attempted.includes(j.id) &&
+        (j.sync_mode === "full" || j.sync_mode == null) &&
+        (j.cars_synced || 0) > 0 && !j.helper_seen_vins) || null;
+    }
+    if (job) mode = "verify";
+  }
   if (!job) return { skipped: "no_job" };
+  const repairFamily = mode === "repair" || mode === "verify";
 
   const srows = await deps.sbGet(
     `user_settings?user_id=eq.${userId}` +
     `&select=used_url,extra_used_urls,certified_url,new_url,helper_lease_id,helper_lease_expires_at,auto_post_enabled`);
   const settings = srows && srows.length ? srows[0] : null;
   if (!settings) {
-    if (mode === "repair") await dwsMarkAttempted(deps, attempted, job.id);
+    if (repairFamily) await dwsMarkAttempted(deps, attempted, job.id);
     return { skipped: "no_settings" };
   }
   // The lease gates sync claims exactly like posting claims.
@@ -1046,7 +1306,7 @@ async function dwsSyncMain(deps) {
 
   const feeds = dwsBuildFeeds(settings);
   if (!feeds.length) {
-    if (mode === "repair") await dwsMarkAttempted(deps, attempted, job.id);
+    if (repairFamily) await dwsMarkAttempted(deps, attempted, job.id);
     return { skipped: "no_feeds" };
   }
 
@@ -1062,7 +1322,7 @@ async function dwsSyncMain(deps) {
     if (html && dwsIsPlatform(html)) dwsFeeds.push({ feed: feed, html1: html });
   }
   if (!dwsFeeds.length) {
-    if (mode === "repair") await dwsMarkAttempted(deps, attempted, job.id);
+    if (repairFamily) await dwsMarkAttempted(deps, attempted, job.id);
     return { skipped: "not_dws" };
   }
 
@@ -1080,6 +1340,8 @@ async function dwsSyncMain(deps) {
   let totalSaved = 0;
   let anyComplete = true;
   let anyCars = false;
+  const feedTallies = [];
+  let crashed = null;
   try {
     for (const entry of dwsFeeds) {
       const res = await dwsCrawlFeed(
@@ -1096,6 +1358,10 @@ async function dwsSyncMain(deps) {
           (res.complete ? "" :
             `, fragments=${JSON.stringify(res.diag.fragments)}`));
       }
+      feedTallies.push({
+        assembled: res.cars.length,
+        totalVehicles: dwsListingMeta(entry.html1, entry.feed.url).totalVehicles,
+      });
       let cars = res.cars;
       if (limitLeft && cars.length > limitLeft) cars = cars.slice(0, limitLeft);
       await dwsFetchAllVdp(deps.fetchText, cars);
@@ -1112,103 +1378,96 @@ async function dwsSyncMain(deps) {
       }
     }
   } catch (e) {
-    if (mode === "repair") {
-      await dwsMarkAttempted(deps, attempted, job.id);
-    } else {
-      try {
-        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
-          status: "failed",
-          completed_at: new Date(deps.now()).toISOString(),
-        });
-      } catch (e2) { /* row state is the least of it */ }
-    }
-    throw e;
+    crashed = e;
   }
 
+  // CIRCUIT BREAKER (2.84): a full-mode crawl is VERIFIED-complete
+  // only when it is content-complete (2.81) AND its assembled
+  // union count is not below the watermark of the last
+  // verified-complete crawl — or the smaller lot is corroborated:
+  // the site's own published totals agree with the assembled
+  // per-feed counts, or a previous short crawl assembled the
+  // identical set (a genuine shrink confirms itself; the
+  // intermittent degraded seam does not repeat car-for-car). The
+  // watermark lives in chrome.storage — helper-local state only
+  // helper-verified crawls may set; a job row would let other
+  // writers' completions pollute it. Test crawls are capped
+  // slices: they never stale-mark, never read or move the
+  // watermark, and complete on content alone, exactly as before.
+  let verifiedComplete = false;
+  if (!crashed && anyComplete) {
+    if (isTest) {
+      verifiedComplete = true;
+    } else if (seenVins.size) {
+      const assembled = seenVins.size;
+      const wmRec = (store.dws_vin_watermark &&
+        store.dws_vin_watermark.userId === userId)
+        ? store.dws_vin_watermark : null;
+      const wm = wmRec ? wmRec.count : null;
+      let ok = (wm == null || assembled >= wm);
+      if (!ok) {
+        const published = feedTallies.filter(t => t.totalVehicles != null);
+        if (published.length &&
+            feedTallies.every(t => t.totalVehicles == null ||
+                                   t.assembled === t.totalVehicles)) {
+          ok = true;
+          deps.log(`[AutoLaunch] DWS sync: crawl assembled ${assembled} VIN(s), below the watermark ${wm}, but the site's own published totals corroborate the smaller lot — verified.`);
+        }
+      }
+      if (!ok) {
+        const ps = (store.dws_pending_short &&
+          store.dws_pending_short.userId === userId)
+          ? store.dws_pending_short : null;
+        if (ps && ps.count === assembled &&
+            ps.hash === dwsVinSetHash(seenVins)) {
+          ok = true;
+          deps.log(`[AutoLaunch] DWS sync: crawl assembled ${assembled} VIN(s), below the watermark ${wm}, identical to the previous short crawl — the smaller lot is corroborated, verified.`);
+        }
+      }
+      if (ok) {
+        verifiedComplete = true;
+        try {
+          await deps.storageSet({
+            dws_vin_watermark: {
+              userId: userId, count: assembled,
+              at: new Date(deps.now()).toISOString(),
+            },
+            dws_pending_short: null,
+          });
+        } catch (e) { /* bookkeeping only */ }
+      } else {
+        deps.log(`[AutoLaunch] DWS sync: crawl assembled ${assembled} VIN(s), below the watermark ${wm} — circuit breaker: nothing retires, the job finishes incomplete.`);
+        try {
+          await deps.storageSet({
+            dws_pending_short: {
+              userId: userId, count: assembled,
+              hash: dwsVinSetHash(seenVins),
+              at: new Date(deps.now()).toISOString(),
+            },
+          });
+        } catch (e) { /* bookkeeping only */ }
+      }
+    }
+  }
+  const finishComplete = !crashed && verifiedComplete;
+
   // Stale pass: only a full-mode, verified-complete crawl that
-  // actually saw cars may deactivate anything — the server's rule.
-  if (!isTest && anyComplete && seenVins.size) {
+  // actually saw cars may deactivate anything.
+  if (!crashed && !isTest && verifiedComplete && seenVins.size) {
     const allDws = dwsFeeds.length === feeds.length;
     const scope = allDws ? null : dwsFeeds.map(x => x.feed.key);
     await dwsMarkStale(deps, userId, seenVins, scope);
   }
 
-  if (mode === "repair") {
-    await dwsMarkAttempted(deps, attempted, job.id);
-    if (anyComplete && totalSaved > 0) {
-      // The seen-set stamp (2.82) is a FULL-mode record only: a
-      // test-mode crawl's set is a capped slice and must never be
-      // mistaken for the whole lot by a later pass.
-      const seenStamp = isTest ? {} : { helper_seen_vins: Array.from(seenVins) };
-      if (job.status === "failed") {
-        // A cadence-shaped failure the crawl has now genuinely
-        // served: the row tells the truth — completed, with the
-        // real count and completion time.
-        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
-          status: "completed",
-          completed_at: new Date(deps.now()).toISOString(),
-          cars_synced: totalSaved,
-          ...seenStamp,
-        });
-      } else {
-        await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
-          cars_synced: totalSaved,
-          ...seenStamp,
-        });
-      }
-      deps.log(`[AutoLaunch] DWS sync repair for job ${job.id}: landed ${totalSaved} car(s).`);
-      // 2.82: a repaired FULL-mode sync is a completed sync — it
-      // earns the same auto-post handoff as the claimed path.
-      if (!isTest && settings.auto_post_enabled === true) {
-        await dwsInsertPostpass(deps, job, userId);
-      }
-      return { repaired: job.id, saved: totalSaved };
-    }
-    // Incomplete repair: what the crawl had is landed, but the
-    // job row is left exactly as it was (failed stays failed,
-    // completed-0 keeps its 0) and the attempt is spent.
-    deps.log(`[AutoLaunch] DWS sync repair for job ${job.id}: crawl incomplete, landed ${totalSaved} car(s); job left uncorrected.`);
-    return { repair_incomplete: job.id, saved: totalSaved };
-  }
-  if (!anyCars) {
-    // Claimed a DWS job but the crawl landed nothing (the site
-    // died mid-run): an honest failure, never a fake success.
-    await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
-      status: "failed",
-      completed_at: new Date(deps.now()).toISOString(),
-    });
-    if (!anyComplete) await dwsMarkIncomplete(deps, incompleteJobs, job.id);
-    return { failed: job.id };
-  }
-  if (!anyComplete) {
-    // A SHORT CRAWL landed cars but must not report success (the
-    // 2.80 live failure: page 1 only, job "completed", real cars
-    // stale-flipped). Finish failed with the honest landed count
-    // and a completion stamp (the repair selector keys on fresh
-    // failed rows, exactly like the server's own cadence failures
-    // carry); the ledger makes the job eligible for one re-run.
-    await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
-      status: "failed", cars_synced: totalSaved,
-      completed_at: new Date(deps.now()).toISOString(),
-    });
-    await dwsMarkIncomplete(deps, incompleteJobs, job.id);
-    deps.log(`[AutoLaunch] DWS sync job ${job.id}: crawl incomplete — landed ${totalSaved} car(s), finished failed for repair.`);
-    return { incomplete: job.id, saved: totalSaved };
-  }
-  await deps.sbPatch(`scrape_jobs?id=eq.${job.id}`, {
-    status: "completed",
-    completed_at: new Date(deps.now()).toISOString(),
-    cars_synced: totalSaved,
-    // Full-mode completions only (see the repair path's stamp).
-    ...(isTest ? {} : { helper_seen_vins: Array.from(seenVins) }),
+  const finishOut = await dwsFinishSync(deps, {
+    job: job, mode: mode, userId: userId, settings: settings,
+    isTest: isTest, totalSaved: totalSaved, anyCars: anyCars,
+    complete: finishComplete, crashed: crashed,
+    seenVins: seenVins, attempted: attempted,
+    incompleteJobs: incompleteJobs,
   });
-  deps.log(`[AutoLaunch] DWS sync completed job ${job.id}: ${totalSaved} car(s).`);
-  // 2.82: hand the server's auto-post pass this crawl's seen set —
-  // full-mode completions only, and only with auto-post switched on.
-  if (!isTest && settings.auto_post_enabled === true) {
-    await dwsInsertPostpass(deps, job, userId);
-  }
-  return { completed: job.id, saved: totalSaved };
+  if (crashed) throw crashed;
+  return finishOut;
 }
 
 const AutoLaunchDwsSync = {
@@ -1224,6 +1483,8 @@ const AutoLaunchDwsSync = {
   dwsStripSharedPlaceholderPhotos: dwsStripSharedPlaceholderPhotos,
   dwsParseVdpDetails: dwsParseVdpDetails,
   dwsUsablePhotoCount: dwsUsablePhotoCount,
+  dwsRealPhotoCount: dwsRealPhotoCount,
+  dwsVinSetHash: dwsVinSetHash,
   dwsHiResPhotoUrl: dwsHiResPhotoUrl,
   dwsEnrichMerge: dwsEnrichMerge,
   dwsBuildFeeds: dwsBuildFeeds,
