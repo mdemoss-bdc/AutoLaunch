@@ -9867,6 +9867,75 @@ function usablePhotoCountJS(car) {
   return urls.size;
 }
 
+// The car's full photo list in the app's canonical order — the
+// ordered twin of usablePhotoCountJS: image_url (the cover) first,
+// then photos[], then custom_photo_urls[], deduped by path (query
+// and fragment stripped), skipping /static/ placeholder paths and
+// our own assets/no-photo.png. Backs the vehicle details modal's
+// thumbnail gallery (Matthew, 2026-11-05).
+function vehiclePhotoList(car) {
+  const seen = new Set();
+  const list = [];
+  const add = (u) => {
+    if (typeof u !== "string") return;
+    u = u.trim();
+    if (!u) return;
+    if (u.startsWith("//")) u = "https:" + u;
+    if (!u.startsWith("http://") && !u.startsWith("https://")) return;
+    if (u.indexOf("/static/") !== -1) return;
+    const path = u.split("?")[0].split("#")[0];
+    if (path.endsWith("assets/no-photo.png")) return;
+    if (seen.has(path)) return;
+    seen.add(path);
+    list.push(u);
+  };
+  if (car) {
+    add(car.image_url);
+    ["photos", "custom_photo_urls"].forEach(k => {
+      const v = car[k];
+      if (Array.isArray(v)) v.forEach(add);
+    });
+  }
+  return list;
+}
+
+// Vehicle details modal gallery state (the photo list of the car
+// currently open in the modal, and which one is the big picture).
+let detailsModalGallery = [];
+let detailsModalGalleryIdx = 0;
+
+// Make gallery photo idx the modal's big picture and move the
+// active mark to its thumbnail.
+function detailsModalShowPhoto(idx) {
+  const img = document.getElementById("detailsModalMainImg");
+  if (!img || !detailsModalGallery.length) return;
+  idx = Math.max(0, Math.min(idx, detailsModalGallery.length - 1));
+  detailsModalGalleryIdx = idx;
+  img.dataset.fbk = "";
+  img.src = detailsModalGallery[idx];
+  document.querySelectorAll("#detailsModalThumbs [data-gallery-idx]").forEach(b => {
+    const active = Number(b.getAttribute("data-gallery-idx")) === idx;
+    b.classList.toggle("border-blue-500", active);
+    b.classList.toggle("opacity-100", active);
+    b.classList.toggle("border-slate-200", !active);
+    b.classList.toggle("opacity-70", !active);
+  });
+}
+
+// Big-picture load failure: walk to the next gallery photo; when
+// the list runs out (or there is no gallery), land on the fallback
+// image exactly like the modal always has.
+function detailsModalMainImgError(img) {
+  if (!img) return;
+  if (detailsModalGalleryIdx + 1 < detailsModalGallery.length) {
+    detailsModalShowPhoto(detailsModalGalleryIdx + 1);
+    return;
+  }
+  if (img.dataset.fbk) return;
+  img.dataset.fbk = "1";
+  img.src = FALLBACK_IMAGE;
+}
+
 // PLACEHOLDER PHOTOS (Matthew, 2026-11-05): a dealer's "no photo"
 // stock asset is not a photo. Moses serves it as
 // .../components/missing/photo_unavailable_640.png; other platforms
@@ -11318,15 +11387,37 @@ function openVehicleDetailsModal(car) {
   document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'} ${car.trim || ''}`;
   document.getElementById("detailsModalVin").innerText = `VIN: ${car.vin || 'N/A'} • Stock: ${car.stock_num || car.stock_number || 'N/A'}`;
 
-  let photoUrl = car.image_url;
-  if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
-  if (!photoUrl || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
+  // PHOTO GALLERY (Matthew, 2026-11-05): show ALL of the car's
+  // pictures in the modal — a thumbnail strip under the big photo,
+  // click a thumbnail to make it the big picture — so nobody has to
+  // open the dealer's site just to look at the photos. The big
+  // picture on open is the car's cover, exactly as before.
+  detailsModalGallery = vehiclePhotoList(car);
+  detailsModalGalleryIdx = 0;
+
+  let photoUrl;
+  if (detailsModalGallery.length) {
+    photoUrl = detailsModalGallery[0];
+  } else {
+    photoUrl = car.image_url;
+    if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
+    if (!photoUrl || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
+  }
   photoUrl = escapeHtml(photoUrl);
+
+  const thumbsHtml = detailsModalGallery.length > 1 ? `
+    <div id="detailsModalThumbs" class="flex gap-2 overflow-x-auto pt-2 pb-1">
+      ${detailsModalGallery.map((u, i) => `
+      <button type="button" data-gallery-idx="${i}" onclick="detailsModalShowPhoto(${i})" title="Photo ${i + 1} of ${detailsModalGallery.length}" class="flex-none w-16 h-16 rounded-lg overflow-hidden border-2 ${i === 0 ? 'border-blue-500 opacity-100' : 'border-slate-200 opacity-70'} hover:opacity-100 cursor-pointer">
+        <img src="${escapeHtml(u)}" onerror="this.parentElement.style.display='none'" class="w-full h-full object-cover" alt="">
+      </button>`).join("")}
+    </div>` : "";
 
   document.getElementById("detailsModalContent").innerHTML = `
     <div class="h-64 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
-      <img src="${photoUrl}" onerror="this.src='${FALLBACK_IMAGE}'" class="w-full h-full object-cover">
+      <img id="detailsModalMainImg" src="${photoUrl}" onerror="detailsModalMainImgError(this)" class="w-full h-full object-cover">
     </div>
+    ${thumbsHtml}
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
       <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
         <span class="text-slate-500 block text-[10px] uppercase font-bold">Price</span>
