@@ -860,6 +860,36 @@
 //     posted report. Per-attempt verdicts and a compact
 //     counter trace ride the outcome so the next failure
 //     explains itself. Still strictly fail-open throughout.
+// 43. EDIT-FLOW VIDEO ATTACH (v2.1.88 — Matthew, 2026-11-06;
+//     background.js header note 43 carries the worker's
+//     side): the create-flow attach of notes 41-42 is
+//     structurally beaten — the watched Colorado run read
+//     the counter 1/1 in 7s, survived the VIN auto-fill
+//     settle, and lost the clip at the "Next" step
+//     transition (trace: drops:next); the final step has
+//     no video input, so no in-flow repair can exist. The
+//     attach therefore ALSO runs as its own job on the
+//     surface that keeps videos — the listing's Edit form,
+//     where Matthew's hand upload of the same file stuck
+//     at once. An attach_video job mirrors the price
+//     update's state machine: a strict Selling-page match
+//     at the POSTED price (title + price, the delete /
+//     price discipline — ambiguity or absence fails closed
+//     having touched nothing), the card's ⋯ → Edit entry,
+//     an editor phase whose identity gate is the editor's
+//     own price field reading back the posted price, the
+//     note-42 attach machinery aimed at the edit form
+//     (counter-required done, size-scaled budget, never a
+//     Remove click, one retry only on a clean miss), Save,
+//     and a verify phase that REOPENS the editor and reads
+//     the counter back — only that post-save read reports
+//     AUTOLAUNCH_JOB_VIDEO_ATTACHED. An editor that
+//     already shows a video is a no-op success (nothing is
+//     saved; the verify phase re-reads before reporting).
+//     Any failure exits without saving if Save was not yet
+//     clicked; a saved-but-unproven attach fails with the
+//     reel_attach diag on the job row and consumes
+//     nothing.
 
 
 (async function () {
@@ -910,6 +940,14 @@
   const updateFromPrice = job.updateFromPrice != null ? Number(job.updateFromPrice) : null;
   const updateToPrice = job.updateToPrice != null ? Number(job.updateToPrice) : null;
 
+  // Edit-flow video attach (v2.1.88, header note 43): the
+  // worker carries the POSTED price (the strict matcher's
+  // target) and the resolved poster reel on attach_video
+  // jobs only.
+  const attachPostedPrice = job.attachPostedPrice != null ? Number(job.attachPostedPrice) : null;
+  const attachReel = (job.attachReel && typeof job.attachReel.url === "string" &&
+    job.attachReel.url) ? job.attachReel : null;
+
   // ---- job routing (v2.1.4, header notes 14–15) -----------------------
   // This script is injected on BOTH the create pages and the selling
   // page now. A delete job runs only on the selling page; a post job
@@ -917,7 +955,8 @@
   // of one kind would fire its routine on the other kind's page.
   const jobAction = job.action === "delete" ? "delete"
     : job.action === "share" ? "share"
-    : job.action === "update_price" ? "update_price" : "post";
+    : job.action === "update_price" ? "update_price"
+    : job.action === "attach_video" ? "attach_video" : "post";
   const pageUrl = window.location.href;
   if ((jobAction === "delete" || jobAction === "share") &&
       !/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(pageUrl)) return;
@@ -925,7 +964,7 @@
   // listing edit page (v2.1.62): the ⋯ menu's Edit entry may
   // navigate, and the stored job's phase marker carries the
   // flow across. Anywhere else is not this job's room.
-  if (jobAction === "update_price" &&
+  if ((jobAction === "update_price" || jobAction === "attach_video") &&
       !/facebook\.com\/marketplace\/(you\/(selling|dashboard)|edit)/.test(pageUrl)) return;
   // A post job normally lives only on the create pages — EXCEPT a
   // job in post-publish verification (v2.1.7, header note 18): its
@@ -1009,7 +1048,9 @@
   const fail = async (bannerText, storedReason) => {
     await cdpDetach(); // a trusted-input session never outlives its job
     say("Stopped — " + (carBannerLabel ? carBannerLabel + " — " : "") +
-      bannerText + " This car was marked FAILED in your queue, not posted.", "#b91c1c");
+      bannerText + (jobAction === "attach_video"
+        ? " The listing itself is live — only the video attach was marked FAILED in your queue."
+        : " This car was marked FAILED in your queue, not posted."), "#b91c1c");
     // The per-field forensic records ride THIS message (v3.1): the
     // worker writes them into the queue row's error_message, where
     // they can be read from the database. jobDiags is declared with
@@ -6667,6 +6708,581 @@
       "price_verify_scan", JSON.stringify(s));
   }
 
+  // [PURE-ATTACH-FLOW-BEGIN] — extracted and unit-exercised
+  // by the test harness; keep free of DOM/chrome references.
+  // Edit-flow attach decisions (v2.1.88, header note 43).
+  // attachVideoPlan: the job payload's shape gate — the car
+  // identity fields, a positive POSTED price (the strict
+  // matcher's target), and the resolved reel (URL + id).
+  // Anything missing fails the job before a page is touched.
+  function attachVideoPlan(jobLike) {
+    const car = (jobLike && jobLike.car) || null;
+    const postedPrice = Number(jobLike && jobLike.attachPostedPrice);
+    const reel = (jobLike && jobLike.attachReel) || null;
+    if (!car || !car.year || !car.make || !car.model) {
+      return { ok: false, reason: "attach_job_incomplete" };
+    }
+    if (!isFinite(postedPrice) || postedPrice <= 0) {
+      return { ok: false, reason: "attach_payload_invalid" };
+    }
+    if (!reel || typeof reel.url !== "string" || !reel.url || !reel.reelId) {
+      return { ok: false, reason: "attach_reel_missing" };
+    }
+    return {
+      ok: true,
+      postedPrice,
+      matcherCar: Object.assign({}, car, { price: postedPrice }),
+      reelUrl: reel.url,
+      reelId: reel.reelId
+    };
+  }
+  // The editor identity gate: the editor's price field must
+  // read back the POSTED price. A field showing anything
+  // else is a different listing (or a moved price) — abort
+  // having changed nothing; no readable value proves
+  // nothing.
+  function attachEditorIdentityVerdict(shownPrice, postedPrice) {
+    if (shownPrice == null || !isFinite(Number(shownPrice))) return "unproven";
+    return Number(shownPrice) === Number(postedPrice) ? "ok" : "wrong_listing";
+  }
+  // The editor phase's next step, from the counter and the
+  // attach outcome: a form already carrying a video is the
+  // no-op path; a verified attach earns the Save click —
+  // and so does a form whose counter reads the clip on a
+  // fresh read after an attempt whose own read-back lagged
+  // (the counter is the witness; its timing is Facebook's);
+  // anything else fails WITHOUT saving.
+  function decideAttachEditorNext(obs) {
+    const o = obs || {};
+    if (!o.outcome && o.counter >= 1) return "already";
+    if (o.outcome && (o.outcome.verified === true || o.counter >= 1)) return "save";
+    return "fail";
+  }
+  // The verify phase's verdict: the reopened editor's
+  // counter is the only evidence. >= 1 reports the attach;
+  // 0 fails it — saved or not, nothing is consumed on a 0.
+  function decideAttachVerifyNext(obs) {
+    const o = obs || {};
+    return o.counter >= 1 ? "report" : "fail";
+  }
+  // [PURE-ATTACH-FLOW-END]
+
+  // Records the attach flow's phase on the STORED job, so a
+  // fresh content-script incarnation (the Edit click may
+  // navigate this tab) resumes at the right phase — the
+  // price update's setPriceUpdateStage, twin for twin.
+  async function setAttachVideoStage(stage, extra) {
+    try {
+      job.attachVideo = Object.assign({}, job.attachVideo || {},
+        { stage, stageAt: new Date().toISOString() }, extra || {});
+      await chrome.storage.local.set({ current_posting_job: job });
+    } catch (_) { /* fail-open: worst case a phase re-runs */ }
+  }
+
+  // The delete flow's navigation recovery, attach twin.
+  let attachVideoNavRecoveries = 0;
+  async function recoverToSellingPageForAttach(reason) {
+    if (attachVideoNavRecoveries >= 2) return false;
+    attachVideoNavRecoveries += 1;
+    recordStepNote("attach_nav_recover",
+      reason + " | " + window.location.href.slice(0, 100));
+    window.location.href = "https://www.facebook.com/marketplace/you/selling";
+    await sleep(8000);
+    return true;
+  }
+
+  // One attach attempt against the EDIT form (v2.1.88): the
+  // note-42 poll, unchanged in discipline — the done verdict
+  // requires the Videos counter itself (introProcessing-
+  // Verdict), and a timeout NEVER removes the clip.
+  async function runEditAttachAttempt(blob, name, budgetMs) {
+    const input = findVideoInput();
+    if (!input) {
+      return { verdict: "no_input", everAttached: false,
+        signature: false, elapsedMs: 0, budgetMs, readBack: 0 };
+    }
+    const file = new File([blob], name, { type: blob.type || "video/mp4" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    const startedAt = Date.now();
+    let everAttached = false;
+    let signature = false;
+    let verdict = "wait";
+    for (;;) {
+      await sleep(1500);
+      const count = videoAttachedCount();
+      const obs = {
+        stillLoading: videoLoadingNotice(),
+        removePresent: !!removeVideoButton(),
+        counterAttached: videoCounterAttached(),
+        count,
+        everAttached,
+        elapsedMs: Date.now() - startedAt,
+        timeoutMs: budgetMs
+      };
+      if (obs.removePresent || obs.counterAttached || obs.stillLoading) {
+        everAttached = true;
+        obs.everAttached = true;
+      }
+      if (obs.removePresent && !obs.stillLoading && count < 1) {
+        signature = true; // processed signature up, counter not yet flipped
+      }
+      verdict = introProcessingVerdict(obs);
+      if (verdict !== "wait") break;
+    }
+    return { verdict, everAttached, signature,
+      elapsedMs: Date.now() - startedAt, budgetMs,
+      readBack: verdict === "rejected" ? 0 : videoAttachedCount() };
+  }
+
+  // Attach the resolved reel inside the listing's editor
+  // (v2.1.88): attachIntroVideo's outcome discipline aimed
+  // at the edit form — download (relay then direct), the
+  // duration gate, the size-scaled budget, one retry only
+  // on the clean miss (decideReelVerify). The caller owns
+  // the Save decision: verified is the only outcome that
+  // may save.
+  async function attachReelInEditor(reelUrl) {
+    const outcome = { attempted: false, verified: false, attempts: 0,
+      downloaded: false, blobSize: 0, readBack: 0, skip: null,
+      attemptLog: [], budgetMs: 0 };
+    outcome.attempted = true;
+    say("Adding this listing's video…");
+    if (!findVideoInput()) {
+      outcome.skip = "attach_video_input_not_found";
+      return outcome;
+    }
+    let blob;
+    try {
+      blob = await fetchVideoBlob(reelUrl);
+    } catch (e) {
+      outcome.skip = "attach_video_download_failed";
+      return outcome;
+    }
+    if (!blob || !blob.size) {
+      outcome.skip = "attach_video_empty";
+      return outcome;
+    }
+    outcome.downloaded = true;
+    outcome.blobSize = blob.size;
+    const duration = await probeVideoDuration(blob);
+    const durSkip = introDurationSkip(duration);
+    if (durSkip) {
+      outcome.skip = durSkip;
+      return outcome;
+    }
+    const name = (reelUrl.split("/").pop() || "reel.mp4").split("?")[0];
+    const budgetMs = reelProcessBudgetMs(blob.size);
+    outcome.budgetMs = budgetMs;
+    while (outcome.attempts < 2) {
+      outcome.attempts += 1;
+      if (outcome.attempts > 1) {
+        console.log("[AutoLaunch] Edit-flow attach: clean miss — retrying the attach once with the same clip.");
+        say("Adding this listing's video…");
+      }
+      const rec = await runEditAttachAttempt(blob, name, budgetMs);
+      outcome.attemptLog.push(Object.assign(
+        { stage: "edit", n: outcome.attempts }, rec));
+      outcome.readBack = rec.readBack;
+      const decision = decideReelVerify(outcome.attempts, rec.readBack, rec.verdict);
+      if (decision.verified) { outcome.verified = true; break; }
+      if (!decision.retry) break;
+    }
+    return outcome;
+  }
+
+  // The attach outcome's diag record, in the reel_attach
+  // shape the create flow files (background.js
+  // reelAttachDiagFields): rode out on JOB_FAILED's diags
+  // and compacted into the job row's error_message by the
+  // worker, exactly like a price update's step notes.
+  function recordAttachDiag(outcome, finalStage) {
+    const o = outcome || {};
+    const verdicts = (Array.isArray(o.attemptLog) ? o.attemptLog : [])
+      .map(t => `${(t && t.n) || "?"}:${(t && t.verdict) || "?"}` +
+        `${t && t.everAttached ? "/ever" : ""}`).join(",");
+    recordStepNote("reel_attach",
+      `attach_unverified attempts:${o.attempts || 0} skip:${o.skip || "none"}` +
+        ` final:${finalStage || "edit"}` +
+        (verdicts ? ` verdicts:${verdicts}` : ""),
+      `downloaded:${o.downloaded === true} blob_bytes:${o.blobSize || 0}` +
+        (o.budgetMs ? ` budget_s:${Math.round(o.budgetMs / 1000)}` : ""));
+  }
+
+  // Open the matched card's Edit form, the price update's
+  // menu ladder unchanged (realistic click, one re-render
+  // re-resolve, then CDP rungs). stageOnClick is armed on
+  // the stored job BEFORE the Edit click; resume() drives
+  // whichever phase the navigation (or lack of it) leaves
+  // this flow in. Resolves true when the editor phase owns
+  // the flow from here (this incarnation or the next).
+  async function openAttachEditor(matchedCard, matcher, plan, stageOnClick, resume) {
+    try { matchedCard.scrollIntoView({ block: "center" }); } catch (e) {}
+    await sleep(600);
+    await humanPause();
+    let menuBtn = listingMenuButton(matchedCard, matcher);
+    if (!menuBtn) {
+      const freshAfterScroll = listingCardsIn(null, matcher);
+      if (freshAfterScroll.length === 1) {
+        matchedCard = freshAfterScroll[0];
+        try { matchedCard.scrollIntoView({ block: "center" }); } catch (e) {}
+        await sleep(400);
+        menuBtn = listingMenuButton(matchedCard, matcher);
+      }
+    }
+    if (!menuBtn) {
+      recordStepNote("attach_menu_missing",
+        menuItemTexts(matchedCard).join(" | ").slice(0, 180));
+      await fail("The listing's menu could not be opened — nothing was changed.", "attach_menu_not_found");
+      return false;
+    }
+    recordStepNote("attach_menu_click", "realistic");
+    await realisticClick(menuBtn);
+    let menuOpen = await pollForMenuOpen(matchedCard, menuBtn);
+    if (!menuOpen) {
+      const fresh = listingCardsIn(null, matcher);
+      const freshBtn = fresh.length === 1 ? listingMenuButton(fresh[0], matcher) : null;
+      if (freshBtn && freshBtn !== menuBtn) {
+        await realisticClick(freshBtn);
+        menuOpen = await pollForMenuOpen(fresh[0], freshBtn);
+        if (menuOpen) { matchedCard = fresh[0]; menuBtn = freshBtn; }
+      }
+    }
+    if (!menuOpen) {
+      const ok = await cdpClickEl(menuBtn).catch(() => false);
+      if (ok) menuOpen = await pollForMenuOpen(matchedCard, menuBtn);
+      recordStepNote("attach_menu_cdp_click", ok ? "clicked" : "failed");
+    }
+    if (!menuOpen) {
+      const ok = await cdpClickSeq(menuBtn).catch(() => false);
+      if (ok) menuOpen = await pollForMenuOpen(matchedCard, menuBtn);
+      recordStepNote("attach_menu_cdp_seq", ok ? "clicked" : "failed");
+    }
+    if (!menuOpen) {
+      recordStepNote("attach_menu_items",
+        menuItemTexts(matchedCard).join(" | ").slice(0, 180));
+      await fail("The listing's menu could not be opened — nothing was changed.", "attach_menu_not_found");
+      return false;
+    }
+    recordStepNote("attach_menu_items",
+      menuItemTexts(matchedCard).join(" | ").slice(0, 180));
+    const editItem = findEditMenuItem();
+    if (!editItem) {
+      await fail("The listing's menu has no Edit entry — nothing was changed.", "attach_edit_item_not_found");
+      return false;
+    }
+    // Arm the phase BEFORE the click: the click may navigate
+    // this tab, and the next incarnation must know where the
+    // flow resumes (the price update's discipline).
+    await setAttachVideoStage(stageOnClick,
+      stageOnClick === "edit" ? {} : { outcome: (job.attachVideo && job.attachVideo.outcome) || null });
+    recordStepNote("attach_edit_click", "realistic");
+    await realisticClick(editItem);
+    const editorSignal = () =>
+      findVideoInput() || findPriceFieldInEditor(plan.postedPrice);
+    const waitEditor = async tries => {
+      for (let i = 0; i < tries; i++) {
+        await sleep(500);
+        if (!/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) {
+          return "navigated";
+        }
+        if (editorSignal()) return "in_page";
+      }
+      return "";
+    };
+    let arrived = await waitEditor(24);
+    if (!arrived) {
+      const ok = await cdpClickEl(editItem).catch(() => false);
+      recordStepNote("attach_edit_cdp_click", ok ? "clicked" : "failed");
+      arrived = await waitEditor(16);
+    }
+    if (arrived === "navigated") {
+      // A HARD navigation destroyed this context — the
+      // awaits above never resume and the edit page's own
+      // incarnation drives from the stage marker. Execution
+      // continuing here means a SOFT navigation: this same
+      // incarnation must drive the phase itself (the price
+      // update's 2026-11-03 lesson).
+      await sleep(1500);
+      recordStepNote("attach_editor_continuation",
+        "href=" + window.location.href.slice(0, 100));
+      await resume();
+      return true;
+    }
+    if (arrived === "in_page") {
+      recordStepNote("attach_editor_open", "in_page");
+      await resume();
+      return true;
+    }
+    await fail("The listing's editor did not open — nothing was changed.", "attach_editor_not_found");
+    return false;
+  }
+
+  // Strict-scan the Selling list for the plan's matcher and
+  // return the single matched card, or null after failing
+  // the job with the honest verdict (not found / ambiguous /
+  // list never settled). Shared by the listing and verify
+  // phases; noteField prefixes the step-note names.
+  async function findAttachCard(plan, noteField, recover) {
+    const matcher = t => listingTextMatches(t, plan.matcherCar);
+    await searchAssistRender(() => listingCardsIn(null, matcher).length > 0);
+    if (scanSearchPath === "none") await settleSellingList();
+    if (!countSellingCards()) {
+      if (await recover(noteField)) return null;
+      const probe = {
+        strict: 0,
+        title: findListingCardsByTitle(plan.matcherCar).length,
+        rendered: sellingRenderedFromSignals(sellingChromeSignals()),
+        url: window.location.href.slice(0, 100)
+      };
+      recordStepNote(noteField + "_probe", JSON.stringify(probe));
+      await fail(settleNotFoundReason(), noteField + "_not_found");
+      return null;
+    }
+    const matches = listingCardsIn(null, matcher);
+    const titleProbe = listingCardsIn(null, t => listingTitleMatches(t, plan.matcherCar));
+    recordStepNote(noteField + "_scan",
+      "strict:" + matches.length + " title:" + titleProbe.length +
+      " rendered:" + sellingRenderedFromSignals(sellingChromeSignals()) +
+      " cards:" + countSellingCards() +
+      " vis:" + (settleVisibility.state || "unknown") +
+      " search:" + scanSearchPath +
+      " assist:" + scanAssistStage + " card:" + scanCardState);
+    if (!matches.length) {
+      const probe = {
+        strict: 0,
+        title: titleProbe.length,
+        rendered: sellingRenderedFromSignals(sellingChromeSignals()),
+        cards: countSellingCards(),
+        samples: findListingCardsByTitle(plan.matcherCar)
+          .slice(0, 3).map(c => normText(c.textContent).slice(0, 80))
+      };
+      recordStepNote(noteField + "_probe", JSON.stringify(probe));
+      await fail(settleNotFoundReason(), noteField + "_not_found");
+      return null;
+    }
+    if (matches.length > 1) {
+      await fail("More than one listing matches this car exactly — nothing was changed.", noteField + "_ambiguous");
+      return null;
+    }
+    return matches[0];
+  }
+
+  async function runAttachVideoListing() {
+    sayJobStart("Adding this listing's video");
+    const plan = attachVideoPlan(job);
+    if (!plan.ok) {
+      recordStepNote("attach_plan", plan.reason,
+        JSON.stringify({ price: attachPostedPrice, reel: !!attachReel }));
+      await fail("This video attach job is incomplete — nothing was changed.", plan.reason);
+      return;
+    }
+    // Strict match AT THE POSTED PRICE — the price the
+    // listing shows. That is the whole identity of the job.
+    const card = await findAttachCard(plan, "attach_match",
+      () => recoverToSellingPageForAttach("listing_scan"));
+    if (!card) return;
+    const matcher = t => listingTextMatches(t, plan.matcherCar);
+    await openAttachEditor(card, matcher, plan, "edit",
+      () => runAttachVideoEditor());
+  }
+
+  // Watchdog wrapper: no editor attempt may run longer than
+  // 120s without settling — the price editor's discipline.
+  async function runAttachVideoEditor() {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("attach_editor_timeout")), 120000));
+    await Promise.race([runAttachVideoEditorBody(), timeout]);
+  }
+
+  async function runAttachVideoEditorBody() {
+    sayJobStart("Adding this listing's video");
+    recordStepNote("attach_editor_enter",
+      window.location.href.slice(0, 100));
+    const plan = attachVideoPlan(job);
+    if (!plan.ok) {
+      recordStepNote("attach_plan", plan.reason,
+        JSON.stringify({ price: attachPostedPrice, reel: !!attachReel }));
+      await fail("This video attach job is incomplete — nothing was changed.", plan.reason);
+      return;
+    }
+    // Hunt for the editor, gating on IDENTITY: the editor's
+    // price field must read back the POSTED price before
+    // anything is attached (a field showing anything else is
+    // a different listing — abort having changed nothing).
+    let field = null;
+    let identity = "unproven";
+    const huntDeadline = Date.now() + 25000;
+    for (let miss = 0; identity !== "ok" && Date.now() < huntDeadline; miss++) {
+      field = findPriceFieldInEditor(plan.postedPrice);
+      if (field) {
+        identity = attachEditorIdentityVerdict(
+          moneyNumber(extractValue(field)), plan.postedPrice);
+        if (identity === "wrong_listing") {
+          recordStepNote("attach_identity",
+            "shown " + String(extractValue(field)).slice(0, 40) +
+            " | expect " + plan.postedPrice);
+          await fail("This editor is showing a different listing — nothing was changed.", "attach_wrong_listing");
+          return;
+        }
+        if (identity === "ok" && findVideoInput()) break;
+      }
+      if (miss % 10 === 9) {
+        recordStepNote("attach_editor_hunting", "miss " + (miss + 1));
+      }
+      if (miss % 8 === 7) { try { window.scrollBy(0, 700); } catch (_) {} }
+      await sleep(400);
+    }
+    if (identity !== "ok") {
+      recordStepNote("attach_editor_missing", window.location.href.slice(0, 100));
+      await fail("The editor's price could not be verified against this listing — nothing was changed.", "attach_editor_identity_unproven");
+      return;
+    }
+    // Already carrying a video: the no-op success path —
+    // nothing is attached, nothing is saved; the verify
+    // phase re-reads the counter before anything reports.
+    const next0 = decideAttachEditorNext(
+      { counter: videoAttachedCount(), outcome: null });
+    if (next0 === "already") {
+      recordStepNote("attach_already_present", "counter:" + videoAttachedCount());
+      await setAttachVideoStage("verify", { outcome: "already" });
+      window.location.href = "https://www.facebook.com/marketplace/you/selling";
+      return; // the fresh incarnation runs the verify phase
+    }
+    if (!findVideoInput()) {
+      await fail("The editor has no video control to attach to — nothing was changed.", "attach_video_input_not_found");
+      return;
+    }
+    const outcome = await attachReelInEditor(plan.reelUrl);
+    recordAttachDiag(outcome, "edit");
+    const next = decideAttachEditorNext(
+      { counter: videoAttachedCount(), outcome });
+    if (next !== "save") {
+      // Unverified: exit WITHOUT saving. The unsaved editor
+      // tab stays open as evidence; the reel stays ready.
+      await fail("The video did not attach in the editor — nothing was saved.", "attach_unverified");
+      return;
+    }
+    const save = findEditSaveButton();
+    if (!save) {
+      await fail("The editor's Save control could not be found — nothing was saved.", "attach_save_button_not_found");
+      return;
+    }
+    recordStepNote("attach_save_click", save.t);
+    await realisticClick(save.el);
+    // Wait for the editor to close or the tab to come home;
+    // the verdict itself is the verify phase's, never this
+    // click's.
+    for (let i = 0; i < 20; i++) {
+      await sleep(500);
+      if (!findPriceFieldInEditor(plan.postedPrice)) break;
+      if (/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) break;
+    }
+    await setAttachVideoStage("verify", { outcome: "attached" });
+    if (!/facebook\.com\/marketplace\/you\/(selling|dashboard)/.test(window.location.href)) {
+      window.location.href = "https://www.facebook.com/marketplace/you/selling";
+      return; // the fresh incarnation runs the verify phase
+    }
+    await runAttachVideoVerify();
+  }
+
+  // The verify phase (v2.1.88): after Save, the verdict is
+  // read in a REOPENED editor — the counter there is the
+  // only proof the video survived the save. This body runs
+  // on the Selling page: strict-scan, reopen the editor,
+  // hand off to the verify editor (this incarnation on a
+  // soft navigation, the next on a hard one).
+  async function runAttachVideoVerify() {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("attach_verify_timeout")), 120000));
+    await Promise.race([runAttachVideoVerifyBody(), timeout]);
+  }
+
+  async function runAttachVideoVerifyBody() {
+    sayJobStart("Confirming this listing's video");
+    const plan = attachVideoPlan(job);
+    if (!plan.ok) {
+      recordStepNote("attach_plan", plan.reason,
+        JSON.stringify({ price: attachPostedPrice, reel: !!attachReel }));
+      await fail("This video attach job is incomplete — nothing was changed.", plan.reason);
+      return;
+    }
+    const card = await findAttachCard(plan, "attach_verify",
+      () => recoverToSellingPageForAttach("verify_scan"));
+    if (!card) return;
+    const matcher = t => listingTextMatches(t, plan.matcherCar);
+    await openAttachEditor(card, matcher, plan, "verify",
+      () => runAttachVideoVerifyEditor());
+  }
+
+  // The reopened editor, verify side: READ-ONLY — identity
+  // gate, then the counter decides. Nothing here may save,
+  // set a field, or attach: a 0 fails the job with the
+  // reel staying ready and reel_failed staying true.
+  async function runAttachVideoVerifyEditor() {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("attach_verify_editor_timeout")), 120000));
+    await Promise.race([runAttachVideoVerifyEditorBody(), timeout]);
+  }
+
+  async function runAttachVideoVerifyEditorBody() {
+    sayJobStart("Confirming this listing's video");
+    recordStepNote("attach_verify_editor_enter",
+      window.location.href.slice(0, 100));
+    const plan = attachVideoPlan(job);
+    if (!plan.ok) {
+      recordStepNote("attach_plan", plan.reason,
+        JSON.stringify({ price: attachPostedPrice, reel: !!attachReel }));
+      await fail("This video attach job is incomplete — nothing was changed.", plan.reason);
+      return;
+    }
+    let field = null;
+    let identity = "unproven";
+    const huntDeadline = Date.now() + 25000;
+    for (let miss = 0; identity !== "ok" && Date.now() < huntDeadline; miss++) {
+      field = findPriceFieldInEditor(plan.postedPrice);
+      if (field) {
+        identity = attachEditorIdentityVerdict(
+          moneyNumber(extractValue(field)), plan.postedPrice);
+        if (identity === "wrong_listing") {
+          recordStepNote("attach_verify_identity",
+            "shown " + String(extractValue(field)).slice(0, 40) +
+            " | expect " + plan.postedPrice);
+          await fail("The reopened editor is showing a different listing — the attach was NOT counted.", "attach_verify_wrong_listing");
+          return;
+        }
+      }
+      if (miss % 8 === 7) { try { window.scrollBy(0, 700); } catch (_) {} }
+      await sleep(400);
+    }
+    if (identity !== "ok") {
+      await fail("The reopened editor's price could not be verified — the attach was NOT counted.", "attach_verify_identity_unproven");
+      return;
+    }
+    // The counter can lag the form's render by a beat; give
+    // it a bounded 10s to read >= 1 before concluding 0.
+    let counter = videoAttachedCount();
+    for (let i = 0; i < 10 && counter < 1; i++) {
+      await sleep(1000);
+      counter = videoAttachedCount();
+    }
+    const outcomeWas = (job.attachVideo && job.attachVideo.outcome) || "";
+    recordStepNote("attach_verify_counter",
+      "counter:" + counter + " outcome:" + outcomeWas);
+    const next = decideAttachVerifyNext({ counter });
+    if (next === "report") {
+      recordStepNote("attach_verified", "counter:" + counter);
+      await report("AUTOLAUNCH_JOB_VIDEO_ATTACHED",
+        { alreadyHadVideo: outcomeWas === "already" });
+      return;
+    }
+    recordAttachDiag({ attempts: 0, skip: "saved_unproven",
+      attemptLog: [], downloaded: false, blobSize: 0, budgetMs: 0 }, "verify");
+    await fail("The video was saved but does not show on the listing — it was NOT counted as attached.", "attach_verify_failed");
+  }
+
   async function runDeleteListing() {
     try {
       sayJobStart("Removing your listing from Facebook");
@@ -7173,6 +7789,36 @@
         ((e && e.message) || e || "unknown") +
         ") — the listing was left unchanged.", "price_update_crash",
         JSON.stringify({ phase, error: String((e && e.message) || e || "") })
+      ).catch(() => {});
+    }
+    return;
+  }
+  if (jobAction === "attach_video") {
+    // Phase routing (v2.1.88, header note 43): the stored
+    // job's attachVideo marker says where the flow left
+    // off — the Selling-page attempt, the editor (this tab
+    // may have navigated to the edit page), or the post-save
+    // verification, which itself spans the Selling page and
+    // a reopened editor.
+    const phase = (job.attachVideo && job.attachVideo.stage) || "";
+    try {
+      if (phase === "verify") {
+        if (/facebook\.com\/(marketplace\/edit|edit\/listing)/.test(pageUrl)) {
+          await runAttachVideoVerifyEditor();
+        } else {
+          await runAttachVideoVerify();
+        }
+        return;
+      }
+      if (phase === "edit" || /facebook\.com\/(marketplace\/edit|edit\/listing)/.test(pageUrl)) {
+        await runAttachVideoEditor();
+        return;
+      }
+      await runAttachVideoListing();
+    } catch (e) {
+      await fail("The video attach hit an unexpected error (" +
+        ((e && e.message) || e || "unknown") +
+        ") — the listing was left unchanged.", "attach_crash"
       ).catch(() => {});
     }
     return;

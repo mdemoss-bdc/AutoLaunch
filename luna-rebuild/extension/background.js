@@ -672,6 +672,52 @@ importScripts("dws_sync.js");
 //     and the compact Videos-counter trace — built purely
 //     by reelAttachDiagFields so the harness exercises the
 //     exact strings the row will carry.
+// 43. EDIT-FLOW VIDEO ATTACH (v2.1.88 — Matthew, 2026-11-06):
+//     the create-flow attach is structurally beaten — six
+//     desk runs across file sizes, helper versions and
+//     watched/unwatched tabs all ended the same way: the
+//     clip attaches and verifies (a watched run read the
+//     counter 1/1 in 7s, through the VIN auto-fill settle),
+//     then Facebook's composer DROPS it at the "Next" step
+//     transition, and the final step has no video input to
+//     repair with. The EDIT surface is the proven one —
+//     Matthew attached the Durango's reel by hand through
+//     ⋯ → Edit listing and it stuck at once. So the attach
+//     becomes a SECOND, queued job: when a post completes
+//     with its poster reel still unconsumed (the note-41/42
+//     verdict said unverified), the finish queues ONE
+//     attach_video row for the car (dedupe-checked, strictly
+//     fail-open), and a later claim runs it as a price
+//     update's sibling: strict Selling-page match at the
+//     POSTED price, the listing's own Edit form, the 2.87
+//     attach machinery against that form, Save, then a
+//     reopened editor as the post-save proof. Only a
+//     verified post-save read consumes the reel, settles
+//     the row "completed" and clears the parent post row's
+//     reel_failed flag. The claim also gains its ACTION
+//     ALLOWLIST in this version: a helper claims only
+//     actions it knows (post/delete/share/update_price/
+//     attach_video); an unknown action is never claimed as
+//     a post. Blast radius, stated plainly: an attach_video
+//     row can exist only in the queue of an account whose
+//     own >= 2.88 helper created it at a post completion —
+//     no producer writes one. An OLDER helper on that same
+//     account claiming one as a "post" exits at the v2.52
+//     claim-time stamp check (the car always carries
+//     marketplace_posted_at — that is the attach premise):
+//     the row settles "posted" without a tab ever opening,
+//     no listing is created, the stamp is untouched and the
+//     reel stays ready; the attach is simply lost. The one
+//     residue: if the listing were deleted between queueing
+//     and such a claim, the stamp check could not fire and
+//     the legacy flow would re-post the car as it would any
+//     queued post row — bounded to a downgrade window on an
+//     account that ran 2.88, and accepted. Attach jobs are
+//     not posts anywhere the worker counts: the daily cap
+//     and usage count read inventory stamps (an attach
+//     completion never stamps), pacing anchors on the same
+//     stamp, and the claim treats the action with the
+//     delete/share/update_price exemptions.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1631,8 +1677,13 @@ async function reconcileActiveJob(job) {
     // reload the job tab from OUTSIDE the page — a fresh script
     // boots and resumes from the stage marker. At most 2 reloads
     // per phase; beyond that the stale path below settles it.
-    const pu = job.priceUpdate || {};
-    if (job.action === "update_price" &&
+    // v2.1.88: the same watchdog serves attach_video jobs,
+    // whose stage marker rides job.attachVideo in the same
+    // shape (stages "edit"/"verify").
+    const phaseKey = job.action === "update_price" ? "priceUpdate"
+      : job.action === "attach_video" ? "attachVideo" : null;
+    const pu = phaseKey ? (job[phaseKey] || {}) : {};
+    if (phaseKey &&
         (pu.stage === "edit" || pu.stage === "verify") &&
         job.tabId != null) {
       if (job.phaseReloadStage !== pu.stage) {
@@ -1644,11 +1695,13 @@ async function reconcileActiveJob(job) {
           (job.phaseReloads || 0) < 2) {
         try {
           job.phaseReloads = (job.phaseReloads || 0) + 1;
-          job.priceUpdate = Object.assign({}, pu,
+          job[phaseKey] = Object.assign({}, pu,
             { stageAt: new Date().toISOString() });
           await chrome.storage.local.set({ current_posting_job: job });
           await chrome.tabs.reload(job.tabId);
-          console.warn("[AutoLaunch] Price-update phase " + pu.stage +
+          console.warn("[AutoLaunch] " +
+            (phaseKey === "priceUpdate" ? "Price-update" : "Video-attach") +
+            " phase " + pu.stage +
             " stalled — reloaded the job tab (reload " +
             job.phaseReloads + " of 2).");
         } catch (e) { /* tab gone — the stale path settles it */ }
@@ -1656,7 +1709,8 @@ async function reconcileActiveJob(job) {
       }
     }
     const ageMs = isFinite(claimedAtMs) ? Date.now() - claimedAtMs : Infinity;
-    const staleLimitMs = job.action === "update_price"
+    const staleLimitMs = (job.action === "update_price" ||
+        job.action === "attach_video")
       ? UPDATE_JOB_STALE_MS : JOB_STALE_MS;
     if (ageMs <= staleLimitMs) return true; // genuinely running
     // Orphan recovery (v2.52, header note 26): a stale POST row
@@ -1758,6 +1812,77 @@ function priceUpdateClaimGate(item, carRow) {
 }
 // [PURE-PRICE-UPDATE-END]
 
+// [PURE-CLAIM-BEGIN] — extracted and unit-exercised by the
+// test harness; keep free of DOM/chrome references.
+// The claim ACTION ALLOWLIST (v2.1.88, header note 43):
+// the actions this build knows how to run. checkQueue
+// selects work ONLY through claimActionOf: a row whose
+// action is anything else — a future producer's new verb,
+// a hand-written row — is NEVER claimed, and in particular
+// never claimed as a post (the pre-2.88 selection treated
+// every unrecognized action as a post). A row with no
+// action (or an empty one) is a post: that is the queue's
+// founding shape.
+const CLAIM_KNOWN_ACTIONS = ["post", "delete", "share", "update_price", "attach_video"];
+function claimActionOf(item) {
+  const a = item && typeof item.action === "string" && item.action
+    ? item.action : "post";
+  return CLAIM_KNOWN_ACTIONS.indexOf(a) >= 0 ? a : null;
+}
+// [PURE-CLAIM-END]
+
+// [PURE-ATTACH-VIDEO-BEGIN] — extracted and unit-exercised
+// by the test harness; keep free of DOM/chrome references.
+// Claim-time basis validation for an attach_video job
+// (v2.1.88, header note 43), the price-update gate's twin:
+// the job exists to put a video on ONE live listing — the
+// car must still be posted, and its stamped posted price
+// must still equal the price stamped on the row (the
+// strict matcher's target). Any drift means the world
+// moved — fail the row untouched with a named reason.
+// Pure: (queue item, inventory row) -> verdict.
+function attachVideoClaimGate(item, carRow) {
+  if (!item || item.action !== "attach_video") {
+    return { ok: false, reason: "not_an_attach_job" };
+  }
+  const postedPrice = Number(item.price);
+  if (!isFinite(postedPrice) || postedPrice <= 0) {
+    return { ok: false, reason: "attach_payload_invalid" };
+  }
+  if (!carRow) {
+    return { ok: false, reason: "inventory_row_missing" };
+  }
+  if (!carRow.marketplace_posted_at) {
+    return { ok: false, reason: "listing_not_posted" };
+  }
+  if (Number(carRow.marketplace_posted_price) !== postedPrice) {
+    return { ok: false, reason: "attach_price_basis_changed" };
+  }
+  return { ok: true, postedPrice };
+}
+// decideAttachQueue (v2.1.88): given the reel record a
+// POST completion folded (claim time stamped { id, source,
+// attached }, the finish folded in attachVerified), decide
+// whether the completion queues the edit-flow attach job.
+// Exactly the completions whose poster reel was attached
+// but NOT verified queue one — a verified attach consumed
+// its reel (nothing left to attach), a manual reel is out
+// of scope (never queued, never consumed), and a job that
+// carried no reel has nothing to queue for.
+function decideAttachQueue(reel) {
+  if (!reel || reel.attached !== true) {
+    return { queue: false, reason: "no_reel_attached" };
+  }
+  if (reel.source !== "poster") {
+    return { queue: false, reason: "manual_reel" };
+  }
+  if (reel.attachVerified === true) {
+    return { queue: false, reason: "attach_verified" };
+  }
+  return { queue: true };
+}
+// [PURE-ATTACH-VIDEO-END]
+
 async function checkQueue() {
   if (isChecking) return;
   isChecking = true;
@@ -1843,8 +1968,11 @@ async function checkQueue() {
     // limit — pacing spaces posts, never removals. No configured
     // delay (0) means no gate; a missing last-post stamp (never
     // posted, or the lookup failed) also means no gate.
+    // v2.1.88: the some() reads through the claim allowlist —
+    // only a claimable POST can hold the cycle for pacing;
+    // an unknown action never triggers the lookup.
     let pacingHeld = false;
-    if (settings.delayMinutes > 0 && queueItems.some(q => q.action !== "delete" && q.action !== "share" && q.action !== "update_price")) {
+    if (settings.delayMinutes > 0 && queueItems.some(q => claimActionOf(q) === "post")) {
       const lastPost = await lastPostedAt(userId);
       if (lastPost !== null) {
         const sinceMin = (Date.now() - lastPost) / 60000;
@@ -1855,17 +1983,33 @@ async function checkQueue() {
       }
     }
     let item = null;
+    let itemAction = null;
     for (const q of queueItems) {
-      if (q.action === "delete" || q.action === "share" || q.action === "update_price") { item = q; break; }
-      if (!atLimit && !pacingHeld) { item = q; break; }
+      // The claim ACTION ALLOWLIST (v2.1.88, header note 43):
+      // only actions this build knows are selectable at all.
+      // An unknown action is skipped — NEVER claimed as a
+      // post — and the skip is logged so a future producer's
+      // row is visible in the console instead of silently
+      // becoming a listing.
+      const a = claimActionOf(q);
+      if (a === null) {
+        console.warn(`[AutoLaunch] Queue row ${q.id} carries unknown action "${q.action}" — not claimed (allowlist).`);
+        continue;
+      }
+      if (a !== "post") { item = q; itemAction = a; break; }
+      if (!atLimit && !pacingHeld) { item = q; itemAction = "post"; break; }
     }
     if (!item) return; // only posts waiting, and the cap (or pacing) says wait
-    const isDelete = item.action === "delete";
-    const isShare = item.action === "share";
+    const isDelete = itemAction === "delete";
+    const isShare = itemAction === "share";
     // Price updates (v2.1.62, header note 34) ride the delete/share
     // exemptions everywhere below: not a post — never capped, never
     // paced, never photo-gated, never intro-video'd.
-    const isUpdatePrice = item.action === "update_price";
+    const isUpdatePrice = itemAction === "update_price";
+    // Edit-flow video attach (v2.1.88, header note 43): the
+    // same exemptions, for the same reason — it edits a live
+    // listing; it does not post one.
+    const isAttachVideo = itemAction === "attach_video";
 
     const cars = await sbGet(
       `scraped_inventory?vin=eq.${encodeURIComponent(item.vin)}&user_id=eq.${userId}&limit=1`
@@ -1886,6 +2030,30 @@ async function checkQueue() {
         console.log(`[AutoLaunch] Price update for VIN ${item.vin} not claimed: ${gate.reason}.`);
         return;
       }
+    }
+    let attachReelHit = null;
+    if (isAttachVideo) {
+      // Basis validation (v2.1.88, header note 43), the price
+      // gate's twin: the car still posted, its stamped posted
+      // price still the row's price — and a ready POSTER reel
+      // must still exist for the VIN (the completion that
+      // queued this row left it ready; anything else means
+      // the world moved). Fail the row untouched on any miss.
+      const gate = attachVideoClaimGate(item, carRow);
+      if (!gate.ok) {
+        await sbPatch(`auto_posting_queue?id=eq.${item.id}&status=eq.pending`, { status: "failed" });
+        await logFailure(item.id, gate.reason);
+        console.log(`[AutoLaunch] Video attach for VIN ${item.vin} not claimed: ${gate.reason}.`);
+        return;
+      }
+      const hit = await reelForJob(userId, item.vin);
+      if (!hit || !hit.reel || hit.reel.source !== "poster") {
+        await sbPatch(`auto_posting_queue?id=eq.${item.id}&status=eq.pending`, { status: "failed" });
+        await logFailure(item.id, "attach_reel_not_ready");
+        console.log(`[AutoLaunch] Video attach for VIN ${item.vin} not claimed: no ready poster reel.`);
+        return;
+      }
+      attachReelHit = hit;
     }
     if (!carRow && !isDelete && !isShare) {
       // Queue row points at a car that no longer exists: fail it loudly
@@ -1925,7 +2093,7 @@ async function checkQueue() {
     // of handing a photo-less listing to Facebook. POSTS ONLY: a delete
     // removes a listing, and a car whose photos vanished is exactly the
     // car whose listing should come down.
-    if (!isDelete && !isShare && !isUpdatePrice) {
+    if (!isDelete && !isShare && !isUpdatePrice && !isAttachVideo) {
       // Fallback placeholders are never real photos: the old hotlinked
       // Unsplash URL (rows stored before 2.1.11 may still carry it), the
       // local fallback asset in both the absolute Pages form a stored
@@ -1965,7 +2133,7 @@ async function checkQueue() {
     // a job or opening a tab, and WITHOUT touching the stamp:
     // the existing value is the truth. The row's executed_at
     // fingerprints this path (applyPosted rows carry none).
-    if (!isDelete && !isShare && !isUpdatePrice && carRow.marketplace_posted_at) {
+    if (!isDelete && !isShare && !isUpdatePrice && !isAttachVideo && carRow.marketplace_posted_at) {
       await sbPatch(`auto_posting_queue?id=eq.${item.id}`,
         { status: "posted", executed_at: new Date().toISOString() });
       console.log(`[AutoLaunch] already_posted_at_claim: queue item ${item.id} (VIN ${item.vin}) already carries marketplace_posted_at ${carRow.marketplace_posted_at} — completed without posting.`);
@@ -1976,7 +2144,7 @@ async function checkQueue() {
       queueId: item.id,
       userId,
       car: jobCarWithStock(carRow, item),
-      action: isDelete ? "delete" : isShare ? "share" : isUpdatePrice ? "update_price" : "post",
+      action: isDelete ? "delete" : isShare ? "share" : isUpdatePrice ? "update_price" : isAttachVideo ? "attach_video" : "post",
       fullAuto: settings.fullAuto,
       dealershipName: settings.dealershipName,
       dealershipAddress: settings.dealershipAddress,
@@ -2000,13 +2168,22 @@ async function checkQueue() {
       // publishes with, written to the inventory row as
       // marketplace_posted_price when the post completes.
       queuePrice: item.price != null ? Number(item.price) : null,
+      // Edit-flow video attach (v2.1.88, header note 43): the
+      // POSTED price (the strict matcher's target — the
+      // inventory row's current price may already have moved)
+      // and the resolved poster reel, carried only on
+      // attach_video jobs; the claim gate above has already
+      // proven both against the fresh rows.
+      attachPostedPrice: isAttachVideo ? Number(item.price) : null,
+      attachReel: attachReelHit
+        ? { url: attachReelHit.url, reelId: attachReelHit.reel.id } : null,
       claimedAt: new Date().toISOString()
     };
     // Intro video (v2.1.53, header note 27): resolved at claim
     // time and carried on the job; posts only — a delete has no
     // composer to attach to. Absent = the post runs exactly as
     // before this version.
-    if (!isDelete && !isShare && !isUpdatePrice) {
+    if (!isDelete && !isShare && !isUpdatePrice && !isAttachVideo) {
       // VIN reel (v2.1.85, header note 40): a ready reel for
       // this car replaces the intro video for this post — it
       // rides the same job slot the content side already
@@ -2040,7 +2217,7 @@ async function checkQueue() {
     // Selling list's own search (content.js header note 38)
     // — so every job's tab is created the same plain way
     // again, scan jobs included.
-    const jobUrl = (isDelete || isShare || isUpdatePrice)
+    const jobUrl = (isDelete || isShare || isUpdatePrice || isAttachVideo)
       ? "https://www.facebook.com/marketplace/you/selling"
       : "https://www.facebook.com/marketplace/create/vehicle";
     const jobTab = await chrome.tabs.create({ active: false, url: jobUrl });
@@ -2529,6 +2706,29 @@ async function applyPriceUpdated(queueId, vin, userId, newPrice) {
   }
 }
 
+// Edit-flow attach completion (v2.1.88, header note 43):
+// the queue row ends "completed" with executed_at stamped —
+// the price-update completion's exact semantics, since an
+// attach is not a post: scraped_inventory's posted stamps
+// are NEVER touched here (the daily count and the pacing
+// anchor read them). The parent post row's reel_failed flag
+// then clears — the car is no longer "posted without
+// video". The parent is matched by user + VIN among posted
+// rows still carrying the flag; a swept parent (the app
+// ages finished rows out) matches nothing and the clear is
+// skipped silently. The clear is fail-open: the attach DID
+// land, and its own row already says so.
+async function applyVideoAttached(queueId, vin, userId) {
+  await sbPatch(`auto_posting_queue?id=eq.${queueId}`,
+    { status: "completed", executed_at: new Date().toISOString() });
+  try {
+    await sbPatch(
+      `auto_posting_queue?user_id=eq.${userId}&vin=eq.${encodeURIComponent(vin)}&status=eq.posted&reel_failed=eq.true`,
+      { reel_failed: false }
+    );
+  } catch (e) { /* the attach stands; the flag clear is bookkeeping */ }
+}
+
 // The share row's details text (v2.1.56, header note 30): a
 // worker-side rebuild of the listing description from the same
 // inputs the posting composer's buildDescription uses — the
@@ -2625,6 +2825,50 @@ async function maybeQueueFeedShare(job) {
   }
 }
 
+// Post-completion edit-flow attach queueing (v2.1.88,
+// header note 43): when a post's poster reel was attached
+// but NOT verified (decideAttachQueue), queue ONE
+// attach_video row so a later claim can put the video on
+// the live listing through its Edit form — the surface
+// that keeps it. The row carries the producer shape the
+// strict matcher needs: the car's year/make/model/stock
+// and the POSTED price. Dedupe-checked against live attach
+// rows for the VIN first, exactly like the feed share.
+// STRICTLY FAIL-OPEN: called only after the post is
+// already final; worst case the attach is skipped and the
+// reel simply stays ready.
+async function maybeQueueAttachVideo(userId, vin, carLike, postedPrice, reel) {
+  try {
+    const d = decideAttachQueue(reel);
+    if (!d.queue) return;
+    if (!userId || !vin || !carLike) return;
+    const pp = Number(postedPrice);
+    if (!isFinite(pp) || pp <= 0) return;
+    const existing = await sbGet(
+      `auto_posting_queue?user_id=eq.${userId}&vin=eq.${encodeURIComponent(vin)}&action=eq.attach_video&status=in.(pending,processing)&select=id&limit=1`);
+    if (existing && existing.length) {
+      console.log(`[AutoLaunch] edit-flow attach: an attach for VIN ${vin} is already queued — not queueing another.`);
+      return;
+    }
+    await sbPost("auto_posting_queue", {
+      user_id: userId,
+      vin,
+      target_channel: "facebook",
+      action: "attach_video",
+      status: "pending",
+      year: carLike.year != null ? carLike.year : null,
+      make: carLike.make || null,
+      model: carLike.model || null,
+      stock_num: carLike.stock_num || carLike.stock_number || null,
+      price: Math.round(pp),
+      created_at: new Date().toISOString()
+    });
+    console.log(`[AutoLaunch] edit-flow attach: queued a video attach for VIN ${vin} (create-flow attach unverified).`);
+  } catch (e) {
+    console.warn("[AutoLaunch] edit-flow attach: queueing failed and was skipped — the post itself is unaffected.", e && e.message || e);
+  }
+}
+
 async function applyFailed(queueId, errorMessage) {
   if (errorMessage) {
     try {
@@ -2657,6 +2901,9 @@ async function flushPendingFinish() {
       // (v2.1.86: only on its verified attach — the stashed
       // reel record carries the verdict).
       await consumeJobReel(pending.userId, pending.vin, pending.reel);
+      // v2.1.88: the replayed finish queues the edit-flow
+      // attach backstop exactly like the direct one.
+      await maybeQueueAttachVideo(pending.userId, pending.vin, pending.shareCar, pending.postedPrice, pending.reel);
       // The share the post earned rides the stash (v2.1.55):
       // queued on replay, still fail-open.
       await maybeQueueFeedShare({ userId: pending.userId, shareToFeed: pending.shareToFeed, car: pending.shareCar, includeStock: pending.includeStock === true, dealershipName: pending.dealershipName || "", dealershipAddress: pending.dealershipAddress || "" });
@@ -2664,6 +2911,13 @@ async function flushPendingFinish() {
       await applyShared(pending.queueId);
     } else if (pending.outcome === "price_updated") {
       await applyPriceUpdated(pending.queueId, pending.vin, pending.userId, pending.price);
+    } else if (pending.outcome === "video_attached") {
+      await applyVideoAttached(pending.queueId, pending.vin, pending.userId);
+      // v2.1.88: consume the reel on the verified post-save
+      // read that settled this finish, exactly like the
+      // direct path.
+      await consumeJobReel(pending.userId, pending.vin,
+        { id: pending.reelId || null, source: "poster", attached: true, attachVerified: true });
     } else if (pending.outcome === "deleted") {
       await applyDeleted(pending.queueId, pending.vin, pending.userId);
     } else {
@@ -2793,6 +3047,11 @@ async function finishJobPosted(queueId, listingUrl, reelAttach) {
   // the post is confirmed — consume the poster reel it
   // carried, but only on a form-verified attach. Fail-open.
   await consumeJobReel(job.userId, job.car.vin, reel);
+  // Edit-flow attach backstop (v2.1.88, header note 43):
+  // an unverified poster attach queues its second chance
+  // through the listing's Edit form. Fail-open.
+  await maybeQueueAttachVideo(job.userId, job.car.vin, job.car,
+    job.queuePrice != null ? job.queuePrice : job.car.price, reel);
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Posted confirmed for queue item", queueId, listingUrl || "");
   scheduleJobTabClose(job);
@@ -2895,6 +3154,47 @@ async function finishJobPriceUpdated(queueId) {
   scheduleJobTabClose(job);
 }
 
+// The edit-flow attach counterpart of finishJobPriceUpdated
+// (v2.1.88, header note 43). Called by the content script
+// ONLY after its reopened editor read the Videos counter
+// back at >= 1 post-save — never on the Save click alone.
+// Settles the row "completed", consumes the poster reel on
+// that verified read, and clears the parent post row's
+// reel_failed flag (inside applyVideoAttached).
+async function finishJobVideoAttached(queueId) {
+  const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
+  if (!job || job.queueId !== queueId) return;
+  const reelId = job.attachReel && job.attachReel.reelId ? job.attachReel.reelId : null;
+  try {
+    await applyVideoAttached(queueId, job.car.vin, job.userId);
+  } catch (err) {
+    if (err instanceof SbAuthError) {
+      // The video really is on the listing; only the
+      // bookkeeping failed. Stash + replay on the next
+      // fresh token, like the other finishes.
+      await chrome.storage.local.set({
+        autolaunch_pending_finish: {
+          outcome: "video_attached", queueId,
+          vin: job.car.vin, userId: job.userId, reelId
+        }
+      });
+      await chrome.storage.local.remove(["current_posting_job"]);
+      console.warn("[AutoLaunch] Video attach confirmed on Facebook; the queue update is waiting on a fresh session token.");
+      scheduleJobTabClose(job);
+      return;
+    }
+    throw err;
+  }
+  // The reel's job is done — consume it on the verified
+  // post-save read (the note-41 rule, fed a verified
+  // record). Fail-open, exactly like the post path's.
+  await consumeJobReel(job.userId, job.car.vin,
+    { id: reelId, source: "poster", attached: true, attachVerified: true });
+  await chrome.storage.local.remove(["current_posting_job"]);
+  console.log("[AutoLaunch] Video attach confirmed for queue item", queueId);
+  scheduleJobTabClose(job);
+}
+
 async function finishJobFailed(queueId, reason, diags) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
   if (!job || job.queueId !== queueId) return;
@@ -2916,7 +3216,7 @@ async function finishJobFailed(queueId, reason, diags) {
      reason === "duplicate_rejected" ||
      reason === "job_orphaned" ||
      (job && (job.action === "delete" || job.action === "share" ||
-              job.action === "update_price")))
+              job.action === "update_price" || job.action === "attach_video")))
       ? compactDiagError(diags)
       : null;
   try {
@@ -3331,6 +3631,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     finishJobPriceUpdated(message.queueId)
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (message.type === "AUTOLAUNCH_JOB_VIDEO_ATTACHED") {
+    // Sender discipline (v2.1.88, header note 43): an attach
+    // is claimed from the Selling page OR the listing's edit
+    // surface — the verdict evidence is the editor's own
+    // Videos counter, read in a reopened editor after Save,
+    // and the flow reports from whichever of those rooms the
+    // reopened editor lives in. A report from anywhere else
+    // is a read of the wrong room — refuse and fail honestly.
+    const senderUrl = (sender && sender.tab && sender.tab.url) ||
+      (sender && sender.url) || "";
+    if (!/^https:\/\/www\.facebook\.com\/marketplace\/(you\/(selling|dashboard)|edit)/.test(senderUrl)) {
+      finishJobFailed(message.queueId,
+        "attach_reported_from_wrong_page:" + senderUrl.slice(0, 80), [])
+        .then(() => sendResponse({ ok: false }))
+        .catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+    finishJobVideoAttached(message.queueId)
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;
