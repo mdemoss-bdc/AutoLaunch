@@ -890,6 +890,40 @@
 //     clicked; a saved-but-unproven attach fails with the
 //     reel_attach diag on the job row and consumes
 //     nothing.
+// 44. EDITOR ATTACH: CDP FILE INJECTION + SETTLE BEAT
+//     (v2.1.89 — Matthew, 2026-11-06; background.js header
+//     note 44 carries the worker's side): the 2.88 desk
+//     proof ran the editor attach end to end — the clip
+//     verified in the form (done/ever), Update was
+//     clicked, and the reopened editor read the counter
+//     back at 0 (saved_unproven). A page-level
+//     DataTransfer set produces a preview Facebook never
+//     turns into a durable upload — photos survive the
+//     same mechanism because their pipeline binds each
+//     file to a server asset on selection; the video
+//     pipeline does not, so the preview dies at the save
+//     exactly as it died at the composer's transitions.
+//     Matthew's own picker upload of the same file
+//     through the same editor persisted at once. So the
+//     EDITOR attach (only) now hands the file to the
+//     input the way the picker does: the worker saves
+//     the reel to a real on-disk path (chrome.downloads)
+//     and injects it with DOM.setFileInputFiles over the
+//     existing CDP session; the input is marked with a
+//     temporary attribute so the worker finds the exact
+//     node, and the marker comes off whatever happens.
+//     Any failure in that chain falls back to the
+//     DataTransfer set for the attempt — fail-open — and
+//     the attempt record + the reel_attach diag state
+//     which mechanism ran ("mech") and why CDP did not.
+//     And before Save may be clicked, a verified attach
+//     must now survive a SETTLE BEAT: the counter is
+//     polled for a further ~10s and must read >= 1 on
+//     every sample (decideAttachSettle) — a clip that
+//     drops inside the window is unverified and exits
+//     WITHOUT saving, the note-43 rule unchanged. The
+//     create-flow attach is byte-untouched: still
+//     DataTransfer, still the note-42 discipline.
 
 
 (async function () {
@@ -6765,6 +6799,40 @@
     const o = obs || {};
     return o.counter >= 1 ? "report" : "fail";
   }
+  // The settle beat (v2.1.89, header note 44): after a
+  // verified editor attach, the counter is polled for the
+  // settle window before Save may be clicked. Every
+  // sample must read >= 1 — one 0 inside the window means
+  // the clip dropped after its verdict, and the attach is
+  // unverified (the caller exits without saving).
+  const ATTACH_SETTLE_WINDOW_MS = 10000;
+  const ATTACH_SETTLE_POLL_MS = 1000;
+  function decideAttachSettle(samples) {
+    if (!Array.isArray(samples) || !samples.length) return "empty";
+    for (const s of samples) {
+      if (!(Number(s) >= 1)) return "dropped";
+    }
+    return "stable";
+  }
+  // The editor attempt's mechanism choice (v2.1.89): CDP
+  // file injection is primary; ANY CDP/download failure
+  // falls back to the DataTransfer set for that attempt,
+  // and the reason rides the attempt record into the
+  // reel_attach diag.
+  function decideEditAttachMech(cdpRes) {
+    if (cdpRes && cdpRes.ok === true) return { mech: "cdp", reason: null };
+    return { mech: "datatransfer",
+      reason: (cdpRes && cdpRes.error) || "cdp_unavailable" };
+  }
+  // The temp-file name the worker saves the reel under
+  // (v2.1.89): the reel's own file name behind a fixed
+  // prefix, path-safe — the worker's guard accepts exactly
+  // this shape.
+  function reelTempFilename(name) {
+    const base = String(name || "reel.mp4").split("/").pop().split("?")[0];
+    return "autolaunch-reel-" +
+      (base.replace(/[^A-Za-z0-9._-]/g, "_") || "reel.mp4");
+  }
   // [PURE-ATTACH-FLOW-END]
 
   // Records the attach flow's phase on the STORED job, so a
@@ -6791,21 +6859,58 @@
     return true;
   }
 
-  // One attach attempt against the EDIT form (v2.1.88): the
-  // note-42 poll, unchanged in discipline — the done verdict
-  // requires the Videos counter itself (introProcessing-
-  // Verdict), and a timeout NEVER removes the clip.
-  async function runEditAttachAttempt(blob, name, budgetMs) {
+  // Hand the reel file to the editor's video input the
+  // way the picker does (v2.1.89, header note 44): mark
+  // the input, ask the worker to inject its on-disk copy
+  // with DOM.setFileInputFiles, unmark whatever happens.
+  // The reply is the CDP protocol's {ok} / {ok:false,
+  // error} — decideEditAttachMech reads it.
+  async function cdpSetReelFile(input, reelUrl, name) {
+    if (!input) return { ok: false, error: "cdp_no_input" };
+    if (!(await cdpEnsure("reel_attach"))) {
+      return { ok: false,
+        error: attemptsFor("reel_attach").cdpError || "cdp_attach_failed" };
+    }
+    input.setAttribute("data-autolaunch-cdp-target", "1");
+    try {
+      return await cdpRequest({
+        action: "setFile",
+        url: reelUrl,
+        filename: reelTempFilename(name),
+        selector: 'input[data-autolaunch-cdp-target="1"]',
+        queueId: job.queueId || null,
+        vin: (job.car && job.car.vin) || null
+      });
+    } finally {
+      try { input.removeAttribute("data-autolaunch-cdp-target"); } catch (e) {}
+    }
+  }
+
+  // One attach attempt against the EDIT form (v2.1.88;
+  // the file set is v2.1.89's, header note 44): the
+  // note-42 poll, unchanged in discipline — the done
+  // verdict requires the Videos counter itself
+  // (introProcessingVerdict), and a timeout NEVER
+  // removes the clip.
+  async function runEditAttachAttempt(blob, name, budgetMs, reelUrl) {
     const input = findVideoInput();
     if (!input) {
       return { verdict: "no_input", everAttached: false,
-        signature: false, elapsedMs: 0, budgetMs, readBack: 0 };
+        signature: false, elapsedMs: 0, budgetMs, readBack: 0,
+        mech: null, mechReason: null };
     }
-    const file = new File([blob], name, { type: blob.type || "video/mp4" });
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    input.files = dt.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    // v2.1.89: CDP injection is the primary set; the
+    // DataTransfer set survives as the attempt's fail-open
+    // fallback, chosen purely by decideEditAttachMech.
+    const mechPick = decideEditAttachMech(
+      await cdpSetReelFile(input, reelUrl, name));
+    if (mechPick.mech === "datatransfer") {
+      const file = new File([blob], name, { type: blob.type || "video/mp4" });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
     const startedAt = Date.now();
     let everAttached = false;
     let signature = false;
@@ -6834,7 +6939,8 @@
     }
     return { verdict, everAttached, signature,
       elapsedMs: Date.now() - startedAt, budgetMs,
-      readBack: verdict === "rejected" ? 0 : videoAttachedCount() };
+      readBack: verdict === "rejected" ? 0 : videoAttachedCount(),
+      mech: mechPick.mech, mechReason: mechPick.reason };
   }
 
   // Attach the resolved reel inside the listing's editor
@@ -6882,7 +6988,7 @@
         console.log("[AutoLaunch] Edit-flow attach: clean miss — retrying the attach once with the same clip.");
         say("Adding this listing's video…");
       }
-      const rec = await runEditAttachAttempt(blob, name, budgetMs);
+      const rec = await runEditAttachAttempt(blob, name, budgetMs, reelUrl);
       outcome.attemptLog.push(Object.assign(
         { stage: "edit", n: outcome.attempts }, rec));
       outcome.readBack = rec.readBack;
@@ -6903,12 +7009,18 @@
     const verdicts = (Array.isArray(o.attemptLog) ? o.attemptLog : [])
       .map(t => `${(t && t.n) || "?"}:${(t && t.verdict) || "?"}` +
         `${t && t.everAttached ? "/ever" : ""}`).join(",");
+    const mechs = (Array.isArray(o.attemptLog) ? o.attemptLog : [])
+      .map(t => (t && t.mech) || null).filter(Boolean);
+    const mechReason = (Array.isArray(o.attemptLog) ? o.attemptLog : [])
+      .map(t => (t && t.mechReason) || null).filter(Boolean)[0] || null;
     recordStepNote("reel_attach",
       `attach_unverified attempts:${o.attempts || 0} skip:${o.skip || "none"}` +
         ` final:${finalStage || "edit"}` +
-        (verdicts ? ` verdicts:${verdicts}` : ""),
+        (verdicts ? ` verdicts:${verdicts}` : "") +
+        (mechs.length ? ` mech:${mechs.join(",")}` : ""),
       `downloaded:${o.downloaded === true} blob_bytes:${o.blobSize || 0}` +
-        (o.budgetMs ? ` budget_s:${Math.round(o.budgetMs / 1000)}` : ""));
+        (o.budgetMs ? ` budget_s:${Math.round(o.budgetMs / 1000)}` : "") +
+        (mechReason ? ` mech_fallback:${mechReason}` : ""));
   }
 
   // Open the matched card's Edit form, the price update's
@@ -7159,6 +7271,28 @@
     recordAttachDiag(outcome, "edit");
     const next = decideAttachEditorNext(
       { counter: videoAttachedCount(), outcome });
+    if (next === "save") {
+      // The settle beat (v2.1.89, header note 44): a
+      // verified clip must still read on the form ~10s
+      // later before Save may be clicked — polled here,
+      // decided purely by decideAttachSettle. A drop
+      // inside the window is unverified: exit WITHOUT
+      // saving, exactly like any other unverified attach.
+      const samples = [];
+      const settleDeadline = Date.now() + ATTACH_SETTLE_WINDOW_MS;
+      for (;;) {
+        samples.push(videoAttachedCount());
+        if (decideAttachSettle(samples) === "dropped") break;
+        if (Date.now() >= settleDeadline) break;
+        await sleep(ATTACH_SETTLE_POLL_MS);
+      }
+      recordStepNote("attach_settle",
+        decideAttachSettle(samples) + " samples:" + samples.join(","));
+      if (decideAttachSettle(samples) !== "stable") {
+        await fail("The attached video vanished before saving — nothing was saved.", "attach_settle_dropped");
+        return;
+      }
+    }
     if (next !== "save") {
       // Unverified: exit WITHOUT saving. The unsaved editor
       // tab stays open as evidence; the reel stays ready.

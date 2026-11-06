@@ -718,6 +718,31 @@ importScripts("dws_sync.js");
 //     completion never stamps), pacing anchors on the same
 //     stamp, and the claim treats the action with the
 //     delete/share/update_price exemptions.
+// 44. EDITOR ATTACH: CDP FILE INJECTION (v2.1.89 — Matthew,
+//     2026-11-06): the 2.88 desk proof isolated the last
+//     mechanism. In the listing's editor the DataTransfer-
+//     set clip verified in the form (done/ever), Update was
+//     clicked — and the reopened editor read the counter
+//     at 0 (saved_unproven). The page-level set yields a
+//     preview Facebook never binds to a durable upload;
+//     Matthew's picker upload of the same file persisted
+//     at once. The editor attach's file set is now picker-
+//     equivalent: this worker saves the reel bytes to a
+//     real on-disk path itself (chrome.downloads — the one
+//     NEW permission in this build; "debugger" was already
+//     carried for the note-9 trusted input) and, over the
+//     note-9 CDP session, runs DOM.setFileInputFiles on
+//     the exact input the content script marked. The
+//     download record rides chrome.storage so the temp
+//     file is cleaned up (removeFile + erase) when the
+//     attach job settles — success in finishJobVideo-
+//     Attached, failure in finishJobFailed — always fail-
+//     open. Any failure in the download/CDP chain answers
+//     a structured error and the content side falls back
+//     to the DataTransfer set for that attempt; the
+//     reel_attach diag states the mechanism that ran. The
+//     create-flow attach keeps the DataTransfer set: this
+//     build tests injection in the editor only.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -2364,6 +2389,7 @@ async function fetchVideoForContent(url) {
 //   { type: "AUTOLAUNCH_CDP", action: "clickSeq", x, y }  (v2.1.9)
 //   { type: "AUTOLAUNCH_CDP", action: "insertText", text }
 //   { type: "AUTOLAUNCH_CDP", action: "key", key, code, text?, modifiers? }
+//   { type: "AUTOLAUNCH_CDP", action: "setFile", url, filename, selector, queueId, vin }  (v2.1.89)
 //   { type: "AUTOLAUNCH_CDP", action: "detach" }
 // Every reply is { ok: true, ... } or { ok: false, error } — an attach
 // failure (another debugger, e.g. the user's own DevTools, is attached)
@@ -2476,6 +2502,15 @@ async function handleCdp(message, tabId) {
         Object.assign({ type: "keyUp" }, base));
       return { ok: true };
     }
+    case "setFile": {
+      // v2.1.89 (header note 44): picker-equivalent file
+      // injection for the editor attach — download the
+      // reel to a real path, then DOM.setFileInputFiles
+      // on the input the content script marked. Every
+      // failure is the structured {ok:false, error} the
+      // content side falls back on.
+      return cdpSetFileInputFiles(tabId, message);
+    }
     default:
       return { ok: false, error: "cdp_unknown_action" };
   }
@@ -2487,6 +2522,195 @@ chrome.debugger.onDetach.addListener(source => {
 chrome.tabs.onRemoved.addListener(tabId => {
   cdpSessions.delete(tabId);
 });
+
+// --- CDP reel file injection (v2.1.89, header note 44) -------------------
+// The editor attach's file set, picker-equivalent: the reel
+// is saved to a real on-disk path by chrome.downloads, then
+// DOM.setFileInputFiles hands that path to the editor's
+// marked video input over the note-9 CDP session. The
+// download record is kept in chrome.storage.local (key
+// autolaunch_cdp_reel_file) so cleanup can find it even if
+// this worker restarted between the set and the settle.
+
+// [PURE-CDP-FILE-BEGIN] — extracted and unit-exercised by
+// the test harness; keep free of chrome/fetch references.
+// The setFile request's shape gate: an https reel URL and
+// exactly the temp-file name shape the content side
+// builds (reelTempFilename) — no paths, no traversal.
+function cdpReelFileRequestGuard(message) {
+  const url = message && typeof message.url === "string" ? message.url : "";
+  const filename = message && typeof message.filename === "string"
+    ? message.filename : "";
+  if (!/^https:\/\//i.test(url)) {
+    return { ok: false, error: "cdp_file_url_invalid" };
+  }
+  if (!/^autolaunch-reel-[A-Za-z0-9._-]+\.mp4$/.test(filename) ||
+      filename.indexOf("..") >= 0 || filename.indexOf("/") >= 0 ||
+      filename.indexOf("\\") >= 0) {
+    return { ok: false, error: "cdp_file_name_invalid" };
+  }
+  return { ok: true, url, filename };
+}
+// Cleanup fires only for the attach job the record was
+// written for — the queue id must match the settling job.
+function decideCdpFileCleanup(record, job) {
+  if (!record || !job) return false;
+  if (job.action !== "attach_video") return false;
+  return record.queueId != null && record.queueId === job.queueId;
+}
+// [PURE-CDP-FILE-END]
+
+const CDP_REEL_DOWNLOAD_TIMEOUT_MS = 90 * 1000;
+
+function waitForDownloadComplete(downloadId) {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = v => {
+      if (settled) return;
+      settled = true;
+      try { chrome.downloads.onChanged.removeListener(onChanged); } catch (e) {}
+      resolve(v);
+    };
+    const onChanged = delta => {
+      if (!delta || delta.id !== downloadId || !delta.state) return;
+      if (delta.state.current === "complete") finish({ ok: true });
+      else if (delta.state.current === "interrupted") {
+        finish({ ok: false,
+          error: "downloads_interrupted:" +
+            ((delta.error && delta.error.current) || "unknown") });
+      }
+    };
+    chrome.downloads.onChanged.addListener(onChanged);
+    // The download may have finished before the listener
+    // attached (a small reel on a fast disk) — check once.
+    try {
+      chrome.downloads.search({ id: downloadId }, items => {
+        if (items && items[0] && items[0].state === "complete") {
+          finish({ ok: true });
+        } else if (items && items[0] && items[0].state === "interrupted") {
+          finish({ ok: false,
+            error: "downloads_interrupted:" + (items[0].error || "unknown") });
+        }
+      });
+    } catch (e) { /* the listener + timeout still stand */ }
+    setTimeout(() => finish({ ok: false, error: "downloads_timeout" }),
+      CDP_REEL_DOWNLOAD_TIMEOUT_MS);
+  });
+}
+
+// Ensure the reel sits at a real on-disk path: reuse the
+// recorded download when it is this URL's and the file is
+// still there (refreshing the record to the CURRENT job,
+// so its settle cleans up); otherwise download it under
+// the deterministic name and record it for cleanup.
+async function ensureCdpReelFile(message) {
+  const guard = cdpReelFileRequestGuard(message);
+  if (!guard.ok) return guard;
+  const stored = await chrome.storage.local.get(["autolaunch_cdp_reel_file"]);
+  const prev = stored.autolaunch_cdp_reel_file;
+  if (prev && prev.url === guard.url && prev.downloadId != null) {
+    const items = await new Promise(resolve => {
+      try { chrome.downloads.search({ id: prev.downloadId }, resolve); }
+      catch (e) { resolve(null); }
+    });
+    if (items && items[0] && items[0].state === "complete" &&
+        items[0].exists !== false && items[0].filename) {
+      await chrome.storage.local.set({
+        autolaunch_cdp_reel_file: Object.assign({}, prev, {
+          queueId: message.queueId || null, vin: message.vin || null,
+          at: new Date().toISOString()
+        })
+      });
+      return { ok: true, path: items[0].filename, reused: true };
+    }
+  }
+  const downloadId = await new Promise(resolve => {
+    try {
+      chrome.downloads.download(
+        { url: guard.url, filename: guard.filename,
+          conflictAction: "overwrite" },
+        id => {
+          const err = chrome.runtime.lastError;
+          resolve(err || id == null ? null : id);
+        });
+    } catch (e) { resolve(null); }
+  });
+  if (downloadId == null) return { ok: false, error: "downloads_start_failed" };
+  const done = await waitForDownloadComplete(downloadId);
+  if (!done.ok) return done;
+  const items = await new Promise(resolve => {
+    try { chrome.downloads.search({ id: downloadId }, resolve); }
+    catch (e) { resolve(null); }
+  });
+  const path = items && items[0] && items[0].filename;
+  if (!path) return { ok: false, error: "downloads_path_unresolved" };
+  await chrome.storage.local.set({
+    autolaunch_cdp_reel_file: {
+      downloadId, path, url: guard.url,
+      queueId: message.queueId || null, vin: message.vin || null,
+      at: new Date().toISOString()
+    }
+  });
+  return { ok: true, path, reused: false };
+}
+
+// The injection itself: DOM.setFileInputFiles on the
+// input the content script marked, over the note-9
+// session (attached here when the rung-3 ladder has not
+// already attached it).
+async function cdpSetFileInputFiles(tabId, message) {
+  const file = await ensureCdpReelFile(message);
+  if (!file.ok) return file;
+  const attach = await cdpAttach(tabId);
+  if (!attach.ok) return attach;
+  const selector = typeof message.selector === "string" && message.selector
+    ? message.selector : 'input[data-autolaunch-cdp-target="1"]';
+  try {
+    await cdpSendCommand(tabId, "DOM.enable", {});
+    const doc = await cdpSendCommand(tabId, "DOM.getDocument", { depth: -1 });
+    const rootId = doc && doc.root && doc.root.nodeId;
+    if (!rootId) return { ok: false, error: "cdp_no_document" };
+    const found = await cdpSendCommand(tabId, "DOM.querySelector",
+      { nodeId: rootId, selector });
+    const nodeId = found && found.nodeId;
+    if (!nodeId) return { ok: false, error: "cdp_node_not_found" };
+    await cdpSendCommand(tabId, "DOM.setFileInputFiles",
+      { nodeId, files: [file.path] });
+    return { ok: true, path: file.path, reused: file.reused === true };
+  } catch (e) {
+    return { ok: false,
+      error: "cdp_set_files_failed: " + ((e && e.message) || "unknown") };
+  }
+}
+
+// Temp-file cleanup at the attach job's settle (success
+// and failure alike, from the finish functions): erase
+// the storage record first so a repeated call is a
+// no-op, then remove the file and its download-history
+// entry. Fail-open throughout — a leftover temp file is
+// litter, never a wedge.
+async function cleanupCdpReelFile(job) {
+  try {
+    const stored = await chrome.storage.local.get(["autolaunch_cdp_reel_file"]);
+    const record = stored.autolaunch_cdp_reel_file;
+    if (!decideCdpFileCleanup(record, job)) return;
+    await chrome.storage.local.remove(["autolaunch_cdp_reel_file"]);
+    if (record.downloadId != null) {
+      await new Promise(resolve => {
+        try {
+          chrome.downloads.removeFile(record.downloadId,
+            () => { void chrome.runtime.lastError; resolve(); });
+        } catch (e) { resolve(); }
+      });
+      await new Promise(resolve => {
+        try {
+          chrome.downloads.erase({ id: record.downloadId },
+            () => { void chrome.runtime.lastError; resolve(); });
+        } catch (e) { resolve(); }
+      });
+    }
+  } catch (e) { /* fail-open */ }
+}
 
 // Failure-log writes are serialized through this chain (v3.1): the
 // get-modify-write cycle is not atomic, and near-simultaneous callers
@@ -3178,6 +3402,7 @@ async function finishJobVideoAttached(queueId) {
           vin: job.car.vin, userId: job.userId, reelId
         }
       });
+      await cleanupCdpReelFile(job);
       await chrome.storage.local.remove(["current_posting_job"]);
       console.warn("[AutoLaunch] Video attach confirmed on Facebook; the queue update is waiting on a fresh session token.");
       scheduleJobTabClose(job);
@@ -3190,6 +3415,9 @@ async function finishJobVideoAttached(queueId) {
   // record). Fail-open, exactly like the post path's.
   await consumeJobReel(job.userId, job.car.vin,
     { id: reelId, source: "poster", attached: true, attachVerified: true });
+  // v2.1.89: the attach job is settled — the CDP temp
+  // file goes away with it (fail-open).
+  await cleanupCdpReelFile(job);
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Video attach confirmed for queue item", queueId);
   scheduleJobTabClose(job);
@@ -3234,6 +3462,10 @@ async function finishJobFailed(queueId, reason, diags) {
     }
   } finally {
     await logFailure(queueId, reason || "unknown");
+    // v2.1.89: a failed attach job settles too — clean up
+    // its CDP temp file (the pure gate no-ops for any
+    // other action and for a missing record).
+    await cleanupCdpReelFile(job);
     await chrome.storage.local.remove(["current_posting_job"]);
     console.warn("[AutoLaunch] Job failed:", queueId, reason);
   }
