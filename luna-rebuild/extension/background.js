@@ -657,6 +657,21 @@ importScripts("dws_sync.js");
 //     A finish with no attach verdict on record (a recovery
 //     scan settled the job) counts as unverified: consumption
 //     requires proof, never a presumption.
+//
+// 42. REEL ATTACH: BINDING PRE-PUBLISH VERDICT (v2.1.87 —
+//     Matthew, 2026-11-06): the consumption rule of note 41
+//     is unchanged — the verdict it consumes is now the
+//     content side's FINAL one, taken immediately before
+//     Publish after a counter-required wait, a size-scaled
+//     budget, and at most one repair attach (content.js
+//     header note 42). The diag filed for an unverified
+//     attach grows the self-diagnosing tail the Wrangler
+//     run was missing: every attempt's verdict (with ever /
+//     signature markers), the budget the size-scaled wait
+//     used, the stage that produced the binding verdict,
+//     and the compact Videos-counter trace — built purely
+//     by reelAttachDiagFields so the harness exercises the
+//     exact strings the row will carry.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1358,6 +1373,34 @@ function decideReelConsume(reel) {
   }
   if (!reel.id) return { consume: false, reason: "no_reel_id" };
   return { consume: true, reelId: reel.id };
+}
+// reelAttachDiagFields (v2.1.87, header note 42): the
+// note/detail pair filed for an unverified attach. The
+// note leads with the 2.86 shape (compactDiagError leaves
+// notes untruncated) and appends the self-diagnosing tail:
+// the binding stage, every attempt's verdict (R = the
+// pre-Publish repair; /ever = the form showed the clip at
+// some point in the attempt; /sig = the processed
+// signature fired without the counter), and the compact
+// counter trace. The detail keeps the 2.86 download facts
+// and adds the processing budget the size-scaled wait
+// used, in seconds.
+function reelAttachDiagFields(a) {
+  const att = a || {};
+  const verdicts = (Array.isArray(att.attemptLog) ? att.attemptLog : [])
+    .map(t => `${t && t.stage === "repair" ? "R" : ""}${(t && t.n) || "?"}:` +
+      `${(t && t.verdict) || "?"}${t && t.everAttached ? "/ever" : ""}` +
+      `${t && t.signature ? "/sig" : ""}`)
+    .join(",");
+  let note = `attach_unverified attempts:${att.attempts || 0}` +
+    ` skip:${att.skip || "none"}`;
+  if (att.finalStage) note += ` final:${att.finalStage}`;
+  if (verdicts) note += ` verdicts:${verdicts}`;
+  if (att.trace) note += ` trace:${att.trace}`;
+  let detail = `downloaded:${att.downloaded === true}` +
+    ` blob_bytes:${att.blobSize || 0}`;
+  if (att.budgetMs) detail += ` budget_s:${Math.round(att.budgetMs / 1000)}`;
+  return { note, detail };
 }
 // decideReelCompletionFlag (v2.1.86): the reel_failed value a
 // posted completion writes. null = the job carried no reel —
@@ -2671,7 +2714,11 @@ async function finishJobPosted(queueId, listingUrl, reelAttach) {
   // it into the reel record the finish acts on. No verdict
   // on record (a recovery scan settled this job) leaves
   // attachVerified unset — consumption reads that as
-  // unverified and keeps the reel.
+  // unverified and keeps the reel. (v2.1.87, header note
+  // 42: the verdict riding the message is now the BINDING
+  // pre-Publish one, and the diag's note/detail are built
+  // by reelAttachDiagFields — per-attempt verdicts, the
+  // budget, the compact counter trace.)
   const reel = job.reel
     ? { ...job.reel, attachVerified: !!(reelAttach && reelAttach.verified === true) }
     : null;
@@ -2680,10 +2727,7 @@ async function finishJobPosted(queueId, listingUrl, reelAttach) {
         field: "reel_attach",
         rungsAttempted: [],
         readBack: reelAttach.readBack != null ? String(reelAttach.readBack) : null,
-        note: `attach_unverified attempts:${reelAttach.attempts || 0}` +
-          ` skip:${reelAttach.skip || "none"}`,
-        detail: `downloaded:${reelAttach.downloaded === true}` +
-          ` blob_bytes:${reelAttach.blobSize || 0}`
+        ...reelAttachDiagFields(reelAttach)
       }])
     : null;
   try {

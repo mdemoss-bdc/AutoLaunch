@@ -827,6 +827,39 @@
 //     and the queue row's truth on it. Still strictly
 //     fail-open: an unverified video never blocks the post;
 //     it only stops being invisible.
+// 42. ATTACH MECHANISM: COUNTER-REQUIRED DONE, SIZE-SCALED
+//     WAIT, BINDING PRE-PUBLISH VERDICT (v2.1.87 — Matthew,
+//     2026-11-06): the 2.86 Wrangler desk run read the
+//     mechanism's mail. Its reel downloaded fine, showed
+//     Videos 1/1 mid-form, and still was not on the listing —
+//     while the attach had reported its attempts against a
+//     verdict that never required the counter at all:
+//     introProcessingVerdict called "done" on the Remove-
+//     button + notice-gone signature, which for a 20 MB clip
+//     fires minutes before Facebook's ingest flips the
+//     counter. The flat 120s budget then expired against a
+//     healthy upload, the timeout path CLICKED REMOVE —
+//     deleting the very clip it was waiting for — and the
+//     retry re-set input.files, which Facebook merges into
+//     its uploader (a duplicate racing the original). And
+//     nothing re-checked the video in the minutes between
+//     attach and Publish. Now: (a) "done" REQUIRES THE
+//     VIDEOS COUNTER >= 1 — signature without the counter is
+//     still waiting; (b) the per-attempt budget scales with
+//     the clip's size (120s + 10s/MB, cap 360s) and a timeout
+//     NEVER removes the clip — a slow upload is left in
+//     place to finish during the step walk; (c) the early
+//     retry survives only for the clean miss ("rejected");
+//     while a clip may still be ingesting it is never
+//     re-set; (d) the BINDING verdict is taken after the
+//     final field verify, immediately before the Publish
+//     phase: re-read the counter, wait out a bounded 120s
+//     for an in-flight ingest, or spend ONE repair attach
+//     with the same bytes — and that verdict, overriding
+//     the early one in both directions, is what rides the
+//     posted report. Per-attempt verdicts and a compact
+//     counter trace ride the outcome so the next failure
+//     explains itself. Still strictly fail-open throughout.
 
 
 (async function () {
@@ -1893,6 +1926,11 @@
   const diagRecorded = new Set();
   const jobDiags = [];        // forensic records, sent with JOB_FAILED (v3.1)
   let reelAttachOutcome = null; // video attach verdict, sent with JOB_POSTED (v2.1.86)
+  let reelVideoBlob = null;   // the resolved clip's bytes, lifted for the pre-Publish repair attach (v2.1.87, header note 42)
+  let reelVideoName = null;   // its file name, same purpose
+  let reelTrace = [];         // Videos-counter checkpoints for the compact trace (v2.1.87)
+  let reelTraceT0 = 0;        // trace epoch (attach start)
+  let reelRepairUsed = false; // the pre-Publish repair attach fires at most once
   let formMapRecorded = false; // the form_map record is one per job (v3.2)
   let cdpAttached = false;
 
@@ -2931,28 +2969,106 @@
   // stillLoading = the "must finish loading" notice is up;
   // removePresent = the "Remove video" control exists (the
   // processed state's signature); counterAttached = the Videos
-  // counter reads 1/1. Done requires the processed signature
-  // AND the loading notice gone. A video that vanishes on its
-  // own mid-wait (counter lost, nothing loading, nothing to
-  // remove) was rejected by Facebook — a skip, not a timeout.
+  // counter reads 1/1; count = the counter as a number. Done
+  // requires the processed signature AND the loading notice
+  // gone AND THE COUNTER ITSELF (v2.1.87, header note 42):
+  // the signature fires when Facebook accepts a clip into
+  // its pipeline, the counter only when ingest completes —
+  // for a 20 MB reel those are minutes apart, and a "done"
+  // read against the signature alone is how 2.86 honestly
+  // read back 0. Signature without the counter is still
+  // waiting. A video that vanishes on its own mid-wait
+  // (counter lost, nothing loading, nothing to remove) was
+  // rejected by Facebook — a skip, not a timeout.
   function introProcessingVerdict(obs) {
     const o = obs || {};
-    if (o.removePresent && !o.stillLoading) return "done";
+    const counted = typeof o.count === "number"
+      ? o.count >= 1 : o.counterAttached === true;
+    if (o.removePresent && !o.stillLoading && counted) return "done";
     if (!o.stillLoading && !o.removePresent && !o.counterAttached &&
         o.everAttached) return "rejected";
     if (o.elapsedMs >= o.timeoutMs) return "timeout";
     return "wait";
   }
-  // decideReelVerify (v2.1.86, header note 41): after an
-  // attach attempt settles, the composer's Videos counter
-  // read-back is the only witness that counts. verified =
-  // the counter shows the clip (>= 1). retry = a missed
-  // read-back earns exactly ONE more attempt, with the
-  // same downloaded bytes.
-  function decideReelVerify(attemptsUsed, readBackCount) {
+  // decideReelVerify (v2.1.86, header note 41; retry gate
+  // narrowed v2.1.87, header note 42): after an attach
+  // attempt settles, the composer's Videos counter read-back
+  // is the only witness that counts. verified = the counter
+  // shows the clip (>= 1). retry = a missed read-back earns
+  // exactly ONE more attempt with the same downloaded bytes
+  // — but ONLY on the clean miss ("rejected": Facebook took
+  // the clip off the form, nothing is in flight). After a
+  // "timeout" — budget spent, the upload possibly still
+  // ingesting — or any other unsettled ending, re-setting
+  // input.files would merge a duplicate into Facebook's
+  // uploader; the verdict defers to the binding pre-Publish
+  // check instead. In doubt, defer.
+  function decideReelVerify(attemptsUsed, readBackCount, lastVerdict) {
     const verified = typeof readBackCount === "number" &&
       isFinite(readBackCount) && readBackCount >= 1;
-    return { verified, retry: !verified && attemptsUsed < 2 };
+    const retry = !verified && attemptsUsed < 2 &&
+      lastVerdict === "rejected";
+    const inFlight = !verified && lastVerdict !== "rejected";
+    return { verified, retry, inFlight };
+  }
+  // reelProcessBudgetMs (v2.1.87, header note 42): the
+  // per-attempt processing budget scales with the clip's
+  // size — 120s base + 10s per MB, capped at 360s. The flat
+  // 120s of <=2.86 was sized by the 5 MB intro video; a
+  // 20 MB reel's ingest outran it while still healthy.
+  function reelProcessBudgetMs(blobSize) {
+    const mb = (typeof blobSize === "number" && isFinite(blobSize) &&
+      blobSize > 0) ? blobSize / 1000000 : 0;
+    return Math.min(360000, Math.round(120000 + mb * 10000));
+  }
+  // applyPrePublishVerdict (v2.1.87, header note 42): the
+  // pre-Publish observation is BINDING in both directions —
+  // it can rescue an early unverified outcome (the clip
+  // finished ingesting during the step walk — the CR-V
+  // pattern) and it can convict an early verified one (the
+  // counter read 1 at attach time and 0 at the Publish
+  // step). Returns a new outcome; the early outcome is
+  // evidence, not the verdict.
+  function applyPrePublishVerdict(outcome, late) {
+    const o = Object.assign({}, outcome || {});
+    const l = late || {};
+    const count = typeof l.count === "number" && isFinite(l.count)
+      ? l.count : 0;
+    o.verified = count >= 1;
+    o.readBack = count;
+    o.finalStage = l.stage || "prepublish";
+    return o;
+  }
+  // compactReelTrace (v2.1.87, header note 42): crush the
+  // counter checkpoints into what the diag can carry —
+  // where the counter FIRST read >= 1 (checkpoint name +
+  // elapsed seconds), every checkpoint where it DROPPED
+  // against the previous one, and the final count. Drops,
+  // first-sighting and final win any argument with the
+  // char budget.
+  function compactReelTrace(points) {
+    const pts = Array.isArray(points) ? points : [];
+    if (!pts.length) return "";
+    let first = null;
+    const drops = [];
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i] || {};
+      if (first === null && typeof p.count === "number" && p.count >= 1) {
+        first = p;
+      }
+      const prev = i > 0 ? (pts[i - 1] || {}) : {};
+      if (i > 0 && typeof p.count === "number" &&
+          typeof prev.count === "number" && p.count < prev.count) {
+        drops.push(String(p.name || "?"));
+      }
+    }
+    const last = pts[pts.length - 1] || {};
+    const parts = [first
+      ? `first:${first.name}@${Math.round((first.atMs || 0) / 1000)}s`
+      : "first:none"];
+    if (drops.length) parts.push("drops:" + drops.join(","));
+    parts.push(`final:${last.count != null ? last.count : "?"}`);
+    return parts.join(" ");
   }
   // [PURE-INTRO-VIDEO-END]
 
@@ -3134,23 +3250,100 @@
     return m ? parseInt(m[1], 10) : 0;
   }
 
+  // One Videos-counter checkpoint for the attach trace
+  // (v2.1.87, header note 42): recorded as a step note (the
+  // established evidence channel) and kept for the compact
+  // trace that rides the attach outcome. Read-only; a job
+  // with no resolved video records nothing at all.
+  function traceReelCount(name) {
+    if (!introVideo) return;
+    let count = 0;
+    try { count = videoAttachedCount(); } catch (e) { count = 0; }
+    reelTrace.push({ name, count,
+      atMs: reelTraceT0 ? Date.now() - reelTraceT0 : 0 });
+    recordStepNote("ReelTrace", name, `videos:${count}`, String(count));
+  }
+
   // Attach the job's intro video (v2.1.53; outcome + read-back
-  // + one retry since v2.1.86, header note 41). Returns the
-  // attach outcome; verified only when the clip is on the
-  // listing, processed, AND the Videos counter reads it back.
-  // Every skip names itself in the console. The caller
-  // continues the post identically either way.
-  const INTRO_PROCESS_TIMEOUT_MS = 120 * 1000;
+  // + one retry since v2.1.86, header note 41; mechanism
+  // reworked v2.1.87, header note 42). Returns the attach
+  // outcome; verified only when the clip is on the listing,
+  // processed, AND the Videos counter reads it back. Every
+  // skip names itself in the console. The caller continues
+  // the post identically either way.
+  // One attach attempt (v2.1.87, header note 42): set the
+  // clip on the composer's video input and poll the
+  // processing verdict until it settles or the size-scaled
+  // budget expires. NEVER removes the clip: a timeout
+  // leaves a slow-but-healthy upload in place — it may
+  // finish during the step walk, and the pre-Publish check
+  // is the authority on whether it did. (<=2.86 clicked
+  // Remove on a timeout, deleting uploads that were merely
+  // slow.) Returns the attempt record the outcome logs.
+  async function runAttachAttempt(blob, name, budgetMs, label) {
+    const input = findVideoInput();
+    if (!input) {
+      return { verdict: "no_input", everAttached: false,
+        signature: false, elapsedMs: 0, budgetMs, readBack: 0 };
+    }
+    const file = new File([blob], name, { type: blob.type || "video/mp4" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    traceReelCount("set:" + label);
+    // Wait for Facebook to take it, then to finish processing
+    // it: the form refuses to proceed while a video loads, so
+    // Publish must never race a half-processed clip.
+    const startedAt = Date.now();
+    let everAttached = false;
+    let signature = false;
+    let verdict = "wait";
+    for (;;) {
+      await sleep(1500);
+      const count = videoAttachedCount();
+      const obs = {
+        stillLoading: videoLoadingNotice(),
+        removePresent: !!removeVideoButton(),
+        counterAttached: videoCounterAttached(),
+        count,
+        everAttached,
+        elapsedMs: Date.now() - startedAt,
+        timeoutMs: budgetMs
+      };
+      if (obs.removePresent || obs.counterAttached || obs.stillLoading) {
+        everAttached = true;
+        obs.everAttached = true;
+      }
+      if (obs.removePresent && !obs.stillLoading && count < 1) {
+        signature = true; // processed signature up, counter not yet flipped
+      }
+      verdict = introProcessingVerdict(obs);
+      if (verdict !== "wait") break;
+    }
+    const rec = { verdict, everAttached, signature,
+      elapsedMs: Date.now() - startedAt, budgetMs,
+      readBack: verdict === "rejected" ? 0 : videoAttachedCount() };
+    traceReelCount("exit:" + label + ":" + verdict);
+    return rec;
+  }
+
   async function attachIntroVideo() {
     // v2.1.86 (header note 41): the return is an OUTCOME, not
     // a boolean — { attempted, verified, attempts, downloaded,
     // blobSize, readBack, skip } — and the caller keeps it for
-    // the posted report. Every skip still names itself in the
-    // console, and the post continues identically either way.
+    // the posted report. v2.1.87 (header note 42) adds the
+    // per-attempt log (verdict, everAttached, elapsed, budget),
+    // the wait budget used, and the compact counter trace.
+    // Every skip still names itself in the console, and the
+    // post continues identically either way.
     const outcome = { attempted: false, verified: false, attempts: 0,
-      downloaded: false, blobSize: 0, readBack: 0, skip: null };
+      downloaded: false, blobSize: 0, readBack: 0, skip: null,
+      everAttached: false, attemptLog: [], finalStage: null,
+      budgetMs: 0, trace: "" };
     if (!introVideo) return outcome;
     outcome.attempted = true;
+    reelTraceT0 = Date.now();
     // Announce BEFORE the download (v2.54, header note 28):
     // in 2.53 the banner only changed after the fetch
     // returned, so a stalled download sat silently under the
@@ -3188,74 +3381,134 @@
     // (The banner already reads "Adding your intro video…" —
     // it was set before the download, v2.54 header note 28.)
     const name = (introVideo.url.split("/").pop() || "intro.mp4").split("?")[0];
-    // Attach, then READ BACK (v2.1.86, header note 41): a
-    // processed signature alone no longer counts — the
-    // Videos counter must show the clip. A missed read-back
-    // retries ONCE with the same downloaded bytes; the wait
-    // per attempt is the same bounded processing wait as
-    // before (a stall costs the video, never the post).
+    // Attach, then READ BACK (v2.1.86, header note 41;
+    // mechanism v2.1.87, header note 42): "done" now
+    // requires the counter itself, the wait scales with
+    // the clip's size, a timeout NEVER removes the clip,
+    // and a missed read-back retries ONCE only on the
+    // clean miss — an unsettled upload is left alone for
+    // the binding pre-Publish check. The downloaded bytes
+    // are lifted onto the job closure first, so that late
+    // check can spend its one repair attach on them.
+    reelVideoBlob = blob;
+    reelVideoName = name;
+    const budgetMs = reelProcessBudgetMs(blob.size);
+    outcome.budgetMs = budgetMs;
     while (outcome.attempts < 2) {
       outcome.attempts += 1;
       if (outcome.attempts > 1) {
-        console.log("[AutoLaunch] Intro video: read-back missed — retrying the attach once with the same clip.");
+        console.log("[AutoLaunch] Intro video: clean miss — retrying the attach once with the same clip.");
         say("Adding your intro video…");
-        input = findVideoInput();
-        if (!input) {
-          outcome.skip = "intro_video_input_not_found";
-          break;
-        }
       }
-      const file = new File([blob], name, { type: blob.type || "video/mp4" });
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      input.files = dt.files;
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      // Wait for Facebook to take it, then to finish processing
-      // it: the form refuses to proceed while a video loads, so
-      // Publish must never race a half-processed clip.
-      const startedAt = Date.now();
-      let everAttached = false;
-      let verdict = "wait";
-      for (;;) {
-        await sleep(1500);
-        const obs = {
-          stillLoading: videoLoadingNotice(),
-          removePresent: !!removeVideoButton(),
-          counterAttached: videoCounterAttached(),
-          everAttached,
-          elapsedMs: Date.now() - startedAt,
-          timeoutMs: INTRO_PROCESS_TIMEOUT_MS
-        };
-        if (obs.removePresent || obs.counterAttached || obs.stillLoading) {
-          everAttached = true;
-          obs.everAttached = true;
-        }
-        verdict = introProcessingVerdict(obs);
-        if (verdict !== "wait") break;
+      const rec = await runAttachAttempt(blob, name, budgetMs,
+        "a" + outcome.attempts);
+      outcome.attemptLog.push(Object.assign(
+        { stage: "early", n: outcome.attempts }, rec));
+      if (rec.everAttached) outcome.everAttached = true;
+      outcome.readBack = rec.readBack;
+      if (rec.verdict === "no_input") {
+        outcome.skip = "intro_video_input_not_found";
+        break;
       }
-      if (verdict === "done") {
-        outcome.readBack = videoAttachedCount();
-        if (outcome.readBack >= 1) {
-          console.log("[AutoLaunch] Intro video attached and processed.");
-          outcome.verified = true;
-          return outcome;
-        }
-        console.log(`[AutoLaunch] Intro video processed, but the Videos counter reads ${outcome.readBack} — attach NOT verified.`);
-      } else if (verdict === "rejected") {
-        outcome.readBack = 0;
+      if (rec.verdict === "done" && rec.readBack >= 1) {
+        console.log("[AutoLaunch] Intro video attached and processed.");
+        outcome.verified = true;
+        break;
+      }
+      if (rec.verdict === "rejected") {
         console.log("[AutoLaunch] Intro video skipped (intro_video_rejected).");
-      } else {
-        outcome.readBack = 0;
-        console.log("[AutoLaunch] Intro video skipped (intro_video_processing_timeout) — removing the half-attached clip.");
-        const rm = removeVideoButton();
-        if (rm) {
-          realisticClick(rm);
-          await sleep(1200);
-        }
+      } else if (rec.verdict === "timeout") {
+        console.log("[AutoLaunch] Intro video still processing when its wait expired — leaving the clip in place; the pre-Publish check will judge it.");
+      } else if (rec.verdict === "done") {
+        console.log(`[AutoLaunch] Intro video processed, but the Videos counter reads ${rec.readBack} — attach NOT verified.`);
       }
-      if (!decideReelVerify(outcome.attempts, outcome.readBack).retry) break;
+      const gate = decideReelVerify(outcome.attempts,
+        outcome.readBack, rec.verdict);
+      if (!gate.retry) {
+        if (gate.inFlight) {
+          console.log("[AutoLaunch] Intro video: not re-setting the file — the clip may still be ingesting; the pre-Publish check is binding.");
+        }
+        break;
+      }
     }
+    traceReelCount("attach-return");
+    outcome.trace = compactReelTrace(reelTrace);
     return outcome;
+  }
+
+  // The BINDING attach verdict (v2.1.87, header note 42):
+  // taken after the final field verify, immediately before
+  // the Publish phase, because the early verdict is minutes
+  // old by then and was read against an ingest that may
+  // still have been running. Overrides the early outcome in
+  // BOTH directions via applyPrePublishVerdict. One repair
+  // attach, with the same lifted bytes, when nothing is in
+  // flight and the counter still reads 0. Strictly
+  // fail-open: any surprise leaves the early outcome
+  // untouched and the post proceeds.
+  const PRE_PUBLISH_INGEST_WAIT_MS = 120 * 1000;
+  async function finalizeReelAttachBeforePublish() {
+    if (!introVideo || !reelAttachOutcome ||
+        !reelAttachOutcome.attempted) return;
+    try {
+      let count = videoAttachedCount();
+      traceReelCount("final-verify");
+      if (count >= 1) {
+        reelAttachOutcome = applyPrePublishVerdict(reelAttachOutcome,
+          { count, stage: "prepublish" });
+        reelAttachOutcome.trace = compactReelTrace(reelTrace);
+        return;
+      }
+      if (!!removeVideoButton() || videoLoadingNotice()) {
+        // A clip is still ingesting: give the counter the
+        // bounded wait to flip before judging it.
+        const waitStart = Date.now();
+        while (count < 1 &&
+               Date.now() - waitStart < PRE_PUBLISH_INGEST_WAIT_MS) {
+          await sleep(1500);
+          count = videoAttachedCount();
+        }
+        traceReelCount("prepublish-after-wait");
+        if (count >= 1 ||
+            !!removeVideoButton() || videoLoadingNotice()) {
+          // Flipped — or still in flight after its wait, in
+          // which case there is nothing honest left to do:
+          // a repair on top of a live upload is the
+          // duplicate-merge trap. The count is the verdict.
+          reelAttachOutcome = applyPrePublishVerdict(reelAttachOutcome,
+            { count, stage: "prepublish_wait" });
+          reelAttachOutcome.trace = compactReelTrace(reelTrace);
+          return;
+        }
+        // It slipped out of flight during the wait with the
+        // counter still at 0 — fall through to the repair.
+      }
+      if (reelVideoBlob && !reelRepairUsed) {
+        // Nothing in flight and the counter is 0: ONE late
+        // attach with the same bytes — the form has long
+        // settled, which is exactly the condition the early
+        // attach never enjoyed.
+        reelRepairUsed = true;
+        say("Adding your intro video…");
+        const rec = await runAttachAttempt(reelVideoBlob,
+          reelVideoName || "intro.mp4",
+          reelProcessBudgetMs(reelVideoBlob.size), "repair");
+        reelAttachOutcome.attemptLog.push(Object.assign(
+          { stage: "repair", n: 1 }, rec));
+        if (rec.everAttached) reelAttachOutcome.everAttached = true;
+        count = videoAttachedCount();
+        reelAttachOutcome = applyPrePublishVerdict(reelAttachOutcome,
+          { count, stage: "repair" });
+      } else {
+        reelAttachOutcome = applyPrePublishVerdict(reelAttachOutcome,
+          { count, stage: "prepublish" });
+      }
+      traceReelCount("prepublish-final");
+      reelAttachOutcome.trace = compactReelTrace(reelTrace);
+    } catch (e) {
+      console.log("[AutoLaunch] Pre-publish video check failed (non-fatal): " +
+        (e && e.message ? e.message : e));
+    }
   }
 
   function publishButton() {
@@ -3504,6 +3757,7 @@
         nativeSetValue(vinInput, String(car.vin));
         say("VIN entered — waiting for Facebook's auto-fill to settle, then setting the real details…");
         await sleep(3000); // decoder settles inside this window
+        traceReelCount("vin-settle");
       }
       // The modal typically appears as the decoder engages — clear
       // it before the cascade below starts clicking (v2.1.6).
@@ -7022,6 +7276,7 @@
       if (!next) break;
       next.click();
       await sleep(2800);
+      traceReelCount("next");
       if (checkpointShowing()) {
         await fail("Facebook showed an identity check mid-posting.");
         return;
@@ -7088,6 +7343,14 @@
       return;
     }
 
+    // The BINDING video verdict (v2.1.87, header note 42):
+    // re-read the Videos counter NOW — after the final
+    // verify, before the Publish phase in BOTH modes — with
+    // one repair attach in hand if the early attempt's clip
+    // never landed. A no-op when the job resolved no video:
+    // reelAttachOutcome is null and the step returns at once.
+    await finalizeReelAttachBeforePublish();
+
     // The fill sequence is over and everything verified — end the
     // trusted-input session (Chrome's debugging infobar goes with it)
     // before the confirm watch / publish step.
@@ -7102,6 +7365,7 @@
 
     if (confirmMode) {
       say("Everything is filled in. Review it, then click Publish — AutoLaunch will confirm the post for you.", "#b45309");
+      traceReelCount("pre-publish");
       const watch = await watchForPublishClick(10 * 60 * 1000);
       if (watch.hit) {
         say("Listing confirmed live ✓", "#15803d");
@@ -7138,6 +7402,7 @@
       await humanPause();
       realisticClick(next);
       await sleep(2800);
+      traceReelCount("next-auto");
       if (checkpointShowing()) {
         await fail("Facebook showed an identity check mid-posting.");
         return;
@@ -7157,6 +7422,7 @@
     // instead of ever submitting this job a second time.
     await markPublishAttempted();
     const preClickUrl = window.location.href;
+    traceReelCount("pre-publish");
     realisticClick(btn);
     let hit = await watchForPublish(15000);
     if (!hit) {
