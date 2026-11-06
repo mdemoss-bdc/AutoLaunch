@@ -28,7 +28,7 @@ Exit code 0 = reel ready (or row was already finished); 1 = reel failed
 (the row carries the error). Unexpected crashes also mark the row failed
 when a row is known.
 """
-import argparse, json, math, os, re, subprocess, sys, tempfile
+import argparse, json, math, os, re, subprocess, sys, tempfile, time
 import urllib.request, urllib.error
 from datetime import datetime, timezone
 
@@ -110,17 +110,30 @@ def rest(method, path, body=None, headers=None, raw=None):
         h.update(headers)
     req = urllib.request.Request(SUPABASE_URL + path, data=data,
                                  headers=h, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            txt = resp.read().decode()
-            return resp.status, (json.loads(txt) if txt.strip() else None)
-    except urllib.error.HTTPError as e:
-        txt = e.read().decode("utf-8", errors="replace")
+    # Transport retry (added 2026-11-05 desk test): the VM egress drops
+    # connections intermittently (RemoteDisconnected / IncompleteRead);
+    # retry transport failures only — an HTTPError is a real response
+    # and returns exactly as before.
+    import http.client as _hc
+    last_exc = None
+    for attempt in range(5):
         try:
-            parsed = json.loads(txt)
-        except Exception:
-            parsed = {"message": txt[:300]}
-        return e.code, parsed
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                txt = resp.read().decode()
+                return resp.status, (json.loads(txt) if txt.strip() else None)
+        except urllib.error.HTTPError as e:
+            txt = e.read().decode("utf-8", errors="replace")
+            try:
+                parsed = json.loads(txt)
+            except Exception:
+                parsed = {"message": txt[:300]}
+            return e.code, parsed
+        except (urllib.error.URLError, ConnectionError, TimeoutError,
+                _hc.HTTPException) as e:
+            last_exc = e
+            if attempt < 4:
+                time.sleep(2 ** attempt)
+    raise last_exc
 
 def row_get(row_id):
     rows = sql_query("SELECT id, user_id, vin, stock_number, status, "
@@ -246,9 +259,20 @@ def download_photos(car, urls):
         if not os.path.exists(p):
             req = urllib.request.Request(
                 url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=40) as r, \
-                    open(p, "wb") as fh:
-                fh.write(r.read())
+            last_exc = None
+            for attempt in range(3):
+                try:
+                    with urllib.request.urlopen(req, timeout=40) as r, \
+                            open(p, "wb") as fh:
+                        fh.write(r.read())
+                    last_exc = None
+                    break
+                except Exception as e:
+                    last_exc = e
+                    if attempt < 2:
+                        time.sleep(2)
+            if last_exc is not None:
+                raise last_exc
         paths.append(p)
     return paths
 

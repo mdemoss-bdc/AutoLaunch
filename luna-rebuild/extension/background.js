@@ -637,6 +637,26 @@ importScripts("dws_sync.js");
 //     consumed (cleanup may only ever touch poster reels).
 //     No ready reel at claim time posts exactly as before:
 //     nothing in this version can block a post on a video.
+//
+// 41. REEL ATTACH VERIFICATION (v2.1.86 — Matthew, 2026-11-06):
+//     the 2.85 desk test posted three held cars; only one
+//     listing actually carried its video, yet all three poster
+//     reels were consumed — claim time had stamped the reel
+//     "attached" on INTENT, and the finish believed the stamp.
+//     Now the content side reports the attach verdict with the
+//     posted message: it reads the composer's Videos counter
+//     back after the attach (one retry on a miss, content.js
+//     header note 41) and only a VERIFIED attach (counter
+//     >= 1) lets a finish consume the poster reel. An
+//     unverified attach leaves the reel ready, stamps the
+//     queue row's completion reel_failed=true (the health
+//     bar's "posted without video" chip finally tells the
+//     truth both ways), and files the attach diagnostics in
+//     the row's error_message in field_diag style — the post
+//     itself still completes and stamps exactly as before.
+//     A finish with no attach verdict on record (a recovery
+//     scan settled the job) counts as unverified: consumption
+//     requires proof, never a presumption.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1298,6 +1318,8 @@ async function introVideoForJob(userId, settings) {
 // [PURE-REEL-DECIDE-BEGIN] — extracted and unit-exercised by
 // the test harness; keep free of DOM/chrome references.
 // VIN Reel claim-time decisions (v2.1.85, header note 40).
+// v2.1.86 (header note 41): consumption gated on the
+// form-verified attach; decideReelCompletionFlag added.
 // decideReelAttach: given the car's LATEST reel row (the
 // claim-gate lookup: user + vin, newest first), decide whether
 // a reel rides this post. Only a ready reel with a URL
@@ -1316,11 +1338,14 @@ function decideReelAttach(reelRow) {
   };
 }
 // decideReelConsume: given the reel record a job carried
-// ({ id, source, attached } as claim time stamped it), decide
-// whether a SUCCESSFUL post consumes the reel. Only a poster
-// reel the job actually attached is consumed — a manual reel
-// is the user's own artifact and is never deleted, and a post
-// that attached nothing consumes nothing.
+// ({ id, source, attached, attachVerified } — claim time
+// stamped the first three, the finish folds in the content
+// side's verified read-back), decide whether a SUCCESSFUL
+// post consumes the reel. Only a poster reel whose attach
+// the form itself confirmed is consumed (v2.1.86, header
+// note 41) — a manual reel is the user's own artifact and
+// is never deleted, and a post that attached nothing — or
+// cannot prove it attached — consumes nothing.
 function decideReelConsume(reel) {
   if (!reel || reel.attached !== true) {
     return { consume: false, reason: "not_attached" };
@@ -1328,8 +1353,20 @@ function decideReelConsume(reel) {
   if (reel.source !== "poster") {
     return { consume: false, reason: "manual_reel" };
   }
+  if (reel.attachVerified !== true) {
+    return { consume: false, reason: "attach_unverified" };
+  }
   if (!reel.id) return { consume: false, reason: "no_reel_id" };
   return { consume: true, reelId: reel.id };
+}
+// decideReelCompletionFlag (v2.1.86): the reel_failed value a
+// posted completion writes. null = the job carried no reel —
+// write nothing, the completion stays byte-identical to the
+// pre-reel shape. A carried reel writes the truth: false when
+// its attach verified on the form, true when it did not.
+function decideReelCompletionFlag(reel) {
+  if (!reel || reel.attached !== true) return null;
+  return reel.attachVerified === true ? false : true;
 }
 // [PURE-REEL-DECIDE-END]
 
@@ -2321,8 +2358,14 @@ function compactDiagError(diags) {
 // The DB writes that end a job, split out so a finish that collides with
 // a dead token can be stashed and replayed when a fresh token arrives
 // (see autolaunch_pending_finish below) instead of being lost.
-async function applyPosted(queueId, vin, userId, postedPrice) {
-  await sbPatch(`auto_posting_queue?id=eq.${queueId}`, { status: "posted" });
+async function applyPosted(queueId, vin, userId, postedPrice, reel) {
+  // v2.1.86: a job that carried a reel also writes the
+  // completion's reel_failed truth (decideReelCompletionFlag);
+  // no reel -> the patch is exactly the pre-2.86 shape.
+  const completion = { status: "posted" };
+  const reelFlag = decideReelCompletionFlag(reel);
+  if (reelFlag !== null) completion.reel_failed = reelFlag;
+  await sbPatch(`auto_posting_queue?id=eq.${queueId}`, completion);
   // Posted-price stamp (v2.1.62, header note 34): alongside the
   // posted-at stamp, record the price the post actually used —
   // the queue row's stamped price, carried on the job — as
@@ -2340,7 +2383,23 @@ async function applyPosted(queueId, vin, userId, postedPrice) {
   );
 }
 
-// VIN Reel consumption (v2.1.85, header note 40): after a post
+// VIN reel attach diagnostics (v2.1.86, header note 41): an
+// unverified attach files its forensics in the queue row's
+// error_message, in the field_diag shape the failure path
+// uses (compactDiagError) — the app never renders a posted
+// row's error_message; the record exists for the database.
+// STRICTLY FAIL-OPEN: a diag write may never fail a post
+// whose listing is already live.
+async function writeReelAttachDiag(queueId, errorMessage) {
+  if (!errorMessage) return;
+  try {
+    await sbPatch(`auto_posting_queue?id=eq.${queueId}`,
+      { error_message: errorMessage });
+  } catch (e) { /* the post stands; the console keeps the story */ }
+}
+
+// VIN Reel consumption (v2.1.85, header note 40; since
+// v2.1.86 the attach must be form-verified, note 41): after a post
 // SUCCEEDS with a poster reel attached, the reel's job is done
 // — delete its storage object and mark the row consumed (the
 // Facebook post keeps its own copy; the app already ignores
@@ -2547,8 +2606,13 @@ async function flushPendingFinish() {
   if (!pending) return;
   try {
     if (pending.outcome === "posted") {
-      await applyPosted(pending.queueId, pending.vin, pending.userId, pending.postedPrice);
-      // v2.1.85: consume the reel the original job attached.
+      await applyPosted(pending.queueId, pending.vin, pending.userId, pending.postedPrice, pending.reel);
+      // v2.1.86: file the attach diagnostics the original
+      // finish captured, if any.
+      if (pending.reelDiag) await writeReelAttachDiag(pending.queueId, pending.reelDiag);
+      // v2.1.85: consume the reel the original job attached
+      // (v2.1.86: only on its verified attach — the stashed
+      // reel record carries the verdict).
       await consumeJobReel(pending.userId, pending.vin, pending.reel);
       // The share the post earned rides the stash (v2.1.55):
       // queued on replay, still fail-open.
@@ -2599,12 +2663,32 @@ function scheduleJobTabClose(job) {
 }
 
 // The ONLY two ways a job ends. Called by the content script via message.
-async function finishJobPosted(queueId, listingUrl) {
+async function finishJobPosted(queueId, listingUrl, reelAttach) {
   const { current_posting_job: job } = await chrome.storage.local.get(["current_posting_job"]);
   if (!job || job.queueId !== queueId) return;
+  // VIN reel attach verdict (v2.1.86, header note 41): the
+  // content side's read-back rides the posted message; fold
+  // it into the reel record the finish acts on. No verdict
+  // on record (a recovery scan settled this job) leaves
+  // attachVerified unset — consumption reads that as
+  // unverified and keeps the reel.
+  const reel = job.reel
+    ? { ...job.reel, attachVerified: !!(reelAttach && reelAttach.verified === true) }
+    : null;
+  const reelDiag = (reel && reel.attachVerified !== true && reelAttach)
+    ? compactDiagError([{
+        field: "reel_attach",
+        rungsAttempted: [],
+        readBack: reelAttach.readBack != null ? String(reelAttach.readBack) : null,
+        note: `attach_unverified attempts:${reelAttach.attempts || 0}` +
+          ` skip:${reelAttach.skip || "none"}`,
+        detail: `downloaded:${reelAttach.downloaded === true}` +
+          ` blob_bytes:${reelAttach.blobSize || 0}`
+      }])
+    : null;
   try {
     await applyPosted(queueId, job.car.vin, job.userId,
-      job.queuePrice != null ? job.queuePrice : job.car.price);
+      job.queuePrice != null ? job.queuePrice : job.car.price, reel);
   } catch (err) {
     if (err instanceof SbAuthError) {
       // The listing really is live; only the bookkeeping failed. Stash
@@ -2624,7 +2708,11 @@ async function finishJobPosted(queueId, listingUrl) {
           // v2.1.85: the reel the job attached rides the stash,
           // so a replayed finish consumes it exactly like the
           // direct one.
-          reel: job.reel || null,
+          reel,
+          // v2.1.86: the attach diagnostics ride the stash, so
+          // a replayed finish files them exactly like the
+          // direct one.
+          reelDiag,
           shareToFeed: job.shareToFeed === true,
           // v2.1.56: the settings the share text is built from
           // ride the stash too, so a replayed share row is
@@ -2656,9 +2744,11 @@ async function finishJobPosted(queueId, listingUrl) {
     }
     throw err;
   }
-  // VIN reel consumption (v2.1.85): the post is confirmed —
-  // consume the poster reel it carried, if any. Fail-open.
-  await consumeJobReel(job.userId, job.car.vin, job.reel);
+  if (reelDiag) await writeReelAttachDiag(queueId, reelDiag);
+  // VIN reel consumption (v2.1.85; verified gate v2.1.86):
+  // the post is confirmed — consume the poster reel it
+  // carried, but only on a form-verified attach. Fail-open.
+  await consumeJobReel(job.userId, job.car.vin, reel);
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Posted confirmed for queue item", queueId, listingUrl || "");
   scheduleJobTabClose(job);
@@ -3132,7 +3222,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "AUTOLAUNCH_JOB_POSTED") {
-    finishJobPosted(message.queueId, message.listingUrl)
+    finishJobPosted(message.queueId, message.listingUrl, message.reelAttach || null)
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;

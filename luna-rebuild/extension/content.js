@@ -809,6 +809,24 @@
 //     Outback"), because a stack of failure tabs that
 //     don't say which car failed is a guessing game
 //     (Matthew, 2026-11-05).
+// 41. REEL ATTACH VERIFICATION + ONE RETRY (v2.1.86 —
+//     Matthew, 2026-11-06; background.js header note 41
+//     carries the worker side): the 2.85 desk test posted
+//     three cars whose reels were resolved at claim; only
+//     one listing actually carried its video, and nothing
+//     on this side recorded the difference — attachIntroVideo
+//     returned a verdict its caller discarded. Now the
+//     attach READS BACK the composer's Videos counter after
+//     Facebook finishes processing: a processed signature
+//     with a counter still at 0 is NOT an attach. A missed
+//     read-back retries the attach ONCE with the same
+//     downloaded clip (no second download), and the final
+//     outcome — verified or not, attempts, download state,
+//     clip size, last read-back — rides the posted report
+//     (reelAttach) so the worker can gate reel consumption
+//     and the queue row's truth on it. Still strictly
+//     fail-open: an unverified video never blocks the post;
+//     it only stops being invisible.
 
 
 (async function () {
@@ -936,9 +954,16 @@
     // search. Best-effort and DOM-only; on pages without the
     // listings search box (create, edit) it is a no-op.
     await clearListingsSearch();
+    // The video attach verdict rides every posted report
+    // (v2.1.86, header note 41): the worker gates reel
+    // consumption on it. Absent (the attach never ran, or a
+    // non-post report) the payload is exactly as before.
+    const outPayload = (type === "AUTOLAUNCH_JOB_POSTED" && reelAttachOutcome)
+      ? Object.assign({}, payload || {}, { reelAttach: reelAttachOutcome })
+      : (payload || {});
     return new Promise(resolve => {
       try {
-        chrome.runtime.sendMessage(Object.assign({ type, queueId }, payload || {}), () => {
+        chrome.runtime.sendMessage(Object.assign({ type, queueId }, outPayload), () => {
           void chrome.runtime.lastError;
           resolve();
         });
@@ -1867,6 +1892,7 @@
   const fieldAttempts = {};   // name -> { rungs: [...], cdpError: null }
   const diagRecorded = new Set();
   const jobDiags = [];        // forensic records, sent with JOB_FAILED (v3.1)
+  let reelAttachOutcome = null; // video attach verdict, sent with JOB_POSTED (v2.1.86)
   let formMapRecorded = false; // the form_map record is one per job (v3.2)
   let cdpAttached = false;
 
@@ -2917,6 +2943,17 @@
     if (o.elapsedMs >= o.timeoutMs) return "timeout";
     return "wait";
   }
+  // decideReelVerify (v2.1.86, header note 41): after an
+  // attach attempt settles, the composer's Videos counter
+  // read-back is the only witness that counts. verified =
+  // the counter shows the clip (>= 1). retry = a missed
+  // read-back earns exactly ONE more attempt, with the
+  // same downloaded bytes.
+  function decideReelVerify(attemptsUsed, readBackCount) {
+    const verified = typeof readBackCount === "number" &&
+      isFinite(readBackCount) && readBackCount >= 1;
+    return { verified, retry: !verified && attemptsUsed < 2 };
+  }
   // [PURE-INTRO-VIDEO-END]
 
   // [PURE-LIVENESS-BEGIN] — extracted and unit-exercised by
@@ -3088,89 +3125,137 @@
     return /videos?\s*[·•]\s*1\s*\/\s*1/i.test(t);
   }
 
-  // Attach the job's intro video (v2.1.53). Returns true when
-  // the clip is on the listing and processed; false for EVERY
-  // skip — and each skip names itself in the console. The
-  // caller continues the post identically either way.
+  // The composer's Videos counter as a NUMBER (v2.1.86):
+  // the attach read-back. 0 when the counter is absent or
+  // reads 0 — both mean no clip is on the form.
+  function videoAttachedCount() {
+    const t = (document.body.innerText || "");
+    const m = t.match(/videos?\s*[·•]\s*(\d+)\s*\/\s*1/i);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+
+  // Attach the job's intro video (v2.1.53; outcome + read-back
+  // + one retry since v2.1.86, header note 41). Returns the
+  // attach outcome; verified only when the clip is on the
+  // listing, processed, AND the Videos counter reads it back.
+  // Every skip names itself in the console. The caller
+  // continues the post identically either way.
   const INTRO_PROCESS_TIMEOUT_MS = 120 * 1000;
   async function attachIntroVideo() {
-    if (!introVideo) return false;
+    // v2.1.86 (header note 41): the return is an OUTCOME, not
+    // a boolean — { attempted, verified, attempts, downloaded,
+    // blobSize, readBack, skip } — and the caller keeps it for
+    // the posted report. Every skip still names itself in the
+    // console, and the post continues identically either way.
+    const outcome = { attempted: false, verified: false, attempts: 0,
+      downloaded: false, blobSize: 0, readBack: 0, skip: null };
+    if (!introVideo) return outcome;
+    outcome.attempted = true;
     // Announce BEFORE the download (v2.54, header note 28):
     // in 2.53 the banner only changed after the fetch
     // returned, so a stalled download sat silently under the
     // photo banner and looked like a photo-upload hang.
     say("Adding your intro video…");
     console.log("[AutoLaunch] Intro video: downloading the clip…");
-    const input = findVideoInput();
+    let input = findVideoInput();
     if (!input) {
       console.log("[AutoLaunch] Intro video skipped (intro_video_input_not_found).");
-      return false;
+      outcome.skip = "intro_video_input_not_found";
+      return outcome;
     }
     let blob;
     try {
       blob = await fetchVideoBlob(introVideo.url);
     } catch (e) {
       console.log("[AutoLaunch] Intro video skipped (intro_video_download_failed).");
-      return false;
+      outcome.skip = "intro_video_download_failed";
+      return outcome;
     }
     if (!blob || !blob.size) {
       console.log("[AutoLaunch] Intro video skipped (intro_video_empty).");
-      return false;
+      outcome.skip = "intro_video_empty";
+      return outcome;
     }
+    outcome.downloaded = true;
+    outcome.blobSize = blob.size;
     const duration = await probeVideoDuration(blob);
     const durSkip = introDurationSkip(duration);
     if (durSkip) {
       console.log(`[AutoLaunch] Intro video skipped (${durSkip}: ${Math.round(duration)}s > ${INTRO_VIDEO_MAX_SECONDS}s).`);
-      return false;
+      outcome.skip = durSkip;
+      return outcome;
     }
     // (The banner already reads "Adding your intro video…" —
     // it was set before the download, v2.54 header note 28.)
     const name = (introVideo.url.split("/").pop() || "intro.mp4").split("?")[0];
-    const file = new File([blob], name, { type: blob.type || "video/mp4" });
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    input.files = dt.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    // Wait for Facebook to take it, then to finish processing
-    // it: the form refuses to proceed while a video loads, so
-    // Publish must never race a half-processed clip. The wait
-    // is bounded — a stall costs the video (removed below),
-    // never the post.
-    const startedAt = Date.now();
-    let everAttached = false;
-    for (;;) {
-      await sleep(1500);
-      const obs = {
-        stillLoading: videoLoadingNotice(),
-        removePresent: !!removeVideoButton(),
-        counterAttached: videoCounterAttached(),
-        everAttached,
-        elapsedMs: Date.now() - startedAt,
-        timeoutMs: INTRO_PROCESS_TIMEOUT_MS
-      };
-      if (obs.removePresent || obs.counterAttached || obs.stillLoading) {
-        everAttached = true;
-        obs.everAttached = true;
+    // Attach, then READ BACK (v2.1.86, header note 41): a
+    // processed signature alone no longer counts — the
+    // Videos counter must show the clip. A missed read-back
+    // retries ONCE with the same downloaded bytes; the wait
+    // per attempt is the same bounded processing wait as
+    // before (a stall costs the video, never the post).
+    while (outcome.attempts < 2) {
+      outcome.attempts += 1;
+      if (outcome.attempts > 1) {
+        console.log("[AutoLaunch] Intro video: read-back missed — retrying the attach once with the same clip.");
+        say("Adding your intro video…");
+        input = findVideoInput();
+        if (!input) {
+          outcome.skip = "intro_video_input_not_found";
+          break;
+        }
       }
-      const verdict = introProcessingVerdict(obs);
+      const file = new File([blob], name, { type: blob.type || "video/mp4" });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      // Wait for Facebook to take it, then to finish processing
+      // it: the form refuses to proceed while a video loads, so
+      // Publish must never race a half-processed clip.
+      const startedAt = Date.now();
+      let everAttached = false;
+      let verdict = "wait";
+      for (;;) {
+        await sleep(1500);
+        const obs = {
+          stillLoading: videoLoadingNotice(),
+          removePresent: !!removeVideoButton(),
+          counterAttached: videoCounterAttached(),
+          everAttached,
+          elapsedMs: Date.now() - startedAt,
+          timeoutMs: INTRO_PROCESS_TIMEOUT_MS
+        };
+        if (obs.removePresent || obs.counterAttached || obs.stillLoading) {
+          everAttached = true;
+          obs.everAttached = true;
+        }
+        verdict = introProcessingVerdict(obs);
+        if (verdict !== "wait") break;
+      }
       if (verdict === "done") {
-        console.log("[AutoLaunch] Intro video attached and processed.");
-        return true;
-      }
-      if (verdict === "rejected") {
+        outcome.readBack = videoAttachedCount();
+        if (outcome.readBack >= 1) {
+          console.log("[AutoLaunch] Intro video attached and processed.");
+          outcome.verified = true;
+          return outcome;
+        }
+        console.log(`[AutoLaunch] Intro video processed, but the Videos counter reads ${outcome.readBack} — attach NOT verified.`);
+      } else if (verdict === "rejected") {
+        outcome.readBack = 0;
         console.log("[AutoLaunch] Intro video skipped (intro_video_rejected).");
-        return false;
-      }
-      if (verdict === "timeout") {
+      } else {
+        outcome.readBack = 0;
         console.log("[AutoLaunch] Intro video skipped (intro_video_processing_timeout) — removing the half-attached clip.");
         const rm = removeVideoButton();
         if (rm) {
           realisticClick(rm);
           await sleep(1200);
         }
-        return false;
       }
+      if (!decideReelVerify(outcome.attempts, outcome.readBack).retry) break;
     }
+    return outcome;
   }
 
   function publishButton() {
@@ -6907,7 +6992,7 @@
     // one onto this job. Strictly fail-open: any skip leaves
     // the post exactly as it was before this version.
     if (introVideo) {
-      await attachIntroVideo();
+      reelAttachOutcome = await attachIntroVideo();
       await humanPause();
     }
 

@@ -82,6 +82,21 @@ def _release_hold(user_id, vin, flagged):
         f"({'flagged reel_failed' if flagged else 'reel ready'})")
     return True
 
+def _has_live_reel(user_id, vin):
+    """True when ANY reel for (user, vin) is still live —
+    queued, generating or ready. The stale-release guard
+    (v2.1.86): an aged hold whose reel is still coming must
+    never be flag-released out from under the render. A
+    failed lookup answers False (the pre-guard behavior:
+    the stale release proceeds) so a REST hiccup can never
+    wedge a hold forever."""
+    st, rows = gen.rest(
+        "GET", f"/rest/v1/vin_reels?user_id=eq.{user_id}"
+               f"&vin=eq.{vin}"
+               "&status=in.(queued,generating,ready)"
+               "&limit=1&select=status")
+    return st == 200 and bool(rows)
+
 def reconcile_holds():
     """Phase 2 hold reconciliation — runs on every poll.
 
@@ -93,8 +108,12 @@ def reconcile_holds():
       no reel at all   -> keep holding while fresh (the producer
                           inserts the reel job in the same pass)
     A hold older than HOLD_STALE_MINUTES with no ready reel
-    releases flagged whatever the reel state — the failure policy
-    is that a video problem never starves a post. Only rows still
+    releases flagged whatever the reel state — UNLESS a reel
+    for the car is still live (queued/generating/ready): the
+    stale branch never fires under a live reel (v2.1.86 — the
+    Nov 6 desk test caught it flag-releasing mid-render
+    holds). The failure policy is that a video problem never
+    starves a post. Only rows still
     awaiting_reel=true are ever patched, so a reel finishing after
     its hold already released changes nothing (no resurrection).
     """
@@ -131,9 +150,12 @@ def reconcile_holds():
             _release_hold(key[0], key[1], flagged=False)
         elif latest in ("failed", "consumed"):
             _release_hold(key[0], key[1], flagged=True)
-        elif stale:
+        elif stale and not _has_live_reel(key[0], key[1]):
             _release_hold(key[0], key[1], flagged=True)
         # else: a fresh hold with a live or imminent reel — wait.
+        # A STALE hold with a live reel also waits (v2.1.86):
+        # the stale branch above is the only guarded verdict —
+        # ready/failed/consumed settle exactly as before.
 
 def process(row):
     log(f"rendering row {row['id']} vin={row['vin']} "
