@@ -924,6 +924,25 @@
 //     WITHOUT saving, the note-43 rule unchanged. The
 //     create-flow attach is byte-untouched: still
 //     DataTransfer, still the note-42 discipline.
+// 45. CONTACT LINE + CARD-AS-LAST-PHOTO (v2.1.90 — Matthew,
+//     2026-11-06; background.js header note 45 carries the
+//     worker's side): (a) buildDescription appends the
+//     rep's "Call or text {name} · {phone}" as the closing
+//     line after the dealership block, through the same
+//     pure formatter the worker and the app share — both
+//     values on the job or the description is byte-
+//     identical to 2.89. (b) When the claim resolved a
+//     ready reel whose row carries a card_url, the reel's
+//     end-card still joins the listing as its LAST photo:
+//     planPhotoAttach caps the dealer photos at 19 so the
+//     card never pushes the listing past Facebook's 20,
+//     and under 20 it simply appends. The dealer photos
+//     attach through the unchanged path and earn photoOk
+//     exactly as before; the card attaches AFTERWARDS,
+//     strictly fail-open (download or attach failure posts
+//     without it), and never counts toward the Photos
+//     gate — a car with no dealer photos gains nothing
+//     from its card and fails the gate exactly as today.
 
 
 (async function () {
@@ -944,6 +963,15 @@
   const dealershipName = typeof job.dealershipName === "string" ? job.dealershipName.trim() : "";
   const dealershipAddress = typeof job.dealershipAddress === "string" ? job.dealershipAddress.trim() : "";
 
+  // Rep contact pair (v2.1.90, header note 45): the worker
+  // reads user_settings.rep_display_name / rep_phone at claim
+  // time and carries both on the job payload, exactly like
+  // the dealership identity above. buildDescription appends
+  // the "Call or text" closing line only when BOTH are
+  // present; blank is the pre-feature behavior.
+  const repName = typeof job.repName === "string" ? job.repName.trim() : "";
+  const repPhone = typeof job.repPhone === "string" ? job.repPhone.trim() : "";
+
   // Stock-number preference (v2.1.43): the worker reads
   // user_settings.include_stock at claim time and carries it on the
   // job payload, exactly like the dealership identity above. On,
@@ -959,6 +987,16 @@
   // byte-identical to before this version.
   const introVideo = (job.introVideo && typeof job.introVideo.url === "string" &&
     job.introVideo.url) ? job.introVideo : null;
+
+  // Card-as-last-photo (v2.1.90, header note 45): when the
+  // claim resolved a poster reel, the worker rides its
+  // record on the job — and since 2.90 the record carries
+  // the reel's end-card still URL (qa.card_url at render
+  // time). The post flow appends it as the listing's last
+  // photo; absent (no reel, or a reel rendered before
+  // cards existed) the photo set is exactly the dealer set.
+  const reelCardUrl = (job.reel && typeof job.reel.cardUrl === "string" &&
+    job.reel.cardUrl.trim()) ? job.reel.cardUrl.trim() : "";
 
   // Share details text (v2.1.56, header note 30): the worker
   // carries the queue row's share_text on share jobs, and the
@@ -2910,6 +2948,23 @@
     }
     return [...byKey.values()].slice(0, cap || 12);
   }
+
+  // Card-as-last-photo plan (v2.1.90, header note 45): the
+  // dealer photos attach in order; when the job's reel
+  // carries an end-card still, the card rides LAST and the
+  // dealer set is capped so dealer + card never exceeds
+  // Facebook's 20-photo listing cap — a 20+ dealer set
+  // attaches its first 19 + the card, a shorter set
+  // attaches whole + the card. No usable card (absent,
+  // blank, not a string) returns the dealer list itself,
+  // untouched. This plan shapes the ATTACH only: every
+  // photo gate keeps reading the dealer list alone.
+  function planPhotoAttach(dealerUrls, cardUrl) {
+    const dealer = Array.isArray(dealerUrls) ? dealerUrls.slice() : [];
+    const card = typeof cardUrl === "string" ? cardUrl.trim() : "";
+    if (!card) return dealer;
+    return dealer.slice(0, 19).concat([card]);
+  }
   // [PURE-PHOTOS-END]
 
   function photoUrls() {
@@ -3708,6 +3763,25 @@
   }
 
   // ---- description ------------------------------------------------------
+  // [PURE-CONTACT-BEGIN] — extracted and unit-exercised by
+  // the test harness; keep free of DOM/chrome references.
+  // The rep contact line (v2.1.90, header note 45): the ONE
+  // formatter behind all three description mirrors (the
+  // listing buildDescription, the worker's
+  // buildShareTextForCar, the app's buildShareDetailsText)
+  // and the reel end card's text. BOTH values required —
+  // either blank (or not a string at all) and the answer is
+  // the empty string, which every composer appends as
+  // nothing: the description stays byte-identical to before
+  // the feature existed.
+  function repContactLine(name, phone) {
+    const n = typeof name === "string" ? name.trim() : "";
+    const p = typeof phone === "string" ? phone.trim() : "";
+    if (!n || !p) return "";
+    return `Call or text ${n} · ${p}`;
+  }
+  // [PURE-CONTACT-END]
+
   function buildDescription() {
     const title = `${car.year || ""} ${car.make || ""} ${car.model || "Vehicle"} ${car.trim || ""}`.trim();
     const lm = listingMileage();
@@ -3758,6 +3832,13 @@
     if (dealerLines.length) {
       desc += `\n\n${dealerLines.join("\n")}`;
     }
+    // Rep contact line (v2.1.90, header note 45): the closing
+    // line of the listing, after the dealership block — the
+    // same line the worker's share text and the app's share
+    // text append, through the same formatter. Both values
+    // blank on the job and nothing is appended.
+    const contactLine = repContactLine(repName, repPhone);
+    if (contactLine) desc += `\n\n${contactLine}`;
     return desc;
   }
 
@@ -8001,11 +8082,25 @@
 
     // Photos first: a listing without photos is not worth posting, and a
     // failed upload must stop the job — not silently continue.
-    const photos = photoUrls();
+    const dealerPhotos = photoUrls();
+    // Card-as-last-photo (v2.1.90, header note 45): when the
+    // claim's reel carries an end-card still, planPhotoAttach
+    // shapes the attach — the dealer set capped at 19 so the
+    // card rides LAST inside Facebook's 20. The split below
+    // keeps every gate honest: the dealer photos attach
+    // through the unchanged call and earn photoOk exactly as
+    // before; the card attaches afterwards through the same
+    // path, strictly fail-open. No dealer photos -> no card
+    // attach at all, and the Photos gate fails as it always
+    // has: the card never counts as a photo.
+    const photoPlan = planPhotoAttach(dealerPhotos, reelCardUrl);
+    const cardInPlan = reelCardUrl && photoPlan.length &&
+      photoPlan[photoPlan.length - 1] === reelCardUrl ? reelCardUrl : null;
+    const dealerPlan = cardInPlan ? photoPlan.slice(0, -1) : photoPlan;
     let photoOk = false;
-    if (photos.length) {
-      say(`Uploading ${photos.length} photo(s)…`);
-      const res = await attachPhotos(photos);
+    if (dealerPlan.length) {
+      say(`Uploading ${dealerPlan.length} photo(s)…`);
+      const res = await attachPhotos(dealerPlan);
       if (!res.ok) {
         await fail(`Photo upload failed (${res.reason}).`);
         return;
@@ -8019,6 +8114,17 @@
         await sleep(2000);
       }
       await humanPause();
+    }
+    if (cardInPlan && photoOk) {
+      // Fail-open by construction: attachPhotos never throws,
+      // and its verdict is deliberately unread — a card that
+      // will not attach (download failed, input gone) posts
+      // the listing without it, nothing else changes.
+      const cardRes = await attachPhotos([cardInPlan]);
+      if (cardRes && cardRes.ok) {
+        say("Added the reel's price card as the last photo ✓");
+        await humanPause();
+      }
     }
 
     // Intro video (v2.1.53, header note 27): after the photos,

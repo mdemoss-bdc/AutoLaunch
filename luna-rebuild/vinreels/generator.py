@@ -8,8 +8,10 @@ Renders ONE per-VIN showcase reel end to end:
   end card — the approved spike design) -> facts-only voiceover script
   (stored fields + NHTSA VIN decode for engine/drivetrain ONLY) -> Helio
   TTS -> canonical audio mix -> finished-file size gate + QA gate -> upload to the
-  public `vin-reels` bucket at <user_id>/<vin>.mp4 -> vin_reels row
-  finished (ready + video_url + qa, or failed + error + qa).
+  public `vin-reels` bucket at <user_id>/<vin>.mp4 -> the end-card
+  still uploaded beside it at <user_id>/<vin>-card.jpg (fail-open;
+  its public URL rides qa.card_url) -> vin_reels row finished
+  (ready + video_url + qa, or failed + error + qa).
 
 THE AUDIO LESSON (paid for with a failed delivery on 2026-11-05): the
 mix is built EXACTLY like the hand-remix Matt approved — ducked bed stem
@@ -71,6 +73,11 @@ SIZE_LIMIT_BYTES = 8 * 1024 * 1024   # hard finished-file gate: an
                         # drops, so the generator must never upload
                         # one (see enforce_size_gate)
 SIZE_RETRY_CRF = VIDEO_CRF + 4       # the gate's one stronger retry
+CARD_JPEG_QUALITY = 85      # the end-card still's JPEG quality
+                            # (card-as-last-photo, 2026-11-06): the
+                            # helper appends it as the listing's
+                            # last photo, so it is rendered and
+                            # uploaded with every reel
 NAVY = (10, 23, 48)
 BLUE = (86, 166, 255)
 WHITE = (255, 255, 255)
@@ -216,6 +223,52 @@ def storage_upload(user_id, vin, mp4_path):
     if st >= 300:
         raise RuntimeError(f"storage upload failed: {st} {resp}")
     return f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{obj}"
+
+def card_object_path(user_id, vin):
+    """The end-card still's deterministic object path, sibling
+    to the mp4: <user_id>/<vin>-card.jpg. The helper derives
+    the same path when a consumed reel's objects are deleted,
+    so render, attach and cleanup can never disagree."""
+    return f"{user_id}/{vin}-card.jpg"
+
+def storage_upload_card(user_id, vin, jpg_path):
+    """Upload the end-card still (upsert) and return its
+    public URL — storage_upload's sibling for the JPEG."""
+    obj = card_object_path(user_id, vin)
+    with open(jpg_path, "rb") as fh:
+        data = fh.read()
+    st, resp = rest("POST", f"/storage/v1/object/{BUCKET}/{obj}",
+                    raw=data,
+                    headers={"Content-Type": "image/jpeg",
+                             "x-upsert": "true",
+                             "cache-control": "public, max-age=3600"})
+    if st >= 300:
+        raise RuntimeError(f"card upload failed: {st} {resp}")
+    return f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{obj}"
+
+def save_card_still(car, workdir):
+    """Write the end-card still — the make_end_card raster as
+    a quality-85 JPEG at the frame size — into the workdir;
+    returns its path. Kept separate from the upload so a
+    local test render can produce the file with no storage
+    write at all."""
+    path = os.path.join(workdir, "card.jpg")
+    make_end_card(car).save(path, "JPEG", quality=CARD_JPEG_QUALITY)
+    return path
+
+def upload_card_still(user_id, vin, car, workdir):
+    """Render + upload the end-card still; returns the public
+    URL, or None on ANY failure. The card is a bonus surface
+    (the listing's last photo): a reel must still go ready
+    without it rather than fail over a still — the helper
+    simply posts the dealer photos alone, exactly as before
+    cards existed."""
+    try:
+        return storage_upload_card(user_id, vin,
+                                   save_card_still(car, workdir))
+    except Exception as e:
+        print(f"  card still skipped: {e}")
+        return None
 
 # ================================================================ car data
 def fetch_car(user_id, vin=None, stock=None):
@@ -1128,6 +1181,16 @@ def generate(row, keep_work=False):
                        qa=qa)
             return 1
         url = storage_upload(user_id, vin, final)
+        # Card-as-last-photo (2026-11-06): the end-card still
+        # uploads in the same finish path, after the mp4, and
+        # its URL rides the row's qa — no schema change. Fail-
+        # open by construction (upload_card_still swallows
+        # every failure): a reel whose card failed goes ready
+        # exactly as before, the helper just posts without it.
+        card_url = upload_card_still(user_id, vin, car, workdir)
+        if card_url:
+            qa["card_url"] = card_url
+            print(f"  card: {card_url}")
         row_finish(row_id, "ready", video_url=url, qa=qa)
         print(f"  ready: {url}")
         return 0

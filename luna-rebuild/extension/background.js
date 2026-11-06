@@ -743,6 +743,35 @@ importScripts("dws_sync.js");
 //     reel_attach diag states the mechanism that ran. The
 //     create-flow attach keeps the DataTransfer set: this
 //     build tests injection in the editor only.
+// 45. CONTACT LINE + CARD-AS-LAST-PHOTO (v2.1.90 — Matthew,
+//     2026-11-06): two surfaces for the rep's own "Call or
+//     text {name} · {phone}" (user_settings rep_display_
+//     name / rep_phone — both required, either blank and
+//     every surface stays byte-identical to 2.89). (a) The
+//     LISTING contact line: userSettings now reads the
+//     pair and the job payload carries it exactly like the
+//     dealership identity; both description composers —
+//     the content side's buildDescription and this
+//     worker's buildShareTextForCar, with the app's
+//     buildShareDetailsText the third mirror — append it
+//     as the closing line after the dealership block,
+//     through the one pure formatter (repContactLine) so
+//     the three can never drift. The voiceover never
+//     speaks it (the generator asserts the same rule).
+//     (b) The reel's end-card still rides the post as the
+//     LAST photo: the generator uploads it beside the mp4
+//     (qa.card_url on the reel row), the claim's reel
+//     resolution carries the URL on the job, and the
+//     content side attaches it after the dealer photos —
+//     planPhotoAttach caps the dealer set at 19 when a
+//     card rides, so the listing never passes Facebook's
+//     20; under 20 it simply appends. The card never
+//     counts toward any photo gate: the claim's no-photo
+//     guard, the producer's minimum and the content
+//     Photos verdict all keep reading dealer photos only.
+//     Card download/attach failures are fail-open (the
+//     post stands without the card), and consumption now
+//     deletes the card object beside the mp4.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1325,9 +1354,11 @@ async function todaysPostCount(userId) {
 // (helper_lease_id / helper_lease_expires_at) — see header
 // note 32. The claim cycle's gate reads them from THIS fetch;
 // no extra round trip.
+// v2.1.90: it also carries rep_display_name / rep_phone —
+// the description contact line's pair (header note 45).
 async function userSettings(userId) {
   const rows = await sbGet(
-    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,include_stock,intro_video_enabled,intro_video_mode,intro_selected_video_id,share_to_feed,helper_lease_id,helper_lease_expires_at`);
+    `user_settings?user_id=eq.${userId}&select=daily_post_limit,full_auto_enabled,post_delay_minutes,dealership_name,dealership_address,rep_display_name,rep_phone,include_stock,intro_video_enabled,intro_video_mode,intro_selected_video_id,share_to_feed,helper_lease_id,helper_lease_expires_at`);
   const row = (rows && rows.length) ? rows[0] : {};
   return {
     limit: typeof row.daily_post_limit === "number" ? row.daily_post_limit : 10,
@@ -1336,6 +1367,8 @@ async function userSettings(userId) {
       ? row.post_delay_minutes : 0,
     dealershipName: typeof row.dealership_name === "string" ? row.dealership_name.trim() : "",
     dealershipAddress: typeof row.dealership_address === "string" ? row.dealership_address.trim() : "",
+    repName: typeof row.rep_display_name === "string" ? row.rep_display_name.trim() : "",
+    repPhone: typeof row.rep_phone === "string" ? row.rep_phone.trim() : "",
     includeStock: row.include_stock === true,
     introEnabled: row.intro_video_enabled === true,
     introMode: typeof row.intro_video_mode === "string" ? row.intro_video_mode : "selected",
@@ -1416,11 +1449,22 @@ function decideReelAttach(reelRow) {
   if (typeof reelRow.video_url !== "string" || !reelRow.video_url.trim()) {
     return { attach: false };
   }
+  // Card-as-last-photo (v2.1.90, header note 45): the
+  // end-card still the generator uploaded beside the mp4
+  // rides qa.card_url; it joins the resolution so the
+  // content side can append it as the listing's last
+  // photo. Absent (a reel rendered before cards existed,
+  // or the fail-open card upload skipped) -> null, and
+  // the post's photo set is exactly the dealer set.
+  const qa = (reelRow.qa && typeof reelRow.qa === "object") ? reelRow.qa : null;
+  const cardUrl = (qa && typeof qa.card_url === "string" && qa.card_url.trim())
+    ? qa.card_url.trim() : null;
   return {
     attach: true,
     url: reelRow.video_url,
     reelId: reelRow.id || null,
-    source: reelRow.source === "poster" ? "poster" : "manual"
+    source: reelRow.source === "poster" ? "poster" : "manual",
+    cardUrl
   };
 }
 // decideReelConsume: given the reel record a job carried
@@ -1493,13 +1537,13 @@ async function reelForJob(userId, vin) {
   try {
     const rows = await sbGet(
       `vin_reels?user_id=eq.${userId}&vin=eq.${encodeURIComponent(vin)}` +
-      `&order=created_at.desc&limit=1&select=id,status,source,video_url`);
+      `&order=created_at.desc&limit=1&select=id,status,source,video_url,qa`);
     const d = decideReelAttach(rows && rows.length ? rows[0] : null);
     if (!d.attach) return null;
     console.log(`[AutoLaunch] VIN reel resolved at claim (${d.source} reel ${d.reelId}).`);
     return {
       url: d.url,
-      reel: { id: d.reelId, source: d.source, attached: true }
+      reel: { id: d.reelId, source: d.source, attached: true, cardUrl: d.cardUrl || null }
     };
   } catch (e) {
     console.log("[AutoLaunch] VIN reel skipped at claim (reel_resolve_failed).");
@@ -2173,6 +2217,11 @@ async function checkQueue() {
       fullAuto: settings.fullAuto,
       dealershipName: settings.dealershipName,
       dealershipAddress: settings.dealershipAddress,
+      // Rep contact pair (v2.1.90, header note 45): carried
+      // exactly like the dealership identity; both composers
+      // append the closing line only when both are present.
+      repName: settings.repName,
+      repPhone: settings.repPhone,
       includeStock: settings.includeStock,
       shareToFeed: settings.shareToFeed === true,
       // Share details text (v2.1.56, header note 30): the row's
@@ -2863,10 +2912,15 @@ async function consumeJobReel(userId, vin, reel) {
       return;
     }
     try {
+      // v2.1.90 (header note 45): the end-card still beside
+      // the mp4 is the reel's second object — it is deleted
+      // in the same call, so a consumed reel leaves nothing
+      // behind. A reel rendered before cards existed simply
+      // has no second prefix hit; the delete is unaffected.
       const res = await fetch(`${SUPABASE_URL}/storage/v1/object/vin-reels`, {
         method: "DELETE",
         headers: await sbHeaders(),
-        body: JSON.stringify({ prefixes: [`${userId}/${vin}.mp4`] })
+        body: JSON.stringify({ prefixes: [`${userId}/${vin}.mp4`, `${userId}/${vin}-card.jpg`] })
       });
       if (!res.ok) {
         console.warn(`[AutoLaunch] VIN reel storage delete returned ${res.status}; marking consumed anyway.`);
@@ -2953,6 +3007,25 @@ async function applyVideoAttached(queueId, vin, userId) {
   } catch (e) { /* the attach stands; the flag clear is bookkeeping */ }
 }
 
+// [PURE-CONTACT-BEGIN] — extracted and unit-exercised by
+// the test harness; keep free of DOM/chrome references.
+// The rep contact line (v2.1.90, header note 45): the ONE
+// formatter behind all three description mirrors (the
+// listing buildDescription, the worker's
+// buildShareTextForCar, the app's buildShareDetailsText)
+// and the reel end card's text. BOTH values required —
+// either blank (or not a string at all) and the answer is
+// the empty string, which every composer appends as
+// nothing: the description stays byte-identical to before
+// the feature existed.
+function repContactLine(name, phone) {
+  const n = typeof name === "string" ? name.trim() : "";
+  const p = typeof phone === "string" ? phone.trim() : "";
+  if (!n || !p) return "";
+  return `Call or text ${n} · ${p}`;
+}
+// [PURE-CONTACT-END]
+
 // The share row's details text (v2.1.56, header note 30): a
 // worker-side rebuild of the listing description from the same
 // inputs the posting composer's buildDescription uses — the
@@ -3002,6 +3075,11 @@ function buildShareTextForCar(car, job) {
     job && typeof job.dealershipAddress === "string" ? job.dealershipAddress.trim() : ""
   ].filter(s => s);
   if (dealerLines.length) desc += `\n\n${dealerLines.join("\n")}`;
+  // Rep contact line (v2.1.90, header note 45): the closing
+  // line, after the dealership block — the third mirror
+  // agrees byte for byte through repContactLine.
+  const contact = repContactLine(job && job.repName, job && job.repPhone);
+  if (contact) desc += `\n\n${contact}`;
   return desc;
 }
 
@@ -3130,7 +3208,7 @@ async function flushPendingFinish() {
       await maybeQueueAttachVideo(pending.userId, pending.vin, pending.shareCar, pending.postedPrice, pending.reel);
       // The share the post earned rides the stash (v2.1.55):
       // queued on replay, still fail-open.
-      await maybeQueueFeedShare({ userId: pending.userId, shareToFeed: pending.shareToFeed, car: pending.shareCar, includeStock: pending.includeStock === true, dealershipName: pending.dealershipName || "", dealershipAddress: pending.dealershipAddress || "" });
+      await maybeQueueFeedShare({ userId: pending.userId, shareToFeed: pending.shareToFeed, car: pending.shareCar, includeStock: pending.includeStock === true, dealershipName: pending.dealershipName || "", dealershipAddress: pending.dealershipAddress || "", repName: pending.repName || "", repPhone: pending.repPhone || "" });
     } else if (pending.outcome === "shared") {
       await applyShared(pending.queueId);
     } else if (pending.outcome === "price_updated") {
@@ -3242,6 +3320,10 @@ async function finishJobPosted(queueId, listingUrl, reelAttach) {
           includeStock: job.includeStock === true,
           dealershipName: job.dealershipName || "",
           dealershipAddress: job.dealershipAddress || "",
+          // v2.1.90: the contact pair rides the stash too, so
+          // a replayed finish builds the identical share text.
+          repName: job.repName || "",
+          repPhone: job.repPhone || "",
           shareCar: {
             vin: job.car.vin,
             year: job.car.year != null ? job.car.year : null,

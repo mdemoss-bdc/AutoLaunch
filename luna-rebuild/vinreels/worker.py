@@ -16,6 +16,12 @@ the row 'ready' or 'failed' with the reason.
 PROOF MODE: this runs on the VM (see README). The production shape is
 the same code on a scheduled runner; nothing in the generator depends
 on where it runs.
+
+The generator's finish upload also carries the reel's end-card still
+(<user_id>/<vin>-card.jpg, fail-open; its URL rides the row's
+qa.card_url) — the helper appends it as the listing's last photo.
+Nothing here changes: the worker still just runs the generator per
+claimed row.
 """
 import argparse, os, subprocess, sys, time
 from datetime import datetime, timezone, timedelta
