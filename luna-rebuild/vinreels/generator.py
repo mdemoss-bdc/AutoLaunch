@@ -244,6 +244,22 @@ def fetch_dealership(user_id):
                 or rows[0].get("store_name") or "").strip()
     return ""
 
+def fetch_contact(user_id):
+    """The rep contact line for the end card (Matthew, 2026-11-06):
+    'Call or text {rep_display_name} · {rep_phone}' — returned only
+    when BOTH settings are present; either missing -> no line at all
+    (the dealership-name rule). Text only: build_script never reads
+    this, so the number is never spoken."""
+    rows = sql_query(
+        "SELECT rep_display_name, rep_phone FROM public.user_settings "
+        f"WHERE user_id={_sql_str(user_id)}")
+    if rows:
+        name = (rows[0].get("rep_display_name") or "").strip()
+        phone = (rows[0].get("rep_phone") or "").strip()
+        if name and phone:
+            return f"Call or text {name} · {phone}"
+    return ""
+
 def photo_list(car):
     """Mirror the app's vehiclePhotoList: cover first, then gallery,
     then user-added photos; dedupe by path; skip placeholders."""
@@ -439,12 +455,24 @@ def make_end_card(car):
     name_f = font("inter", _px(38), 500)
     nw = d.textlength(name, font=name_f)
     d.text((cx - nw / 2, y), name, font=name_f, fill=(255, 255, 255))
+    y += name_f.size
     if car.get("mileage"):
-        y += _px(38) + _px(12)
+        y += _px(12)
         miles_f = font("inter", _px(32), 400)
         mw = d.textlength(fmt_miles(car["mileage"]), font=miles_f)
         d.text((cx - mw / 2, y), fmt_miles(car["mileage"]), font=miles_f,
                fill=(198, 212, 232))
+        y += miles_f.size
+    contact = (car.get("_contact") or "").strip()
+    if contact:
+        # Rep contact line (Matthew, 2026-11-06): under the name/miles
+        # block, above the fixed 0 TO POSTED foot. The block bottom
+        # stays hundreds of px above the foot — nothing else moves.
+        y += _px(30)
+        c_f, _ = fit_font(d, "inter", contact, 36, W - _px(120),
+                          weight=600, floor=24)
+        cw = d.textlength(contact, font=c_f)
+        d.text((cx - cw / 2, y), contact, font=c_f, fill=WHITE)
     tag = "0 TO POSTED"
     tag_f = font("mont", _px(25), 600)
     tag_w = text_w(d, tag, tag_f, tracking=8)
@@ -1049,6 +1077,7 @@ def generate(row, keep_work=False):
     car = fetch_car(user_id, vin=vin)
     car["user_key"] = user_id
     car["_dealership"] = fetch_dealership(user_id)
+    car["_contact"] = fetch_contact(user_id)
     urls = photo_list(car)
     if len(urls) < MIN_PHOTOS:
         raise RuntimeError(

@@ -2767,6 +2767,38 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
               </p>
 
             </div>
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Your name (on videos & listings)
+              </label>
+
+              <input
+                type="text"
+                id="settingsRepName"
+                placeholder="e.g. Matt DeMoss"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+            </div>
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Your phone (on videos & listings)
+              </label>
+
+              <input
+                type="text"
+                id="settingsRepPhone"
+                placeholder="e.g. 681-203-1094"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+              <p class="text-xs text-slate-400 mt-2">
+                Shown as a "Call or text" line at the end of your listing descriptions and on your vehicle videos. Leave either one blank to keep it off.
+              </p>
+
+            </div>
 <div>
 
     <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
@@ -8195,6 +8227,10 @@ async function loadUserStoreSettings() {
       currentStore.cpoUrl = data.certified_url || "";
 
       document.getElementById("settingsStoreName").value = currentStore.name;
+      const repNameField = document.getElementById("settingsRepName");
+      if (repNameField) repNameField.value = data.rep_display_name || "";
+      const repPhoneField = document.getElementById("settingsRepPhone");
+      if (repPhoneField) repPhoneField.value = data.rep_phone || "";
       document.getElementById("settingsUsedUrl").value = currentStore.usedUrl;
       renderUsedExtras("settingsUsedExtras", currentStore.usedExtras);
       document.getElementById("settingsNewUrl").value = currentStore.newUrl;
@@ -8334,6 +8370,8 @@ updateLastSyncDisplay();
         if (addrField) addrField.value = brandingState.address;
       }
       brandingState.name = data.dealership_name || brandingState.name || "";
+      brandingState.repName = data.rep_display_name || "";
+      brandingState.repPhone = data.rep_phone || "";
       brandingState.logoUrl = data.dealer_logo_url || "";
       brandingState.enabled = !!data.branding_frame_enabled;
       syncBrandingPanelFromState();
@@ -8660,6 +8698,10 @@ function openSyncSummaryDetails() {
   const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
   const addressEl = document.getElementById("settingsAddress");
   const storeAddress = addressEl ? addressEl.value.trim() : "";
+  const repNameEl = document.getElementById("settingsRepName");
+  const repName = repNameEl ? repNameEl.value.trim() : "";
+  const repPhoneEl = document.getElementById("settingsRepPhone");
+  const repPhone = repPhoneEl ? repPhoneEl.value.trim() : "";
   const usedUrl = document.getElementById("settingsUsedUrl").value.trim();
   const usedExtras = cleanUsedExtras(usedUrl, collectUsedExtras("settingsUsedExtras"));
   const newUrl = document.getElementById("settingsNewUrl").value.trim();
@@ -8671,6 +8713,8 @@ const certifiedUrl =
   dealership_name: storeName,
   store_name: storeName,
   dealership_address: storeAddress,
+  rep_display_name: repName,
+  rep_phone: repPhone,
   used_url: usedUrl,
   extra_used_urls: usedExtras,
   new_url: newUrl,
@@ -10750,6 +10794,15 @@ function buildShareDetailsText(car) {
   const dealerLines = [brandingState.name, brandingState.address]
     .map(s => String(s || "").trim()).filter(s => s);
   if (dealerLines.length) desc += `\n\n${dealerLines.join("\n")}`;
+  // REP CONTACT LINE (2026-11-06): the closing line of the
+  // description — the rep's own "Call or text" line from Settings
+  // (rep_display_name / rep_phone, restored into brandingState by
+  // the settings load). BOTH values required; either blank and the
+  // text stays byte-identical to before this change. Same line the
+  // VIN Reel end card draws.
+  const repName = String(brandingState.repName || "").trim();
+  const repPhone = String(brandingState.repPhone || "").trim();
+  if (repName && repPhone) desc += `\n\nCall or text ${repName} · ${repPhone}`;
   return desc;
 }
 
@@ -18150,7 +18203,7 @@ function toggleSelectAllCars(master) {
 
 // Branding frame state (logo + contact strip): restores from user_settings
 // in loadUserStoreSettings and persists via best-effort upserts.
-const brandingState = { enabled: false, logoUrl: "", name: "", address: "" };
+const brandingState = { enabled: false, logoUrl: "", name: "", address: "", repName: "", repPhone: "" };
 
 // ---------- Branding frame ----------
 // The logo lives in the public "branding" Storage bucket under the user's
