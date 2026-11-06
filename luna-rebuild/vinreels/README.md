@@ -108,40 +108,53 @@ VM loop is the rebuild's proof mode. A `generating` row older than
 45 minutes is logged as likely stale (a crashed run); there is no
 automatic requeue yet.
 
-## Phase 2 lifecycle (designed 2026-11-05 — NOT built)
+## Phase 2 lifecycle (BUILT 2026-11-05 — helper 2.85, rebuild test build)
 
-An Automation-tab toggle will later make the poster generate the
-reel **before** posting, hold the post until the reel is ready,
-attach it to the Marketplace post, then delete the video from the
-user's storage (Facebook keeps its own copy). The schema already
-supports that lifecycle — no migration needed when it is built:
+The Automation-tab toggle **"Make a video before posting"**
+(`user_settings.vin_reel_before_post`, default OFF) drives the
+lifecycle the schema was pre-built for:
 
-- **States:** `queued → generating → ready → consumed` (terminal),
-  with `failed` as the error terminal. `consumed` is in the status
-  CHECK constraint now, and `consumed_at` records when the poster
-  consumed the reel. The partial unique index only covers
-  queued/generating, so once a reel is consumed a fresh reel for the
-  same VIN can be queued again (the re-post case).
-- **Provenance:** `source` is `'manual'` (default — every app/UI
-  insert, including all phase-1 rows) or `'poster'` (phase-2
-  automation inserts). **Cleanup may only ever touch `source =
-  'poster'` rows** — a manually created reel is never auto-cleaned.
-- **Claim-gate lookup:** the poster's gate consults the latest reel
-  for a car with one query, served by
-  `vin_reels_user_vin_latest_idx` on `(user_id, vin, created_at
-  DESC)`:
-  `SELECT * FROM vin_reels WHERE user_id = $1 AND vin = $2 ORDER BY
-  created_at DESC LIMIT 1`.
-- **Consumption sequence (for the phase-2 builder):** poster inserts
-  its row (`source='poster'`) → worker renders → poster polls the
-  lookup until `ready` (or `failed` → post without the reel) →
-  attaches `video_url` to the post → on post success, deletes the
-  storage object `<user_id>/<vin>.mp4` and sets `status='consumed',
-  consumed_at=now()`. The app already ignores `consumed` rows for
-  display (their URLs are dead by design).
-- The `vin-reels` bucket lifecycle is unchanged: consumption deletes
-  the object, so a consumed reel's URL 404s — anything that stored
-  the URL (the Facebook post) holds its own copy, per the design.
+- **Hold.** With the toggle ON, `_auto_post_filtered` queues
+  the car's marketplace row with `awaiting_reel=true` +
+  `reel_requested_at`, and `_queue_reel_jobs` inserts a
+  `source='poster'` reel row unless a live (queued /
+  generating / ready) reel already exists for the VIN.
+  Manual queue rows are never held, and other channels' rows
+  are never held. Toggle OFF is byte-identical behavior.
+- **Release.** The worker's `reconcile_holds()` runs on every
+  poll and keys off the LATEST reel for (user, vin): `ready`
+  releases the hold; `failed`/`consumed` releases it with
+  `reel_failed=true`; a hold older than **60 minutes** with
+  no ready reel releases flagged whatever the reel state —
+  a dead worker can never starve posts. Only rows still
+  `awaiting_reel=true` are patched, so a reel that finishes
+  after its hold released changes nothing (no resurrection).
+  The app's health bar counts the day's flagged posts in a
+  "posted without video" chip that filters to those cars.
+- **Attach.** Helper 2.85's claim fetch excludes
+  `awaiting_reel=true` rows. At claim time a post looks up
+  the car's latest reel: a **ready** reel rides the job's
+  `introVideo` slot *instead of* the intro video (the reel
+  carries the dealership branding) through the unchanged
+  content-side attach path. No ready reel → the post runs
+  exactly as before; the claim never waits on a video.
+- **Consume.** After the post succeeds (direct finish or a
+  replayed stashed finish), a `source='poster'` reel the job
+  attached is consumed: storage object `<user_id>/<vin>.mp4`
+  deleted, row `status='consumed'` + `consumed_at`. A ready
+  `source='manual'` reel attaches but is **never** consumed.
+  Consumption is fail-open — it runs after the post is
+  confirmed and can never fail it.
+- **Provenance/cleanup law** (unchanged from the design):
+  cleanup may only ever touch `source='poster'` rows, and
+  only the row the poster itself consumed.
+
+**Production note:** the worker is still VM-run in rebuild
+proof mode. Production needs the scheduled/always-on runner
+named under "Running the worker" — until then the 60-minute
+stale sweep only fires while a worker is actually polling,
+so with the toggle on and no worker running, held posts wait
+for the sweep's next poll rather than posting on time.
 
 ## Cost
 

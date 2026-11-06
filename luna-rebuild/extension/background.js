@@ -618,6 +618,25 @@ importScripts("dws_sync.js");
 //     al_helper_window storage key are gone with the
 //     mechanism. Post jobs were never touched by any of
 //     this and are byte-identical.
+//
+// 40. VIN REELS PHASE 2 (v2.1.85 — Matthew, 2026-11-05):
+//     the auto-post producer can queue a marketplace row
+//     HELD (awaiting_reel=true) behind a poster VIN Reel.
+//     Held rows are invisible to the claim fetch (one added
+//     filter; the claim's shape and order are unchanged)
+//     until the reels worker releases the hold — reel ready,
+//     reel failed, or hold stale. At claim time a post looks
+//     up the car's latest reel: a READY reel rides the job's
+//     introVideo slot INSTEAD of the user's intro video (one
+//     video slot; the reel carries the dealership branding),
+//     so the content side's attach path is untouched. After
+//     the post SUCCEEDS, a source='poster' reel is consumed:
+//     its storage object is deleted and the row is marked
+//     consumed — the Facebook post keeps its own copy. A
+//     ready source='manual' reel attaches but is NEVER
+//     consumed (cleanup may only ever touch poster reels).
+//     No ready reel at claim time posts exactly as before:
+//     nothing in this version can block a post on a video.
 
 const SUPABASE_URL = "https://tdsipiltwajwhzgjsupx.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w";
@@ -1276,6 +1295,67 @@ async function introVideoForJob(userId, settings) {
   }
 }
 
+// [PURE-REEL-DECIDE-BEGIN] — extracted and unit-exercised by
+// the test harness; keep free of DOM/chrome references.
+// VIN Reel claim-time decisions (v2.1.85, header note 40).
+// decideReelAttach: given the car's LATEST reel row (the
+// claim-gate lookup: user + vin, newest first), decide whether
+// a reel rides this post. Only a ready reel with a URL
+// attaches; every other state is a plain no, and the post
+// runs exactly as before VIN Reels existed.
+function decideReelAttach(reelRow) {
+  if (!reelRow || reelRow.status !== "ready") return { attach: false };
+  if (typeof reelRow.video_url !== "string" || !reelRow.video_url.trim()) {
+    return { attach: false };
+  }
+  return {
+    attach: true,
+    url: reelRow.video_url,
+    reelId: reelRow.id || null,
+    source: reelRow.source === "poster" ? "poster" : "manual"
+  };
+}
+// decideReelConsume: given the reel record a job carried
+// ({ id, source, attached } as claim time stamped it), decide
+// whether a SUCCESSFUL post consumes the reel. Only a poster
+// reel the job actually attached is consumed — a manual reel
+// is the user's own artifact and is never deleted, and a post
+// that attached nothing consumes nothing.
+function decideReelConsume(reel) {
+  if (!reel || reel.attached !== true) {
+    return { consume: false, reason: "not_attached" };
+  }
+  if (reel.source !== "poster") {
+    return { consume: false, reason: "manual_reel" };
+  }
+  if (!reel.id) return { consume: false, reason: "no_reel_id" };
+  return { consume: true, reelId: reel.id };
+}
+// [PURE-REEL-DECIDE-END]
+
+// Claim-time wrapper (v2.1.85): fetch the car's latest reel
+// ONLY for posts (the caller gates that), resolve, and log.
+// Any failure resolves to null — never a throw into the claim
+// loop, and never a held post: the producer's hold is what
+// waits for reels, not the claim.
+async function reelForJob(userId, vin) {
+  try {
+    const rows = await sbGet(
+      `vin_reels?user_id=eq.${userId}&vin=eq.${encodeURIComponent(vin)}` +
+      `&order=created_at.desc&limit=1&select=id,status,source,video_url`);
+    const d = decideReelAttach(rows && rows.length ? rows[0] : null);
+    if (!d.attach) return null;
+    console.log(`[AutoLaunch] VIN reel resolved at claim (${d.source} reel ${d.reelId}).`);
+    return {
+      url: d.url,
+      reel: { id: d.reelId, source: d.source, attached: true }
+    };
+  } catch (e) {
+    console.log("[AutoLaunch] VIN reel skipped at claim (reel_resolve_failed).");
+    return null;
+  }
+}
+
 // Newest completed-post stamp for this user (v2.1.42): the pacing
 // gate's anchor. applyPosted stamps scraped_inventory.marketplace_
 // posted_at at the moment a post completes, so the newest non-null
@@ -1661,6 +1741,7 @@ async function checkQueue() {
     // Other channels' rows belong to other workers; never touch them.
     const queueItems = await sbGet(
       `auto_posting_queue?user_id=eq.${userId}&status=eq.pending` +
+      `&awaiting_reel=eq.false` +
       `&target_channel=in.(marketplace,facebook)&order=created_at.asc&limit=5`
     );
     if (!queueItems.length) return;
@@ -1846,8 +1927,19 @@ async function checkQueue() {
     // composer to attach to. Absent = the post runs exactly as
     // before this version.
     if (!isDelete && !isShare && !isUpdatePrice) {
-      const intro = await introVideoForJob(userId, settings);
-      if (intro) jobPayload.introVideo = intro;
+      // VIN reel (v2.1.85, header note 40): a ready reel for
+      // this car replaces the intro video for this post — it
+      // rides the same job slot the content side already
+      // attaches from. No ready reel: the intro resolution
+      // runs exactly as before.
+      const reelHit = await reelForJob(userId, item.vin);
+      if (reelHit) {
+        jobPayload.introVideo = { url: reelHit.url, videoId: null };
+        jobPayload.reel = reelHit.reel;
+      } else {
+        const intro = await introVideoForJob(userId, settings);
+        if (intro) jobPayload.introVideo = intro;
+      }
     }
     await chrome.storage.local.set({ current_posting_job: jobPayload });
 
@@ -2248,6 +2340,47 @@ async function applyPosted(queueId, vin, userId, postedPrice) {
   );
 }
 
+// VIN Reel consumption (v2.1.85, header note 40): after a post
+// SUCCEEDS with a poster reel attached, the reel's job is done
+// — delete its storage object and mark the row consumed (the
+// Facebook post keeps its own copy; the app already ignores
+// consumed rows). STRICTLY FAIL-OPEN: the post is confirmed
+// before this runs, and nothing here may ever surface as a
+// post failure. Delete-then-mark, the README's order: if the
+// mark fails the row stays ready over a dead URL (the next
+// claim's attach would fail honestly and post without it);
+// if the delete fails the object lingers unviewed.
+async function consumeJobReel(userId, vin, reel) {
+  try {
+    const d = decideReelConsume(reel);
+    if (!d.consume) {
+      if (reel && reel.attached === true && reel.source !== "poster") {
+        console.log("[AutoLaunch] VIN reel attached was a manual reel — left in place (never consumed).");
+      }
+      return;
+    }
+    try {
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/vin-reels`, {
+        method: "DELETE",
+        headers: await sbHeaders(),
+        body: JSON.stringify({ prefixes: [`${userId}/${vin}.mp4`] })
+      });
+      if (!res.ok) {
+        console.warn(`[AutoLaunch] VIN reel storage delete returned ${res.status}; marking consumed anyway.`);
+      }
+    } catch (e) {
+      console.warn("[AutoLaunch] VIN reel storage delete failed; marking consumed anyway.");
+    }
+    await sbPatch(`vin_reels?id=eq.${d.reelId}`, {
+      status: "consumed",
+      consumed_at: new Date().toISOString()
+    });
+    console.log(`[AutoLaunch] VIN reel ${d.reelId} consumed (poster reel for VIN ${vin}).`);
+  } catch (e) {
+    console.warn("[AutoLaunch] VIN reel consumption failed (non-fatal; the post stands).");
+  }
+}
+
 // Delete completion (v2.1.4): the queue row ends "completed" —
 // there is no check constraint on status (verified against the live
 // schema), and the app's queue view renders the value — with
@@ -2415,6 +2548,8 @@ async function flushPendingFinish() {
   try {
     if (pending.outcome === "posted") {
       await applyPosted(pending.queueId, pending.vin, pending.userId, pending.postedPrice);
+      // v2.1.85: consume the reel the original job attached.
+      await consumeJobReel(pending.userId, pending.vin, pending.reel);
       // The share the post earned rides the stash (v2.1.55):
       // queued on replay, still fail-open.
       await maybeQueueFeedShare({ userId: pending.userId, shareToFeed: pending.shareToFeed, car: pending.shareCar, includeStock: pending.includeStock === true, dealershipName: pending.dealershipName || "", dealershipAddress: pending.dealershipAddress || "" });
@@ -2486,6 +2621,10 @@ async function finishJobPosted(queueId, listingUrl) {
           postedPrice: job.queuePrice != null ? job.queuePrice
             : (job.car.price != null ? Number(job.car.price) : null),
           listingUrl: listingUrl || null,
+          // v2.1.85: the reel the job attached rides the stash,
+          // so a replayed finish consumes it exactly like the
+          // direct one.
+          reel: job.reel || null,
           shareToFeed: job.shareToFeed === true,
           // v2.1.56: the settings the share text is built from
           // ride the stash too, so a replayed share row is
@@ -2517,6 +2656,9 @@ async function finishJobPosted(queueId, listingUrl) {
     }
     throw err;
   }
+  // VIN reel consumption (v2.1.85): the post is confirmed —
+  // consume the poster reel it carried, if any. Fail-open.
+  await consumeJobReel(job.userId, job.car.vin, job.reel);
   await chrome.storage.local.remove(["current_posting_job"]);
   console.log("[AutoLaunch] Posted confirmed for queue item", queueId, listingUrl || "");
   scheduleJobTabClose(job);

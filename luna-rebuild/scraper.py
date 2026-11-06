@@ -2691,6 +2691,51 @@ def _teammate_blocked_vins(uid: str) -> set:
         return set()
 
 
+def _queue_reel_jobs(uid: str, holds) -> None:
+    """VIN REELS PHASE 2 (Matthew, 2026-11-05): ensure every car
+    whose marketplace row was just queued HELD (awaiting_reel)
+    has a live poster reel job behind it. A car with a live
+    (queued / generating / ready) reel already — poster OR
+    manual — gets no second row: the worker's hold
+    reconciliation keys off the latest reel for the VIN
+    regardless of source, and a ready manual reel is attachable
+    as-is. Never raises: the auto-post pass is a never-raise
+    surface, and a missed insert leaves the hold to the
+    worker's 60-minute stale sweep, which releases the post
+    flagged rather than starving it."""
+    try:
+        vins = [v for v, _stk in holds]
+        live = (
+            db.table("vin_reels")
+            .select("vin")
+            .eq("user_id", uid)
+            .in_("vin", vins)
+            .in_("status", ["queued", "generating", "ready"])
+            .execute()
+        ).data or []
+        have = {r.get("vin") for r in live if r.get("vin")}
+        for v, stk in holds:
+            if v in have:
+                continue
+            try:
+                db.table("vin_reels").insert({
+                    "user_id": uid,
+                    "vin": v,
+                    "stock_number": stk,
+                    "source": "poster",
+                    "status": "queued",
+                }).execute()
+                have.add(v)
+            except Exception:
+                # The partial unique index allows one live
+                # (queued/generating) row per (user, VIN): a
+                # racing pass inserted it first. The hold
+                # resolves through that row — nothing to do.
+                pass
+    except Exception as e:
+        print(f"[!] VIN reel job queue warning for user {uid[:8]} (non-fatal): {e}")
+
+
 def _auto_post_filtered(uid: str, only_vins=None) -> int:
     """Queue post jobs for every unposted car matching the user's
     location x condition filter, up to today's remaining daily
@@ -2701,7 +2746,7 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
     try:
         res = (
             db.table("user_settings")
-            .select("auto_post_enabled, auto_post_min_photos, auto_post_locations, auto_post_conditions, location_groups, daily_post_limit, channel_instagram_enabled, channel_tiktok_enabled, channel_facebook_page_enabled, allow_post_without_colors")
+            .select("auto_post_enabled, auto_post_min_photos, auto_post_locations, auto_post_conditions, location_groups, daily_post_limit, channel_instagram_enabled, channel_tiktok_enabled, channel_facebook_page_enabled, allow_post_without_colors, vin_reel_before_post")
             .eq("user_id", uid)
             .limit(1)
             .execute()
@@ -2723,6 +2768,14 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
         # the color leg below; every other leg is untouched, and an
         # absent/false flag keeps filtering byte-identical to before.
         allow_no_colors = s.get("allow_post_without_colors") is True
+        # VIN REELS PHASE 2 (Matthew, 2026-11-05): with "make a
+        # video before posting" on, the MARKETPLACE row for a car
+        # queues HELD (awaiting_reel) behind a poster reel job and
+        # the helper cannot claim it until the VIN Reels worker
+        # releases the hold — reel ready, reel failed, or hold
+        # stale (the failure policy: posts never starve behind a
+        # video). An absent/false flag changes nothing, anywhere.
+        reel_before_post = s.get("vin_reel_before_post") is True
         conditions = s.get("auto_post_conditions")
         if not isinstance(conditions, list):
             conditions = []
@@ -2863,6 +2916,7 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
             return not t or t == "standard"
 
         queue_rows = []
+        reel_hold_vins = []
         cars_queued = 0
         for car in inv:
             if allowance is not None and cars_queued >= allowance:
@@ -2910,6 +2964,13 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
                 })
                 live_keys.add((vin, ch))
             if new_rows:
+                if reel_before_post:
+                    for _r in new_rows:
+                        if _r.get("target_channel") == "marketplace":
+                            _r["awaiting_reel"] = True
+                            _r["reel_requested_at"] = datetime.now(timezone.utc).isoformat()
+                            reel_hold_vins.append((vin, car.get("stock_number")))
+                            break
                 queue_rows.extend(new_rows)
                 cars_queued += 1
         if guard_skipped:
@@ -2928,6 +2989,8 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
         # run by the live-job guard above.
         for _ci in range(0, len(queue_rows), 200):
             db.table("auto_posting_queue").insert(queue_rows[_ci:_ci + 200]).execute()
+        if reel_before_post and reel_hold_vins:
+            _queue_reel_jobs(uid, reel_hold_vins)
         print(
             f"[✓] Auto-post for user {uid[:8]}: queued {cars_queued} car(s) "
             f"across {len(channels)} channel(s) "

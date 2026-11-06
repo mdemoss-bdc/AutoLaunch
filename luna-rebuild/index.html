@@ -3121,6 +3121,40 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         </div>
 
+        <!-- VIN REEL BEFORE POST (Matthew, 2026-11-05) -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Make a video before posting
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                Auto-posts wait for the car's generated VIN Reel video and include it in the Marketplace post. If a video can't be made, the car posts anyway and is flagged in the health bar.
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkVinReelBeforePost"
+                onchange="toggleVinReelBeforePostSetting(this)"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
         <!-- SYNDICATION CHANNELS (Phase 6) -->
 
         <div class="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
@@ -8251,6 +8285,12 @@ updateLastSyncDisplay();
         const chkModalNoColors = document.getElementById("chkModalAllowPostWithoutColors");
         if (chkModalNoColors) chkModalNoColors.checked = allowPostWithoutColorsSetting;
       }
+      // VIN Reel before post: absent column leaves the default (OFF — opt-in).
+      if (data.vin_reel_before_post !== undefined && data.vin_reel_before_post !== null) {
+        vinReelBeforePostSetting = !!data.vin_reel_before_post;
+        const chkReel = document.getElementById("chkVinReelBeforePost");
+        if (chkReel) chkReel.checked = vinReelBeforePostSetting;
+      }
       if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
 
@@ -9504,7 +9544,8 @@ if (filterMileageRange) {
     if (activePillFilter === 'POSTED' && !car.marketplace_posted_at) return false;
     if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
     if (needsAttentionOnly && !carNeedsAttention(car)) return false;
-    if (autoPostBlockerFilter && autoPostBlockerOf(car) !== autoPostBlockerFilter) return false;
+    if (autoPostBlockerFilter === "novideo") { if (!reelFlaggedToday.vins.has(car.vin)) return false; }
+    else if (autoPostBlockerFilter && autoPostBlockerOf(car) !== autoPostBlockerFilter) return false;
 
     return carMatchesInventorySearch(car, query);
   });
@@ -9863,6 +9904,20 @@ let autoPostEnabledSetting = false;
 // bar's blocker walk skips the colors leg, exactly like the
 // scraper's auto-post pass does.
 let allowPostWithoutColorsSetting = false;
+// VIN Reel before post (Matthew, 2026-11-05): mirrors
+// user_settings.vin_reel_before_post. When true the scraper's
+// auto-post pass holds each marketplace row behind a generated
+// VIN Reel (see _auto_post_filtered); the helper attaches the
+// ready reel to the post.
+let vinReelBeforePostSetting = false;
+// Today's reel-flagged posts (queue rows that went up with
+// reel_failed set), captured in loadPostingQueue BEFORE the
+// queue-hygiene sweep deletes the finished rows. Session-scoped:
+// a reload re-derives it from any flagged rows still present.
+let reelFlaggedToday = { day: "", vins: new Set() };
+function localDayKey(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
 
 // Usable photos, counted exactly like the scraper: http(s) URLs
 // across image_url + photos + custom_photo_urls, deduped by path
@@ -10079,7 +10134,8 @@ function renderAutoPostHealth() {
   rawInventory.forEach(car => { const b = autoPostBlockerOf(car); if (b) counts[b]++; });
   const held = counts.price + counts.colors + counts.photos;
   const total = counts.ready + held + counts.filter;
-  if (!total) { bar.style.display = "none"; return; }
+  const flaggedCount = (reelFlaggedToday.day === localDayKey(new Date())) ? reelFlaggedToday.vins.size : 0;
+  if (!total && !flaggedCount) { bar.style.display = "none"; return; }
   const chip = (kind, label, cls, title) => {
     const active = autoPostBlockerFilter === kind;
     return `<button type="button" onclick="setAutoPostBlockerFilter('${kind}')" title="${title}" class="px-2.5 py-0.5 rounded-full border font-semibold cursor-pointer ${cls}${active ? " ring-2 ring-slate-700" : ""}">${label}</button>`;
@@ -10093,6 +10149,7 @@ function renderAutoPostHealth() {
     if (counts.photos) html += chip("photos", `${counts.photos} need photos`, "bg-amber-50 text-amber-700 border-amber-300", `Fewer than your minimum of ${selectedMinPhotos} usable photos`);
   }
   if (counts.filter) html += chip("filter", `${counts.filter} outside your posting filter`, "bg-white text-slate-500 border-slate-300", "Outside the locations / conditions picked in Automation — widen the filter there to include them");
+  if (flaggedCount) html += chip("novideo", `${flaggedCount} posted without video`, "bg-sky-50 text-sky-700 border-sky-300", "Posted today without their VIN Reel video — the render failed or the wait timed out, so the post went up without it (it never holds a car back)");
   bar.innerHTML = html;
   bar.style.display = "flex";
 }
@@ -11932,6 +11989,20 @@ async function loadPostingQueue() {
         // (marketplace_posted_at drives the Posted pill), so nothing is
         // lost. Failed rows stay: they carry the error diagnostics.
         const allRows = data || [];
+        // VIN REELS PHASE 2: remember today's reel-flagged posts
+        // (posted rows carrying reel_failed) BEFORE the hygiene
+        // sweep below deletes the finished rows — the health
+        // bar's "posted without video" chip counts from this.
+        try {
+          const todayKey = localDayKey(new Date());
+          if (reelFlaggedToday.day !== todayKey) reelFlaggedToday = { day: todayKey, vins: new Set() };
+          allRows.forEach(i => {
+            if (i && i.reel_failed === true && i.status === "posted" && i.vin && i.created_at
+                && localDayKey(new Date(i.created_at)) === todayKey) {
+              reelFlaggedToday.vins.add(i.vin);
+            }
+          });
+        } catch (e) { /* the chip is informational; never break the queue load */ }
         const doneRows = allRows.filter(i => i.status === "posted" || i.status === "completed");
         postingQueue = allRows.filter(i => i.status !== "posted" && i.status !== "completed");
         syncQueueBulkBar();
@@ -17265,6 +17336,34 @@ async function toggleAllowPostWithoutColorsSetting(el) {
   } catch (err) {
     el.checked = !value;
     alert("Could not save the post-without-colors setting: " + (err.message || "Unknown error"));
+  }
+}
+
+// Make a video before posting (Matthew, 2026-11-05): writes
+// user_settings.vin_reel_before_post immediately, like the
+// colors waiver. The scraper's auto-post pass reads the same
+// column and holds marketplace rows behind poster VIN Reels
+// while it is on. Turning it ON belongs to the VIN Reels
+// feature, so it carries that plan gate; turning it off is
+// always allowed.
+async function toggleVinReelBeforePostSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  // PLANS: the hold only matters for VIN Reels (enabling only).
+  if (value && !requireTier("vin_reels")) { el.checked = false; return; }
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        vin_reel_before_post: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    vinReelBeforePostSetting = value;
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the video-before-posting setting: " + (err.message || "Unknown error"));
   }
 }
 
