@@ -7,7 +7,7 @@ Renders ONE per-VIN showcase reel end to end:
   inventory row -> photo sequence (slow push-in, plain crossfades, navy
   end card — the approved spike design) -> facts-only voiceover script
   (stored fields + NHTSA VIN decode for engine/drivetrain ONLY) -> Helio
-  TTS -> canonical audio mix -> finished-file QA gate -> upload to the
+  TTS -> canonical audio mix -> finished-file size gate + QA gate -> upload to the
   public `vin-reels` bucket at <user_id>/<vin>.mp4 -> vin_reels row
   finished (ready + video_url + qa, or failed + error + qa).
 
@@ -49,7 +49,28 @@ TTS_BIN = "/opt/hatch/bin/tts"
 MUSIC_BED = os.path.join(HERE, "assets", "music-bed.mp3")
 PHOTO_CACHE = os.path.expanduser("~/.cache/vinreels/photos")
 
-W, H, FPS = 1080, 1920, 30
+# Frame size (Matthew, 2026-11-06): 720x1280, NOT the spike's
+# 1080x1920. Proven at the desk that day: 1080p reels land at
+# 20.7-22.7 MB and Facebook's vehicle composer will not ingest them
+# (they fail via the helper AND via a hand upload — the Videos
+# counter never registers), while the identical reel re-encoded to
+# 720p / 3.8 MB attached instantly. Every absolute pixel value in
+# the design below stays a 1080p-design number, scaled at use by
+# _px(), so the approved composition is unchanged — only the
+# raster is smaller.
+W, H, FPS = 720, 1280, 30
+
+def _px(v):
+    """Scale a 1080p-design pixel value to the render width."""
+    return int(round(v * W / 1080))
+
+VIDEO_CRF = 28          # final video encode (the proven 720p recipe:
+                        # a ~36s reel lands ~3.5-6 MB, not ~21 MB)
+SIZE_LIMIT_BYTES = 8 * 1024 * 1024   # hard finished-file gate: an
+                        # oversized reel is one Facebook silently
+                        # drops, so the generator must never upload
+                        # one (see enforce_size_gate)
+SIZE_RETRY_CRF = VIDEO_CRF + 4       # the gate's one stronger retry
 NAVY = (10, 23, 48)
 BLUE = (86, 166, 255)
 WHITE = (255, 255, 255)
@@ -308,12 +329,14 @@ def font(name, size, weight=400):
     return ImageFont.truetype(fb, size)
 
 def text_w(draw, s, fnt, tracking=0):
+    tracking = _px(tracking)  # callers pass 1080p-design units
     if not s:
         return 0
     w = sum(draw.textlength(ch, font=fnt) for ch in s)
     return w + tracking * (len(s) - 1)
 
 def draw_tracked(draw, xy, s, fnt, fill, tracking=0):
+    tracking = _px(tracking)  # callers pass 1080p-design units
     x, y = xy
     for ch in s:
         draw.text((x, y), ch, font=fnt, fill=fill)
@@ -321,7 +344,9 @@ def draw_tracked(draw, xy, s, fnt, fill, tracking=0):
     return x - tracking
 
 def fit_font(draw, name, s, start, max_w, weight=400, tracking=0, floor=24):
-    size = start
+    # start/floor arrive in 1080p-design units; render sizes scale.
+    size = _px(start)
+    floor = _px(floor)
     while size > floor:
         f = font(name, size, weight)
         if text_w(draw, s, f, tracking) <= max_w:
@@ -347,7 +372,7 @@ def _car_name(car):
 def make_title_overlay(car):
     img = _layer()
     d = ImageDraw.Draw(img)
-    margin, max_w = 64, W - 128
+    margin, max_w = _px(64), W - 2 * _px(64)
     name = _car_name(car)
     dealer = (car.get("_dealership") or "").upper()
     parts = []
@@ -358,14 +383,14 @@ def make_title_overlay(car):
     sub = " • ".join(parts)
     sub_f, _ = fit_font(d, "inter", sub, 36, max_w, weight=400, floor=26)
     sub_h = sub_f.size
-    y_sub = H - 118 - sub_h
+    y_sub = H - _px(118) - sub_h
     title_f, _ = fit_font(d, "mont", name, 86, max_w, weight=700, floor=40)
-    y_title = y_sub - 26 - title_f.size
+    y_title = y_sub - _px(26) - title_f.size
     if dealer:
-        eb_f = font("mont", 29, 600)
-        y_eb = y_title - 30 - eb_f.size
-        y_rule = y_eb - 24
-        d.rectangle([margin, y_rule, margin + 64, y_rule + 4],
+        eb_f = font("mont", _px(29), 600)
+        y_eb = y_title - _px(30) - eb_f.size
+        y_rule = y_eb - _px(24)
+        d.rectangle([margin, y_rule, margin + _px(64), y_rule + _px(4)],
                     fill=BLUE + (255,))
         draw_tracked(d, (margin, y_eb), dealer, eb_f, BLUE + (255,),
                      tracking=10)
@@ -377,14 +402,14 @@ def make_title_overlay(car):
 def make_lowerthird_overlay(car):
     img = _layer()
     d = ImageDraw.Draw(img)
-    margin = 64
+    margin = _px(64)
     name = _car_name(car)
-    nf = font("mont", 31, 600)
-    y = H - 96 - 31
+    nf = font("mont", _px(31), 600)
+    y = H - _px(96) - nf.size
     d.text((margin, y), name, font=nf, fill=WHITE + (235,))
     if car.get("price"):
         price = fmt_price(car["price"])
-        pf = font("inter", 31, 600)
+        pf = font("inter", _px(31), 600)
         pw = d.textlength(price, font=pf)
         d.text((W - margin - pw, y), price, font=pf, fill=WHITE + (235,))
     return img
@@ -397,33 +422,33 @@ def make_end_card(car):
     dealer = (car.get("_dealership") or "").upper()
     y = int(H * 0.40)
     if dealer:
-        eb_f = font("mont", 27, 600)
+        eb_f = font("mont", _px(27), 600)
         eb_w = text_w(d, dealer, eb_f, tracking=10)
         draw_tracked(d, (cx - eb_w / 2, y), dealer, eb_f, BLUE + (255,),
                      tracking=10)
-        y += 27 + 26
-        d.rectangle([cx - 28, y, cx + 28, y + 4], fill=BLUE)
-        y += 44
+        y += _px(27) + _px(26)
+        d.rectangle([cx - _px(28), y, cx + _px(28), y + _px(4)], fill=BLUE)
+        y += _px(44)
     if car.get("price"):
         price = fmt_price(car["price"])
-        price_f, _ = fit_font(d, "mont", price, 132, W - 160, weight=800,
-                              floor=60)
+        price_f, _ = fit_font(d, "mont", price, 132, W - _px(160),
+                              weight=800, floor=60)
         pw = d.textlength(price, font=price_f)
         d.text((cx - pw / 2, y), price, font=price_f, fill=WHITE)
-        y += price_f.size + 30
-    name_f = font("inter", 38, 500)
+        y += price_f.size + _px(30)
+    name_f = font("inter", _px(38), 500)
     nw = d.textlength(name, font=name_f)
     d.text((cx - nw / 2, y), name, font=name_f, fill=(255, 255, 255))
     if car.get("mileage"):
-        y += 38 + 12
-        miles_f = font("inter", 32, 400)
+        y += _px(38) + _px(12)
+        miles_f = font("inter", _px(32), 400)
         mw = d.textlength(fmt_miles(car["mileage"]), font=miles_f)
         d.text((cx - mw / 2, y), fmt_miles(car["mileage"]), font=miles_f,
                fill=(198, 212, 232))
     tag = "0 TO POSTED"
-    tag_f = font("mont", 25, 600)
+    tag_f = font("mont", _px(25), 600)
     tag_w = text_w(d, tag, tag_f, tracking=8)
-    draw_tracked(d, (cx - tag_w / 2, H - 150), tag, tag_f,
+    draw_tracked(d, (cx - tag_w / 2, H - _px(150)), tag, tag_f,
                  BLUE + (255,), tracking=8)
     return img
 
@@ -454,7 +479,7 @@ class Shot:
         box = (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
         fr = self.im.resize((W, H), Image.LANCZOS, box=box)
         if SHARPEN > 0:
-            fr = fr.filter(ImageFilter.UnsharpMask(radius=2,
+            fr = fr.filter(ImageFilter.UnsharpMask(radius=2 * W / 1080,
                                                    percent=SHARPEN,
                                                    threshold=3))
         return fr
@@ -530,8 +555,9 @@ def render_visuals(car, photo_paths, out_path):
 
     cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt",
            "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
-           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
-           "-preset", "medium", "-movflags", "+faststart", out_path]
+           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf",
+           str(VIDEO_CRF), "-preset", "medium", "-movflags",
+           "+faststart", out_path]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     try:
         for i in range(n_frames):
@@ -897,6 +923,43 @@ def mix_final(silent_mp4, ducked_wav, stem_wav, total, workdir):
                     final], check=True)
     return final, peak, gain
 
+# ================================================================ size gate
+def enforce_size_gate(final_mp4, workdir):
+    """Hard finished-file size gate (Matthew, 2026-11-06): Facebook's
+    vehicle composer silently drops oversized reels — proven at the
+    desk, where 20.7-22.7 MB reels never ingested via the helper or
+    by hand while a 3.8 MB copy of the same reel attached instantly.
+    An oversized render must therefore never reach the upload. If
+    the delivered file exceeds SIZE_LIMIT_BYTES, re-encode the video
+    ONCE at SIZE_RETRY_CRF (the audio is copied bit-identical, so
+    the canonical mix and its QA are untouched); if it is STILL
+    over, raise — the row finishes 'failed' with the reason instead
+    of uploading a file that cannot post. Runs BEFORE qa_gate so
+    the QA gate measures the exact delivered artifact.
+    Returns (path, info) — info rides the row's qa."""
+    size = os.path.getsize(final_mp4)
+    info = {"limit_bytes": SIZE_LIMIT_BYTES, "initial_bytes": size,
+            "reencoded": False}
+    if size <= SIZE_LIMIT_BYTES:
+        info["final_bytes"] = size
+        return final_mp4, info
+    smaller = os.path.join(workdir, "final_small.mp4")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", final_mp4,
+                    "-map", "0:v", "-map", "0:a", "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p", "-crf", str(SIZE_RETRY_CRF),
+                    "-preset", "medium", "-c:a", "copy",
+                    "-movflags", "+faststart", smaller], check=True)
+    size2 = os.path.getsize(smaller)
+    info.update({"reencoded": True, "retry_crf": SIZE_RETRY_CRF,
+                 "final_bytes": size2})
+    if size2 > SIZE_LIMIT_BYTES:
+        raise RuntimeError(
+            f"finished reel is {size2 / 1e6:.1f} MB after the "
+            f"size-gate re-encode (limit "
+            f"{SIZE_LIMIT_BYTES // (1024 * 1024)} MB) — refusing to "
+            "upload an oversized file Facebook will not ingest")
+    return smaller, info
+
 # ================================================================ QA gate
 def mean_volume_db(path, start, dur):
     out = subprocess.run(
@@ -1009,7 +1072,13 @@ def generate(row, keep_work=False):
         ducked = build_ducked_bed(bed, stem, workdir)
         final, peak, gain = mix_final(silent, ducked, stem, total,
                                       workdir)
+        final, size_info = enforce_size_gate(final, workdir)
+        if size_info["reencoded"]:
+            print(f"  size gate: {size_info['initial_bytes']} B over "
+                  f"the limit — re-encoded at crf {SIZE_RETRY_CRF} "
+                  f"to {size_info['final_bytes']} B")
         passed, qa = qa_gate(final, ducked, segs, total, gain_db=gain)
+        qa["size_gate"] = size_info
         qa["script"] = [s["text"] for s in segs]
         qa["segments"] = [{"id": s["id"],
                            "onset": round(s["onset"], 2),
