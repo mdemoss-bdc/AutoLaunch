@@ -340,6 +340,67 @@ def photo_list(car):
                 add(u)
     return out
 
+def _download_full(url, dest):
+    """Download url to dest, resuming across truncated reads.
+
+    The dealer photo CDN (through this host's egress proxy) cuts
+    urllib response bodies mid-read — IncompleteRead at ~85-95% of
+    the body, repeatedly — while curl pulls the same file whole,
+    and the server advertises Accept-Ranges: bytes. So a cut read
+    is resumed with a Range request for the remainder instead of
+    failing the whole reel (2026-11-06: three renders in a row died
+    on photo fetches ~40 KB in). Bytes land in dest + '.part' and
+    are moved into place only when the file is verifiably complete,
+    so the photo cache can never hold a truncated JPEG — the
+    pre-fix code wrote partial files straight to the cache path,
+    where the exists() check then trusted them."""
+    import http.client as _hc
+    part = dest + ".part"
+    total = None
+    for _pass in range(10):
+        have = os.path.getsize(part) if os.path.exists(part) else 0
+        if total is not None and have >= total:
+            break
+        headers = {"User-Agent": "Mozilla/5.0"}
+        if have:
+            headers["Range"] = f"bytes={have}-"
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=40) as r:
+                status = getattr(r, "status", 200)
+                clen = r.headers.get("Content-Length")
+                if have and status == 200:
+                    # The server ignored the Range: start over.
+                    have = 0
+                    total = int(clen) if clen else None
+                    mode = "wb"
+                else:
+                    if clen is not None:
+                        total = have + int(clen)
+                    mode = "ab" if have else "wb"
+                with open(part, mode) as fh:
+                    while True:
+                        try:
+                            chunk = r.read(65536)
+                        except _hc.IncompleteRead as e:
+                            if e.partial:
+                                fh.write(e.partial)
+                            raise
+                        if not chunk:
+                            break
+                        fh.write(chunk)
+        except Exception:
+            # Truncated read / transport error: the .part bytes
+            # stay on disk and the next pass resumes from them.
+            time.sleep(1)
+    size = os.path.getsize(part) if os.path.exists(part) else 0
+    if total is not None and size != total:
+        raise IOError(
+            f"photo download incomplete: {size} of {total} bytes: {url}")
+    if not size:
+        raise IOError(f"photo download empty: {url}")
+    os.replace(part, dest)
+
 def download_photos(car, urls):
     d = os.path.join(PHOTO_CACHE, car["user_key"], car["stock_number"])
     os.makedirs(d, exist_ok=True)
@@ -347,22 +408,7 @@ def download_photos(car, urls):
     for i, url in enumerate(urls):
         p = os.path.join(d, f"{i:02d}.jpg")
         if not os.path.exists(p):
-            req = urllib.request.Request(
-                url, headers={"User-Agent": "Mozilla/5.0"})
-            last_exc = None
-            for attempt in range(3):
-                try:
-                    with urllib.request.urlopen(req, timeout=40) as r, \
-                            open(p, "wb") as fh:
-                        fh.write(r.read())
-                    last_exc = None
-                    break
-                except Exception as e:
-                    last_exc = e
-                    if attempt < 2:
-                        time.sleep(2)
-            if last_exc is not None:
-                raise last_exc
+            _download_full(url, p)
         paths.append(p)
     return paths
 
