@@ -2,8 +2,10 @@ name: AutoLaunch Scraper Runner
 
 on:
   schedule:
-    # Runs automatically every 6 hours at :17 past the hour UTC (2:17 AM, 8:17 AM, 2:17 PM, 8:17 PM EDT)
-    - cron: '17 */6 * * *'
+    # Runs automatically once a day at 11:17 UTC (6:17 AM EST / 7:17 AM EDT).
+    # Daily cadence per Matthew (2026-11-07): dealer inventory turns over
+    # daily; on-demand syncs still dispatch runs any time.
+    - cron: '17 11 * * *'
   workflow_dispatch:
     inputs:
       user_id:
