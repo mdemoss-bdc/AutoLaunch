@@ -8851,12 +8851,16 @@ async function fetchLiveInventory(isManual) {
     let keepFetching = true;
 
     while (keepFetching) {
+      // EGRESS TRIM (2026-11-07): the list load goes through
+      // inventory_list_rows, which returns every column EXCEPT the
+      // photos / custom_photo_urls arrays (76% of a row's bytes) plus
+      // server-computed photo counts that reproduce the JS counting
+      // predicates exactly (proven row-for-row against them). Rows
+      // that need the real arrays (details gallery, Add Photos) fetch
+      // them per car via ensureFullCar. Ordering (price, vin) is
+      // applied inside the function, matching the old select.
       const { data, error } = await supabaseClient
-        .from("scraped_inventory")
-        .select("*")
-        .eq("user_id", currentUser.id)
-        .order("price", { ascending: true })
-        .order("vin", { ascending: true })
+        .rpc("inventory_list_rows", { p_user_id: currentUser.id })
         .range(from, from + step - 1);
 
       if (error) throw error;
@@ -9821,7 +9825,35 @@ function hasRealPhoto(car) {
   if (Array.isArray(car.custom_photo_urls)) {
     return car.custom_photo_urls.some(isUsablePhotoUrl);
   }
-  return false;
+  // Slim list row (photo arrays not loaded): the server flagged
+  // usable custom photos when the row was built.
+  return car.has_usable_custom === true;
+}
+
+// The car's usable custom-photo count, from whichever shape the
+// in-memory row carries (full arrays, or the slim row's server count).
+function usableCustomCount(car) {
+  if (!car) return 0;
+  if (Array.isArray(car.custom_photo_urls)) return car.custom_photo_urls.filter(isUsablePhotoUrl).length;
+  return typeof car.usable_custom_count === "number" ? car.usable_custom_count : 0;
+}
+
+// Fetch a list row's full inventory record (photo arrays included)
+// the first time a surface needs them, merging it into the in-memory
+// row so every later read sees the full shape. Fail-open: on any
+// error the slim row stands and the surface renders what it has.
+async function ensureFullCar(car) {
+  if (!car || Array.isArray(car.photos)) return car;
+  try {
+    const { data, error } = await supabaseClient
+      .from("scraped_inventory")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .eq("vin", car.vin)
+      .limit(1);
+    if (!error && data && data.length) Object.assign(car, data[0]);
+  } catch (e) { /* fail-open */ }
+  return car;
 }
 
 // NO-PRICE RULE (Matthew, 2026-10-23): when the scraper can't pull a car's
@@ -9968,6 +10000,11 @@ function localDayKey(d) {
 // (query/fragment stripped), skipping /static/ paths and the
 // assets/no-photo.png placeholder.
 function usablePhotoCountJS(car) {
+  // Slim list row: the server's count reproduces this function
+  // exactly (proven row-for-row); the arrays were never downloaded.
+  if (car && typeof car.usable_photo_count === "number" && !Array.isArray(car.photos)) {
+    return car.usable_photo_count;
+  }
   const urls = new Set();
   const add = (u) => {
     if (typeof u !== "string") return;
@@ -10085,6 +10122,9 @@ function usableCustomPhotoUrls(car) {
 // usablePhotoCountJS but with placeholder assets filtered out first.
 function dealerUsablePhotoCount(car) {
   if (!car) return 0;
+  if (typeof car.dealer_usable_photo_count === "number" && !Array.isArray(car.photos)) {
+    return car.dealer_usable_photo_count;
+  }
   const keep = (u) => typeof u === "string" && !isPlaceholderPhotoUrl(u);
   return usablePhotoCountJS({
     image_url: keep(car.image_url) ? car.image_url : null,
@@ -10100,7 +10140,7 @@ function dealerUsablePhotoCount(car) {
 function showsAddPhotosButton(car) {
   if (!car) return false;
   if (!hasRealPhoto(car)) return true;
-  return dealerUsablePhotoCount(car) === 0 && usableCustomPhotoUrls(car).length === 0;
+  return dealerUsablePhotoCount(car) === 0 && usableCustomCount(car) === 0;
 }
 
 // The (⋯) menu offers "Add / manage photos" exactly when the modal
@@ -10108,7 +10148,7 @@ function showsAddPhotosButton(car) {
 // included), or the user already added photos of their own to manage.
 function addPhotosOffered(car) {
   if (!car) return false;
-  return dealerUsablePhotoCount(car) === 0 || usableCustomPhotoUrls(car).length > 0;
+  return dealerUsablePhotoCount(car) === 0 || usableCustomCount(car) > 0;
 }
 
 function missingColorJS(v) {
@@ -11188,15 +11228,15 @@ function addPhotosCar() {
   return rawInventory.find(c => c.vin === addPhotosVin) || null;
 }
 
-function openAddPhotosModal(vin) {
+async function openAddPhotosModal(vin) {
   const car = rawInventory.find(c => c.vin === vin);
   if (!car) return;
-  const customs = usableCustomPhotoUrls(car);
   const dealerCount = dealerUsablePhotoCount(car);
-  if (dealerCount > 0 && !customs.length) {
+  if (dealerCount > 0 && usableCustomCount(car) === 0) {
     alert("This car already has photos from the dealer's site — nothing to add. (Photos you add yourself are for cars the dealer's site shows with none.)");
     return;
   }
+  await ensureFullCar(car);
   addPhotosVin = vin;
   const title = document.getElementById("addPhotosTitle");
   if (title) title.textContent = `Add photos — ${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'}`;
@@ -11695,7 +11735,8 @@ function vinReelSectionInnerHtml(car) {
   </div>`;
 }
 
-function openVehicleDetailsModal(car) {
+async function openVehicleDetailsModal(car) {
+  car = await ensureFullCar(car);
   document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'} ${car.trim || ''}`;
   document.getElementById("detailsModalVin").innerText = `VIN: ${car.vin || 'N/A'} • Stock: ${car.stock_num || car.stock_number || 'N/A'}`;
   detailsReelVin = car.vin;
