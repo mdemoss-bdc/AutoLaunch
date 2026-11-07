@@ -2249,6 +2249,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     <i class="fa-solid fa-wand-magic-sparkles w-4"></i>
     <span>✨ Listing copy (AI)</span>
   </button>
+  <button id="dropdownVinReelItem" onclick="handleDropdownAction('create_reel')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-clapperboard w-4 text-slate-400"></i>
+    <span id="dropdownVinReelLabel">Create reel</span>
+  </button>
   <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-solid fa-link w-4 text-slate-400"></i>
     <span>Already on Facebook? Add its link</span>
@@ -2763,6 +2767,38 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
               </p>
 
             </div>
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Your name (on videos & listings)
+              </label>
+
+              <input
+                type="text"
+                id="settingsRepName"
+                placeholder="e.g. Matt DeMoss"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+            </div>
+
+            <div>
+
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Your phone (on videos & listings)
+              </label>
+
+              <input
+                type="text"
+                id="settingsRepPhone"
+                placeholder="e.g. 681-203-1094"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3">
+
+              <p class="text-xs text-slate-400 mt-2">
+                Shown as a "Call or text" line at the end of your listing descriptions and on your vehicle videos. Leave either one blank to keep it off.
+              </p>
+
+            </div>
 <div>
 
     <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
@@ -3107,6 +3143,40 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
                 type="checkbox"
                 id="chkAllowPostWithoutColors"
                 onchange="toggleAllowPostWithoutColorsSetting(this)"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
+        <!-- VIN REEL BEFORE POST (Matthew, 2026-11-05) -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Make a video before posting
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                Auto-posts wait for the car's generated VIN Reel video and include it in the Marketplace post. If a video can't be made, the car posts anyway and is flagged in the health bar.
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkVinReelBeforePost"
+                onchange="toggleVinReelBeforePostSetting(this)"
                 class="sr-only peer">
 
               <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
@@ -4257,6 +4327,8 @@ document.addEventListener("click", function (e) {
   } else if (action === "listing-copy") {
     const car = rawInventory.find(c => c.vin === vin);
     if (car) openListingCopyModal(car);
+  } else if (action === "vin-reel") {
+    vinReelAction(vin);
   } else if (action === "row-dropdown") {
     toggleRowDropdown({
       stopPropagation: () => e.stopPropagation(),
@@ -4552,6 +4624,7 @@ const TIER_FEATURES = {
   wishlist: "automate",    // Customer Wishlist
   trade: "automate",       // Trade Appraisals
   intro_videos: "automate",// My Intro Videos
+  vin_reels: "automate",   // VIN Reels — per-car narrated showcase video (worker-rendered)
   teams: "group"           // future team/org features — nothing calls this yet
 };
 
@@ -4776,6 +4849,7 @@ const FEATURE_LABELS = {
   wishlist: "Customer Wishlist",
   trade: "Trade Appraisals",
   intro_videos: "Intro videos",
+  vin_reels: "VIN Reels",
   post_delay: "Time between posts",
   teams: "Team features"
 };
@@ -8153,6 +8227,10 @@ async function loadUserStoreSettings() {
       currentStore.cpoUrl = data.certified_url || "";
 
       document.getElementById("settingsStoreName").value = currentStore.name;
+      const repNameField = document.getElementById("settingsRepName");
+      if (repNameField) repNameField.value = data.rep_display_name || "";
+      const repPhoneField = document.getElementById("settingsRepPhone");
+      if (repPhoneField) repPhoneField.value = data.rep_phone || "";
       document.getElementById("settingsUsedUrl").value = currentStore.usedUrl;
       renderUsedExtras("settingsUsedExtras", currentStore.usedExtras);
       document.getElementById("settingsNewUrl").value = currentStore.newUrl;
@@ -8243,6 +8321,12 @@ updateLastSyncDisplay();
         const chkModalNoColors = document.getElementById("chkModalAllowPostWithoutColors");
         if (chkModalNoColors) chkModalNoColors.checked = allowPostWithoutColorsSetting;
       }
+      // VIN Reel before post: absent column leaves the default (OFF — opt-in).
+      if (data.vin_reel_before_post !== undefined && data.vin_reel_before_post !== null) {
+        vinReelBeforePostSetting = !!data.vin_reel_before_post;
+        const chkReel = document.getElementById("chkVinReelBeforePost");
+        if (chkReel) chkReel.checked = vinReelBeforePostSetting;
+      }
       if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
 
@@ -8286,6 +8370,8 @@ updateLastSyncDisplay();
         if (addrField) addrField.value = brandingState.address;
       }
       brandingState.name = data.dealership_name || brandingState.name || "";
+      brandingState.repName = data.rep_display_name || "";
+      brandingState.repPhone = data.rep_phone || "";
       brandingState.logoUrl = data.dealer_logo_url || "";
       brandingState.enabled = !!data.branding_frame_enabled;
       syncBrandingPanelFromState();
@@ -8612,6 +8698,10 @@ function openSyncSummaryDetails() {
   const storeName = document.getElementById("settingsStoreName").value.trim() || "Dealership Inventory";
   const addressEl = document.getElementById("settingsAddress");
   const storeAddress = addressEl ? addressEl.value.trim() : "";
+  const repNameEl = document.getElementById("settingsRepName");
+  const repName = repNameEl ? repNameEl.value.trim() : "";
+  const repPhoneEl = document.getElementById("settingsRepPhone");
+  const repPhone = repPhoneEl ? repPhoneEl.value.trim() : "";
   const usedUrl = document.getElementById("settingsUsedUrl").value.trim();
   const usedExtras = cleanUsedExtras(usedUrl, collectUsedExtras("settingsUsedExtras"));
   const newUrl = document.getElementById("settingsNewUrl").value.trim();
@@ -8623,6 +8713,8 @@ const certifiedUrl =
   dealership_name: storeName,
   store_name: storeName,
   dealership_address: storeAddress,
+  rep_display_name: repName,
+  rep_phone: repPhone,
   used_url: usedUrl,
   extra_used_urls: usedExtras,
   new_url: newUrl,
@@ -8759,12 +8851,16 @@ async function fetchLiveInventory(isManual) {
     let keepFetching = true;
 
     while (keepFetching) {
+      // EGRESS TRIM (2026-11-07): the list load goes through
+      // inventory_list_rows, which returns every column EXCEPT the
+      // photos / custom_photo_urls arrays (76% of a row's bytes) plus
+      // server-computed photo counts that reproduce the JS counting
+      // predicates exactly (proven row-for-row against them). Rows
+      // that need the real arrays (details gallery, Add Photos) fetch
+      // them per car via ensureFullCar. Ordering (price, vin) is
+      // applied inside the function, matching the old select.
       const { data, error } = await supabaseClient
-        .from("scraped_inventory")
-        .select("*")
-        .eq("user_id", currentUser.id)
-        .order("price", { ascending: true })
-        .order("vin", { ascending: true })
+        .rpc("inventory_list_rows", { p_user_id: currentUser.id })
         .range(from, from + step - 1);
 
       if (error) throw error;
@@ -9496,7 +9592,8 @@ if (filterMileageRange) {
     if (activePillFilter === 'POSTED' && !car.marketplace_posted_at) return false;
     if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
     if (needsAttentionOnly && !carNeedsAttention(car)) return false;
-    if (autoPostBlockerFilter && autoPostBlockerOf(car) !== autoPostBlockerFilter) return false;
+    if (autoPostBlockerFilter === "novideo") { if (!reelFlaggedToday.vins.has(car.vin)) return false; }
+    else if (autoPostBlockerFilter && autoPostBlockerOf(car) !== autoPostBlockerFilter) return false;
 
     return carMatchesInventorySearch(car, query);
   });
@@ -9728,7 +9825,35 @@ function hasRealPhoto(car) {
   if (Array.isArray(car.custom_photo_urls)) {
     return car.custom_photo_urls.some(isUsablePhotoUrl);
   }
-  return false;
+  // Slim list row (photo arrays not loaded): the server flagged
+  // usable custom photos when the row was built.
+  return car.has_usable_custom === true;
+}
+
+// The car's usable custom-photo count, from whichever shape the
+// in-memory row carries (full arrays, or the slim row's server count).
+function usableCustomCount(car) {
+  if (!car) return 0;
+  if (Array.isArray(car.custom_photo_urls)) return car.custom_photo_urls.filter(isUsablePhotoUrl).length;
+  return typeof car.usable_custom_count === "number" ? car.usable_custom_count : 0;
+}
+
+// Fetch a list row's full inventory record (photo arrays included)
+// the first time a surface needs them, merging it into the in-memory
+// row so every later read sees the full shape. Fail-open: on any
+// error the slim row stands and the surface renders what it has.
+async function ensureFullCar(car) {
+  if (!car || Array.isArray(car.photos)) return car;
+  try {
+    const { data, error } = await supabaseClient
+      .from("scraped_inventory")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .eq("vin", car.vin)
+      .limit(1);
+    if (!error && data && data.length) Object.assign(car, data[0]);
+  } catch (e) { /* fail-open */ }
+  return car;
 }
 
 // NO-PRICE RULE (Matthew, 2026-10-23): when the scraper can't pull a car's
@@ -9855,12 +9980,31 @@ let autoPostEnabledSetting = false;
 // bar's blocker walk skips the colors leg, exactly like the
 // scraper's auto-post pass does.
 let allowPostWithoutColorsSetting = false;
+// VIN Reel before post (Matthew, 2026-11-05): mirrors
+// user_settings.vin_reel_before_post. When true the scraper's
+// auto-post pass holds each marketplace row behind a generated
+// VIN Reel (see _auto_post_filtered); the helper attaches the
+// ready reel to the post.
+let vinReelBeforePostSetting = false;
+// Today's reel-flagged posts (queue rows that went up with
+// reel_failed set), captured in loadPostingQueue BEFORE the
+// queue-hygiene sweep deletes the finished rows. Session-scoped:
+// a reload re-derives it from any flagged rows still present.
+let reelFlaggedToday = { day: "", vins: new Set() };
+function localDayKey(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
 
 // Usable photos, counted exactly like the scraper: http(s) URLs
 // across image_url + photos + custom_photo_urls, deduped by path
 // (query/fragment stripped), skipping /static/ paths and the
 // assets/no-photo.png placeholder.
 function usablePhotoCountJS(car) {
+  // Slim list row: the server's count reproduces this function
+  // exactly (proven row-for-row); the arrays were never downloaded.
+  if (car && typeof car.usable_photo_count === "number" && !Array.isArray(car.photos)) {
+    return car.usable_photo_count;
+  }
   const urls = new Set();
   const add = (u) => {
     if (typeof u !== "string") return;
@@ -9978,6 +10122,9 @@ function usableCustomPhotoUrls(car) {
 // usablePhotoCountJS but with placeholder assets filtered out first.
 function dealerUsablePhotoCount(car) {
   if (!car) return 0;
+  if (typeof car.dealer_usable_photo_count === "number" && !Array.isArray(car.photos)) {
+    return car.dealer_usable_photo_count;
+  }
   const keep = (u) => typeof u === "string" && !isPlaceholderPhotoUrl(u);
   return usablePhotoCountJS({
     image_url: keep(car.image_url) ? car.image_url : null,
@@ -9993,7 +10140,7 @@ function dealerUsablePhotoCount(car) {
 function showsAddPhotosButton(car) {
   if (!car) return false;
   if (!hasRealPhoto(car)) return true;
-  return dealerUsablePhotoCount(car) === 0 && usableCustomPhotoUrls(car).length === 0;
+  return dealerUsablePhotoCount(car) === 0 && usableCustomCount(car) === 0;
 }
 
 // The (⋯) menu offers "Add / manage photos" exactly when the modal
@@ -10001,7 +10148,7 @@ function showsAddPhotosButton(car) {
 // included), or the user already added photos of their own to manage.
 function addPhotosOffered(car) {
   if (!car) return false;
-  return dealerUsablePhotoCount(car) === 0 || usableCustomPhotoUrls(car).length > 0;
+  return dealerUsablePhotoCount(car) === 0 || usableCustomCount(car) > 0;
 }
 
 function missingColorJS(v) {
@@ -10071,7 +10218,8 @@ function renderAutoPostHealth() {
   rawInventory.forEach(car => { const b = autoPostBlockerOf(car); if (b) counts[b]++; });
   const held = counts.price + counts.colors + counts.photos;
   const total = counts.ready + held + counts.filter;
-  if (!total) { bar.style.display = "none"; return; }
+  const flaggedCount = (reelFlaggedToday.day === localDayKey(new Date())) ? reelFlaggedToday.vins.size : 0;
+  if (!total && !flaggedCount) { bar.style.display = "none"; return; }
   const chip = (kind, label, cls, title) => {
     const active = autoPostBlockerFilter === kind;
     return `<button type="button" onclick="setAutoPostBlockerFilter('${kind}')" title="${title}" class="px-2.5 py-0.5 rounded-full border font-semibold cursor-pointer ${cls}${active ? " ring-2 ring-slate-700" : ""}">${label}</button>`;
@@ -10085,6 +10233,7 @@ function renderAutoPostHealth() {
     if (counts.photos) html += chip("photos", `${counts.photos} need photos`, "bg-amber-50 text-amber-700 border-amber-300", `Fewer than your minimum of ${selectedMinPhotos} usable photos`);
   }
   if (counts.filter) html += chip("filter", `${counts.filter} outside your posting filter`, "bg-white text-slate-500 border-slate-300", "Outside the locations / conditions picked in Automation — widen the filter there to include them");
+  if (flaggedCount) html += chip("novideo", `${flaggedCount} posted without video`, "bg-sky-50 text-sky-700 border-sky-300", "Posted today without their VIN Reel video — the render failed or the wait timed out, so the post went up without it (it never holds a car back)");
   bar.innerHTML = html;
   bar.style.display = "flex";
 }
@@ -10187,6 +10336,7 @@ function gridCardHtml(car) {
         <div class="text-[11px] text-slate-500 mt-1">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')} &bull; VIN: ${escapeHtml(car.vin || 'N/A')}</div>
         ${carColorsHtml(car)}
         ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(displayLocation(car.location_name))}</span></div>` : ''}
+        ${vinReelChipHtml(car)}
         <div class="flex items-baseline gap-2.5 pt-2">
           ${hasPrice(car)
             ? `<span class="text-sm font-bold text-blue-600">${priceText}</span>`
@@ -10198,6 +10348,9 @@ function gridCardHtml(car) {
         ${actions}
         <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="ai-gradient-btn w-8 h-8 shrink-0 rounded-xl flex items-center justify-center cursor-pointer">
           <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+        </button>
+        <button data-action="vin-reel" data-vin="${vinAttr}" title="VIN Reel — a narrated showcase video of this car" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+          <i class="fa-solid fa-clapperboard text-xs"></i>
         </button>
         <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
           <i class="fa-solid fa-ellipsis text-xs"></i>
@@ -10381,7 +10534,7 @@ ${car.location_name ? `
         </span>
       `
   }
-
+  ${vinReelChipHtml(car)}
 </td>
       <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2 relative">
@@ -10431,6 +10584,9 @@ ${car.location_name ? `
           <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="ai-gradient-btn w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer">
             <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
           </button>
+          <button data-action="vin-reel" data-vin="${vinAttr}" title="VIN Reel — a narrated showcase video of this car" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+            <i class="fa-solid fa-clapperboard text-xs"></i>
+          </button>
           <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
             <i class="fa-solid fa-ellipsis text-xs"></i>
           </button>
@@ -10461,6 +10617,16 @@ function toggleRowDropdown(event, vin) {
   const ddCar = rawInventory.find(c => c.vin === vin);
   const addItem = document.getElementById("dropdownAddPhotosItem");
   if (addItem) addItem.classList.toggle("hidden", !!ddCar && !addPhotosOffered(ddCar));
+
+  // VIN Reel item label follows the car's reel state.
+  const reelLabel = document.getElementById("dropdownVinReelLabel");
+  if (reelLabel && ddCar) {
+    const ddReel = vinReelFor(ddCar);
+    reelLabel.innerText = !ddReel ? "Create reel"
+      : ddReel.status === "ready" ? "View reel"
+      : ddReel.status === "failed" ? "Create reel (failed last time)"
+      : vinReelStatusText(ddReel);
+  }
 
   // The menu is position:fixed, so its coordinates are viewport
   // coordinates — scroll offsets must NOT be added (the old code
@@ -10514,6 +10680,7 @@ function handleDropdownAction(action) {
     case "add_photos": openAddPhotosModal(car.vin); break;
     case "sync_one": syncSingleCar(car.vin); break;
     case "listing_copy": openListingCopyModal(car); break;
+    case "create_reel": vinReelAction(vin); break;
     case "add_link": openAddFbLinkModal(car.vin); break;
     case "remove_inventory": removeVehicleFromInventory(car.vin); break;
   }
@@ -10667,6 +10834,15 @@ function buildShareDetailsText(car) {
   const dealerLines = [brandingState.name, brandingState.address]
     .map(s => String(s || "").trim()).filter(s => s);
   if (dealerLines.length) desc += `\n\n${dealerLines.join("\n")}`;
+  // REP CONTACT LINE (2026-11-06): the closing line of the
+  // description — the rep's own "Call or text" line from Settings
+  // (rep_display_name / rep_phone, restored into brandingState by
+  // the settings load). BOTH values required; either blank and the
+  // text stays byte-identical to before this change. Same line the
+  // VIN Reel end card draws.
+  const repName = String(brandingState.repName || "").trim();
+  const repPhone = String(brandingState.repPhone || "").trim();
+  if (repName && repPhone) desc += `\n\nCall or text ${repName} · ${repPhone}`;
   return desc;
 }
 
@@ -11052,15 +11228,15 @@ function addPhotosCar() {
   return rawInventory.find(c => c.vin === addPhotosVin) || null;
 }
 
-function openAddPhotosModal(vin) {
+async function openAddPhotosModal(vin) {
   const car = rawInventory.find(c => c.vin === vin);
   if (!car) return;
-  const customs = usableCustomPhotoUrls(car);
   const dealerCount = dealerUsablePhotoCount(car);
-  if (dealerCount > 0 && !customs.length) {
+  if (dealerCount > 0 && usableCustomCount(car) === 0) {
     alert("This car already has photos from the dealer's site — nothing to add. (Photos you add yourself are for cars the dealer's site shows with none.)");
     return;
   }
+  await ensureFullCar(car);
   addPhotosVin = vin;
   const title = document.getElementById("addPhotosTitle");
   if (title) title.textContent = `Add photos — ${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'}`;
@@ -11399,9 +11575,172 @@ async function saveExistingFbLink() {
   }
 }
 
-function openVehicleDetailsModal(car) {
+// =====================================================================
+// VIN REELS (Matthew, 2026-11-05): a per-car narrated showcase video,
+// rendered off-app by the VIN Reels worker from the car's real photos
+// and data. The app only queues (an insert into vin_reels) and
+// reflects state — chips on inventory cards/rows, the player in this
+// details modal. Creating a reel is an Automate feature
+// (TIER_FEATURES.vin_reels, so trial phase 1 sees the locked button
+// and phase 2 can create); watching a finished reel is never gated.
+// State refresh rides the queue poller (pollQueueTick) — no new
+// timers. The finished file lives at a stable public URL
+// (vin-reels bucket, <user_id>/<vin>.mp4) so the poster and the
+// TikTok channel can attach it later.
+// =====================================================================
+let vinReelsByVin = {};
+let vinReelsSig = "";
+let detailsReelVin = null;
+let detailsReelRenderedSig = "";
+
+function vinReelFor(car) {
+  return (car && vinReelsByVin[car.vin]) || null;
+}
+
+function vinReelStatusText(reel) {
+  if (!reel) return "";
+  if (reel.status === "queued") return "Reel queued…";
+  if (reel.status === "generating") return "Rendering reel…";
+  if (reel.status === "ready") return "Reel ready";
+  if (reel.status === "failed") return "Reel failed";
+  return "";
+}
+
+function vinReelChipHtml(car) {
+  const reel = vinReelFor(car);
+  if (!reel) return "";
+  const cls = reel.status === "ready"
+    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+    : reel.status === "failed"
+    ? "bg-rose-50 text-rose-700 border-rose-200"
+    : "bg-amber-50 text-amber-700 border-amber-200";
+  return `<div class="mt-1.5"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}"><i class="fa-solid fa-clapperboard mr-1"></i>${vinReelStatusText(reel)}</span></div>`;
+}
+
+async function refreshVinReels() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("vin_reels")
+      .select("id, vin, stock_number, status, video_url, error, created_at")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    // One display row per VIN: a live render wins, then the newest
+    // ready reel, then the newest failure (rows arrive newest-first,
+    // so the first row seen at the winning rank is the newest of it).
+    // 'consumed' rows (phase 2: the poster attached the reel, then
+    // deleted the file) are history only — their video_url is dead,
+    // so they must never render a chip or a player.
+    const rank = { queued: 0, generating: 0, ready: 1, failed: 2 };
+    const byVin = {};
+    (data || []).forEach(r => {
+      if (r.status === "consumed") return;
+      const cur = byVin[r.vin];
+      if (!cur || rank[r.status] < rank[cur.status]) byVin[r.vin] = r;
+    });
+    vinReelsByVin = byVin;
+    const sig = Object.keys(byVin).sort().map(v => {
+      const r = byVin[v];
+      return v + ":" + r.status + ":" + (r.video_url || "");
+    }).join(";");
+    if (sig !== vinReelsSig) {
+      vinReelsSig = sig;
+      if (typeof applyFilters === "function") applyFilters();
+    }
+    renderDetailsReelSection();
+  } catch (e) { /* reel state is decoration on the inventory view — a failed read must never break it */ }
+}
+
+async function vinReelAction(vin) {
+  const car = rawInventory.find(c => c.vin === vin);
+  if (!car || !currentUser) return;
+  const reel = vinReelFor(car);
+  if (reel && reel.status !== "failed") { openVehicleDetailsModal(car); return; }
+  if (!requireTier("vin_reels")) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("vin_reels")
+      .insert({ user_id: currentUser.id, vin: car.vin, stock_number: car.stock_num || car.stock_number || null, status: "queued" })
+      .select()
+      .single();
+    if (error) throw error;
+    vinReelsByVin[car.vin] = data;
+    if (typeof applyFilters === "function") applyFilters();
+    openVehicleDetailsModal(car);
+    refreshVinReels();
+  } catch (err) {
+    // 23505 = a live reel already exists for this VIN (double-click or
+    // a second device beat us to it) — that is the state we wanted.
+    if (err && (err.code === "23505" || /duplicate/i.test(err.message || ""))) {
+      refreshVinReels();
+      openVehicleDetailsModal(car);
+      return;
+    }
+    alert("Could not queue the reel: " + (err.message || err));
+  }
+}
+
+function vinReelSectionHtml(car) {
+  return `<div id="detailsReelSection">${vinReelSectionInnerHtml(car)}</div>`;
+}
+
+function renderDetailsReelSection() {
+  const el = document.getElementById("detailsReelSection");
+  if (!el || !detailsReelVin) return;
+  const car = rawInventory.find(c => c.vin === detailsReelVin);
+  if (!car) return;
+  const reel = vinReelFor(car);
+  const sig = detailsReelVin + ":" + (reel ? reel.status + ":" + (reel.video_url || "") : "none");
+  if (sig === detailsReelRenderedSig) return; // never restart a playing video on a poll tick
+  detailsReelRenderedSig = sig;
+  el.innerHTML = vinReelSectionInnerHtml(car);
+}
+
+function vinReelSectionInnerHtml(car) {
+  const reel = vinReelFor(car);
+  const head = `<div class="flex items-center gap-2 pt-1">
+      <i class="fa-solid fa-clapperboard text-slate-400 text-xs"></i>
+      <span class="text-[10px] uppercase font-bold text-slate-500">VIN Reel</span>
+    </div>`;
+  if (reel && reel.status === "ready" && reel.video_url) {
+    return `${head}
+    <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-900 mt-2">
+      <video controls playsinline preload="metadata" src="${escapeHtml(reel.video_url)}" class="w-full max-h-96"></video>
+    </div>
+    <div class="pt-2 flex items-center justify-end gap-2">
+      <a href="${escapeHtml(reel.video_url)}" download class="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-sm">
+        <i class="fa-solid fa-download text-[10px]"></i><span>Download</span>
+      </a>
+      <button type="button" onclick="vinReelAction('${escapeHtml(car.vin)}')" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-rotate text-[10px]"></i><span>Re-create</span>
+      </button>
+    </div>`;
+  }
+  if (reel && (reel.status === "queued" || reel.status === "generating")) {
+    return `${head}
+    <div class="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 font-semibold flex items-center gap-2">
+      <i class="fa-solid fa-hourglass-half"></i><span>${vinReelStatusText(reel)} — it will appear here when it's done.</span>
+    </div>`;
+  }
+  const failedNote = reel && reel.status === "failed"
+    ? `<div class="mt-2 p-3 bg-rose-50 rounded-xl border border-rose-200 text-xs text-rose-700">${escapeHtml(reel.error || "The last render failed.")}</div>` : "";
+  const allowed = tierAllows("vin_reels");
+  return `${head}${failedNote}
+  <div class="pt-2 flex justify-end">
+    <button type="button" onclick="vinReelAction('${escapeHtml(car.vin)}')" class="px-4 py-2 rounded-xl ${allowed ? "btn-gradient text-white" : "border border-slate-300 text-slate-500 bg-slate-50"} text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+      <i class="fa-solid ${allowed ? "fa-clapperboard" : "fa-lock"} text-[10px]"></i><span>${reel && reel.status === "failed" ? "Try again" : "Create reel"}</span>
+    </button>
+  </div>`;
+}
+
+async function openVehicleDetailsModal(car) {
+  car = await ensureFullCar(car);
   document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'} ${car.trim || ''}`;
   document.getElementById("detailsModalVin").innerText = `VIN: ${car.vin || 'N/A'} • Stock: ${car.stock_num || car.stock_number || 'N/A'}`;
+  detailsReelVin = car.vin;
+  detailsReelRenderedSig = "";
 
   // PHOTO GALLERY (Matthew, 2026-11-05): show ALL of the car's
   // pictures in the modal — a thumbnail strip under the big photo,
@@ -11458,9 +11797,11 @@ function openVehicleDetailsModal(car) {
         <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
       </a>
     </div>
+    ${vinReelSectionHtml(car)}
   `;
 
   document.getElementById("vehicleDetailsModal").classList.remove("hidden");
+  refreshVinReels();
 }
 
 async function removeVehicleFromInventory(vin) {
@@ -11742,6 +12083,20 @@ async function loadPostingQueue() {
         // (marketplace_posted_at drives the Posted pill), so nothing is
         // lost. Failed rows stay: they carry the error diagnostics.
         const allRows = data || [];
+        // VIN REELS PHASE 2: remember today's reel-flagged posts
+        // (posted rows carrying reel_failed) BEFORE the hygiene
+        // sweep below deletes the finished rows — the health
+        // bar's "posted without video" chip counts from this.
+        try {
+          const todayKey = localDayKey(new Date());
+          if (reelFlaggedToday.day !== todayKey) reelFlaggedToday = { day: todayKey, vins: new Set() };
+          allRows.forEach(i => {
+            if (i && i.reel_failed === true && i.status === "posted" && i.vin && i.created_at
+                && localDayKey(new Date(i.created_at)) === todayKey) {
+              reelFlaggedToday.vins.add(i.vin);
+            }
+          });
+        } catch (e) { /* the chip is informational; never break the queue load */ }
         const doneRows = allRows.filter(i => i.status === "posted" || i.status === "completed");
         postingQueue = allRows.filter(i => i.status !== "posted" && i.status !== "completed");
         syncQueueBulkBar();
@@ -11955,6 +12310,7 @@ async function pollQueueTick() {
 
         if (modalOpen) await loadPostingQueue();       // list + sidebar badge
         if (invVisible) await pollInventoryDelta(); // rows + Posted pills (delta — full reload stays on sign-in/Sync)
+        await refreshVinReels(); // VIN Reel chips + details-modal player ride this poller — no new timers
 
         if (card) card.scrollTop = cardScroll;
         if (window.scrollY !== winScroll) window.scrollTo(0, winScroll);
@@ -17077,6 +17433,34 @@ async function toggleAllowPostWithoutColorsSetting(el) {
   }
 }
 
+// Make a video before posting (Matthew, 2026-11-05): writes
+// user_settings.vin_reel_before_post immediately, like the
+// colors waiver. The scraper's auto-post pass reads the same
+// column and holds marketplace rows behind poster VIN Reels
+// while it is on. Turning it ON belongs to the VIN Reels
+// feature, so it carries that plan gate; turning it off is
+// always allowed.
+async function toggleVinReelBeforePostSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  // PLANS: the hold only matters for VIN Reels (enabling only).
+  if (value && !requireTier("vin_reels")) { el.checked = false; return; }
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        vin_reel_before_post: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    vinReelBeforePostSetting = value;
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the video-before-posting setting: " + (err.message || "Unknown error"));
+  }
+}
+
 // The Settings modal's Auto Posting switch controls the same column as the
 // ribbon's "Auto-post new arrivals" switch. Route it through the same save.
 async function toggleSettingsAutoPost(el) {
@@ -17860,7 +18244,7 @@ function toggleSelectAllCars(master) {
 
 // Branding frame state (logo + contact strip): restores from user_settings
 // in loadUserStoreSettings and persists via best-effort upserts.
-const brandingState = { enabled: false, logoUrl: "", name: "", address: "" };
+const brandingState = { enabled: false, logoUrl: "", name: "", address: "", repName: "", repPhone: "" };
 
 // ---------- Branding frame ----------
 // The logo lives in the public "branding" Storage bucket under the user's
