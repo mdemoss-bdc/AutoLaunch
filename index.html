@@ -14481,6 +14481,9 @@ const TRADE_TABLE = "trade_appraisals";
 const TRADE_PAGE_URL = "https://autolaunch.org/trade.html";
 let tradeAppraisals = [];
 let tradeToken = null;
+let tradeCode = null;
+function tradeLinkId() { return tradeCode || tradeToken; }
+function genTradeCode() { const A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let s = ""; for (let i = 0; i < 12; i++) s += A[Math.floor(Math.random() * A.length)]; return s; }
 let tradeDetailId = null;
 
 const TRADE_QUESTIONS = [
@@ -14527,10 +14530,11 @@ async function ensureTradeToken() {
     if (!tradeToken) {
       const { data } = await supabaseClient
         .from("user_settings")
-        .select("trade_token")
+        .select("trade_token, trade_code")
         .eq("user_id", currentUser.id)
         .maybeSingle();
       if (data && data.trade_token) tradeToken = data.trade_token;
+      if (data && data.trade_code) tradeCode = data.trade_code;
     }
     if (!tradeToken) {
       tradeToken = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())) + "-" + Math.random().toString(36).slice(2, 10);
@@ -14539,7 +14543,16 @@ async function ensureTradeToken() {
         .upsert({ user_id: currentUser.id, trade_token: tradeToken }, { onConflict: "user_id" });
       if (error) throw error;
     }
-    if (input) input.value = TRADE_PAGE_URL + "?t=" + tradeToken;
+    if (!tradeCode) {
+      try {
+        tradeCode = genTradeCode();
+        const { error } = await supabaseClient
+          .from("user_settings")
+          .upsert({ user_id: currentUser.id, trade_code: tradeCode }, { onConflict: "user_id" });
+        if (error) { console.warn("Trade code setup failed:", error); tradeCode = null; }
+      } catch (e2) { console.warn("Trade code setup failed:", e2); tradeCode = null; }
+    }
+    if (input) input.value = TRADE_PAGE_URL + "?t=" + tradeLinkId();
   } catch (e) {
     console.warn("Trade token setup failed:", e);
     if (input) input.value = "Your link couldn't be loaded — reopen this page to retry.";
@@ -14550,7 +14563,7 @@ async function copyTradeLink() {
   const input = document.getElementById("tradeLinkInput");
   const status = document.getElementById("tradeLinkStatus");
   if (!input || !tradeToken) return;
-  const link = TRADE_PAGE_URL + "?t=" + tradeToken;
+  const link = TRADE_PAGE_URL + "?t=" + tradeLinkId();
   try {
     await navigator.clipboard.writeText(link);
     if (status) status.innerText = "Copied — send it to your customer.";
@@ -15307,7 +15320,7 @@ async function copyProspectTradeLink(id, btn) {
   };
   try { if (!tradeToken) await ensureTradeToken(); } catch (e) { /* ensureTradeToken is fail-soft; the token check below decides */ }
   if (!tradeToken) { flash("⚠ Link unavailable"); return; }
-  const link = TRADE_PAGE_URL + "?t=" + tradeToken;
+  const link = TRADE_PAGE_URL + "?t=" + tradeLinkId();
   let ok = false;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     try { await navigator.clipboard.writeText(link); ok = true; } catch (e) { ok = false; }

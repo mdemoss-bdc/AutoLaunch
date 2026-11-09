@@ -221,7 +221,7 @@ const photos = { vin: null, dash: null, gallery: [] };
 
 document.getElementById("disclaimerTop").textContent = DISCLAIMER;
 document.getElementById("disclaimerBottom").textContent = DISCLAIMER;
-if (!token || token.length < 16) {
+if (!token || token.length < 8) {
   document.getElementById("formRoot").classList.add("hidden");
   document.getElementById("badLinkRoot").classList.remove("hidden");
 }
@@ -1023,7 +1023,7 @@ function isValid() {
 // sits there silently. Returns "" when nothing is missing, and null
 // when the form itself is hidden (bad link), where no line is needed.
 function firstUnmetReason() {
-  if (token.length < 16) return null;
+  if (token.length < 8) return null;
   if (typedVinCheckDigitBad()) return "That VIN doesn't check out — please double-check it against the VIN plate";
   if (photoGate.vin.verdict === "mismatch") return VIN_MISMATCH_MSG;
   if (photoGate.miles.verdict === "mismatch") return MILES_MISMATCH_MSG;
