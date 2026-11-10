@@ -1006,7 +1006,7 @@ function allAnswered() {
   return QUESTIONS.every((_, i) => document.querySelector('input[name="q' + (i + 1) + '"]:checked'));
 }
 function isValid() {
-  return token.length >= 16
+  return token.length >= 8
     && document.getElementById("fName").value.trim().length > 1
     && document.getElementById("fContact").value.trim().length > 3
     && document.getElementById("fVin").value.trim().length > 0
@@ -1020,10 +1020,11 @@ function isValid() {
 }
 // Plain-words name for the first unmet submit requirement (mirrors
 // isValid), shown directly above the button so a disabled button never
-// sits there silently. Returns "" when nothing is missing, and null
-// when the form itself is hidden (bad link), where no line is needed.
+// sits there silently. Returns "" when nothing is missing. A short or
+// malformed link code gets its own plain message, and the fallthrough
+// always names something, so a disabled button is never unexplained.
 function firstUnmetReason() {
-  if (token.length < 8) return null;
+  if (token.length < 8) return "This link looks incomplete — please ask us to resend it";
   if (typedVinCheckDigitBad()) return "That VIN doesn't check out — please double-check it against the VIN plate";
   if (photoGate.vin.verdict === "mismatch") return VIN_MISMATCH_MSG;
   if (photoGate.miles.verdict === "mismatch") return MILES_MISMATCH_MSG;
@@ -1042,7 +1043,7 @@ function firstUnmetReason() {
     return "Add " + need + " more photo" + (need === 1 ? "" : "s") + " to continue (" + galleryCount + " of 6 added)";
   }
   if (!document.getElementById("ackBox").checked) return "Check the Fair-condition box to continue";
-  return "";
+  return "Something above still needs attention";
 }
 function refresh() {
   judgeVinPhoto();
