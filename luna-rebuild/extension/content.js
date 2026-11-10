@@ -944,6 +944,48 @@
 //     gate — a car with no dealer photos gains nothing
 //     from its card and fails the gate exactly as today.
 
+// 46. RICH DESCRIPTIONS (REBUILD ONLY — Matthew, 2026-11-10;
+//     unreleased: no version bump, no store build, no desk
+//     load — the version is assigned if and when this is
+//     promoted): the plain one-template description gains
+//     the rich emoji format competitor posters use — an
+//     emoji spec header, a one-line intro, a HIGHLIGHTS
+//     block (scraped claims, then factory packages), and
+//     categorized feature sections — fed ONLY by the car's
+//     scraped VDP payload (scraped_inventory.vdp_features,
+//     captured by the rebuild scraper from the dealer's own
+//     vehicle page: its Highlighted Features shortlist, its
+//     factory package list, exact-phrase claims matched in
+//     the page's own description prose, and the most
+//     specific engine/transmission strings the page
+//     publishes). GROUNDING RULE: nothing renders that is
+//     not in the payload — no invented features, no
+//     inferred claims, no fact-asserting blurbs; feature
+//     names print plain. The account switch
+//     (user_settings.rich_descriptions, default OFF) rides
+//     the job as job.richDesc exactly like include_stock;
+//     OFF — or ON with no usable payload — and
+//     buildDescription's plain path runs BYTE-IDENTICAL to
+//     before this feature existed: the rich branch only
+//     ever REPLACES the plain text wholesale, it never
+//     edits it. Package dollar values are factory OPTION
+//     prices, never the car's: packages print as names
+//     only, and the pure renderer's final guard refuses
+//     the rich text outright if any $ figure other than
+//     the advertised price survives. A car whose price
+//     state is the dealer's own "call"/"none" (or a
+//     non-positive stored price) renders NO Price line at
+//     all — the plain template's unconditional "$0" is a
+//     plain-path wart the rich path does not repeat. The
+//     Mileage / Price / VIN / Stock / CARFAX facts and the
+//     mileage-default disclosure print verbatim from the
+//     same rows the plain path reads; the contact line
+//     keeps the note-45 both-required rule. The renderer
+//     is the [PURE-RICHDESC] block below — one text shared
+//     byte-for-byte with the worker's share builder and
+//     the app's share text, so the three description
+//     surfaces can never drift.
+
 
 (async function () {
   const stored = await chrome.storage.local.get([
@@ -978,6 +1020,9 @@
   // buildDescription adds a "Stock #:" line under the VIN; off (or
   // absent on an older job), the description is unchanged.
   const includeStock = job.includeStock === true;
+  // Rich descriptions (REBUILD, header note 46): the
+  // account switch, carried exactly like include_stock.
+  const richDesc = job.richDesc === true;
 
   // Intro video (v2.1.53, header note 27): the worker resolved
   // the user's preference at claim time and carried the clip on
@@ -3763,6 +3808,246 @@
   }
 
   // ---- description ------------------------------------------------------
+  // [PURE-RICHDESC-BEGIN] — extracted and unit-exercised by
+  // the test harness; keep free of DOM/chrome references.
+  // Rich listing descriptions (REBUILD, 2026-11-10 — Matthew's
+  // build; header note 46 in the content script and the
+  // worker): the emoji format the competitor posters use, fed
+  // ONLY by the car's scraped VDP payload (scraped_inventory
+  // .vdp_features — highlights, factory packages, exact-phrase
+  // claims, and the most specific engine/transmission strings,
+  // captured by the rebuild scraper from the dealer's own
+  // vehicle page). GROUNDING RULE: nothing renders that is not
+  // in the payload — no invented features, no inferred claims,
+  // no fact-asserting blurbs; the feature names print plain.
+  // When the account's rich_descriptions setting is off the
+  // composers never call this; when it is on but the car
+  // carries no usable payload, buildRichDescription returns ""
+  // and every composer falls back to the plain template
+  // BYTE-IDENTICAL to before this feature existed. PRICE
+  // RULE: package dollar values are factory OPTION prices,
+  // not the car's price — a package prints as its name only
+  // (richPackageName strips the value tail), and a final guard
+  // refuses the rich text outright when any $ figure other
+  // than the advertised price line survives. The one exception
+  // is the composer's own facts block: the advertised "Price:"
+  // line, which the guard counts exactly.
+  // Category map: the Highlighted Features shortlist is sorted
+  // by keyword, tested in the order safety → capability →
+  // tech → comfort (first match wins), so "Adaptive Cruise
+  // Control" lands in safety (adaptive cruise beats the plain
+  // cruise-control comfort term) and heated tech never
+  // outranks a safety term. Unmatched items are still real
+  // scraped features — they print under MORE FEATURES, capped
+  // like every section (section cap 6, package cap 8) so the
+  // post stays readable.
+  const RICH_SECTION_CAP = 6;
+  const RICH_PACKAGE_CAP = 8;
+  const RICH_FEATURE_CATEGORIES = [
+    { key: "safety", re: /\b(blind spot|lane|collision|brake assist|emergency brak|automatic braking|backup camera|back-up camera|rear view camera|rearview camera|parking sensor|park assist|parking assist|cross traffic|pedestrian|airbags?|air bags?|traction control|stability control|tire pressure|tpms|anti-lock|antilock|abs|adaptive cruise|hill hold|hill descent|daytime running)\b/ },
+    { key: "capability", re: /\b(4wd|awd|4x4|four-wheel|all-wheel|front-wheel drive|rear-wheel drive|tow|towing|hitch|trailer|payload|bed liner|tonneau|skid plate|off-road|off road|differential|transfer case|axle ratio|ground clearance|fox racing|roof rack|running boards?|side steps?|locking hubs?|sway control)\b/ },
+    { key: "tech", re: /\b(bluetooth|carplay|android auto|navigation|wi-fi|wifi|hotspot|usb|touchscreen|touch screen|infotainment|satellite radio|siriusxm|hd radio|speakers?|sound system|audio system|wireless charging|aux input|voice recognition|voice control|sync|uconnect|onstar|telematics|hands-free|hands free)\b/ },
+    { key: "comfort", re: /\b(heated|cooled|ventilated|leather|seats?|seating|sunroof|moonroof|climate|air conditioning|a\/c|remote start|remote engine start|keyless|cruise control|lumbar|armrest|steering wheel|memory|dual-zone|tri-zone|floor mats|all-weather)\b/ }
+  ];
+  function richFeatureCategory(name) {
+    const t = String(name == null ? "" : name).toLowerCase();
+    for (let i = 0; i < RICH_FEATURE_CATEGORIES.length; i++) {
+      if (RICH_FEATURE_CATEGORIES[i].re.test(t)) {
+        return RICH_FEATURE_CATEGORIES[i].key;
+      }
+    }
+    return "other";
+  }
+  function richPackageName(pkg) {
+    // "Spray-In Bed Liner ($595 value)" → "Spray-In Bed
+    // Liner": only a parenthetical carrying a $ figure is
+    // stripped, so a real name parenthetical survives.
+    return String(pkg == null ? "" : pkg)
+      .replace(/\s*\([^)]*\$[^)]*\)\s*$/, "")
+      .trim();
+  }
+  function richTrimDisplay(car) {
+    // The stored trim is slug-corrupted on most rows — the
+    // VDP URL slug glued to the VIN ("SE-1FADP3KE3GL273598",
+    // "HYBRID-RX-350h-LUXURY-AWD-<VIN>"). Repair ONLY that
+    // exact shape: strip the "-<VIN>" tail and un-slug the
+    // remainder ("Black-Edition" → "Black Edition"). A clean
+    // stored trim passes through untouched.
+    let t = String((car && car.trim) || "").trim();
+    const vin = String((car && car.vin) || "").trim();
+    if (t && vin &&
+        t.toUpperCase().endsWith("-" + vin.toUpperCase())) {
+      t = t.slice(0, t.length - vin.length - 1)
+        .replace(/-/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    return t;
+  }
+  function buildRichDescription(car, settings) {
+    const vf = (car && typeof car.vdp_features === "object" &&
+      car.vdp_features) ? car.vdp_features : null;
+    if (!vf) return "";
+    const s = settings || {};
+    const highlights = (Array.isArray(vf.highlights)
+      ? vf.highlights : [])
+      .map(x => String(x == null ? "" : x).trim())
+      .filter(x => x);
+    const claims = (vf.claims && typeof vf.claims === "object")
+      ? vf.claims : {};
+    const packages = (Array.isArray(vf.packages) ? vf.packages : [])
+      .map(richPackageName)
+      .filter(x => x);
+    const anyClaim = claims.one_owner === true ||
+      claims.no_accidents === true;
+    if (!highlights.length && !packages.length && !anyClaim) {
+      return "";
+    }
+    // Mileage posture: the composer's rules exactly (stored
+    // >= 300 wins; an exact stored 1,000 on a New car is the
+    // new-car default; below 300 / absent = unproven → the
+    // 1,000 working figure with the default disclosure).
+    const stored = (car.mileage != null && car.mileage !== "")
+      ? Number(car.mileage) : null;
+    const isNew = /^new$/i.test(String(car.condition || "").trim());
+    const lm = (stored !== null && stored >= 300)
+      ? { miles: stored, defaulted: isNew && stored === 1000 }
+      : { miles: 1000, defaulted: true };
+    const title = (`${car.year || ""} ${car.make || ""} ` +
+      `${car.model || "Vehicle"} ${richTrimDisplay(car)}`)
+      .trim().replace(/\s+/g, " ");
+    const stockRaw = (car.stock_num != null &&
+      String(car.stock_num).trim())
+      ? car.stock_num : car.stock_number;
+    const stock = stockRaw != null ? String(stockRaw).trim() : "";
+    const carfax = car.carfax_url != null
+      ? String(car.carfax_url).trim() : "";
+    const engine = typeof vf.engine_detail === "string"
+      ? vf.engine_detail.trim() : "";
+    const trans = typeof vf.transmission_detail === "string"
+      ? vf.transmission_detail.trim() : "";
+    // The facts block: the composer's lines, in the
+    // composer's order, under the emoji header — Price
+    // (omitted when there is no usable advertised price: the
+    // scraper's call/none states, or a non-positive stored
+    // price), then VIN, Stock # (setting-gated), the CARFAX
+    // line, and the mileage-default disclosure verbatim.
+    const lines = [];
+    lines.push(`🔥 ${title} 🔥`);
+    if (car.color &&
+        String(car.color).trim().toLowerCase() !== "standard") {
+      lines.push(`🎨 Color: ${car.color}`);
+    }
+    if (car.interior_color &&
+        String(car.interior_color).trim().toLowerCase() !== "standard") {
+      lines.push(`🪑 Interior: ${car.interior_color}`);
+    }
+    if (lm.miles != null) {
+      lines.push(`🛣️ Miles: ${lm.miles.toLocaleString()}`);
+    }
+    const engParts = [];
+    if (engine) engParts.push(`Engine: ${engine}`);
+    if (trans) engParts.push(`Transmission: ${trans}`);
+    if (engParts.length) {
+      lines.push(`⚙️ ${engParts.join(" | ⚙️ ")}`);
+    }
+    const priceStatus = String(car.price_status || "")
+      .trim().toLowerCase();
+    const priceNum = car.price != null ? Number(car.price) : 0;
+    const hasPrice = priceStatus !== "call" &&
+      priceStatus !== "none" && priceNum > 0;
+    if (hasPrice) {
+      lines.push(`Price: $${priceNum.toLocaleString()}`);
+    }
+    if (car.vin) lines.push(`VIN: ${car.vin}`);
+    if (s.includeStock === true && stock) {
+      lines.push(`Stock #: ${stock}`);
+    }
+    if (carfax) lines.push(`CARFAX report: ${carfax}`);
+    if (lm.defaulted) {
+      lines.push(isNew
+        ? "Brand new vehicle — the mileage shown is a listing default; actual miles may be less."
+        : "Mileage shown is a listing default — exact miles were not published for this vehicle; ask us for the current odometer reading.");
+    }
+    // Intro: real attributes only — the body word comes from
+    // the car's own scraped body_type, the rest is generic
+    // connective phrasing that asserts nothing.
+    const bt = String(car.body_type || "").trim().toLowerCase();
+    const bodyWord = bt.includes("truck") ? "truck"
+      : bt.includes("suv") ? "SUV"
+      : bt.includes("van") ? "van"
+      : bt.includes("coupe") ? "coupe"
+      : bt.includes("convertible") ? "convertible"
+      : bt.includes("hatchback") ? "hatchback"
+      : bt.includes("sedan") ? "sedan" : "vehicle";
+    lines.push("");
+    lines.push(`Looking for your next ${bodyWord}? This ${title} is on the lot and ready to go — here's what it brings:`);
+    // HIGHLIGHTS: the scraped claims first (exact-phrase
+    // flags only — never inferred), then the factory
+    // packages by NAME.
+    const hl = [];
+    if (claims.one_owner === true) hl.push("✅ ONE OWNER! 👤");
+    if (claims.no_accidents === true) hl.push("✅ NO ACCIDENTS!");
+    if (packages.length) {
+      hl.push("✅ Factory packages:");
+      for (const p of packages.slice(0, RICH_PACKAGE_CAP)) {
+        hl.push(`• ${p}`);
+      }
+    }
+    // Categorized sections from the highlights shortlist.
+    const buckets = { comfort: [], tech: [], safety: [], capability: [], other: [] };
+    const seenH = new Set();
+    for (const h of highlights) {
+      const k = h.toLowerCase();
+      if (seenH.has(k)) continue;
+      seenH.add(k);
+      buckets[richFeatureCategory(h)].push(h);
+    }
+    const SECTION_ORDER = [
+      ["comfort", "👑 COMFORT & CONVENIENCE 👑"],
+      ["tech", "📶 TECH & CONNECTIVITY 📶"],
+      ["safety", "🛡️ SAFETY & DRIVER ASSIST 🛡️"],
+      ["capability", "⚡ CAPABILITY ⚡"],
+      ["other", "🔹 MORE FEATURES 🔹"]
+    ];
+    const sections = [];
+    if (hl.length) {
+      sections.push("✨ VEHICLE HIGHLIGHTS ✨\n" + hl.join("\n"));
+    }
+    for (const [key, head] of SECTION_ORDER) {
+      const items = buckets[key].slice(0, RICH_SECTION_CAP);
+      if (items.length) {
+        sections.push(head + "\n" +
+          items.map(i => `• ${i}`).join("\n"));
+      }
+    }
+    if (!sections.length) return "";
+    let desc = lines.join("\n") + "\n\n" + sections.join("\n\n");
+    // Closing: the existing tagline, dealer block, and rep
+    // contact line — the composer's elements, unchanged (the
+    // contact pair through the same both-required rule as
+    // repContactLine in the helper composers; the app mirror
+    // inlines the pair the same way its plain path does).
+    desc += "\n\nInspected and frontline ready. Message to set up a test drive!";
+    const dealerLines = [s.dealershipName, s.dealershipAddress]
+      .map(x => typeof x === "string" ? x.trim() : "")
+      .filter(x => x);
+    if (dealerLines.length) desc += `\n\n${dealerLines.join("\n")}`;
+    const rn = typeof s.repName === "string" ? s.repName.trim() : "";
+    const rp = typeof s.repPhone === "string" ? s.repPhone.trim() : "";
+    if (rn && rp) desc += `\n\nCall or text ${rn} · ${rp}`;
+    // PRICE GUARD: every $ in the text must be the advertised
+    // price itself; anything else refuses the rich text and
+    // the composer falls back to the plain template.
+    const dollarCount = (desc.match(/\$/g) || []).length;
+    const priceCount = hasPrice
+      ? desc.split(`$${priceNum.toLocaleString()}`).length - 1
+      : 0;
+    if (dollarCount !== priceCount) return "";
+    return desc;
+  }
+  // [PURE-RICHDESC-END]
+
   // [PURE-CONTACT-BEGIN] — extracted and unit-exercised by
   // the test harness; keep free of DOM/chrome references.
   // The rep contact line (v2.1.90, header note 45): the ONE
@@ -3783,6 +4068,21 @@
   // [PURE-CONTACT-END]
 
   function buildDescription() {
+    // Rich descriptions (REBUILD, header note 46): ON +
+    // a usable scraped payload and the rich composer
+    // builds the text; OFF (or no payload) and the plain
+    // template below runs BYTE-IDENTICAL to before this
+    // feature existed.
+    if (richDesc) {
+      const rich = buildRichDescription(car, {
+        includeStock,
+        dealershipName,
+        dealershipAddress,
+        repName,
+        repPhone
+      });
+      if (rich) return rich;
+    }
     const title = `${car.year || ""} ${car.make || ""} ${car.model || "Vehicle"} ${car.trim || ""}`.trim();
     const lm = listingMileage();
     // Stock number (v2.1.43, Matthew's request): with the user's

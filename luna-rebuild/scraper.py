@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+from html import unescape as _html_unescape
 from typing import List
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
@@ -1661,6 +1662,387 @@ def _parse_dws_vdp(html: str, out: dict) -> dict:
     return out
 
 
+# ==============================================================================
+# ==================== RICH DESCRIPTION PAYLOAD (2026-11-10) ===================
+# ==============================================================================
+# REBUILD ONLY (Matthew, 2026-11-10 — "Build it — rich descriptions",
+# perfected in the rebuild before any promotion). The Marketplace
+# description's rich format is fed ONLY by what the dealer's own VDP
+# publishes — the grounding rule is absolute: a feature, package, or
+# claim that is not in this payload never appears in a description.
+#
+# _extract_vdp_features() is a PURE function over one VDP's raw HTML
+# (the same document parse_vdp_details already holds). It NEVER
+# raises: any missing or garbled section yields None / empty lists.
+# Sources, in the page's own shapes (Dealer.com "vhcliaa" template):
+# * highlights — the "Highlighted Features" shortlist
+#   (span.vehicle-highlights__label items).
+# * all_features — the tabbed feature panes under "All Features".
+#   Two tab vocabularies exist across stores (Mechanical/Exterior/
+#   Entertainment/Interior/Safety vs Comfort/Convenience/Technology
+#   and telematics/...); BOTH flatten to one deduped list. The
+#   Charleston store's prose format is handled by keeping only the
+#   bolded name ("**Seating capacity**: 6" -> "Seating capacity: 6")
+#   and dropping the marketing blurb after it. The "Specs" pane is
+#   EXCLUDED by design: it is a measurement table, and the page's
+#   own header numbers can contradict it (a Focus header reads
+#   28/40 MPG where its Specs pane says 26/36) — spec-table numbers
+#   are never republished.
+# * packages + claims — from the JSON-LD description prose. Claims
+#   are EXACT-PHRASE matches ("No Accidents!" / "One Owner!") on
+#   the tag-flattened text — never inferred, never paraphrased.
+#   Packages are the "What this vehicle includes:" entries, which
+#   arrive as vc_build_package_name <h4>s carrying "($N value)";
+#   the name keeps its value in storage (a factory option price,
+#   not the car's price) and the RENDERER prints names only.
+#   Fallback for descriptions without the <h4> shape: the sentence
+#   after the "What this vehicle includes:" marker, split on
+#   commas, minus any parenthetical dollar values and minus the
+#   trailing feature-prose section.
+# * engine_detail / transmission_detail — the MOST SPECIFIC string
+#   wins: an "Engine: ..." line inside the feature panes ("Engine:
+#   2.0L I-4 DOHC 16-Valve i-VTEC", "ENGINE: 1.0L ECOBOOST SFE")
+#   beats the Vehicle Information header pair, whose Honda strings
+#   are generic ("V6 Cylinder Engine", "4 Cylinder Engine") and
+#   whose Focus engine string ("3 Cylinder Engine") is flatly
+#   generic next to the pane's own EcoBoost line. The header pair
+#   is the fallback when no pane line exists. "Standard
+#   Equipment"-style JSON-LD dumps (new cars) are NOT mined — the
+#   panes carry the same content in structured form.
+
+def _vdp_clean_text(fragment: str) -> str:
+    """Flatten an HTML fragment to visible text: tags out, entities
+    decoded, whitespace collapsed."""
+    if not fragment:
+        return ""
+    t = re.sub(r"<[^>]+>", " ", fragment)
+    t = _html_unescape(t)
+    return " ".join(t.split())
+
+
+def _extract_vdp_features(html: str) -> dict:
+    """Build the rich-description payload from one VDP's raw HTML.
+    Returns the payload dict, or None when the page carries nothing
+    usable at all. Never raises."""
+    payload = {
+        "highlights": [],
+        "all_features": [],
+        "packages": [],
+        "claims": {"no_accidents": False, "one_owner": False},
+        "engine_detail": None,
+        "transmission_detail": None,
+    }
+    try:
+        if not html:
+            return None
+        # Fence to THIS car: the cross-sell rail repeats other cars'
+        # blocks (the same scoping the price_status rule applies).
+        _cut = len(html)
+        for _marker in (
+            "vehicles you might like",
+            "you may also like",
+            "similar vehicles",
+            "recommended vehicles",
+        ):
+            _idx = html.lower().find(_marker)
+            if 0 <= _idx < _cut:
+                _cut = _idx
+        own = html[:_cut]
+
+        _pane_engine = None
+        _pane_transmission = None
+
+        # ---- highlights: the labelled shortlist.
+        seen_h = set()
+        for m in re.finditer(
+            r'vehicle-highlights__label"[^>]*>(.*?)</span>', own, re.S
+        ):
+            t = _vdp_clean_text(m.group(1))
+            if t and t.lower() not in seen_h:
+                seen_h.add(t.lower())
+                payload["highlights"].append(t)
+        if len(payload["highlights"]) < 2:
+            # SECOND HIGHLIGHT FORM (seen on the newest pages):
+            # the shortlist is re-published inside the JSON-LD /
+            # build prose as "Key Features:" — a comma run of
+            # names, each terminated by its detail sentence
+            # ("... comes to life. Blind Spot Information (BSI)
+            # System ... senses than ever before. Wireless Apple
+            # CarPlay® ..."). A name is the sentence-final chunk
+            # ending in a known feature noun; sentences without
+            # one are pure blurb and are skipped. Only a small,
+            # sane harvest lands (3-25 names) — the shortlist is
+            # the render source, and a garbage harvest must
+            # never become one.
+            _dm = re.search(
+                r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>',
+                own, re.S | re.I,
+            )
+            _desc = ""
+            if _dm:
+                try:
+                    _data = json.loads(_dm.group(1).strip())
+                except Exception:
+                    _data = None
+                _items = (
+                    _data if isinstance(_data, list)
+                    else (_data.get("@graph")
+                          if isinstance(_data, dict)
+                          and isinstance(_data.get("@graph"), list)
+                          else [_data])
+                )
+                for _it in _items:
+                    if (isinstance(_it, dict)
+                            and isinstance(_it.get("description"), str)):
+                        _desc = _it["description"]
+                        break
+            _kf = re.search(r"Key Features:\s*(.+)", _desc, re.S)
+            if _kf:
+                _noun = re.compile(
+                    r"(Seat|Seats|Camera|Camera System|System|Monitor|"
+                    r"Alert|Assist|Control|Sensing|CarPlay|Android Auto|"
+                    r"Bluetooth|Wheel|Wheels|Sunroof|Moonroof|Roof|"
+                    r"Mirror|Mirrors|Entry|Start|Gate|Door|Doors|"
+                    r"Display|Screen|Audio|Radio|Connectivity|Charging|"
+                    r"Lighting|Lights|Headlights|Brakes|Brake Assist|"
+                    r"Package|Group)$"
+                )
+                _harvest = []
+                _seen_k = set()
+                for _sent in re.split(r"(?<=[.!])\s+", _kf.group(1)):
+                    _sent = _sent.strip()
+                    if not _sent or len(_sent) > 400:
+                        continue
+                    _tail = re.split(r"\.\s+", _sent)[-1].strip()
+                    _tail = _tail.rstrip(".!").strip()
+                    if not _tail or len(_tail) > 60:
+                        continue
+                    _words = _tail.split()
+                    if not (1 <= len(_words) <= 8):
+                        continue
+                    if not _noun.search(_tail):
+                        continue
+                    _low = _tail.lower()
+                    if _low in _seen_k:
+                        continue
+                    _seen_k.add(_low)
+                    _harvest.append(_tail)
+                    if len(_harvest) >= 25:
+                        break
+                if 3 <= len(_harvest) <= 25:
+                    payload["highlights"] = _harvest
+
+        # ---- all features: every tab pane except Specs.
+        tabs = re.findall(
+            r'feature-tabs__label tab-label">([^<]+)</', own
+        )
+        seen_f = set()
+        for tab in tabs:
+            tab = tab.strip()
+            if not tab or tab.lower() == "specs":
+                continue
+            pm = re.search(
+                r'id="' + re.escape(tab.replace(" ", "")) + r'"[^>]*>(.*?)(?=<div class="feature-tab|\Z)',
+                own,
+                re.S,
+            )
+            if not pm:
+                continue
+            for lm in re.finditer(r"<li[^>]*>(.*?)</li>", pm.group(1), re.S):
+                frag = lm.group(1)
+                sm = re.match(
+                    r"\s*<strong>(.*?)</strong>(.*)\Z", frag, re.S
+                )
+                if sm:
+                    name = _vdp_clean_text(sm.group(1))
+                    rest = _vdp_clean_text(sm.group(2))
+                    # Prose format: bolded name, then the fact after
+                    # a colon ("Seating capacity: 6"); a blurb with
+                    # no colon fact is marketing copy — name only.
+                    rm = re.match(r"^:\s*([^.]{1,60})$", rest)
+                    item = f"{name}: {rm.group(1).strip()}" if rm else name
+                else:
+                    item = _vdp_clean_text(frag)
+                if not item or len(item) > 200:
+                    continue
+                # The facts tables ride the same panes as plain
+                # "Label: value" items (interior/exterior colors,
+                # bed length, MPG, drivetrain...). They are spec
+                # data, not features: the render never uses them
+                # (the header-block sources win by design — the
+                # FOCUS RULE), so they never enter storage. The
+                # Engine:/Transmission: items are the ONE
+                # exception to the skip: they are skipped HERE
+                # (they are not features) but harvested into
+                # engine_detail / transmission_detail below,
+                # before the header-pair fallback runs.
+                _eng = re.match(r"(?i)^engine\s*:\s*(.+)$", item)
+                _trn = re.match(r"(?i)^transmission\s*:\s*(.+)$", item)
+                if _eng and _eng.group(1).strip():
+                    _pane_engine = _eng.group(1).strip()
+                if _trn and _trn.group(1).strip():
+                    _pane_transmission = _trn.group(1).strip()
+                if re.match(
+                    r"(?i)^(engine|transmission|exterior color|"
+                    r"interior color|body style|bed length|"
+                    r"epa classification|mpg|fuel|drivetrain|"
+                    r"passenger capacity|overall length|"
+                    r"overall width|overall height|wheelbase|"
+                    r"cargo|turning radius|curb weight|gvwr|"
+                    r"seating capacity)\s*:",
+                    item,
+                ):
+                    continue
+                if item.lower() in seen_f:
+                    continue
+                seen_f.add(item.lower())
+                payload["all_features"].append(item)
+
+        # ---- engine / transmission: the pane HEADER line first
+        # (the Focus Options pane leads with a standalone
+        # "<p><strong>ENGINE: 1.0L ECOBOOST SFE</strong></p>" — the
+        # most specific string on the page, and NOT an <li>, so the
+        # list scan above never sees it), then an "Engine: ..." item
+        # inside the panes, then the header pair as the fallback.
+        # Generic header strings ("V6 Cylinder Engine", "3 Cylinder
+        # Engine") never override a specific pane string.
+        hm = re.search(
+            r"<strong>\s*ENGINE\s*:\s*([^<]{3,80})</strong>", own, re.I
+        )
+        if hm and hm.group(1).strip():
+            payload["engine_detail"] = hm.group(1).strip()
+        if payload["engine_detail"] is None and _pane_engine:
+            payload["engine_detail"] = _pane_engine
+        if payload["transmission_detail"] is None and _pane_transmission:
+            payload["transmission_detail"] = _pane_transmission
+        info = {}
+        for lm, vm in re.findall(
+            r'info__label">(.*?)</span>\s*<span class="info__value[^"]*"[^>]*>\s*(.*?)\s*</span>',
+            own,
+            re.S,
+        ):
+            k = _vdp_clean_text(lm)
+            if k and k not in info:
+                info[k] = _vdp_clean_text(vm)
+        if payload["engine_detail"] is None and info.get("Engine"):
+            payload["engine_detail"] = info["Engine"]
+        if payload["transmission_detail"] is None and info.get("Transmission"):
+            payload["transmission_detail"] = info["Transmission"]
+
+        # ---- claims + packages: the JSON-LD description prose of
+        # the subject car's own Product/Vehicle item — the same
+        # loop shape parse_vdp_details runs for price.
+        desc_raw = ""
+        for m in re.finditer(
+            r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>',
+            html,
+            re.S | re.I,
+        ):
+            try:
+                data = json.loads(m.group(1).strip())
+            except Exception:
+                continue
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict) and isinstance(data.get("@graph"), list):
+                items = data["@graph"]
+            elif isinstance(data, dict):
+                items = [data]
+            else:
+                items = []
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                t = str(item.get("@type") or "").lower()
+                if t not in ("vehicle", "car", "product") and not item.get(
+                    "vehicleIdentificationNumber"
+                ):
+                    continue
+                d = item.get("description")
+                if isinstance(d, str) and d.strip():
+                    desc_raw = d
+                    break
+            if desc_raw:
+                break
+        if desc_raw:
+            if "No Accidents!" in desc_raw:
+                payload["claims"]["no_accidents"] = True
+            if "One Owner!" in desc_raw:
+                payload["claims"]["one_owner"] = True
+            seen_p = set()
+            # NOTE the attribute shape: the dealer's JSON-LD carries
+            # class=vc_build_package_name with NO quotes around the
+            # value — a pattern demanding the closing quote silently
+            # matches nothing and the prose fallback below then
+            # harvests commas out of the marketing copy (proven on
+            # the 5-car harness: packages came back as sentence
+            # fragments). Quotes are optional in the pattern.
+            for pm in re.finditer(
+                r'vc_build_package_name"?>(.*?)</h4>', desc_raw, re.S
+            ):
+                name = _vdp_clean_text(pm.group(1))
+                if name and name.lower() not in seen_p:
+                    seen_p.add(name.lower())
+                    payload["packages"].append(name)
+            if not payload["packages"]:
+                # Prose format (Charleston store): the packages run
+                # together after the marker, each carrying its own
+                # "($N value)" — the values are the separators.
+                # Split ON them (name = text between the previous
+                # value and the next value's "("), then stop at the
+                # first "Includes ..." detail sentence, which is
+                # where the package run ends and feature prose takes
+                # over. Parentheticals WITHOUT a dollar figure
+                # (e.g. "(compatible with select ...)") belong to a
+                # detail and never split.
+                dm = re.search(
+                    r"What this vehicle includes:\s*(.+)", desc_raw, re.S
+                )
+                if dm:
+                    seg = _vdp_clean_text(dm.group(1))
+                    _vals = list(
+                        re.finditer(r"\(\$[\d,]+ value\)", seg)
+                    )
+                    for _vi, _vm in enumerate(_vals):
+                        _start = (
+                            _vals[_vi - 1].end() if _vi > 0 else 0
+                        )
+                        _name = seg[_start:_vm.start()].strip()
+                        _nxt = (
+                            _vals[_vi + 1].start()
+                            if _vi + 1 < len(_vals)
+                            else len(seg)
+                        )
+                        _after = seg[_vm.end():_nxt]
+                        _im = re.search(
+                            r"\bIncludes\b", _after
+                        )
+                        if _im:
+                            _detail = _after[:_im.start()].strip()
+                            if _detail and _detail.lower() not in seen_p:
+                                seen_p.add(_detail.lower())
+                                payload["packages"].append(_detail)
+                        if (
+                            _name
+                            and len(_name) <= 120
+                            and _name.lower() not in seen_p
+                        ):
+                            seen_p.add(_name.lower())
+                            payload["packages"].append(_name)
+                        if _im:
+                            break
+    except Exception:
+        return None
+    if (
+        payload["highlights"]
+        or payload["all_features"]
+        or payload["packages"]
+        or payload["engine_detail"]
+    ):
+        return payload
+    return None
+
+
 def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
     """Extract gallery photos, advertised final price, and spec colors from a
     DealerOn VDP's raw HTML. Returns a dict; missing pieces stay None/[]."""
@@ -1960,6 +2342,23 @@ def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
             "call" if re.search(r"\bcall\s+for\s+price\b", _main_text, re.I) else "none"
         )
 
+    # ---- RICH DESCRIPTION payload (2026-11-10, REBUILD ONLY —
+    # Matthew's rich-descriptions build): everything the emoji
+    # description format needs, lifted from the SAME HTML this
+    # function already holds — the JSON-LD description (dealer prose
+    # carrying the "No Accidents!" / "One Owner!" claims and the
+    # "What this vehicle includes:" factory packages), the
+    # Highlighted Features shortlist, the tabbed All Features panes,
+    # and the Vehicle Information spec pairs. Pure helper; fail-open
+    # by contract (it never raises), so a garbled page costs the
+    # rich payload and nothing else — price/photos/colors above are
+    # already final. The payload lands on scraped_inventory
+    # .vdp_features (additive JSONB, 2026-11-10).
+    try:
+        out["vdp_features"] = _extract_vdp_features(html)
+    except Exception:
+        out["vdp_features"] = None
+
     # ---- SPEC LIST colors (DealerOn .info__value blocks), exterior first
     for label, key in (("Exterior Color", "color"), ("Interior Color", "interior_color")):
         if out[key]:
@@ -2183,6 +2582,25 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
                     _log_carfax_reject(car, cfx)
         except Exception as e:
             print(f"[!] CARFAX capture warning (non-fatal): {e}")
+        # RICH DESCRIPTION payload (2026-11-10): ride the VDP parse
+        # onto the car record (stored on scraped_inventory
+        # .vdp_features). Set ONLY when the parse found something
+        # real — highlights, the full list, packages, or a detailed
+        # engine string. An empty parse (stripped-variant page, a
+        # platform without these blocks) leaves the key unset, so
+        # the upsert can never erase a payload a previous sync
+        # captured. Fail-open like the CARFAX block above it.
+        try:
+            _vf = d.get("vdp_features")
+            if _vf and (
+                _vf.get("highlights")
+                or _vf.get("all_features")
+                or _vf.get("packages")
+                or _vf.get("engine_detail")
+            ):
+                car["vdp_features"] = _vf
+        except Exception as e:
+            print(f"[!] Rich-description capture warning (non-fatal): {e}")
 
     await asyncio.gather(*(one(c) for c in cars), return_exceptions=True)
     if retry_ctx is not None:
