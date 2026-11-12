@@ -149,7 +149,7 @@
     <div id="painLines" class="mt-4 space-y-3"></div>
 
     <div class="mt-4 rounded-3xl border border-[rgba(59,130,246,0.22)] bg-[#101B30] p-5">
-      <p class="text-[17px] font-bold text-white">From $75/month &mdash; less than one of those hours is worth.</p>
+      <p class="text-[17px] font-bold text-white" data-price="solo.self_post.monthly" data-price-format="from-month">From $75/month &mdash; less than one of those hours is worth.</p>
       <p class="mt-1 text-[14px] text-[#9FB0C7]">Breaks even if your time is worth <strong class="text-white" id="beVal">$15</strong> an hour.</p>
       <p class="mt-3 text-[15px] text-slate-200">Same cars. In front of more eyes, quicker &mdash; with the hours back in your day.</p>
     </div>
@@ -157,7 +157,7 @@
     <a id="cta" href="https://autolaunch.org/?src=quiz" class="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2E7CF6] px-5 py-4 text-base font-extrabold text-white shadow-lg shadow-blue-500/25">
       Start your free 4-day trial <i class="fa-solid fa-arrow-right"></i>
     </a>
-    <p class="mt-3 text-center text-[13px] text-[#9FB0C7]">Free for 4 days — Self Post first, then full Automate. Then from $75/month &mdash; cancel any time.</p>
+    <p class="mt-3 text-center text-[13px] text-[#9FB0C7]" data-price="solo.self_post.monthly" data-price-format="from-month-foot">Free for 4 days — Self Post first, then full Automate. Then from $75/month &mdash; cancel any time.</p>
 
     <div class="mt-6 flex items-center justify-between">
       <button type="button" class="backlink text-sm font-semibold text-[#58A6FF]" data-back="3"><i class="fa-solid fa-arrow-left mr-2"></i>Change answers</button>
@@ -170,6 +170,12 @@
 
 <script>
 /* QUIZ_CALC_BEGIN — pure logic, extracted and exercised by the Node harness */
+/* Pricing: QUIZ_PRICE defaults to the Self Post monthly price ($75) baked
+   into the page, so computeResult stays synchronous and correct with no
+   fetch. pricing.json (same directory) is the single source: when it loads
+   (bottom of this block), it updates QUIZ_PRICE and the displayed prices. */
+var QUIZ_PRICE = 75;
+function setQuizPrice(v) { if (typeof v === "number" && isFinite(v) && v > 0) { QUIZ_PRICE = v; } }
 const Q1_CARS = { "under-20": 15, "20-50": 35, "50-150": 100, "150-plus": 200 };
 function round05(x) { return Math.round(x * 2) / 2; }
 function fmtHours(x) { return (x % 1 === 0) ? String(x) : x.toFixed(1); }
@@ -178,7 +184,7 @@ function computeResult(q1key, minutes) {
   const posting = round05(cars * minutes / 60);
   const fresh = posting;
   const total = posting + fresh;
-  const breakeven = Math.round(75 / Math.max(total, 1));
+  const breakeven = Math.round(QUIZ_PRICE / Math.max(total, 1));
   /* Time back with AutoLaunch: the user's own hands-on time is ~1 min per car
      (a glance / approve); posting runs without them and freshness is automated.
      autoExact = cars x 1 min in hours. savedExact is measured against the exact
@@ -195,6 +201,32 @@ function fmtAuto(autoExact, cars) {
 function ctaUrl(a) {
   return "https://autolaunch.org/?src=quiz&cars=" + a.cars + "&method=" + a.method + "&pain=" + a.pain;
 }
+/* Fetch pricing.json and apply it. Fully guarded: with no DOM (the Node gate
+   harness evaluates this block) it is a no-op, and any fetch/parse failure
+   leaves the baked-in $75 fallback untouched. Runs only in a browser. */
+try {
+  if (typeof document !== "undefined" && typeof fetch === "function") {
+    fetch("pricing.json").then(function (r) {
+      if (!r.ok) throw new Error("pricing fetch " + r.status);
+      return r.json();
+    }).then(function (p) {
+      try {
+        var n = p && p.solo && p.solo.self_post && p.solo.self_post.monthly;
+        if (typeof n !== "number" || !isFinite(n) || n <= 0) return;
+        setQuizPrice(n);
+        var els = document.querySelectorAll('[data-price="solo.self_post.monthly"]');
+        for (var i = 0; i < els.length; i++) {
+          if (els[i].getAttribute("data-price-format") === "from-month-foot") {
+            els[i].textContent = "Free for 4 days \u2014 Self Post first, then full Automate. Then from $" + n + "/month \u2014 cancel any time.";
+          } else {
+            els[i].textContent = "From $" + n + "/month \u2014 less than one of those hours is worth.";
+          }
+        }
+        if (typeof renderResult === "function" && typeof state !== "undefined" && state && state.cars) { renderResult(); }
+      } catch (e2) {}
+    }).catch(function () {});
+  }
+} catch (e) {}
 /* QUIZ_CALC_END */
 
 const PAIN_LINES = {

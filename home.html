@@ -165,7 +165,7 @@
       <div class="plans">
         <div class="plan">
           <h3>Self Post</h3>
-          <div class="price">$75<small>/mo</small></div>
+          <div class="price" data-price="solo.self_post.monthly">$75<small>/mo</small></div>
           <p style="color:var(--muted)">For reps who post their own cars and want the busywork gone.</p>
           <ul>
             <li>Marketplace posting tools</li>
@@ -177,7 +177,7 @@
         </div>
         <div class="plan">
           <h3>Automate</h3>
-          <div class="price">$100<small>/mo</small></div>
+          <div class="price" data-price="solo.automate.monthly">$100<small>/mo</small></div>
           <p style="color:var(--muted)">The full kit — hands-off posting and the selling tools around it.</p>
           <ul>
             <li>Everything in Self Post</li>
@@ -193,8 +193,8 @@
           <div class="price">Per seat</div>
           <p style="color:var(--muted)">One account runs the whole store. The team leader's management account is free and never counts as a seat.</p>
           <ul>
-            <li>Post seats from $75/seat/mo</li>
-            <li>Group seats from $99/seat/mo</li>
+            <li data-price="dealership.post_seat.monthly">Post seats from $75/seat/mo</li>
+            <li data-price="dealership.group_seat.monthly">Group seats from $99/seat/mo</li>
             <li>Volume pricing at 10+ and 25+ seats</li>
             <li>Dealership data stays with the store</li>
             <li>Free 4-day dealership trial with 2 seats</li>
@@ -237,5 +237,35 @@
   <div class="wrap" style="margin-top:16px">© 2026 AutoLaunch. All rights reserved.</div>
 </footer>
 
+<script>
+/* Pricing: pricing.json (repo root) is the single source. The numbers in the
+   HTML above are the fallback and render complete with JS disabled or the
+   fetch failing -- this page must stay complete as a zero-JS review page.
+   This script only overwrites a tagged price element after a successful
+   fetch, and never throws if fetch is unavailable. */
+(function () {
+  try {
+    if (typeof document === "undefined" || typeof fetch !== "function") return;
+    fetch("pricing.json").then(function (r) {
+      if (!r.ok) throw new Error("pricing fetch " + r.status);
+      return r.json();
+    }).then(function (p) {
+      function num(path) {
+        var v = p, parts = path.split(".");
+        for (var i = 0; i < parts.length; i++) { if (v == null) return null; v = v[parts[i]]; }
+        return (typeof v === "number" && isFinite(v)) ? v : null;
+      }
+      var els = document.querySelectorAll("[data-price]");
+      for (var i = 0; i < els.length; i++) {
+        var key = els[i].getAttribute("data-price"), v = num(key);
+        if (v === null) continue;
+        if (key === "dealership.post_seat.monthly") els[i].textContent = "Post seats from $" + v + "/seat/mo";
+        else if (key === "dealership.group_seat.monthly") els[i].textContent = "Group seats from $" + v + "/seat/mo";
+        else els[i].innerHTML = "$" + v + "<small>/mo</small>";
+      }
+    }).catch(function () {});
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
