@@ -3603,6 +3603,16 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
               <p class="text-xs text-slate-400">Loading…</p>
             </div>
           </div>
+
+          <div class="mt-6 pt-5 border-t border-slate-200">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <h4 class="font-bold text-sm text-slate-800">Watchdog</h4>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">Accounts that look dark to the automation. Read-only — this list changes nothing.</p>
+            <div id="ownerWatchdogList" class="space-y-2">
+              <p class="text-xs text-slate-400">Loading…</p>
+            </div>
+          </div>
         </div>
 
       </div><!-- /settingsPanelOwner -->
@@ -5114,6 +5124,7 @@ function loadOwnerGrantTools() {
     refreshOwnerGrantList();
     loadOwnerSuggestions();
     loadOwnerTickets();
+    loadOwnerWatchdog();
   }
 }
 
@@ -5273,6 +5284,46 @@ async function loadOwnerTickets() {
     html += '<p class="text-[11px] text-slate-400 mt-1.5">' + escapeHtml(t.submitter_email || "Unknown sender") + (when ? " \u00b7 " + when : "") + "</p></div>";
     return html;
   }).join("");
+}
+
+// Watchdog (read-only, 2026-11-12): accounts that look dark to the
+// automation, read live from the owner-grant function
+// (watchdog_list) each time the Owner tab opens — helper-served
+// DWS accounts whose helper evidence is over 48h old, and
+// auto-sync-OFF accounts with no successful sync in over 7 days.
+// Alert-only: nothing here changes any account.
+async function loadOwnerWatchdog() {
+  const listEl = document.getElementById("ownerWatchdogList");
+  if (!listEl || !isOwnerGrantUser()) return;
+  listEl.innerHTML = '<p class="text-xs text-slate-400">Loading\u2026</p>';
+  const res = await ownerGrantInvoke({ action: "watchdog_list" });
+  if (!res.ok) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">Couldn\'t load the watchdog list.</p>';
+    return;
+  }
+  const stale = res.dws_stale || [];
+  const dark = res.sync_dark || [];
+  if (!stale.length && !dark.length) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">All clear — no dark accounts.</p>';
+    return;
+  }
+  const fmt = function (ts) {
+    return ts ? new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "never";
+  };
+  let html = "";
+  stale.forEach(function (u) {
+    html += '<div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">' +
+      '<p class="text-sm text-slate-700"><span class="font-bold text-slate-800">' + escapeHtml(u.display_name || u.email || "Unknown") + '</span>' +
+      ' <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold">HELPER DARK 48H+</span></p>' +
+      '<p class="text-[11px] text-slate-500 mt-1.5">Helper-served lot — helper last seen ' + escapeHtml(fmt(u.helper_seen_at)) + (u.email ? ' · ' + escapeHtml(u.email) : '') + '</p></div>';
+  });
+  dark.forEach(function (u) {
+    html += '<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">' +
+      '<p class="text-sm text-slate-700"><span class="font-bold text-slate-800">' + escapeHtml(u.display_name || u.email || "Unknown") + '</span>' +
+      ' <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold">AUTO-SYNC OFF 7D+</span></p>' +
+      '<p class="text-[11px] text-slate-500 mt-1.5">Auto-sync is off — last successful sync ' + escapeHtml(fmt(u.last_synced_at)) + (u.email ? ' · ' + escapeHtml(u.email) : '') + '</p></div>';
+  });
+  listEl.innerHTML = html;
 }
 
 // ===== OWNER CONSOLE — USERS LIST + FORCE SCRAPE (Matthew only) =====
@@ -8714,13 +8765,40 @@ function syncSummaryCountsText(row) {
     return parts.join(" · ");
 }
 
+function syncSummaryReasonText(reason) {
+    // Machine-readable scraper error codes -> the plain words the
+    // card shows (hands-free audit #6/#22, 2026-11-12). Unknown or
+    // missing codes still say the sync failed; only the known ones
+    // get a specific sentence.
+    const r = String(reason || "");
+    const m = r.match(/^feed_http_(\d{3})$/);
+    if (m) {
+        if (m[1] === "404") return "the dealership feed address returned 'not found' (HTTP 404) — check the inventory source URL in Settings.";
+        if (m[1] === "403") return "the dealership site refused the sync (HTTP 403).";
+        if (m[1] === "429") return "the dealership site rate-limited the sync (HTTP 429) — it should recover on the next run.";
+        return "the dealership site answered with an error (HTTP " + m[1] + ").";
+    }
+    if (r) return "the sync hit an error (" + r + ").";
+    return "the sync hit an error.";
+}
+
 function syncSummaryCardText(row) {
     if (!row) return null;
-    const counts = syncSummaryCountsText(row);
-    if (!counts) return null;
     const t = row.run_finished_at || row.run_started_at;
     const when = t ? new Date(t).toLocaleString("en-US") : "";
-    return when ? ("Last sync · " + when + " — " + counts) : ("Last sync — " + counts);
+    if (row.status === "failed") {
+        // A failed run must never render as counts (a zero-car
+        // failure used to read as a plausible empty sync).
+        const head = "Last sync FAILED — " + syncSummaryReasonText(row.error_reason);
+        return when ? (head + " · " + when) : head;
+    }
+    const counts = syncSummaryCountsText(row);
+    if (!counts) return null;
+    let text = when ? ("Last sync · " + when + " — " + counts) : ("Last sync — " + counts);
+    if (row.stale_brake_fired) {
+        text += " Safety brake: most of the lot looked missing, so nothing was removed or deleted — if the feed looks wrong, check the inventory source.";
+    }
+    return text;
 }
 
 function syncSummaryShouldShowPopup(row, lastShownId) {
@@ -8755,13 +8833,28 @@ async function refreshSyncSummary() {
     if (!currentUser || syncSummaryBusy) return;
     syncSummaryBusy = true;
     try {
-        const { data, error } = await supabaseClient
+        let { data, error } = await supabaseClient
             .from("sync_summaries")
-            .select("id, run_started_at, run_finished_at, vehicles_checked, new_added, updated, exited_removed, queued_posts, queued_deletes")
+            .select("id, run_started_at, run_finished_at, vehicles_checked, new_added, updated, exited_removed, queued_posts, queued_deletes, status, error_reason, stale_brake_fired")
             .eq("user_id", currentUser.id)
             .order("run_finished_at", { ascending: false })
             .order("created_at", { ascending: false })
             .limit(1);
+        if (error) {
+            // Self-heal for a database that predates the additive
+            // surfacing columns (status / error_reason /
+            // stale_brake_fired): retry once with the legacy column
+            // list so the card keeps working exactly as before.
+            const legacy = await supabaseClient
+                .from("sync_summaries")
+                .select("id, run_started_at, run_finished_at, vehicles_checked, new_added, updated, exited_removed, queued_posts, queued_deletes")
+                .eq("user_id", currentUser.id)
+                .order("run_finished_at", { ascending: false })
+                .order("created_at", { ascending: false })
+                .limit(1);
+            data = legacy.data;
+            error = legacy.error;
+        }
 
         // Fail open: missing table, RLS denial, empty result — the
         // card stays hidden and the pre-existing sync surface is

@@ -2621,6 +2621,21 @@ STALE_MAX_FRACTION = 0.5
 # removals for a user — anything beyond it waits for a later run.
 AUTO_DELETE_MAX_PER_RUN = 25
 
+# Bounded auto-retry for failed queue work (2026-11-12, hands-free
+# audit #3, scraper parts): a failed price-drift triple or exit
+# delete used to be suppressed FOREVER by the producers, so one
+# transient Facebook-side failure stranded the work until a human
+# re-queued it by hand. Now a failure becomes eligible again after
+# a backoff, up to a small total attempt cap, and only when the
+# underlying condition still holds at re-check (the drift still
+# exists / the car still shows exited). Execution-time verification
+# on Facebook is unchanged — this widens ELIGIBILITY only.
+PRICE_RETRY_BACKOFF_HOURS = 24
+PRICE_RETRY_MAX_ATTEMPTS = 3
+EXIT_DELETE_RETRY_BACKOFF_HOURS = 24
+EXIT_DELETE_RETRY_MAX_ATTEMPTS = 3
+EXIT_DELETE_RETRY_MAX_PER_RUN = 25
+
 
 def _auto_delete_on_exit_enabled(uid: str) -> bool:
     """user_settings.auto_delete_on_exit_enabled; default ON.
@@ -2772,7 +2787,7 @@ def _delete_match_price(row):
     return (row or {}).get("price")
 
 
-def _price_update_queue_rows(uid, inv_rows, blocked_vins, failed_keys):
+def _price_update_queue_rows(uid, inv_rows, blocked_vins, failed_rows, now=None):
     """Pure drift selection: which inventory rows earn a price-update
     job, and the exact queue payloads for them.
 
@@ -2781,12 +2796,32 @@ def _price_update_queue_rows(uid, inv_rows, blocked_vins, failed_keys):
     current price is a real positive number, and the two differ.
     blocked_vins (a live update_price or delete row already exists
     for the VIN — a car with a live delete NEVER gets an update) and
-    failed_keys ((vin, from_price, to_price) triples an identical
-    update already FAILED on; the same drift never re-queues itself,
-    while a NEW drift to a different price still can) are honored.
+    failed_rows (the user's failed update_price rows) are honored:
+    an identical (vin, from_price, to_price) triple that failed
+    before is suppressed only while it is not retry-eligible — it
+    becomes eligible again once its newest failure is at least
+    PRICE_RETRY_BACKOFF_HOURS old and the triple has fewer than
+    PRICE_RETRY_MAX_ATTEMPTS failures (bounded retry, 2026-11-12;
+    before this, one failure suppressed the drift forever). Because
+    inv_rows are read fresh, a retried drift is one that still
+    exists right now; a NEW drift to a different price is a
+    different triple and was never suppressed.
     Capped at PRICE_UPDATE_MAX_PER_RUN; the rest simply qualify
     again next run. Returns queue-row dicts in the producers' shared
     contract."""
+    if now is None:
+        now = datetime.now(timezone.utc)
+    attempts = {}
+    last_fail = {}
+    for q in failed_rows or []:
+        if q.get("update_from_price") is None or q.get("price") is None:
+            continue
+        key = (q.get("vin"), int(q["update_from_price"]), int(q["price"]))
+        attempts[key] = attempts.get(key, 0) + 1
+        ts = q.get("executed_at") or q.get("created_at")
+        if ts and (key not in last_fail or ts > last_fail[key]):
+            last_fail[key] = ts
+    backoff = timedelta(hours=PRICE_RETRY_BACKOFF_HOURS)
     rows = []
     for r in inv_rows or []:
         vin = r.get("vin")
@@ -2807,8 +2842,13 @@ def _price_update_queue_rows(uid, inv_rows, blocked_vins, failed_keys):
             continue
         if current_i <= 0 or posted_i <= 0 or current_i == posted_i:
             continue
-        if (vin, posted_i, current_i) in failed_keys:
+        fail_key = (vin, posted_i, current_i)
+        if attempts.get(fail_key, 0) >= PRICE_RETRY_MAX_ATTEMPTS:
             continue
+        if attempts.get(fail_key, 0) >= 1:
+            last = _parse_job_ts(last_fail.get(fail_key))
+            if last is None or now - last < backoff:
+                continue
         if len(rows) >= PRICE_UPDATE_MAX_PER_RUN:
             continue
         rows.append(
@@ -2828,6 +2868,126 @@ def _price_update_queue_rows(uid, inv_rows, blocked_vins, failed_keys):
         )
         blocked_vins.add(vin)
     return rows
+
+
+def _exit_delete_retry_rows(uid, inv_rows, queue_rows, now):
+    """Pure core of the exit-delete bounded retry: from this user's
+    inventory rows and queue rows, return fresh delete rows for cars
+    that STILL show exited (is_active False with a posted stamp) and
+    whose past delete failures are retry-eligible: at least one
+    failed attempt, fewer than EXIT_DELETE_RETRY_MAX_ATTEMPTS, and
+    the newest failure at least EXIT_DELETE_RETRY_BACKOFF_HOURS old.
+    Cars with a live (pending/processing) or completed delete are
+    never re-queued (VIN discipline, exactly the producer's dedupe).
+    Row shape is copied verbatim from
+    _queue_exit_listing_removals, including the match price."""
+    live_vins = set()
+    completed_vins = set()
+    attempts = {}
+    last_fail = {}
+    for q in queue_rows or []:
+        if q.get("action") != "delete":
+            continue
+        vin = q.get("vin")
+        if not vin:
+            continue
+        status = q.get("status")
+        if status in ("pending", "processing"):
+            live_vins.add(vin)
+        elif status == "completed":
+            completed_vins.add(vin)
+        elif status == "failed":
+            attempts[vin] = attempts.get(vin, 0) + 1
+            ts = q.get("executed_at") or q.get("created_at")
+            if ts and (vin not in last_fail or ts > last_fail[vin]):
+                last_fail[vin] = ts
+    backoff = timedelta(hours=EXIT_DELETE_RETRY_BACKOFF_HOURS)
+    rows = []
+    for r in inv_rows or []:
+        vin = r.get("vin")
+        if not vin:
+            continue
+        if r.get("is_active") is not False or not r.get("marketplace_posted_at"):
+            continue
+        if vin in live_vins or vin in completed_vins:
+            continue
+        n = attempts.get(vin, 0)
+        if n < 1 or n >= EXIT_DELETE_RETRY_MAX_ATTEMPTS:
+            continue
+        last = _parse_job_ts(last_fail.get(vin))
+        if last is None or now - last < backoff:
+            continue
+        rows.append({
+            "user_id": uid,
+            "vin": vin,
+            "target_channel": "facebook",
+            "action": "delete",
+            "status": "pending",
+            "year": r.get("year"),
+            "make": r.get("make"),
+            "model": r.get("model"),
+            "stock_num": r.get("stock_number") or r.get("stock_num"),
+            "price": _delete_match_price(r),
+        })
+    return rows
+
+
+def _queue_exit_delete_retries(uid: str) -> int:
+    """Queue bounded retries for failed exit-deletes whose cars still
+    show exited. Runs after a clean full crawl of this user (the
+    crawl just proved the current lot, so a car still is_active=False
+    with a posted stamp is still exited). Honors the same
+    auto-delete-on-exit toggle as the original producer. Fail-open:
+    any error queues nothing."""
+    try:
+        inv_rows = []
+        page_size = 1000
+        offset = 0
+        while True:
+            res = (
+                db.table("scraped_inventory")
+                .select("vin, year, make, model, price, stock_number, is_active, marketplace_posted_at, marketplace_posted_price")
+                .eq("user_id", uid)
+                .eq("is_active", False)
+                .order("vin")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            page = res.data or []
+            inv_rows.extend(r for r in page if r.get("vin"))
+            if len(page) < page_size:
+                break
+            offset += page_size
+        if not inv_rows:
+            return 0
+        if not _auto_delete_on_exit_enabled(uid):
+            print(
+                f"[*] Auto-delete on exit is OFF for user {uid[:8]}: "
+                "failed exit-deletes are not retried."
+            )
+            return 0
+        queue_rows = (
+            db.table("auto_posting_queue")
+            .select("vin, action, status, created_at, executed_at")
+            .eq("user_id", uid)
+            .eq("action", "delete")
+            .execute()
+        ).data or []
+        rows = _exit_delete_retry_rows(
+            uid, inv_rows, queue_rows, datetime.now(timezone.utc)
+        )[:EXIT_DELETE_RETRY_MAX_PER_RUN]
+        if not rows:
+            return 0
+        db.table("auto_posting_queue").insert(rows).execute()
+        print(
+            f"[✓] Exit-delete retry for user {uid[:8]}: queued "
+            f"{len(rows)} fresh delete row(s) for still-exited cars "
+            "whose earlier delete failed."
+        )
+        return len(rows)
+    except Exception as e:
+        print(f"[!] Exit-delete retry pass failed for user {uid[:8]}: {e}")
+        return 0
 
 
 def _queue_price_updates(uid: str) -> int:
@@ -2874,21 +3034,17 @@ def _queue_price_updates(uid: str) -> int:
         blocked = {r["vin"] for r in live if r.get("vin")}
         failed = (
             db.table("auto_posting_queue")
-            .select("vin, update_from_price, price")
+            .select("vin, update_from_price, price, created_at, executed_at")
             .eq("user_id", uid)
             .eq("action", "update_price")
             .eq("status", "failed")
             .execute()
         ).data or []
-        failed_keys = {
-            (r.get("vin"), r.get("update_from_price"), r.get("price"))
-            for r in failed
-            if r.get("vin")
-        }
+        failed_rows = [r for r in failed if r.get("vin")]
     except Exception as e:
         print(f"[!] Price-update pass failed for user {uid[:8]}: {e}")
         return 0
-    rows = _price_update_queue_rows(uid, inv_rows, blocked, failed_keys)
+    rows = _price_update_queue_rows(uid, inv_rows, blocked, failed_rows)
     if not rows:
         return 0
     try:
@@ -3527,6 +3683,8 @@ def _prod_tally_start_user(uid):
             "exited_removed": None,
             "queued_deletes": None,
             "queued_posts": None,
+            "error_reason": None,
+            "stale_brake_fired": False,
         }
     except Exception:
         pass
@@ -3566,6 +3724,31 @@ def _prod_tally_note_exits(uid, flagged, deletes):
         if acc is not None:
             acc["exited_removed"] = flagged
             acc["queued_deletes"] = deletes
+    except Exception:
+        pass
+
+
+def _prod_tally_note_error(uid, reason):
+    """Record the run's first hard error (machine-readable, e.g.
+    'feed_http_403') so the summary row can say FAILED + why instead
+    of a silent 'completed, 0 cars' (hands-free audit #6/#22,
+    2026-11-12). First error wins — it is the root cause."""
+    try:
+        acc = _PROD_TALLY.get(uid)
+        if acc is not None and not acc.get("error_reason"):
+            acc["error_reason"] = reason
+    except Exception:
+        pass
+
+
+def _prod_tally_note_brake(uid):
+    """Flag that the mass-exit brake fired for this user, so the app
+    can say so plainly (audit #15 alert half). The brake's threshold
+    and action are untouched — this only reports it."""
+    try:
+        acc = _PROD_TALLY.get(uid)
+        if acc is not None:
+            acc["stale_brake_fired"] = True
     except Exception:
         pass
 
@@ -3621,6 +3804,9 @@ def _prod_tally_compute_row(uid, acc):
         "queued_posts": acc.get("queued_posts"),
         "queued_deletes": acc.get("queued_deletes"),
         "source": "production",
+        "status": "failed" if acc.get("error_reason") else "completed",
+        "error_reason": acc.get("error_reason"),
+        "stale_brake_fired": bool(acc.get("stale_brake_fired")),
     }
 
 
@@ -3639,8 +3825,18 @@ def _flush_prod_sync_summaries():
                 row = _prod_tally_compute_row(uid, acc)
                 try:
                     db.table("sync_summaries").insert(row).execute()
-                except Exception as e:
-                    print(f"[!] Sync summary insert warning ({uid[:8]}): {e}")
+                except Exception:
+                    # Self-heal for a deploy that predates the
+                    # additive surfacing columns: retry once without
+                    # the new keys so the counts still land.
+                    try:
+                        legacy = {
+                            k: v for k, v in row.items()
+                            if k not in ("status", "error_reason", "stale_brake_fired")
+                        }
+                        db.table("sync_summaries").insert(legacy).execute()
+                    except Exception as e:
+                        print(f"[!] Sync summary insert warning ({uid[:8]}): {e}")
             except Exception as e:
                 print(f"[!] Sync summary tally warning ({uid[:8]}): {e}")
     except Exception as e:
@@ -3829,6 +4025,7 @@ def mark_stale_inventory(uid: str, seen_vins: set, scope_keys=None) -> int:
                 f"{len(active_vins)} active units unseen (> {int(STALE_MAX_FRACTION * 100)}%). "
                 "Feed may have changed; refusing to mass-deactivate."
             )
+            _prod_tally_note_brake(uid)
             _prod_tally_note_exits(uid, 0, 0)
             return 0
 
@@ -3876,6 +4073,26 @@ def mark_stale_inventory(uid: str, seen_vins: set, scope_keys=None) -> int:
 # missing settings row, an unreadable timestamp, or any lookup error
 # lets the crawl proceed; the guard bites only when a settings row
 # clearly resolves a tier and the window clearly has not elapsed.
+#
+# STAGED-TRIAL PHASES + DEFER-DON'T-FAIL (2026-11-12, hands-free
+# audit #7): the app resolves a STAGED trial (stored window <= 4 days
+# + 1h) as Self Post for its first 48 hours and as Automate after —
+# sync cadence phase 1 = Post 18h, phase 2 = Group 6h, legacy trials
+# keep 24h (see trialPhaseState + syncCooldownState in index.html).
+# The guard below mirrors that derivation exactly (same constants,
+# same fallback to "legacy" on missing/unreadable stamps, same
+# resolution order: owner -> trial -> covered -> tier; a trialing
+# account whose trial has ENDED resolves to the app's "gate" mode,
+# which carries no cadence at all). And a job that lands inside its
+# window is no longer FAILED: it stays 'pending', stamped with
+# not_before (the unlock instant), block_reason (the same reason
+# string) and deferred_at, and the caller skips the crawl. The
+# dispatcher picks the job up once the window opens — a later
+# USER_ID run adopts it (adoption skips not-yet-due deferred rows),
+# and the nightly all-users sweep completes a due deferred job for
+# any user it actually crawls. The window itself never shrinks: a
+# deferred job can only run at or after the exact unlock instant
+# the old fail path computed.
 SYNC_COOLDOWN_HOURS = {"trial": 24, "post": 18, "automate": 12, "group": 6}
 OWNER_USER_IDS = {
     "40a95557-504a-460f-a891-462bb2b4f25c",  # Matthew
@@ -3906,19 +4123,80 @@ def _parse_job_ts(value):
     return dt
 
 
-def _sync_cooldown_hours(uid, settings_row, covered):
+TRIAL_PHASE2_AFTER = timedelta(hours=48)
+TRIAL_STAGED_WINDOW_MAX = timedelta(days=4, hours=1)
+
+
+def _trial_phase_scraper(started_iso, ends_iso, now):
+    """Mirror of the app's trialPhaseState(): 1 during the first
+    48 hours of a STAGED trial (stored window <= 4 days + 1h),
+    2 after, and "legacy" for a longer stored window or any
+    missing/unreadable stamp — the pre-staged behavior, never a
+    phase. Pure."""
+    started = _parse_job_ts(started_iso)
+    ends = _parse_job_ts(ends_iso)
+    if started is None or ends is None or now is None:
+        return "legacy"
+    if ends - started > TRIAL_STAGED_WINDOW_MAX:
+        return "legacy"
+    return 1 if now < started + TRIAL_PHASE2_AFTER else 2
+
+
+def _sync_cooldown_hours(uid, settings_row, covered, now=None):
     """Sync window in hours for this account, or None = no cadence.
     `covered` is the dealership coverage tier from
-    _dealership_covered() ('post'/'group') or None."""
+    _dealership_covered() ('post'/'group') or None. Resolution order
+    mirrors the app's syncCooldownState exactly: owner exempt, then
+    trial mode (staged phases), then gate (no cadence), then
+    dealership coverage, then the account's own tier."""
     if uid in OWNER_USER_IDS:
         return None
-    if covered:
-        return SYNC_COOLDOWN_HOURS.get(covered, SYNC_COOLDOWN_HOURS["group"])
     if not settings_row:
         return None  # fail-open: nothing on file to resolve against
     if settings_row.get("billing_status") == "trialing":
+        # The app's computeAccessState: trial mode exists only while
+        # trial_ends_at is set and still ahead; an ended (or
+        # stamp-less) trial is the purchase GATE, which carries no
+        # cadence (syncCooldownState: mode "gate" -> hours null).
+        ends = _parse_job_ts(settings_row.get("trial_ends_at"))
+        if ends is None or now is None or now >= ends:
+            return None
+        phase = _trial_phase_scraper(
+            settings_row.get("trial_started_at"),
+            settings_row.get("trial_ends_at"),
+            now,
+        )
+        if phase == 1:
+            return SYNC_COOLDOWN_HOURS["post"]
+        if phase == 2:
+            return SYNC_COOLDOWN_HOURS["group"]
         return SYNC_COOLDOWN_HOURS["trial"]
+    if covered:
+        return SYNC_COOLDOWN_HOURS.get(covered, SYNC_COOLDOWN_HOURS["group"])
     return SYNC_COOLDOWN_HOURS[_resolve_tier_scraper(settings_row.get("plan_tier"))]
+
+
+def _sync_cadence_block(uid, job, settings_row, covered, prior_jobs, now):
+    """Cadence verdict for this job: None when it may run now, else
+    {"reason": str, "unlock": datetime, "hours": number} — the job
+    is inside its window and must wait until `unlock`. Pure: same
+    inputs as _sync_cadence_block_reason."""
+    reason = _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now)
+    if not reason:
+        return None
+    hours = _sync_cooldown_hours(uid, settings_row, covered, now)
+    priors = [
+        j for j in (prior_jobs or [])
+        if j.get("id") != job.get("id")
+        and j.get("sync_mode") not in ("test", "postpass")
+    ]
+    unlock = None
+    if priors:
+        latest = max(priors, key=lambda j: j.get("started_at") or "")
+        started = _parse_job_ts(latest.get("started_at"))
+        if started is not None and hours is not None:
+            unlock = started + timedelta(hours=hours)
+    return {"reason": reason, "unlock": unlock, "hours": hours}
 
 
 def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now):
@@ -3938,7 +4216,7 @@ def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now)
         # (owner-grant force_scrape {override:true} stamps the row):
         # the owner's explicit call beats the plan window.
         return None
-    hours = _sync_cooldown_hours(uid, settings_row, covered)
+    hours = _sync_cooldown_hours(uid, settings_row, covered, now)
     if hours is None:
         return None
     priors = [
@@ -3966,8 +4244,9 @@ def _dealership_covered(uid):
     is a covered dealership MEMBER, else None (Phase 2). Coverage
     mirrors the app exactly: an ACTIVE dealership covers at its
     bought flavor (no flavor on file -> 'group'); a dealership still
-    inside its 5-day trial window covers at 'group'; anything else
-    covers nobody. The dealership LEADER (role 'admin') is NEVER
+    inside its trial window covers at 'group' — except a STAGED
+    trial's first 48 hours, which cover at 'post' (app parity,
+    2026-11-12); anything else covers nobody. The dealership LEADER (role 'admin') is NEVER
     covered — that account is manage-only (Matthew, 2026-10-26), so
     only role 'member' rows count. Any read problem answers None and
     the normal billing resolution decides instead."""
@@ -3983,7 +4262,7 @@ def _dealership_covered(uid):
                 continue
             d = (
                 db.table("dealership_accounts")
-                .select("status, plan_flavor, trial_ends_at")
+                .select("status, plan_flavor, trial_ends_at, created_at")
                 .eq("id", r.get("dealership_id"))
                 .execute()
             ).data or []
@@ -3994,8 +4273,16 @@ def _dealership_covered(uid):
                 return d[0].get("plan_flavor") or "group"
             if status == "trial":
                 ends = _parse_job_ts(d[0].get("trial_ends_at"))
-                if ends is not None and datetime.now(timezone.utc) < ends:
-                    return "group"
+                now = datetime.now(timezone.utc)
+                if ends is not None and now < ends:
+                    # Staged dealership trial (app parity, 2026-11-12):
+                    # phase 1 covers members at the Post flavor, phase
+                    # 2 and legacy windows at Group — the app's
+                    # dealershipTrialPhase anchors on created_at.
+                    phase = _trial_phase_scraper(
+                        d[0].get("created_at"), d[0].get("trial_ends_at"), now
+                    )
+                    return "post" if phase == 1 else "group"
     except Exception:
         pass
     return None
@@ -4003,8 +4290,10 @@ def _dealership_covered(uid):
 
 def _apply_sync_cadence_guard(uid, job, settings_row):
     """Backstop enforcement for one user-requested job. Returns True
-    when the job was refused: it is marked failed (cars_synced 0) and
-    the caller must skip the crawl."""
+    when the job must not run now: it is DEFERRED (2026-11-12) — left
+    'pending' and stamped with not_before / block_reason /
+    deferred_at — and the caller must skip the crawl. The job is
+    never marked failed for cadence again."""
     if job.get("sync_mode") == "test":
         return False
     if job.get("sync_mode") == "postpass":
@@ -4029,17 +4318,30 @@ def _apply_sync_cadence_guard(uid, job, settings_row):
         ).data or []
         if not p.get("sync_vin")
     ]
-    reason = _sync_cadence_block_reason(
-        uid, job, settings_row, covered, priors, datetime.now(timezone.utc)
-    )
-    if not reason:
+    now = datetime.now(timezone.utc)
+    block = _sync_cadence_block(uid, job, settings_row, covered, priors, now)
+    if not block:
         return False
-    db.table("scrape_jobs").update({
-        "status": "failed",
-        "completed_at": datetime.now(timezone.utc).isoformat(),
-        "cars_synced": 0,
-    }).eq("id", job["id"]).execute()
-    print(f"[!] Sync cadence: job {job['id']} refused for user {uid[:8]} — {reason}")
+    unlock = block.get("unlock")
+    try:
+        db.table("scrape_jobs").update({
+            "not_before": unlock.isoformat() if unlock else None,
+            "block_reason": block.get("reason"),
+            "deferred_at": now.isoformat(),
+        }).eq("id", job["id"]).execute()
+    except Exception as e:
+        # The stamp is bookkeeping; the REFUSAL is the fence. Even if
+        # the write fails (e.g. the additive columns are somehow
+        # absent), the crawl still does not run inside the window —
+        # the next dispatch simply re-evaluates the unstamped row.
+        print(
+            f"[!] Sync cadence: deferral stamp failed for job "
+            f"{job['id']} ({e}); refusing the crawl anyway."
+        )
+    print(
+        f"[!] Sync cadence: job {job['id']} deferred for user "
+        f"{uid[:8]} until {unlock} — {block.get('reason')}"
+    )
     return True
 # ==============================================================================
 # ====================== SYNC CADENCE GUARD END ================================
@@ -4426,6 +4728,8 @@ async def run_scraper():
     active_job_mode = None
     active_job = None
     target_settings_row = None
+    _due_deferred = {}  # uid -> [deferred job ids due for pickup]
+    _deferred_crawled = {}  # uid -> units synced by this sweep
 
     target_uid = os.environ.get("USER_ID")
 
@@ -4451,8 +4755,28 @@ async def run_scraper():
 
         if pending_job.data:
 
+            # CADENCE DEFERRALS (2026-11-12): a pending row stamped
+            # with a future not_before is a deferred job whose window
+            # has not opened — it is not adoptable yet, and this run
+            # must NOT fall through to a no-job crawl of the user
+            # (that would defeat the deferral). Adopt the latest DUE
+            # job; if every pending job is still deferred, there is
+            # nothing to do.
+            _now_adopt = datetime.now(timezone.utc)
+            _due_jobs = []
+            for _j in pending_job.data:
+                _nb = _parse_job_ts(_j.get("not_before"))
+                if _nb is None or _nb <= _now_adopt:
+                    _due_jobs.append(_j)
+            if not _due_jobs:
+                print(
+                    "[*] All pending jobs for this user are cadence-"
+                    "deferred and not yet due. Nothing to do."
+                )
+                return
+
             latest_job = max(
-                pending_job.data,
+                _due_jobs,
                 key=lambda x: x["started_at"]
             )
 
@@ -4484,6 +4808,26 @@ async def run_scraper():
         )
 
         users_to_scrape = res.data or []
+
+        # CADENCE DEFERRAL PICKUP (2026-11-12): this sweep crawls
+        # every eligible user anyway, so a deferred job whose window
+        # has opened completes truthfully when its user is actually
+        # crawled below (recorded in _deferred_crawled). Users the
+        # sweep skips (auto-sync off, helper-served DWS) never enter
+        # that record, so their deferred jobs stay pending.
+        try:
+            _due_rows = (
+                db.table("scrape_jobs")
+                .select("id, user_id, not_before")
+                .eq("status", "pending")
+                .lte("not_before", datetime.now(timezone.utc).isoformat())
+                .execute()
+            ).data or []
+            for _r in _due_rows:
+                if _r.get("user_id") and _r.get("id"):
+                    _due_deferred.setdefault(_r["user_id"], []).append(_r["id"])
+        except Exception as e:
+            print(f"[!] Deferred-job pickup read failed (non-fatal): {e}")
 
     # POSTPASS (2026-11-05): a helper-side DWS sync that completes a
     # full crawl stamps its assembled seen-VIN set on its job row
@@ -4905,6 +5249,27 @@ async def run_scraper():
                                 # Feed URL itself is broken: do not trust
                                 # this run for stale marking.
                                 user_had_error = True
+                                _prod_tally_note_error(active_uid, "feed_http_404")
+
+                            break
+
+                        if response and pt == 1 and response.status != 200:
+
+                            # Any other non-200 on page 1 (403 / 429 /
+                            # 5xx) means the feed never loaded: end
+                            # this source's run as an ERROR with a
+                            # machine-readable reason on the summary
+                            # row, instead of falling through to an
+                            # extraction that "completes" with 0 cars
+                            # (hands-free audit #6/#22, 2026-11-12).
+                            print(
+                                f"[!] Feed returned HTTP {response.status} on page 1: {url}"
+                            )
+
+                            user_had_error = True
+                            _prod_tally_note_error(
+                                active_uid, f"feed_http_{response.status}"
+                            )
 
                             break
 
@@ -5029,6 +5394,15 @@ async def run_scraper():
                 # post pacing on every surface that counts.
                 _queue_price_updates(active_uid)
 
+                # Exit-delete bounded retry (2026-11-12): the stale
+                # pass above only scans is_active=True -> False
+                # transitions, so a car whose delete already FAILED
+                # was never re-queued. This clean crawl just proved
+                # the lot; cars still exited with aged-out failures
+                # get one fresh delete row (bounded: 24h backoff,
+                # max 3 attempts).
+                _queue_exit_delete_retries(active_uid)
+
                 # A clean, full crawl also earns the auto-post pass
                 # (it runs once per user after the crawl loop).
                 if active_uid:
@@ -5048,6 +5422,9 @@ async def run_scraper():
                 f"[✓] Completed crawl for {store_name}: {user_units_synced} units synced."
             )
 
+            if active_uid in _due_deferred:
+                _deferred_crawled[active_uid] = user_units_synced
+
         # Auto-post pass (location x condition filter): once per user
         # whose crawl was clean and complete. Fail-open inside.
         for _uid in auto_post_uids:
@@ -5062,6 +5439,24 @@ async def run_scraper():
     # written only now that the run's real work is done. Fail-open
     # inside — reporting never disturbs the run's outcome.
     _flush_prod_sync_summaries()
+
+    # CADENCE DEFERRAL PICKUP completion (2026-11-12): due deferred
+    # jobs whose users this sweep actually crawled are now served —
+    # mark them completed with the sweep's own count for that user.
+    for _d_uid, _d_synced in _deferred_crawled.items():
+        for _d_jid in _due_deferred.get(_d_uid, []):
+            try:
+                db.table("scrape_jobs").update({
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "cars_synced": _d_synced,
+                }).eq("id", _d_jid).eq("status", "pending").execute()
+                print(
+                    f"[✓] Deferred job {_d_jid} completed by sweep "
+                    f"pickup for user {_d_uid[:8]}."
+                )
+            except Exception as e:
+                print(f"[!] Deferred job {_d_jid} completion failed: {e}")
 
     if active_job_id and (target_uid or "").strip() in _helper_dws_skipped_uids:
 

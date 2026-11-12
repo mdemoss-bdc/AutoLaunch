@@ -1,0 +1,77 @@
+name: Nightly Inventory Sync (All Users)
+
+# =====================================================================
+# ALL-USERS NIGHTLY SWEEP (hands-free audit #2, built 2026-11-12).
+#
+# The production schedule (scraper.yml) covers ONLY Matthew's account
+# (its USER_ID fallback). This workflow runs the SAME production
+# scraper (luna-rebuild/scraper.py) with a BLANK USER_ID, which is
+# the scraper's built-in all-users mode: every user_settings row is
+# visited in ONE sequential run — users are processed one at a time
+# by the scraper's own loop, which is the stagger: there is never a
+# parallel burst. Per-user guards all still apply inside the run:
+# auto_sync_enabled=false accounts are skipped, helper-served DWS
+# accounts are server-skipped whole, and cadence-deferred jobs whose
+# window has opened are picked up for users actually crawled.
+#
+# EGRESS MATH (Nov 12, load-cure era numbers): a full sweep costs
+# roughly 11-13 MB of PostgREST traffic at today's roster (Matthew's
+# ~3,500-car lot dominates at ~9-11 MB per run, mostly the tally
+# baseline read; Jourdan ~1 MB; every other account is KBs, and
+# helper-served accounts cost only their skip-evidence reads).
+# Nightly = ~0.35-0.4 GB/month, about 8% of the 5 GB Free-plan cap
+# on top of the post-trim baseline. That FITS nightly — but turning
+# the schedule on is Matthew's call (it starts crawling dormant
+# accounts nightly), so this file ships DISPATCH-ONLY.
+#
+# TO ENABLE THE SCHEDULE: uncomment the schedule block below (the
+# Dec 3 Supabase egress verdict is the checkpoint to confirm first).
+# =====================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      only_user:
+        description: 'Optional: run for just this user id (blank = all users)'
+        required: false
+        default: ''
+  # schedule:
+  #   - cron: '23 7 * * *'   # ~2:23 AM ET nightly, off-peak for dealers
+
+concurrency:
+  group: autolaunch-nightly-all
+  cancel-in-progress: false
+
+jobs:
+  scrape-all:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright supabase
+
+      - name: Install Playwright browser
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Run all-users sweep
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # Blank USER_ID = the scraper's all-users sweep mode. The
+          # optional dispatch input narrows a manual run to one user.
+          USER_ID: ${{ inputs.only_user }}
+          SCRAPE_LIMIT: '0'
+        run: |
+          cd luna-rebuild
+          python scraper.py

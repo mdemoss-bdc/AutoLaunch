@@ -51,6 +51,11 @@
 //     maps from defect_summary (fallback snapshot_summary) and
 //     message is the transcript rendered as text. Read-only.
 //     Newest first, cap 50.
+//   watchdog_list
+//     Alert-only (2026-11-12): helper-served DWS accounts whose
+//     helper evidence (helper_seen_at) is over 48 hours old, and
+//     accounts with auto-sync OFF and no successful sync in over 7
+//     days. Read-only; changes nothing.
 //   users_list
 //     Every registered user for the Owner console's Users section:
 //     display name (auth metadata name, else the settings'
@@ -538,6 +543,75 @@ Deno.serve(async (req) => {
       });
     }
     return json({ ok: true, tickets: out });
+  }
+
+  // ----------------------------------------------------- watchdog_list
+  if (action === "watchdog_list") {
+    // Alert-only surfacing (hands-free audit #15/#22, 2026-11-12):
+    // accounts that LOOK dark to the automation — helper-served DWS
+    // accounts (they carry a 'server_skip' row in scraper_run_log,
+    // written by the scraper's own skip) whose helper evidence is
+    // over 48 hours old, and accounts with auto-sync OFF whose last
+    // successful sync is over 7 days old (or never). Read-only: this
+    // action changes nothing anywhere; the Owner console just shows
+    // the list. Hidden test accounts are excluded like users_list.
+    const users = (await listAllUsers(svc)).filter(
+      (u: any) => OWNER_LIST_HIDDEN_USER_IDS.indexOf(u.id) === -1,
+    );
+    const authById = new Map<string, any>();
+    for (const u of users) authById.set(u.id, u);
+    const settingsById = new Map<string, any>();
+    for (let from = 0; ; from += 1000) {
+      const { data: rows, error } = await svc
+        .from("user_settings")
+        .select("user_id, helper_seen_at, helper_version, auto_sync_enabled, last_synced_at, dealership_name, store_name")
+        .order("user_id", { ascending: true })
+        .range(from, from + 999);
+      if (error) return refuse("list_failed", "Couldn't load the watchdog list.");
+      for (const r of rows || []) settingsById.set(r.user_id, r);
+      if (!rows || rows.length < 1000) break;
+    }
+    // Helper-served DWS evidence: any server_skip row in the last
+    // 30 days (the skip itself writes one per skipped run).
+    const skipSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const dwsUids = new Set<string>();
+    for (let from = 0; ; from += 1000) {
+      const { data: rows, error } = await svc
+        .from("scraper_run_log")
+        .select("user_id")
+        .eq("event", "server_skip")
+        .gte("created_at", skipSince)
+        .order("created_at", { ascending: true })
+        .range(from, from + 999);
+      if (error) break; // evidence read is best-effort; settings pass still runs
+      for (const r of rows || []) if (r.user_id) dwsUids.add(r.user_id);
+      if (!rows || rows.length < 1000) break;
+    }
+    const now = Date.now();
+    const H48 = 48 * 60 * 60 * 1000;
+    const D7 = 7 * 24 * 60 * 60 * 1000;
+    const dwsStale: any[] = [];
+    const syncDark: any[] = [];
+    for (const [uid, s] of settingsById) {
+      const auth = authById.get(uid);
+      if (!auth) continue;
+      const base = {
+        user_id: uid,
+        email: auth.email ?? null,
+        display_name: displayNameFor(auth, s),
+        helper_seen_at: s?.helper_seen_at ?? null,
+        last_synced_at: s?.last_synced_at ?? null,
+      };
+      if (dwsUids.has(uid)) {
+        const seenMs = s?.helper_seen_at ? Date.parse(s.helper_seen_at) : NaN;
+        if (!isFinite(seenMs) || now - seenMs > H48) dwsStale.push(base);
+      }
+      if (s?.auto_sync_enabled === false) {
+        const syncMs = s?.last_synced_at ? Date.parse(s.last_synced_at) : NaN;
+        if (!isFinite(syncMs) || now - syncMs > D7) syncDark.push(base);
+      }
+    }
+    return json({ ok: true, dws_stale: dwsStale, sync_dark: syncDark });
   }
 
   // --------------------------------------------------------- users_list
