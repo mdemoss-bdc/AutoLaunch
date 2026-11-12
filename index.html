@@ -9670,10 +9670,28 @@ window.addEventListener("resize", function () {
   }, 200);
 });
 
-// Phone grid rendering is chunked (see renderGridRows): first chunk painted
-// by renderGridRows, later chunks appended by showMoreGridCars().
+// Inventory rendering is chunked on ALL widths (see renderGridRows /
+// renderTableRows): first chunk painted by the render functions, later
+// chunks appended by showMoreGridCars() / showMoreTableRows().
 const GRID_CHUNK_SIZE = 60;
-let gridChunkState = { cars: [], shown: 0 };
+let gridChunkState = { cars: [], shown: 0, key: "" };
+const TABLE_CHUNK_SIZE = 100;
+let tableChunkState = { cars: [], shown: 0, key: "" };
+
+// Identity of a filtered list = its length + ordered VINs. A background
+// re-render of the SAME list preserves how many cars the user has already
+// expanded via "Show more"; any filter/sort/search change produces a
+// different key and resets to the first chunk.
+function chunkKeyOf(cars) {
+  return cars.length + ":" + cars.map(c => c.vin || "").join(",");
+}
+function preservedShown(state, cars, size) {
+  const key = chunkKeyOf(cars);
+  if (state && state.key === key && state.shown > 0) {
+    return { key: key, shown: Math.min(state.shown, cars.length) };
+  }
+  return { key: key, shown: Math.min(size, cars.length) };
+}
 
 function gridShowMoreButtonHtml() {
   const remaining = gridChunkState.cars.length - gridChunkState.shown;
@@ -9693,6 +9711,30 @@ function showMoreGridCars() {
   grid.insertAdjacentHTML("beforeend", chunkHtml);
   if (gridChunkState.shown < gridChunkState.cars.length) {
     grid.insertAdjacentHTML("beforeend", gridShowMoreButtonHtml());
+  }
+  // Selection truth lives in selectedCarVins; re-sync the freshly painted
+  // checkboxes from it, exactly like a full render does.
+  syncInventorySelectionUI();
+}
+
+function tableShowMoreRowHtml() {
+  const remaining = tableChunkState.cars.length - tableChunkState.shown;
+  return `<tr id="tableShowMoreRow"><td colspan="5" class="py-4 px-4"><button type="button" id="tableShowMoreBtn" onclick="showMoreTableRows()" class="w-full py-3.5 rounded-2xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-sm shadow-sm cursor-pointer">Show more cars <span class="text-slate-400 font-semibold">(${remaining} more)</span></button></td></tr>`;
+}
+
+function showMoreTableRows() {
+  const tbody = document.getElementById("inventoryTableBody");
+  if (!tbody || !tableChunkState.cars.length) return;
+  const start = tableChunkState.shown;
+  if (start >= tableChunkState.cars.length) return;
+  const next = Math.min(start + TABLE_CHUNK_SIZE, tableChunkState.cars.length);
+  const chunkHtml = tableChunkState.cars.slice(start, next).map(tableRowHtml).join("");
+  tableChunkState.shown = next;
+  const row = document.getElementById("tableShowMoreRow");
+  if (row) row.remove();
+  tbody.insertAdjacentHTML("beforeend", chunkHtml);
+  if (tableChunkState.shown < tableChunkState.cars.length) {
+    tbody.insertAdjacentHTML("beforeend", tableShowMoreRowHtml());
   }
   // Selection truth lives in selectedCarVins; re-sync the freshly painted
   // checkboxes from it, exactly like a full render does.
@@ -10305,11 +10347,10 @@ function gridCardHtml(car) {
     </div>`;
 }
 
-// Renders the grid view. Desktop paints every filtered car at once, exactly
-// as before. On phone-width screens the render is chunked (first
-// GRID_CHUNK_SIZE cards + a "Show more cars" button) so a 2,000-car lot
-// does not jank the phone; selection is unaffected because checkbox state
-// comes from selectedCarVins, not from the DOM.
+// Renders the grid view chunked on every width (first GRID_CHUNK_SIZE
+// cards + a "Show more cars" button) so a 2,000-car lot does not jank
+// any device; selection is unaffected because checkbox state comes from
+// selectedCarVins, not from the DOM.
 
 // SETUP RIDER (2026-11-05): an account with no cars AND no inventory
 // website isn't a filters problem — the "loosen filters" copy sent a
@@ -10337,20 +10378,16 @@ function renderGridRows(cars) {
   if (!grid) return;
   if (tbody) tbody.innerHTML = ""; // only the active view owns row markup
 
-  gridChunkState = { cars: cars, shown: cars.length };
+  const pres = preservedShown(gridChunkState, cars, GRID_CHUNK_SIZE);
+  gridChunkState = { cars: cars, shown: pres.shown, key: pres.key };
 
   if (!cars.length) {
     grid.innerHTML = inventoryEmptyStateHtml("grid");
     return;
   }
 
-  if (window.innerWidth < 768 && cars.length > GRID_CHUNK_SIZE) {
-    gridChunkState.shown = GRID_CHUNK_SIZE;
-    grid.innerHTML = cars.slice(0, GRID_CHUNK_SIZE).map(gridCardHtml).join("") + gridShowMoreButtonHtml();
-    return;
-  }
-
-  grid.innerHTML = cars.map(gridCardHtml).join("");
+  grid.innerHTML = cars.slice(0, gridChunkState.shown).map(gridCardHtml).join("")
+    + (gridChunkState.shown < cars.length ? gridShowMoreButtonHtml() : "");
 }
 
 function renderTableRows(cars) {
@@ -10366,8 +10403,17 @@ function renderTableRows(cars) {
     return;
   }
 
-  let html = "";
-  cars.forEach(car => {
+  const presT = preservedShown(tableChunkState, cars, TABLE_CHUNK_SIZE);
+  tableChunkState = { cars: cars, shown: presT.shown, key: presT.key };
+
+  tbody.innerHTML = cars.slice(0, tableChunkState.shown).map(tableRowHtml).join("")
+    + (tableChunkState.shown < cars.length ? tableShowMoreRowHtml() : "");
+}
+
+// One table row's markup — the exact template renderTableRows has always
+// built inline, extracted unchanged so the initial chunk and the
+// "Show more" appends (showMoreTableRows) produce identical rows.
+function tableRowHtml(car) {
     let photoUrl = car.image_url;
     if (photoUrl && photoUrl.startsWith('//')) photoUrl = 'https:' + photoUrl;
     if (!photoUrl || photoUrl.includes('/static/') || !/^https?:\/\//i.test(photoUrl)) photoUrl = FALLBACK_IMAGE;
@@ -10385,7 +10431,7 @@ function renderTableRows(cars) {
     const removalPending = postingQueue.some(i => i.vin === car.vin && i.action === 'delete' && (i.status === 'pending' || i.status === 'processing'));
     const sharePending = postingQueue.some(i => i.vin === car.vin && i.action === 'share' && (i.status === 'pending' || i.status === 'processing'));
 
-    html += `<tr class="table-row-vibrant transition border-b border-slate-100 group">
+    return `<tr class="table-row-vibrant transition border-b border-slate-100 group">
       <td class="py-4 px-4 text-center">
         <input type="checkbox" data-vin="${vinAttr}" ${selectedCarVins.has(car.vin) ? "checked" : ""} class="car-select-chk rounded text-blue-600 bg-white border-slate-300 w-4 h-4 cursor-pointer">
       </td>
@@ -10535,10 +10581,8 @@ ${car.location_name ? `
         </div>
       </td>
     </tr>`;
-  });
-
-  tbody.innerHTML = html;
 }
+
 
 function toggleRowDropdown(event, vin) {
   event.stopPropagation();
