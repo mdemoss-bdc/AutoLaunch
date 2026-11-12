@@ -3593,6 +3593,16 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
               <p class="text-xs text-slate-400">Loading…</p>
             </div>
           </div>
+
+          <div class="mt-6 pt-5 border-t border-slate-200">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <h4 class="font-bold text-sm text-slate-800">Support tickets</h4>
+            </div>
+            <p id="ownerTicketsCounts" class="text-xs font-medium mb-3 hidden"></p>
+            <div id="ownerTicketsList" class="space-y-2">
+              <p class="text-xs text-slate-400">Loading…</p>
+            </div>
+          </div>
         </div>
 
       </div><!-- /settingsPanelOwner -->
@@ -5103,6 +5113,7 @@ function loadOwnerGrantTools() {
   if (panel && !panel.classList.contains("hidden")) {
     refreshOwnerGrantList();
     loadOwnerSuggestions();
+    loadOwnerTickets();
   }
 }
 
@@ -5189,6 +5200,78 @@ async function loadOwnerSuggestions() {
       '</div>' +
       '<p class="text-[11px] text-slate-400 mt-1.5">' + escapeHtml(s.submitter_email || "Unknown sender") + (when ? " · " + when : "") + '</p>' +
       noteLine + "</div>";
+  }).join("");
+}
+
+// Support tickets inbox (read-only, QW5 2026-11-12): tickets are
+// filed by support-chat's fileTicket, which never sets status, so
+// every ticket lands at the column default 'open' — that filing
+// default is the unviewed state counted below. Read live from the
+// owner-grant function (tickets_list) each time the Owner tab
+// opens, exactly like the suggestions inbox above.
+const OWNER_TICKET_UNVIEWED_STATUS = "open";
+
+function toggleOwnerTicketMsg(id) {
+  const shortEl = document.getElementById("ownerTicketShort-" + id);
+  const fullEl = document.getElementById("ownerTicketFull-" + id);
+  const btn = document.getElementById("ownerTicketMsgBtn-" + id);
+  if (!fullEl) return;
+  const showFull = fullEl.classList.contains("hidden");
+  fullEl.classList.toggle("hidden", !showFull);
+  if (shortEl) shortEl.classList.toggle("hidden", showFull);
+  if (btn) btn.innerText = showFull ? "Show less" : "Show full message";
+}
+
+async function loadOwnerTickets() {
+  const listEl = document.getElementById("ownerTicketsList");
+  const countsEl = document.getElementById("ownerTicketsCounts");
+  if (!listEl || !isOwnerGrantUser()) return;
+  listEl.innerHTML = '<p class="text-xs text-slate-400">Loading\u2026</p>';
+  const res = await ownerGrantInvoke({ action: "tickets_list", filter: "all" });
+  if (!res.ok) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">Couldn\'t load tickets.</p>';
+    if (countsEl) countsEl.classList.add("hidden");
+    return;
+  }
+  const rows = (res.tickets || []).slice().sort(function (a, b) {
+    return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+  });
+  const unviewed = rows.filter(function (t) { return t.status === OWNER_TICKET_UNVIEWED_STATUS; });
+  const defectUnviewed = unviewed.filter(function (t) { return !!t.suspected_defect; });
+  if (countsEl) {
+    countsEl.classList.remove("hidden");
+    countsEl.innerHTML = escapeHtml(unviewed.length + (unviewed.length === 1 ? " unviewed ticket" : " unviewed tickets")) +
+      (defectUnviewed.length
+        ? ' \u00b7 <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold">\u26a0 ' + defectUnviewed.length + " defect-suspected</span>"
+        : "");
+  }
+  if (!rows.length) {
+    listEl.innerHTML = '<p class="text-xs text-slate-400">Nothing here.</p>';
+    return;
+  }
+  listEl.innerHTML = rows.map(function (t) {
+    const when = t.created_at ? new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+    const chipText = t.status === OWNER_TICKET_UNVIEWED_STATUS ? "Unviewed" : escapeHtml(String(t.status || ""));
+    const msg = String(t.message || "");
+    const longMsg = msg.length > 220;
+    const shortMsg = longMsg ? msg.slice(0, 220) + "\u2026" : msg;
+    let html = '<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">' +
+      '<div class="flex items-start justify-between gap-3">' +
+      '<p class="text-sm text-slate-700 leading-relaxed"><span class="font-bold text-slate-800">' + escapeHtml(t.subject || "(no subject)") + "</span></p>" +
+      '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5">' + chipText + "</span>" +
+      "</div>";
+    if (t.suspected_defect) {
+      html += '<p class="mt-1.5"><span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold">\u26a0 Suspected defect</span></p>';
+    }
+    if (msg) {
+      html += '<p id="ownerTicketShort-' + t.id + '" class="text-xs text-slate-500 mt-1.5 leading-relaxed">' + escapeHtml(shortMsg) + "</p>";
+      if (longMsg) {
+        html += '<p id="ownerTicketFull-' + t.id + '" class="hidden text-xs text-slate-500 mt-1.5 leading-relaxed">' + escapeHtml(msg) + "</p>" +
+          '<button type="button" id="ownerTicketMsgBtn-' + t.id + '" onclick="toggleOwnerTicketMsg(\'' + t.id + '\')" class="mt-2 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">Show full message</button>';
+      }
+    }
+    html += '<p class="text-[11px] text-slate-400 mt-1.5">' + escapeHtml(t.submitter_email || "Unknown sender") + (when ? " \u00b7 " + when : "") + "</p></div>";
+    return html;
   }).join("");
 }
 
