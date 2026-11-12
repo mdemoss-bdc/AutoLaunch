@@ -4343,6 +4343,18 @@ let currentStore = {
 
 let rawInventory = [];
 
+// LOAD STATE (2026-11-12): until the first full inventory load settles,
+// the list is LOADING, not empty. inventoryEmptyStateHtml and the
+// header counters read these flags so a returning user is never told
+// "No inventory yet / 0 Vehicles" while their cars are still in
+// flight. inventoryLoadedOnce flips true on the first successful load
+// and stays true (later refreshes keep showing the real data while
+// they run, so nothing flashes back to a loading state);
+// inventoryLoadFailed remembers a failed first load so its failure
+// message is not overwritten by a "loading" render before a retry.
+let inventoryLoadedOnce = false;
+let inventoryLoadFailed = false;
+
 // Inventory bulk selection is keyed by VIN, never by row position.
 // Keeping it outside the DOM means periodic queue/inventory renders,
 // sorting, filtering, and list/grid switches cannot clear a selection
@@ -7624,7 +7636,7 @@ async function handleAuthSubmit(e) {
       });
       if (error) throw error;
       if (data && data.session) {
-        await initAppSession(data.session.user);
+        startAppForUser(data.session.user); // guarded entry — same path as the auth listener, so init runs once per user
       } else if (data && data.user) {
         // Email confirmation is ON for this project: signUp created the
         // account but returned no session. The old code immediately tried
@@ -7664,7 +7676,7 @@ async function handleAuthSubmit(e) {
         }
         throw error;
       }
-      await initAppSession(data.user);
+      startAppForUser(data.user); // guarded entry — same path as the auth listener, so init runs once per user
     }
   } catch (err) {
     errBox.innerText = err.message || "Authentication failed.";
@@ -7970,6 +7982,20 @@ function postExtLogin(user, accessToken) {
 
 async function initAppSession(user) {
   currentUser = user;
+  // LOAD SPEED (2026-11-12): the inventory RPC chain depends only on
+  // the user id, so it starts NOW — in parallel with the session and
+  // settings chain below — instead of waiting behind ~6 sequential
+  // settings round trips. The rows are committed and rendered only
+  // after the settings land (fetchLiveInventory awaits this promise
+  // at the old serial point), so the first paint is identical to the
+  // old order; only the waiting overlaps. The no-op catch marks an
+  // early failure as handled; the commit path still sees it.
+  const invPrefetch = fetchInventoryRows();
+  invPrefetch.catch(() => {});
+  // Until that first load lands, the header must not state "0
+  // Vehicles" as fact — the count is unknown, not zero.
+  const topCountEl = document.getElementById("topCarsCountLabel");
+  if (topCountEl) topCountEl.innerText = "Loading\u2026";
   // Phone layout: open on the initial view (saved choice, else cards on
   // phones) through the same path the view toggle uses, so the containers
   // and toggle buttons match the mode before the first inventory render.
@@ -7988,7 +8014,7 @@ async function initAppSession(user) {
   }
 
   await loadUserStoreSettings();
-  await fetchLiveInventory(true);
+  await fetchLiveInventory(true, invPrefetch);
   await loadPostingQueue();
   syncQueuePoller();
   probeHelperVersionOnce();
@@ -8115,6 +8141,7 @@ async function loadUserStoreSettings() {
   // as it is for any covered member, via the dealershipCovered()
   // guards downstream.
   await consumePendingDealershipRegistration();
+  let loadedSettingsRow = null;
   try {
     const { data, error } = await supabaseClient
       .from("user_settings")
@@ -8123,6 +8150,9 @@ async function loadUserStoreSettings() {
       .maybeSingle();
 
     if (error) throw error;
+    // Passed to the setup gate at the end of this load, which used to
+    // select this same row again (LOAD SPEED, 2026-11-12).
+    loadedSettingsRow = data;
 
     // PLANS: resolve this account's tier from its settings row (legacy
     // values resolve to 'automate'; no row yet means a brand-new signup
@@ -8397,7 +8427,7 @@ updateLastSyncDisplay();
   // it also lands anyone missing an essential on Get Started —
   // whatever the stored onboarding_complete flag claims. Leaders
   // are exempt inside applySetupGate (manage-only accounts).
-  await applySetupGate();
+  await applySetupGate(loadedSettingsRow);
 }
 // ==============================================================================
 // ====================== LAST SYNC DISPLAY START ===============================
@@ -8804,43 +8834,65 @@ async function syncCompletionCoversRender() {
   }
 }
 
-async function fetchLiveInventory(isManual) {
-  if (!currentUser) return;
+// The inventory paging loop on its own (split out 2026-11-12):
+// returns the raw RPC rows and throws on error. fetchLiveInventory
+// below owns the commit + render; initAppSession starts this fetch
+// early (in parallel with the settings chain) and hands the promise
+// to fetchLiveInventory, so every other caller keeps the exact old
+// behavior — one fetch, one commit, the same failure row.
+async function fetchInventoryRows() {
   if (invBaselineAt === null) invBaselineAt = Date.now();
+  let allCars = [];
+  let from = 0;
+  const step = 1000;
+  let keepFetching = true;
+
+  while (keepFetching) {
+    // EGRESS TRIM (2026-11-07): the list load goes through
+    // inventory_list_rows, which returns every column EXCEPT the
+    // photos / custom_photo_urls arrays (76% of a row's bytes) plus
+    // server-computed photo counts that reproduce the JS counting
+    // predicates exactly (proven row-for-row against them). Rows
+    // that need the real arrays (details gallery, Add Photos) fetch
+    // them per car via ensureFullCar. Ordering (price, vin) is
+    // applied inside the function, matching the old select.
+    const { data, error } = await supabaseClient
+      .rpc("inventory_list_rows", { p_user_id: currentUser.id })
+      .range(from, from + step - 1);
+
+    if (error) throw error;
+    if (data && data.length > 0) {
+      allCars = allCars.concat(data);
+      if (data.length < step) keepFetching = false;
+      else from += step;
+    } else {
+      keepFetching = false;
+    }
+  }
+
+  return allCars;
+}
+
+async function fetchLiveInventory(isManual, prefetchedRows) {
+  if (!currentUser) return;
   const tbody = document.getElementById("inventoryTableBody");
   try {
-    let allCars = [];
-    let from = 0;
-    const step = 1000;
-    let keepFetching = true;
-
-    while (keepFetching) {
-      // EGRESS TRIM (2026-11-07): the list load goes through
-      // inventory_list_rows, which returns every column EXCEPT the
-      // photos / custom_photo_urls arrays (76% of a row's bytes) plus
-      // server-computed photo counts that reproduce the JS counting
-      // predicates exactly (proven row-for-row against them). Rows
-      // that need the real arrays (details gallery, Add Photos) fetch
-      // them per car via ensureFullCar. Ordering (price, vin) is
-      // applied inside the function, matching the old select.
-      const { data, error } = await supabaseClient
-        .rpc("inventory_list_rows", { p_user_id: currentUser.id })
-        .range(from, from + step - 1);
-
-      if (error) throw error;
-      if (data && data.length > 0) {
-        allCars = allCars.concat(data);
-        if (data.length < step) keepFetching = false;
-        else from += step;
-      } else {
-        keepFetching = false;
-      }
-    }
+    const allCars = prefetchedRows ? await prefetchedRows : await fetchInventoryRows();
 
     rawInventory = allCars.filter(c => c.is_active !== false || !!c.marketplace_posted_at);
+    inventoryLoadedOnce = true;
+    inventoryLoadFailed = false;
     applyInventoryRefreshUI();
   } catch (err) {
     console.error("Fetch error:", err);
+    if (!inventoryLoadedOnce) {
+      // A failed FIRST load: keep the header honest (it was showing
+      // the loading state) and let inventoryEmptyStateHtml keep the
+      // failure copy if a render lands before the next attempt.
+      inventoryLoadFailed = true;
+      const topCountEl = document.getElementById("topCarsCountLabel");
+      if (topCountEl) topCountEl.innerText = "Failed to load";
+    }
     tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>';
   }
 }
@@ -9589,7 +9641,8 @@ if (filterMileageRange) {
   window.currentFilteredInventory = filtered;
   pruneSelectedCarVins();
 
-document.getElementById("showingCountBold").innerText = filtered.length;
+// Pre-first-load renders must not state "Showing 0 cars" as fact.
+document.getElementById("showingCountBold").innerText = (!inventoryLoadedOnce && !inventoryLoadFailed) ? "\u2026" : filtered.length;
 renderTableRows(filtered);
 syncInventorySelectionUI();
 updateClearFiltersVisibility();
@@ -10359,6 +10412,20 @@ function gridCardHtml(car) {
 // missing, with the way to fix it. When cars exist but the filters
 // exclude them all, the original copy below is unchanged.
 function inventoryEmptyStateHtml(kind) {
+  // LOAD STATE (2026-11-12): before the first load settles, an empty
+  // render means "still loading" (or "that load failed") — never "you
+  // have no inventory". The setup rider and the filter copy below are
+  // only reachable once a load has actually completed.
+  if (typeof inventoryLoadedOnce !== "undefined" && !inventoryLoadedOnce) {
+    if (typeof inventoryLoadFailed !== "undefined" && inventoryLoadFailed) {
+      return kind === "table"
+        ? '<tr><td colspan="5" class="py-12 text-center text-slate-400">Failed to load inventory.</td></tr>'
+        : '<div class="col-span-full py-16 text-center text-slate-400 text-xs">Failed to load inventory.</div>';
+    }
+    return kind === "table"
+      ? '<tr><td colspan="5" class="py-16 text-center text-slate-400">Loading showroom inventory...</td></tr>'
+      : '<div class="col-span-full py-16 text-center text-slate-400 text-xs">Loading showroom inventory...</div>';
+  }
   const noCarsAtAll = typeof rawInventory !== "undefined" && Array.isArray(rawInventory) && rawInventory.length === 0;
   const noSource = !(typeof currentStore !== "undefined" && currentStore && allInventoryUrls().length > 0);
   if (noCarsAtAll && noSource) {
@@ -12942,12 +13009,18 @@ function gsComputeSteps(input) {
 // user_settings row plus two exact counts and the newest sync summary.
 // Any read failure returns null and the caller fails OPEN — a state
 // read error must never trap a user behind a gate that can't verify.
-async function gsLoadSetupState() {
+async function gsLoadSetupState(settingsRow) {
   if (!currentUser || typeof supabaseClient === "undefined") return null;
   const uid = currentUser.id;
   const GS_COLS = "onboarding_complete, dealership_name, store_name, used_url, new_url, certified_url, helper_version, helper_seen_at";
-  let row = null;
-  try {
+  // LOAD SPEED (2026-11-12): loadUserStoreSettings just fetched this
+  // account's full settings row (a select *), so when it passes that
+  // row in, reuse it instead of selecting the same row a second time
+  // — it carries every column read below. A null/absent row (no
+  // settings row yet, or the settings load errored) falls through to
+  // the fresh select below, exactly the old behavior.
+  let row = settingsRow || null;
+  if (!row) try {
     const r = await supabaseClient.from("user_settings")
       .select(GS_COLS + ", fb_ready_confirmed_at, extra_used_urls")
       .eq("user_id", uid).maybeSingle();
@@ -13071,9 +13144,9 @@ document.addEventListener("click", function (e) {
 // Runs from loadUserStoreSettings on every settings load. Dealership
 // leaders are exempt (manage-only accounts; their home is the
 // Dealership page, not the staircase). Fails open on any state error.
-async function applySetupGate() {
+async function applySetupGate(settingsRow) {
   if (!currentUser || typeof isDealershipLeader === "function" && isDealershipLeader()) return;
-  const state = await gsLoadSetupState();
+  const state = await gsLoadSetupState(settingsRow);
   if (!state) return;
   gsApplyNavGate();
   // Heal: state proves setup complete but the stored flag disagrees —
