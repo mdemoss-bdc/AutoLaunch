@@ -42,6 +42,15 @@
 //     accepted (verdict 'do') | denied (verdict 'no') | parked
 //     (verdict 'park') | all. Submitter email is resolved
 //     server-side from user_id. Read-only. Newest first, cap 100.
+//   tickets_list {filter}
+//     The owner inbox for support tickets (public.support_tickets;
+//     filed by support-chat, incl. auto-flagged suspected_defect
+//     tickets). filter: all (default) | unviewed (status 'open' —
+//     the filing default). Submitter email is resolved server-side
+//     from user_id. The table has no subject/body columns: subject
+//     maps from defect_summary (fallback snapshot_summary) and
+//     message is the transcript rendered as text. Read-only.
+//     Newest first, cap 50.
 //   users_list
 //     Every registered user for the Owner console's Users section:
 //     display name (auth metadata name, else the settings'
@@ -490,6 +499,45 @@ Deno.serve(async (req) => {
       });
     }
     return json({ ok: true, suggestions: out });
+  }
+
+  // ------------------------------------------------------ tickets_list
+  if (action === "tickets_list") {
+    const filter = typeof body.filter === "string" ? body.filter : "all";
+    let q = svc
+      .from("support_tickets")
+      // Raw columns: defect_summary / snapshot_summary (subject) and
+      // transcript (message) — support_tickets has no subject or
+      // body/message columns; see the mapping in the loop below.
+      .select("id, user_id, created_at, status, suspected_defect, defect_summary, snapshot_summary, transcript")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (filter === "unviewed") q = q.eq("status", "open");
+    else if (filter !== "all") {
+      return refuse("invalid_filter", "Pick one of the ticket views.");
+    }
+    const { data: rows, error } = await q;
+    if (error) return refuse("list_failed", "Couldn't load the support tickets.");
+    const out = [];
+    for (const r of rows || []) {
+      const turns = Array.isArray(r.transcript) ? r.transcript : [];
+      const message = turns
+        .map((t: any) => (typeof t?.body === "string" ? (t.role ? t.role + ": " : "") + t.body : ""))
+        .filter((s: string) => s)
+        .join("\n");
+      out.push({
+        id: r.id,
+        created_at: r.created_at,
+        status: r.status,
+        suspected_defect: r.suspected_defect,
+        // subject <- defect_summary, falling back to snapshot_summary
+        subject: r.defect_summary || r.snapshot_summary || null,
+        // message <- transcript rendered as text (fallback: snapshot_summary)
+        message: message || r.snapshot_summary || null,
+        submitter_email: await emailForUserId(svc, r.user_id),
+      });
+    }
+    return json({ ok: true, tickets: out });
   }
 
   // --------------------------------------------------------- users_list
