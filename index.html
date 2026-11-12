@@ -5365,7 +5365,8 @@ let currentBilling = {
 
 // HELPER / SYNC STATE for the Prospects status line (2026-10-28):
 // what this account's user_settings row last recorded about the
-// helper (helper_version / helper_seen_at, filled by
+// helper (helper_version / helper_seen_at = build confirmed,
+// helper_lease_expires_at = liveness lease, filled by
 // loadUserStoreSettings), plus whether the helper answered THIS
 // tab during this session (helperPongAt — persistHelperVersion
 // is the funnel every bridge PONG passes through, so a call
@@ -5373,7 +5374,7 @@ let currentBilling = {
 // inbound buyer message the helper has landed in Prospects
 // (closer_messages.created_at via prospectChats.lastInboundAt),
 // recomputed by loadProspects(); null = nothing synced yet.
-let currentHelperInfo = { version: null, seenAt: null };
+let currentHelperInfo = { version: null, seenAt: null, leaseExpiresAt: null };
 let helperPongAt = 0;
 let helperPongVersion = null;
 let prospectsLastBuyerAt = null;
@@ -8183,7 +8184,8 @@ async function loadUserStoreSettings() {
     };
     currentHelperInfo = {
       version: data ? (data.helper_version || null) : null,
-      seenAt: data ? (data.helper_seen_at || null) : null
+      seenAt: data ? (data.helper_seen_at || null) : null,
+      leaseExpiresAt: data ? (data.helper_lease_expires_at || null) : null
     };
     if (currentUser && !isOwnerUser(currentUser.id) && !isDealershipLeader() && !dealershipCovered() &&
         (currentBilling.status === null || currentBilling.status === "trialing")) {
@@ -15124,11 +15126,16 @@ async function showProspectsPage() {
 // helper_seen_at is written ONLY when the recorded version
 // changes (see persistHelperVersion), so it means "this helper
 // build was confirmed on the account at that time" — not a
-// heartbeat. A present-tense "connected" is therefore claimed
-// only when the helper answered this session, or was confirmed
-// within PROSPECTS_HELPER_FRESH_MS; past that the line softens
-// to "last seen".
-const PROSPECTS_HELPER_FRESH_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// heartbeat, and (QW4, 2026-11-12) it no longer decides liveness:
+// a dead helper used to read "connected" for up to 7 days off
+// seen_at alone. The present-tense "connected" verdict now comes
+// from helper_lease_expires_at — the 10-minute lease the holding
+// helper renews on every claim cycle — allowing 2 minutes of
+// grace past expiry so the line does not flicker between renewals;
+// the helper answering this session (pongAt) also counts, since
+// that interrogates the helper directly. Past the lease (+grace)
+// the line softens to not-connected, with seen_at still shown as
+// build-confirmed info.
 
 // [sync-status-pure:start]
 function prospectsRelTime(iso, nowMs) {
@@ -15157,14 +15164,15 @@ function prospectsSyncStatus(input) {
   if (!extVersionAtLeast(version, input.expectedVersion)) {
     return { tone: "warn", text: "Helper out of date (v" + version + " — current is v" + input.expectedVersion + "). Update it from the Extension page. · " + buyerSeg };
   }
-  const seenMs = Date.parse(input.storedSeenAt || "");
-  const fresh = !!input.pongAt || (isFinite(seenMs) && (nowMs - seenMs) <= PROSPECTS_HELPER_FRESH_MS);
+  const leaseMs = Date.parse(input.storedLeaseExpiresAt || "");
+  const LEASE_GRACE_MS = 2 * 60 * 1000; // grace past lease expiry, anti-flicker
+  const fresh = !!input.pongAt || (isFinite(leaseMs) && nowMs <= leaseMs + LEASE_GRACE_MS);
   if (fresh) {
     return { tone: "ok", text: "Helper connected · v" + version + " · " + buyerSeg };
   }
   const seenRel = prospectsRelTime(input.storedSeenAt, nowMs);
   if (seenRel) {
-    return { tone: "warn", text: "Helper last seen " + seenRel + " · v" + version + " · " + buyerSeg };
+    return { tone: "warn", text: "Helper not connected — build v" + version + " confirmed " + seenRel + " · " + buyerSeg };
   }
   return { tone: "warn", text: "Helper v" + version + " — open the Extension page to check the connection. · " + buyerSeg };
 }
@@ -15176,6 +15184,7 @@ function updateProspectsSyncStatus() {
   const s = prospectsSyncStatus({
     storedVersion: currentHelperInfo.version,
     storedSeenAt: currentHelperInfo.seenAt,
+    storedLeaseExpiresAt: currentHelperInfo.leaseExpiresAt,
     pongAt: helperPongAt,
     pongVersion: helperPongVersion,
     expectedVersion: EXPECTED_EXT_VERSION,
