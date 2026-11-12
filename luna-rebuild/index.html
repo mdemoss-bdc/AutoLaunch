@@ -2404,6 +2404,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <input type="email" id="prEmail" placeholder="name@email.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
       </div>
       <div class="col-span-2">
+        <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Phone</label>
+        <input type="tel" id="prPhone" placeholder="e.g. (304) 555-1234" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      </div>
+      <div class="col-span-2">
         <label class="block font-bold text-slate-600 uppercase tracking-wider text-[10px] mb-1.5">Car they're asking about</label>
         <input type="text" id="prVehicle" placeholder="e.g. 2024 F-150 Lariat, stock B5678" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
       </div>
@@ -14836,9 +14840,9 @@ function extractProspectIntel(messages) {
    A find that fills an EMPTY field, or conflicts with one, applies
    only on the rep's tap, through the same persistProspect path the
    manual edit uses; applied/dismissed items leave the pending list.
-   Phone finds are shown with evidence but carry no Apply: the
-   prospects table has no phone column yet (additive-DDL ask is in
-   the build report — until then a phone write would error). */
+   Phone finds apply the same way since 2026-11-12 (Matthew approved
+   the additive prospects.phone column — see the autopull spec
+   addendum). */
 const dismissedIntelKeys = new Set();
 function prospectIntelDate(iso) {
   if (!iso) return "";
@@ -14856,7 +14860,9 @@ function prospectIntelFinds(p) {
     }
   });
   intel.phones.forEach(ph => {
-    items.push({ kind: "phone", key: "phone:" + ph.value, label: "Phone", value: ph.value, existing: "", quote: ph.quote, at: ph.at, noField: true });
+    if ((p.phone || "").trim() !== ph.value) {
+      items.push({ kind: "phone", key: "phone:" + ph.value, label: "Phone", value: ph.value, existing: p.phone || "", quote: ph.quote, at: ph.at });
+    }
   });
   if (intel.location) {
     const L = intel.location;
@@ -14894,9 +14900,7 @@ function prospectIntelHtml(p) {
   items.forEach(it => {
     const existing = it.existing ? ` <span class="text-slate-400">(card has “${escapeHtml(it.existing)}”)</span>` : "";
     const when = src(it.at);
-    const right = it.noField
-      ? `<span class="text-[11px] text-slate-400 shrink-0">no phone field yet</span>`
-      : `<div class="flex gap-1.5 shrink-0">
+    const right = `<div class="flex gap-1.5 shrink-0">
           <button data-prospect-action="intel-apply" data-prospect-id="${pid}" data-intel-kind="${it.kind}" data-intel-value="${escapeHtml(it.value)}" data-intel-city="${escapeHtml(it.city || "")}" data-intel-state="${escapeHtml(it.state || "")}" class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold cursor-pointer">Apply</button>
           <button data-prospect-action="intel-dismiss" data-prospect-id="${pid}" data-intel-key="${escapeHtml(it.key)}" class="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-slate-600 text-[11px] font-bold cursor-pointer">Dismiss</button>
         </div>`;
@@ -14905,7 +14909,7 @@ function prospectIntelHtml(p) {
       ${right}
     </div>`);
   });
-  const applicable = items.filter(it => !it.noField);
+  const applicable = items;
   if (applicable.length >= 2) {
     parts.push(`<button data-prospect-action="intel-apply-all" data-prospect-id="${pid}" class="mt-2 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold cursor-pointer">Apply all</button>`);
   }
@@ -14934,6 +14938,10 @@ async function applyProspectIntel(id, el) {
     payload.email = el.getAttribute("data-intel-value") || "";
     entry.email = payload.email;
     dismissedIntelKeys.add(String(id) + "|email:" + payload.email);
+  } else if (kind === "phone") {
+    payload.phone = el.getAttribute("data-intel-value") || "";
+    entry.phone = payload.phone;
+    dismissedIntelKeys.add(String(id) + "|phone:" + payload.phone);
   } else if (kind === "location") {
     payload.city = el.getAttribute("data-intel-city") || "";
     payload.state = el.getAttribute("data-intel-state") || "";
@@ -14951,8 +14959,9 @@ async function applyAllProspectIntel(id) {
   const f = prospectIntelFinds(entry);
   if (!f) return;
   const payload = {};
-  f.items.filter(it => !it.noField).forEach(it => {
+  f.items.forEach(it => {
     if (it.kind === "email") { payload.email = it.value; entry.email = it.value; }
+    if (it.kind === "phone") { payload.phone = it.value; entry.phone = it.value; }
     if (it.kind === "location") { payload.city = it.city; payload.state = it.state; entry.city = it.city; entry.state = it.state; }
     dismissedIntelKeys.add(String(id) + "|" + it.key);
   });
@@ -15804,7 +15813,7 @@ function renderProspects() {
   list.innerHTML = visible.map(p => {
     const stage = prospectStage(p.stage || "new");
     const where = [p.city, p.state].filter(Boolean).map(x => escapeHtml(x)).join(", ");
-    const contact = [where, p.email ? escapeHtml(p.email) : ""].filter(Boolean).join(" • ");
+    const contact = [where, p.email ? escapeHtml(p.email) : "", p.phone ? escapeHtml(p.phone) : ""].filter(Boolean).join(" • ");
     const options = prospectStageOptions(p.stage || "new").map(s =>
       `<option value="${s.key}" ${s.key === (p.stage || "new") ? "selected" : ""}>${s.label}</option>`).join("");
     const chat = prospectChats[p.id];
@@ -16606,6 +16615,7 @@ function buildProspectLeadSummary(p, tradeLine) {
   const where = [p.city, p.state].filter(Boolean).join(", ");
   if (where) lines.push("Location: " + where);
   if (p.email) lines.push("Email: " + p.email);
+  if (p.phone) lines.push("Phone: " + p.phone);
   lines.push("Stage: " + stage.label + ((p.stage || "new") === "sold" && p.sold_at ? " (" + new Date(p.sold_at).toLocaleDateString() + ")" : ""));
   if (p.vehicle_label) lines.push("Vehicle of interest: " + p.vehicle_label);
   if (p.vehicle_id) lines.push("Vehicle ref / VIN: " + p.vehicle_id);
@@ -16681,6 +16691,7 @@ function openProspectForm(entryId) {
   set("prCity", p ? p.city : "");
   set("prState", p ? p.state : "");
   set("prEmail", p ? p.email : "");
+  set("prPhone", p ? p.phone : "");
   set("prVehicle", p ? p.vehicle_label : "");
   // PIPELINE: a legacy stage (e.g. came_in) has no static <option> in
   // the form — inject one so editing an old row can't silently reset
@@ -16707,6 +16718,7 @@ async function saveProspectForm() {
     city: document.getElementById("prCity").value.trim() || null,
     state: document.getElementById("prState").value.trim() || null,
     email: document.getElementById("prEmail").value.trim() || null,
+    phone: document.getElementById("prPhone").value.trim() || null,
     vehicle_label: document.getElementById("prVehicle").value.trim() || null,
     stage: document.getElementById("prStage").value || "new",
     notes: document.getElementById("prNotes").value.trim() || null,
