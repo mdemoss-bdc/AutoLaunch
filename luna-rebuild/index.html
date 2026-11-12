@@ -14591,6 +14591,375 @@ function prospectLastActivity(p, chat) {
   return (p && (p.updated_at || p.created_at)) || null;
 }
 // [pipeline-pure:end]
+// [autopull-pure:start]
+/* LIGHT CRM — PROSPECTS AUTO-PULL (rebuild only, 2026-11-12,
+   Matthew's ask: "a light version on rebuild only"). Deterministic
+   extraction from a prospect's captured closer_messages — NO AI
+   calls, no auto-writes. The engine below is pure: it reads buyer
+   messages and returns structured intel WITH the evidence quote for
+   every item, so a rep can trust-but-verify before tapping Apply.
+   Rules are deliberately conservative: when in doubt, no find.
+   - Contact (email / phone) comes ONLY from buyer messages
+     (direction "in" / origin "buyer"). Rep and AI rows are never a
+     source, so the dealership's own numbers in a rep message can
+     never be harvested as the buyer's.
+   - Location comes ONLY from an explicit buyer statement
+     ("I'm in Huntington, WV" / "I live in Ashland KY") — never
+     guessed from an area code.
+   - Signals are keyword+context rules with negation guards
+     documented per rule. Stage suggestions derive ONLY from the
+     appointment / not-interested signals and are never auto-applied. */
+const PROSPECT_STATE_NAMES = {
+  "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+  "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+  "district of columbia": "DC", "florida": "FL", "georgia": "GA", "hawaii": "HI",
+  "idaho": "ID", "illinois": "IL", "indiana": "IN", "iowa": "IA",
+  "kansas": "KS", "kentucky": "KY", "louisiana": "LA", "maine": "ME",
+  "maryland": "MD", "massachusetts": "MA", "michigan": "MI", "minnesota": "MN",
+  "mississippi": "MS", "missouri": "MO", "montana": "MT", "nebraska": "NE",
+  "nevada": "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM",
+  "new york": "NY", "north carolina": "NC", "north dakota": "ND", "ohio": "OH",
+  "oklahoma": "OK", "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI",
+  "south carolina": "SC", "south dakota": "SD", "tennessee": "TN", "texas": "TX",
+  "utah": "UT", "vermont": "VT", "virginia": "VA", "washington": "WA",
+  "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY"
+};
+const PROSPECT_STATE_ABBRS = new Set(Object.values(PROSPECT_STATE_NAMES).concat(["DC"]));
+// Captured-thread furniture (Facebook page chrome stored as message
+// rows by early capture) and pure timestamp/divider rows can never
+// yield intel.
+const PROSPECT_INTEL_JUNK = [
+  /you can now rate each other/i,
+  /joined facebook in \d{4}/i,
+  /started this chat/i,
+  /tap a response to send it/i,
+  /^(unread message|notifications?|you sent|message sent)\b/i,
+  /^.{1,60}·\s*buyer$/i,
+  /^\w{3,9} \d{1,2},? \d{1,2}:\d{2}\s?(am|pm)$/i,
+  /^[A-Za-z]{3,9} \d{1,2}, \d{4},? \d{1,2}:\d{2}\s?(am|pm)$/i,
+  /^[A-Za-z]{3,9} \d{1,2}(, \d{4})?$/,
+  /^(\w{3} )?\d{1,2}:\d{2}\s?(am|pm)$/i,
+  /^[^\n]{2,80}?You:\s/,
+  /^you:\s/i,
+  /^buyer$/i
+];
+function prospectIntelIsJunk(body) {
+  const s = String(body || "").trim();
+  if (!s) return true;
+  return PROSPECT_INTEL_JUNK.some(re => re.test(s));
+}
+function prospectIntelIsBuyer(m) {
+  return !!m && m.origin !== "ai" && (m.direction === "in" || m.origin === "buyer");
+}
+function prospectIntelIsReal(m) {
+  return !!m && m.origin !== "ai" && !prospectIntelIsJunk(m.body);
+}
+function prospectIntelQuote(body) {
+  const s = String(body || "").trim().replace(/\s+/g, " ");
+  return s.length > 220 ? s.slice(0, 217) + "…" : s;
+}
+function prospectIntelState(token) {
+  const t = String(token || "").trim().replace(/\.$/, "");
+  if (/^[A-Za-z]{2}$/.test(t)) {
+    const up = t.toUpperCase();
+    return PROSPECT_STATE_ABBRS.has(up) ? up : null;
+  }
+  return PROSPECT_STATE_NAMES[t.toLowerCase().replace(/\s+/g, " ")] || null;
+}
+// US phone candidates in ONE message body. Requires a full 10-digit
+// number (separators, parens, +1, or a bare 10-digit run) — so a
+// price ($23,220), a year, a mileage or a ZIP can never match, and a
+// 17-char VIN token is scrubbed before scanning. Normalized to
+// "(304) 555-1234" everywhere.
+function prospectIntelPhones(text) {
+  const cleaned = String(text || "").replace(/\b[A-HJ-NPR-Z0-9]{17}\b/gi, " ");
+  const out = [];
+  const re = /(^|[^\d])((?:\+?1[\s.\-]?)?(?:\(\d{3}\)|\d{3})[\s.\-]?\d{3}[\s.\-]?\d{4})(?!\d)/g;
+  let m;
+  while ((m = re.exec(cleaned))) {
+    const digits = m[2].replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+    if (digits.length !== 10) continue;
+    if (digits[0] === "0" || digits[0] === "1") continue;
+    const fmt = "(" + digits.slice(0, 3) + ") " + digits.slice(3, 6) + "-" + digits.slice(6);
+    if (!out.includes(fmt)) out.push(fmt);
+  }
+  return out;
+}
+function prospectIntelEmails(text) {
+  const out = [];
+  const re = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+  let m;
+  const s = String(text || "");
+  while ((m = re.exec(s))) {
+    const v = m[0].toLowerCase();
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+const PROSPECT_CITY_STOP = new Set(["the", "a", "an", "your", "town", "area", "market", "facebook", "today", "tomorrow", "tonight", "here", "there"]);
+// Explicit buyer location statement, or null. Two shapes: the
+// comma form ("from Barboursville, WV" / "I live in Huntington,
+// West Virginia") and the bare-abbrev form ("I'm in Huntington WV" —
+// the state token must be uppercase in the raw text there, so
+// ordinary sentence words can't pose as a state). The state token
+// is matched against the KNOWN state list (longest first, built
+// from the map above) instead of a lazy word pattern — a lazy
+// pattern stops at "West" and never resolves "West Virginia".
+const PROSPECT_STATE_TOKEN = "(?:"
+  + Object.keys(PROSPECT_STATE_NAMES).map(n => n.replace(/ /g, "\\s+"))
+      .concat(Object.values(PROSPECT_STATE_NAMES))
+      .sort((a, b) => b.length - a.length).join("|") + ")";
+const PROSPECT_STATE_ABBR_TOKEN = "(?:" + Object.values(PROSPECT_STATE_NAMES).sort().join("|") + ")";
+const PROSPECT_LOC_PREFIX = "(?:i'?m in|i am in|i live in|we live in|we'?re in|living in|i'?m from|from|out of)";
+const PROSPECT_LOC_CITY = "([A-Za-z][A-Za-z'\\-]*(?:\\s+[A-Za-z][A-Za-z'\\-]*){0,2})";
+const PROSPECT_LOC_COMMA_RE = new RegExp("\\b" + PROSPECT_LOC_PREFIX + "\\s+" + PROSPECT_LOC_CITY + "\\s*,\\s*(" + PROSPECT_STATE_TOKEN + ")\\b", "i");
+const PROSPECT_LOC_BARE_RE = new RegExp("\\b" + PROSPECT_LOC_PREFIX + "\\s+" + PROSPECT_LOC_CITY + "\\s+(" + PROSPECT_STATE_ABBR_TOKEN + ")(?=[\\s.,!?]|$)", "i");
+function prospectIntelLocation(text) {
+  const s = String(text || "");
+  const cityOk = raw => {
+    const words = raw.trim().split(/\s+/);
+    if (!words.length || words.length > 3) return null;
+    if (words.some(w => PROSPECT_CITY_STOP.has(w.toLowerCase()))) return null;
+    if (!words.every(w => /^[A-Za-z][A-Za-z'\-.]*$/.test(w))) return null;
+    return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  };
+  let m = s.match(PROSPECT_LOC_COMMA_RE);
+  if (m) {
+    // A 2-letter state token counts only in uppercase in the raw
+    // text — ", in the morning" must not resolve to Indiana.
+    const abbrevOk = !/^[A-Za-z]{2}$/.test(m[2]) || m[2] === m[2].toUpperCase();
+    const city = cityOk(m[1]);
+    const st = abbrevOk ? prospectIntelState(m[2]) : null;
+    if (city && st) return { city, state: st };
+  }
+  m = s.match(PROSPECT_LOC_BARE_RE);
+  if (m && m[2] === m[2].toUpperCase()) {
+    const city = cityOk(m[1]);
+    const st = prospectIntelState(m[2]);
+    if (city && st) return { city, state: st };
+  }
+  return null;
+}
+// Signal rules (buyer messages only). Negation handling, decided:
+// a signal is suppressed when its own negation pattern matches the
+// SAME message — trade: "no trade" / "don't have a trade" /
+// "trade-in: no"; financing: an explicit cash/no-financing statement
+// in the same message ("paying cash", "no financing needed").
+const PROSPECT_INTEL_SIGNALS = [
+  { type: "trade", label: "Trade-in mentioned",
+    test: t => /\b(trade[\s\-]?in|trading in|have a trade|my trade)\b/i.test(t)
+      && !/\b(no|not|never|don'?t|doesn'?t)\b[^.!?]{0,30}\btrade/i.test(t)
+      && !/\btrade[\s\-]?in\b[^.!?]{0,12}\b(no|none)\b/i.test(t) },
+  { type: "financing", label: "Financing / pre-approval mentioned",
+    test: t => /\b(financ\w*|pre[\s\-]?approv\w*|auto loan|car loan|get a loan|monthly payments?)\b/i.test(t)
+      && !/\b(paying cash|pay cash|cash buyer|no financing|not financing|don'?t need financing|without financing)\b/i.test(t) },
+  { type: "appointment", label: "Visit / appointment intent",
+    test: t => /\b(come (in|by|over|look)|stop by|swing by|drop by|test drive|see it in person|be there|head over|visit)\b/i.test(t)
+      && (/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|tonight|this (morning|afternoon|evening|weekend)|after work)\b/i.test(t)
+        || /\b\d{1,2}(:\d{2})?\s?(am|pm)\b/i.test(t)
+        || /\b\d{1,2}\s?o'?clock\b/i.test(t)) },
+  { type: "price_question", label: "Price question",
+    test: t => /\b(what'?s the price|what is the price|your best price|best price|lowest price|asking price|how much is|how much for|out[\s\-]the[\s\-]door|\botd\b|come down on (the )?price)\b/i.test(t) },
+  { type: "price_offer", label: "Offer made",
+    test: t => /\b(offer|offering|give you|pay you|i'?ll do|can do|would do)\b[^.!?]{0,30}\$\s?\d[\d,]*/i.test(t)
+      || /\$\s?\d[\d,]*\s*(cash|out the door|otd|offer)\b/i.test(t) },
+  { type: "not_interested", label: "Bought elsewhere / not interested",
+    test: t => /\b(bought (a |one |it )?(elsewhere|already|from another)|already bought|already purchased|found (a |one )?(elsewhere|already)|got (a |one )?(elsewhere|already)|not interested|no longer interested|no longer looking|stop (messaging|texting|contacting) me)\b/i.test(t) }
+];
+// Pure extraction over one prospect's closer_messages (any order —
+// rows are sorted by created_at when every row carries a parseable
+// one). Returns { emails, phones, location, signals, lastTouch,
+// stageSuggestion }; every find carries its evidence quote + date.
+function extractProspectIntel(messages) {
+  const rows = (Array.isArray(messages) ? messages : []).filter(prospectIntelIsReal);
+  if (rows.every(m => m.created_at && isFinite(Date.parse(m.created_at)))) {
+    rows.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  }
+  const intel = { emails: [], phones: [], location: null, signals: [], lastTouch: null, stageSuggestion: null };
+  if (!rows.length) return intel;
+  const buyerRows = rows.filter(prospectIntelIsBuyer);
+  const seenEmail = new Set(), seenPhone = new Set();
+  const sigByType = {};
+  buyerRows.forEach(m => {
+    const body = String(m.body || "");
+    const quote = prospectIntelQuote(body);
+    prospectIntelEmails(body).forEach(v => {
+      if (!seenEmail.has(v)) { seenEmail.add(v); intel.emails.push({ value: v, quote, at: m.created_at || null }); }
+    });
+    prospectIntelPhones(body).forEach(v => {
+      if (!seenPhone.has(v)) { seenPhone.add(v); intel.phones.push({ value: v, quote, at: m.created_at || null }); }
+    });
+    if (!intel.location) {
+      const loc = prospectIntelLocation(body);
+      if (loc) intel.location = { city: loc.city, state: loc.state, quote, at: m.created_at || null };
+    }
+    PROSPECT_INTEL_SIGNALS.forEach(def => {
+      if (def.test(body)) sigByType[def.type] = { type: def.type, label: def.label, quote, at: m.created_at || null };
+    });
+  });
+  // One entry per signal type — the LATEST firing message is the
+  // evidence (sigByType overwrote in chronological order).
+  PROSPECT_INTEL_SIGNALS.forEach(def => { if (sigByType[def.type]) intel.signals.push(sigByType[def.type]); });
+  const last = rows[rows.length - 1];
+  const lastWho = prospectIntelIsBuyer(last) ? "buyer" : "rep";
+  intel.lastTouch = { who: lastWho, at: last.created_at || null, waiting: lastWho === "buyer" ? "waiting_on_you" : "waiting_on_buyer" };
+  // Stage suggestion derives ONLY from appointment / not-interested;
+  // when both fired, the more recent one wins.
+  const cands = [];
+  if (sigByType.appointment) cands.push({ stage: "visit_set", at: sigByType.appointment.at, quote: sigByType.appointment.quote });
+  if (sigByType.not_interested) cands.push({ stage: "not_now", at: sigByType.not_interested.at, quote: sigByType.not_interested.quote });
+  if (cands.length) {
+    cands.sort((a, b) => String(a.at || "") < String(b.at || "") ? -1 : 1);
+    const top = cands[cands.length - 1];
+    intel.stageSuggestion = { stage: top.stage, quote: top.quote, at: top.at };
+  }
+  return intel;
+}
+// [autopull-pure:end]
+
+/* AUTO-PULL UI (rebuild only, 2026-11-12): the "Pulled from
+   messages" card section. Extraction runs in memory over the
+   already-loaded prospectMessages — NOTHING is written on load.
+   A find that fills an EMPTY field, or conflicts with one, applies
+   only on the rep's tap, through the same persistProspect path the
+   manual edit uses; applied/dismissed items leave the pending list.
+   Phone finds are shown with evidence but carry no Apply: the
+   prospects table has no phone column yet (additive-DDL ask is in
+   the build report — until then a phone write would error). */
+const dismissedIntelKeys = new Set();
+function prospectIntelDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isFinite(d) ? d.toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+}
+function prospectIntelFinds(p) {
+  const msgs = (prospectMessages[p.id] || []).filter(isRealChatMessage);
+  if (!msgs.length) return null;
+  const intel = extractProspectIntel(msgs);
+  const items = [];
+  intel.emails.forEach(e => {
+    if ((p.email || "").trim().toLowerCase() !== e.value) {
+      items.push({ kind: "email", key: "email:" + e.value, label: "Email", value: e.value, existing: p.email || "", quote: e.quote, at: e.at });
+    }
+  });
+  intel.phones.forEach(ph => {
+    items.push({ kind: "phone", key: "phone:" + ph.value, label: "Phone", value: ph.value, existing: "", quote: ph.quote, at: ph.at, noField: true });
+  });
+  if (intel.location) {
+    const L = intel.location;
+    const cityDiff = (p.city || "").trim().toLowerCase() !== L.city.toLowerCase();
+    const stateDiff = (p.state || "").trim().toUpperCase() !== L.state;
+    if (cityDiff || stateDiff) {
+      items.push({ kind: "location", key: "location:" + L.city + "|" + L.state, label: "Location", value: L.city + ", " + L.state, city: L.city, state: L.state, existing: [p.city, p.state].filter(Boolean).join(", "), quote: L.quote, at: L.at });
+    }
+  }
+  const pending = items.filter(it => !dismissedIntelKeys.has(String(p.id) + "|" + it.key));
+  const sug = intel.stageSuggestion;
+  const stageSug = sug && sug.stage !== (p.stage || "new") && !dismissedIntelKeys.has(String(p.id) + "|stage:" + sug.stage) ? sug : null;
+  return { intel, items: pending, stageSug };
+}
+function prospectIntelHtml(p) {
+  const f = prospectIntelFinds(p);
+  if (!f) return "";
+  const { intel, items, stageSug } = f;
+  if (!items.length && !intel.signals.length && !stageSug) return "";
+  const pid = escapeHtml(String(p.id));
+  const src = at => {
+    const d = prospectIntelDate(at);
+    return "from buyer's message" + (d ? ", " + escapeHtml(d) : "");
+  };
+  const parts = [];
+  parts.push(`<p class="text-[11px] font-black text-emerald-700 uppercase tracking-wider">🔎 Pulled from messages</p>`);
+  if (intel.lastTouch) {
+    const who = intel.lastTouch.who === "buyer" ? "Buyer" : "You";
+    const wait = intel.lastTouch.waiting === "waiting_on_you"
+      ? `<span class="font-semibold text-amber-700">waiting on you</span>`
+      : `<span class="font-semibold text-slate-500">waiting on buyer</span>`;
+    const d = prospectIntelDate(intel.lastTouch.at);
+    parts.push(`<p class="text-xs text-slate-500 mt-1">Last message: ${who}${d ? " · " + escapeHtml(d) : ""} — ${wait}</p>`);
+  }
+  items.forEach(it => {
+    const existing = it.existing ? ` <span class="text-slate-400">(card has “${escapeHtml(it.existing)}”)</span>` : "";
+    const when = src(it.at);
+    const right = it.noField
+      ? `<span class="text-[11px] text-slate-400 shrink-0">no phone field yet</span>`
+      : `<div class="flex gap-1.5 shrink-0">
+          <button data-prospect-action="intel-apply" data-prospect-id="${pid}" data-intel-kind="${it.kind}" data-intel-value="${escapeHtml(it.value)}" data-intel-city="${escapeHtml(it.city || "")}" data-intel-state="${escapeHtml(it.state || "")}" class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold cursor-pointer">Apply</button>
+          <button data-prospect-action="intel-dismiss" data-prospect-id="${pid}" data-intel-key="${escapeHtml(it.key)}" class="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-slate-600 text-[11px] font-bold cursor-pointer">Dismiss</button>
+        </div>`;
+    parts.push(`<div class="mt-2 flex items-start justify-between gap-2 flex-wrap">
+      <p class="text-xs text-slate-600 min-w-0"><span class="font-bold text-slate-900">${it.label}:</span> ${escapeHtml(it.value)}${existing}<br><span class="text-slate-400">${escapeHtml(when)}: “${escapeHtml(it.quote)}”</span></p>
+      ${right}
+    </div>`);
+  });
+  const applicable = items.filter(it => !it.noField);
+  if (applicable.length >= 2) {
+    parts.push(`<button data-prospect-action="intel-apply-all" data-prospect-id="${pid}" class="mt-2 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold cursor-pointer">Apply all</button>`);
+  }
+  intel.signals.forEach(sg => {
+    const d = prospectIntelDate(sg.at);
+    parts.push(`<p class="text-xs text-slate-600 mt-2">🏷 <span class="font-semibold text-slate-900">${escapeHtml(sg.label)}</span> — “${escapeHtml(sg.quote)}”${d ? ` <span class="text-slate-400">(${escapeHtml(d)})</span>` : ""}</p>`);
+  });
+  if (stageSug) {
+    const lbl = prospectStage(stageSug.stage).label;
+    parts.push(`<div class="mt-2 flex items-start justify-between gap-2 flex-wrap">
+      <p class="text-xs text-slate-600 min-w-0"><span class="font-bold text-slate-900">Suggested stage: ${escapeHtml(lbl)}</span><br><span class="text-slate-400">because the buyer said: “${escapeHtml(stageSug.quote)}”</span></p>
+      <div class="flex gap-1.5 shrink-0">
+        <button data-prospect-action="intel-stage" data-prospect-id="${pid}" data-intel-stage="${stageSug.stage}" class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold cursor-pointer">Set to ${escapeHtml(lbl)}</button>
+        <button data-prospect-action="intel-dismiss" data-prospect-id="${pid}" data-intel-key="stage:${stageSug.stage}" class="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-slate-600 text-[11px] font-bold cursor-pointer">Dismiss</button>
+      </div>
+    </div>`);
+  }
+  return `<div class="mt-3 pt-3 border-t border-slate-100"><div class="rounded-xl bg-emerald-50 border border-emerald-200 p-3">${parts.join("")}</div></div>`;
+}
+async function applyProspectIntel(id, el) {
+  const entry = prospects.find(x => String(x.id) === String(id));
+  if (!entry || !el) return;
+  const kind = el.getAttribute("data-intel-kind");
+  const payload = {};
+  if (kind === "email") {
+    payload.email = el.getAttribute("data-intel-value") || "";
+    entry.email = payload.email;
+    dismissedIntelKeys.add(String(id) + "|email:" + payload.email);
+  } else if (kind === "location") {
+    payload.city = el.getAttribute("data-intel-city") || "";
+    payload.state = el.getAttribute("data-intel-state") || "";
+    entry.city = payload.city;
+    entry.state = payload.state;
+    dismissedIntelKeys.add(String(id) + "|location:" + payload.city + "|" + payload.state);
+  } else return;
+  try { await persistProspect(payload, id); }
+  catch (err) { console.warn("Intel apply failed:", err); alert("Could not save that: " + err.message); }
+  renderProspects();
+}
+async function applyAllProspectIntel(id) {
+  const entry = prospects.find(x => String(x.id) === String(id));
+  if (!entry) return;
+  const f = prospectIntelFinds(entry);
+  if (!f) return;
+  const payload = {};
+  f.items.filter(it => !it.noField).forEach(it => {
+    if (it.kind === "email") { payload.email = it.value; entry.email = it.value; }
+    if (it.kind === "location") { payload.city = it.city; payload.state = it.state; entry.city = it.city; entry.state = it.state; }
+    dismissedIntelKeys.add(String(id) + "|" + it.key);
+  });
+  if (!Object.keys(payload).length) return;
+  try { await persistProspect(payload, id); }
+  catch (err) { console.warn("Intel apply-all failed:", err); alert("Could not save that: " + err.message); }
+  renderProspects();
+}
+async function applyProspectIntelStage(id, el) {
+  const stage = el && el.getAttribute("data-intel-stage");
+  if (!stage) return;
+  dismissedIntelKeys.add(String(id) + "|stage:" + stage);
+  await setProspectStage(id, stage);
+}
+function dismissProspectIntel(id, el) {
+  const key = el && el.getAttribute("data-intel-key");
+  if (!key) return;
+  dismissedIntelKeys.add(String(id) + "|" + key);
+  renderProspects();
+}
 let prospects = [];
 let prospectChats = {}; // prospect_id -> {count, latest, direction} from closer_messages
 let prospectOutbound = {}; // prospect_id -> latest outbound reply {status, body, created_at}
@@ -15474,6 +15843,7 @@ function renderProspects() {
         <div id="lucaReplyStatus-${escapeHtml(String(p.id))}">${outboundPillHtml(prospectOutbound[p.id])}</div>
         <p class="mt-1 text-[11px] text-slate-400">Delivery needs the helper running with a Messenger tab open — same hub rule as posting.</p>` : ""}
       </div>` : ""}
+      ${prospectIntelHtml(p)}
       ${!prospectChats[p.id] && p.thread_ref ? `<div class="mt-3 pt-3 border-t border-slate-100 flex items-center gap-3 flex-wrap">
         <a href="${escapeHtml(p.thread_ref)}" target="_blank" rel="noopener" class="inline-block px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">↗ Open chat</a>
         <button data-prospect-action="trade-link" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">🔗 Trade appraisal</button>
@@ -15517,6 +15887,10 @@ document.addEventListener("click", function (e) {
   else if (act === "toggle-thread") toggleThread(id, el);
   else if (act === "close-thread") closeThread(id);
   else if (act === "copy-msg") copyProspectMsg(el.getAttribute("data-msg-id"), el);
+  else if (act === "intel-apply") applyProspectIntel(id, el);
+  else if (act === "intel-apply-all") applyAllProspectIntel(id, el);
+  else if (act === "intel-stage") applyProspectIntelStage(id, el);
+  else if (act === "intel-dismiss") dismissProspectIntel(id, el);
 });
 
 // REAL-MESSAGE RULE (Matthew's ask, 2026-10-26): Luca's drafts are
