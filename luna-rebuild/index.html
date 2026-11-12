@@ -1512,6 +1512,19 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       🌙 <strong>Luca only drafts — you always send.</strong> Your profile below is what he works from: your name, your schedule, your lot, your credit-app link, your rules. He answers buyers from your live inventory and never invents a price, a payment, or a promise.
     </div>
 
+    <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <strong class="text-slate-900 block">Luca auto-reply — availability only</strong>
+          <span class="text-[11px] text-slate-500">When ON, Luca himself answers a buyer's very first "Is this available?" message — and only that message — with one fixed reply, after checking the car is really still in your inventory. Everything else stays draft-only: any extra question, a second message, or a car he can't verify means no auto-reply. Needs helper 3.01 or newer. Off by default; turning this off stops it instantly.</span>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="lucaAutoReplyToggle" class="sr-only peer" onchange="lucaAutoReplyToggleChanged(this)">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+    </div>
+
     <div id="closerStorageNotice" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed">
       📱 <strong>Saved on this device for now.</strong> Luca's profile is stored in this browser until the closer table is enabled in Supabase. Nothing is lost; it just won't sync to your other devices yet.
     </div>
@@ -15002,7 +15015,7 @@ async function loadProspects() {
       for (let msgFrom = 0; msgFrom < 10000; msgFrom += 1000) {
         const { data: msgPage } = await supabaseClient
           .from("closer_messages")
-          .select("id, prospect_id, body, direction, origin, status, created_at")
+          .select("id, prospect_id, body, direction, origin, status, created_at, auto_reply")
           .eq("user_id", currentUser.id)
           .order("created_at", { ascending: false })
           .range(msgFrom, msgFrom + 999);
@@ -15922,7 +15935,7 @@ function threadBubblesHtml(p) {
     const bubbleCls = out
         ? "bg-blue-600 border-blue-600 text-white"
         : "bg-white border-slate-200 text-slate-800";
-    const who = out ? "You" : (p.name || "Buyer");
+    const who = out ? (m.auto_reply ? "You · 🤖 AUTO-REPLY" : "You") : (p.name || "Buyer");
     const statusTag = m.status && tags[m.status] ? ` · <span class="font-bold">${tags[m.status]}</span>` : "";
     return `<div class="flex ${out ? "justify-end" : "justify-start"} mb-2">
       <div class="max-w-[85%]">
@@ -15934,7 +15947,14 @@ function threadBubblesHtml(p) {
       </div>
     </div>`;
   }).join("");
-  return (all.length > 100 ? `<p class="text-[11px] text-slate-400 mb-2">Showing the latest 100 messages.</p>` : "") + rows;
+  const decisions = (prospectMessages[p.id] || []).filter(m => m.status === "auto_decision").slice(-5);
+  const logHtml = decisions.map(m => {
+    let d = {}; try { d = JSON.parse(m.body || "{}"); } catch (e) {}
+    const dw = m.created_at ? new Date(m.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+    const what = d.action === "send" ? ("sent (" + (d.branch || "") + ")") : ((d.action || "skip") + " — " + (d.reason || ""));
+    return `<p class="text-[11px] text-slate-400 mt-1">🤖 Auto-reply: ${escapeHtml(what)} · ${escapeHtml(dw)}</p>`;
+  }).join("");
+  return (all.length > 100 ? `<p class="text-[11px] text-slate-400 mb-2">Showing the latest 100 messages.</p>` : "") + rows + logHtml;
 }
 
 function toggleThread(id, btn) {
@@ -16748,6 +16768,35 @@ async function loadCloserProfile() {
   }
 }
 
+// Luca availability-only auto-reply setting (Matthew's amendment,
+// 2026-11-12): one opt-in flag in user_settings. The helper
+// (3.01+) is the only thing that ever acts on it — older helpers
+// never read it, so the flag alone can never cause a send.
+async function loadLucaAutoReplySetting() {
+  const el = document.getElementById("lucaAutoReplyToggle");
+  if (!el || !currentUser) return;
+  try {
+    const { data } = await supabaseClient.from("user_settings")
+      .select("luca_autoreply_availability").eq("user_id", currentUser.id).maybeSingle();
+    el.checked = !!(data && data.luca_autoreply_availability);
+  } catch (e) { /* leave the switch as-is on failure */ }
+}
+
+async function lucaAutoReplyToggleChanged(el) {
+  if (!currentUser) { el.checked = false; return; }
+  try {
+    const { error } = await supabaseClient.from("user_settings").upsert({
+      user_id: currentUser.id,
+      luca_autoreply_availability: !!el.checked,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+    if (error) throw error;
+  } catch (e) {
+    el.checked = !el.checked;
+    alert("Could not save the auto-reply setting — please try again.");
+  }
+}
+
 async function persistCloserProfile() {
   if (closerStorageMode !== "local" && currentUser) {
     try {
@@ -16970,6 +17019,7 @@ async function showCloserPage() {
   document.getElementById("closerPage").classList.remove("hidden");
   await loadCloserProfile();
   fillCloserForm();
+  loadLucaAutoReplySetting();
   syncQueuePoller();
 }
 
