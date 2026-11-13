@@ -1731,6 +1731,7 @@ def _extract_vdp_features(html: str) -> dict:
         "claims": {"no_accidents": False, "one_owner": False},
         "engine_detail": None,
         "transmission_detail": None,
+        "fuel_detail": None,
     }
     try:
         if not html:
@@ -1751,6 +1752,7 @@ def _extract_vdp_features(html: str) -> dict:
 
         _pane_engine = None
         _pane_transmission = None
+        _pane_fuel = None
 
         # ---- highlights: the labelled shortlist.
         seen_h = set()
@@ -1882,6 +1884,17 @@ def _extract_vdp_features(html: str) -> dict:
                     _pane_engine = _eng.group(1).strip()
                 if _trn and _trn.group(1).strip():
                     _pane_transmission = _trn.group(1).strip()
+                # Fuel facts ride the same panes ("Fuel Type:
+                # Regular unleaded", the Charleston prose form
+                # included). Harvested like the engine item; the
+                # facts-skip below decides feature membership
+                # exactly as before (this harvest changes nothing
+                # about what lands in all_features).
+                _ful = re.match(
+                    r"(?i)^fuel(?:\s+type\s*:?|\s*:)\s*(.+)$", item
+                )
+                if _ful and _ful.group(1).strip() and not _pane_fuel:
+                    _pane_fuel = _ful.group(1).strip()
                 if re.match(
                     r"(?i)^(engine|transmission|exterior color|"
                     r"interior color|body style|bed length|"
@@ -1928,6 +1941,24 @@ def _extract_vdp_features(html: str) -> dict:
             payload["engine_detail"] = info["Engine"]
         if payload["transmission_detail"] is None and info.get("Transmission"):
             payload["transmission_detail"] = info["Transmission"]
+        # Fuel (2026-11-13): the same precedence as the engine
+        # string — a pane header line, then a pane item, then the
+        # Vehicle Information pair. Stored RAW as fuel_detail,
+        # parallel to engine_detail; the engine-specs build
+        # (below) normalizes it to the short display label.
+        fm = re.search(
+            r"<strong>\s*FUEL(?:\s+TYPE)?\s*:\s*([^<]{3,80})</strong>",
+            own,
+            re.I,
+        )
+        if fm and fm.group(1).strip():
+            payload["fuel_detail"] = fm.group(1).strip()
+        if payload["fuel_detail"] is None and _pane_fuel:
+            payload["fuel_detail"] = _pane_fuel
+        if payload["fuel_detail"] is None and info.get("Fuel Type"):
+            payload["fuel_detail"] = info["Fuel Type"]
+        if payload["fuel_detail"] is None and info.get("Fuel"):
+            payload["fuel_detail"] = info["Fuel"]
 
         # ---- claims + packages: the JSON-LD description prose of
         # the subject car's own Product/Vehicle item — the same
@@ -2041,6 +2072,319 @@ def _extract_vdp_features(html: str) -> dict:
     ):
         return payload
     return None
+
+
+# =============================================================================
+# ENGINE SPECS (2026-11-13, Matthew: "im more worried about it
+# showing engine size and if its gas/diesel/hybrid more than i am
+# the hp"). vdp_features.engine_specs = {"disp_l", "hp", "cyl",
+# "fuel"} feeds the rich renderer's engine segment ("3.5L Gas,
+# 6 cylinder, 285 HP" — size and fuel lead, HP is the tail).
+# Sources and precedence:
+# * displacement + cylinders — parsed FIRST from the car's own
+#   engine_detail string (the page's own words); the NHTSA vPIC
+#   decode of the car's own VIN fills only what the string lacks.
+#   A value a previous sync already stored beats a fresh decode
+#   (same car, same VIN — verified data is never churned).
+# * fuel — the car's own page first (fuel_detail from the VDP,
+#   then the engine string's own words), vPIC FuelTypePrimary /
+#   ElectrificationLevel as the fallback. Normalized to the
+#   short labels Gas / Diesel / Hybrid / Plug-in Hybrid /
+#   Electric / Flex Fuel. Never guessed: no source word, no
+#   label — the renderer omits it.
+# * horsepower — vPIC ONLY (dealer pages state it nowhere:
+#   0 of 19 sampled 2026-11-13). HYBRIDS SKIP HP: vPIC reports
+#   ENGINE horsepower (a Civic Hybrid decodes 141) against the
+#   marketed combined figure (200); printing it unlabelled
+#   would mislead, and the "Hybrid" fuel label carries that
+#   story honestly.
+# Fail-open throughout: any decode/network error leaves the
+# page-parsed specs (plus any previously stored values) in
+# place, and nothing here may fail a car's sync. Each VIN is
+# decoded at most once per run (module cache), and VINs whose
+# specs are already complete are never decoded at all.
+# =============================================================================
+
+_VPIC_BATCH_URL = (
+    "https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVINValuesBatch/"
+)
+_VPIC_CACHE: dict = {}
+
+
+def _parse_engine_specs(engine_detail):
+    """(disp_l, cyl) from the car's own engine string. Pure.
+    Displacement: the first "<n>L" figure, sanity-banded.
+    Cylinders: a V/I/H configuration token ("V8", "I-4", "H4"),
+    an "in-line / straight N" phrase, or "N cylinder(s)/cyl" —
+    the shapes the dealer strings actually carry. The valve
+    counts that ride the same strings ("24V", "32V") can never
+    match: the patterns need the letter BEFORE the number, or
+    the number before the word "cylinder". Unparseable pieces
+    stay None (vPIC fills them downstream)."""
+    s = str(engine_detail or "")
+    disp = None
+    m = re.search(r"(\d+(?:\.\d+)?)\s*L\b", s, re.I)
+    if m:
+        try:
+            v = float(m.group(1))
+            if 0.5 < v < 10.5:
+                disp = v
+        except ValueError:
+            pass
+    cyl = None
+    for pat in (
+        r"(?<![A-Za-z0-9])V-?(\d{1,2})\b",
+        r"(?<![A-Za-z0-9])I-?(\d{1,2})\b",
+        r"(?<![A-Za-z0-9])H-?(\d{1,2})\b",
+        r"(?:in-?line|inline|straight)\s*-?\s*(\d{1,2})\b",
+        r"(\d{1,2})\s*-?\s*(?:cyl(?:inder)?s?)\b",
+    ):
+        m = re.search(pat, s, re.I)
+        if m:
+            try:
+                v = int(m.group(1))
+            except ValueError:
+                continue
+            if 2 <= v <= 16:
+                cyl = v
+                break
+    return disp, cyl
+
+
+def _normalize_fuel_label(raw):
+    """Short display label for a fuel string — from the car's
+    own page (fuel_detail / engine string) or from vPIC. The
+    order is load-bearing: the specific beats the generic, so
+    "Gas/Electric Hybrid" is a Hybrid (never Gas or Electric)
+    and "Plug-in Hybrid" is not a plain Hybrid. None when the
+    string carries no fuel word we can stand behind."""
+    s = str(raw or "").lower()
+    if not s:
+        return None
+    if "plug-in" in s or "plug in" in s or "phev" in s:
+        return "Plug-in Hybrid"
+    if "hybrid" in s:
+        return "Hybrid"
+    if "diesel" in s:
+        return "Diesel"
+    if "flex" in s or "ffv" in s or "e85" in s:
+        return "Flex Fuel"
+    if "electric" in s:
+        return "Electric"
+    if "gasoline" in s or "unleaded" in s or re.search(r"\bgas\b", s):
+        return "Gas"
+    return None
+
+
+def _specs_is_hybrid(car, engine_detail, fuel_label, electrification):
+    """Hybrid for the HP-skip rule: the resolved fuel label,
+    the vPIC electrification level, or the word "hybrid" in
+    the car's own engine string / model / trim (a Civic Hybrid
+    whose decode is missing still skips HP)."""
+    if fuel_label in ("Hybrid", "Plug-in Hybrid"):
+        return True
+    if electrification and "hybrid" in str(electrification).lower():
+        return True
+    blob = " ".join(
+        str(x or "")
+        for x in (
+            engine_detail,
+            (car or {}).get("model"),
+            (car or {}).get("trim"),
+        )
+    )
+    return "hybrid" in blob.lower()
+
+
+def _vpic_num(raw):
+    try:
+        return float(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _vpic_decode_batch(vins):
+    """Decode VINs against NHTSA vPIC (manufacturer Part 565
+    submissions; free, no key), up to 50 VINs per POST. Returns
+    {VIN: {"disp_l", "hp", "cyl", "fuel", "electrification"}}
+    with None for every blank the decoder leaves. NEVER raises:
+    a transport or payload error yields {} for that chunk, and
+    the caller falls back to page-parsed specs (fail-open)."""
+    from urllib import request as _urlrequest
+
+    out = {}
+    todo = []
+    seen = set()
+    for v in vins or []:
+        vin = str(v or "").strip().upper()
+        if vin and vin not in seen:
+            seen.add(vin)
+            todo.append(vin)
+    for i in range(0, len(todo), 50):
+        chunk = todo[i:i + 50]
+        try:
+            body = urlencode(
+                {"format": "json", "data": ";".join(chunk)}
+            ).encode("utf-8")
+            req = _urlrequest.Request(
+                _VPIC_BATCH_URL,
+                data=body,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "User-Agent": "AutoLaunch-Scraper/1.0",
+                },
+            )
+            with _urlrequest.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            for row in (data or {}).get("Results") or []:
+                vin = str(row.get("VIN") or "").strip().upper()
+                if not vin:
+                    continue
+                disp = _vpic_num(row.get("DisplacementL"))
+                if disp is not None:
+                    disp = round(disp, 1)
+                    if not (0.5 < disp < 10.5):
+                        disp = None
+                hp = _vpic_num(row.get("EngineHP"))
+                hp = int(hp) if hp and hp > 0 else None
+                cyl = _vpic_num(row.get("EngineCylinders"))
+                cyl = int(cyl) if cyl and 2 <= cyl <= 16 else None
+                elec = str(row.get("ElectrificationLevel") or "")
+                if "plug-in" in elec.lower() or "phev" in elec.lower():
+                    fuel = "Plug-in Hybrid"
+                elif "hybrid" in elec.lower():
+                    fuel = "Hybrid"
+                else:
+                    fuel = _normalize_fuel_label(
+                        row.get("FuelTypePrimary")
+                    )
+                out[vin] = {
+                    "disp_l": disp,
+                    "hp": hp,
+                    "cyl": cyl,
+                    "fuel": fuel,
+                    "electrification": elec or None,
+                }
+        except Exception as e:
+            print(f"[!] vPIC decode warning (non-fatal): {e}")
+            continue
+    return out
+
+
+def _specs_coerce_disp(v):
+    if isinstance(v, (int, float)) and 0.5 < float(v) < 10.5:
+        return float(v)
+    return None
+
+
+def _specs_coerce_int(v, lo, hi):
+    if isinstance(v, (int, float)) and lo <= int(v) <= hi:
+        return int(v)
+    return None
+
+
+async def _attach_engine_specs(cars) -> int:
+    """Build vdp_features.engine_specs for every car in the
+    batch that carries a rich payload (see the ENGINE SPECS
+    note above for sources and precedence). One batched decode
+    serves the whole enrich pass. Returns how many cars got
+    specs. Never raises."""
+    try:
+        targets = [
+            c for c in (cars or [])
+            if isinstance(c, dict)
+            and isinstance(c.get("vdp_features"), dict)
+        ]
+        if not targets:
+            return 0
+        plans = []
+        need = []
+        for car in targets:
+            vf = car["vdp_features"]
+            existing = vf.get("engine_specs")
+            if not isinstance(existing, dict):
+                existing = {}
+            disp, cyl = _parse_engine_specs(vf.get("engine_detail"))
+            if disp is None:
+                disp = _specs_coerce_disp(existing.get("disp_l"))
+            if cyl is None:
+                cyl = _specs_coerce_int(existing.get("cyl"), 2, 16)
+            fuel = _normalize_fuel_label(vf.get("fuel_detail"))
+            if fuel is None:
+                fuel = _normalize_fuel_label(vf.get("engine_detail"))
+            if fuel is None:
+                fuel = _normalize_fuel_label(existing.get("fuel"))
+            hp = _specs_coerce_int(existing.get("hp"), 1, 2000)
+            hybrid_pre = _specs_is_hybrid(
+                car, vf.get("engine_detail"), fuel, None
+            )
+            complete = (
+                disp is not None and cyl is not None
+                and fuel is not None
+                and (hp is not None or hybrid_pre)
+            )
+            plan = {
+                "car": car, "vf": vf, "disp": disp, "cyl": cyl,
+                "fuel": fuel, "hp": hp, "hybrid_pre": hybrid_pre,
+            }
+            plans.append(plan)
+            if not complete:
+                vin = str(car.get("vin") or "").strip().upper()
+                plan["vin"] = vin
+                if vin and vin not in _VPIC_CACHE:
+                    need.append(vin)
+            else:
+                plan["vin"] = ""
+        decoded = {}
+        if need:
+            try:
+                decoded = await asyncio.to_thread(_vpic_decode_batch, need)
+            except Exception as e:
+                # _vpic_decode_batch already swallows network errors;
+                # belt-and-braces: a dead decoder must cost us the
+                # vPIC fields only, never the page-parsed specs.
+                print(f"[!] Engine-specs decode failed (page specs kept): {e}")
+                decoded = {}
+            _VPIC_CACHE.update(decoded)
+        built = 0
+        for plan in plans:
+            vin = plan.get("vin") or ""
+            rec = _VPIC_CACHE.get(vin) if vin else None
+            if not isinstance(rec, dict):
+                rec = {}
+            disp = plan["disp"]
+            if disp is None:
+                disp = rec.get("disp_l")
+            cyl = plan["cyl"]
+            if cyl is None:
+                cyl = rec.get("cyl")
+            fuel = plan["fuel"]
+            if fuel is None:
+                fuel = rec.get("fuel")
+            hybrid = _specs_is_hybrid(
+                plan["car"],
+                plan["vf"].get("engine_detail"),
+                fuel,
+                rec.get("electrification"),
+            )
+            # HP: vPIC only, and never on a hybrid (engine-only
+            # figure vs the marketed combined number). A value a
+            # previous sync stored is vPIC's own for this VIN and
+            # is kept when this run decoded nothing fresher.
+            hp = None if hybrid else (plan["hp"] or rec.get("hp"))
+            specs = {
+                "disp_l": disp,
+                "hp": hp,
+                "cyl": cyl,
+                "fuel": fuel,
+            }
+            if any(v is not None for v in specs.values()):
+                plan["vf"]["engine_specs"] = specs
+                built += 1
+        return built
+    except Exception as e:
+        print(f"[!] Engine-specs build warning (non-fatal): {e}")
+        return 0
 
 
 def parse_vdp_details(html: str, vin: str, page_url: str) -> dict:
@@ -2603,6 +2947,14 @@ async def enrich_cars_with_vdp(context, cars: List[dict]) -> int:
             print(f"[!] Rich-description capture warning (non-fatal): {e}")
 
     await asyncio.gather(*(one(c) for c in cars), return_exceptions=True)
+    # ENGINE SPECS (2026-11-13): one batched vPIC decode for the
+    # whole enrich pass fills what the pages don't state (HP
+    # above all) and lands engine_specs on each car's payload.
+    # Fail-open — a decode outage costs the specs, never the sync.
+    try:
+        await _attach_engine_specs(cars)
+    except Exception as e:
+        print(f"[!] Engine-specs warning (non-fatal): {e}")
     if retry_ctx is not None:
         try:
             await retry_ctx.close()
