@@ -11189,6 +11189,45 @@ function richTrimDisplay(car) {
   }
   return t;
 }
+function richEngineSpecsLine(vf) {
+  // Engine specs (2026-11-13): the scraper stores
+  // vf.engine_specs = { disp_l, hp, cyl, fuel } — page
+  // parse first, NHTSA vPIC fallback; HP is vPIC-only
+  // and stored null for hybrids (engine-only figure).
+  // Matt's priority (2026-11-13): size + fuel lead,
+  // HP is the optional tail — "3.5L Gas, 6 cylinder,
+  // 285 HP". Returns "" when no usable spec exists so
+  // the caller falls back to the raw engine string
+  // byte-identically. Never guesses: a missing part is
+  // omitted, never placeholdered.
+  const es = (vf && typeof vf.engine_specs === "object" &&
+    vf.engine_specs) ? vf.engine_specs : null;
+  if (!es) return "";
+  const num = (v) => {
+    const n = (v != null && v !== "") ? Number(v) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const disp = num(es.disp_l);
+  const hp = num(es.hp);
+  const cylN = num(es.cyl);
+  const cyl = cylN != null ? Math.round(cylN) : null;
+  const fuel = typeof es.fuel === "string"
+    ? es.fuel.trim() : "";
+  if (fuel === "Electric" && disp == null && cyl == null) {
+    return hp != null
+      ? `Electric, ${Math.round(hp)} HP` : "Electric";
+  }
+  const parts = [];
+  let head = "";
+  if (disp != null) {
+    head = `${(Math.round(disp * 10) / 10).toFixed(1)}L`;
+  }
+  if (fuel) head = head ? `${head} ${fuel}` : fuel;
+  if (head) parts.push(head);
+  if (cyl != null) parts.push(`${cyl} cylinder`);
+  if (hp != null) parts.push(`${Math.round(hp)} HP`);
+  return parts.join(", ");
+}
 function buildRichDescription(car, settings) {
   const vf = (car && typeof car.vdp_features === "object" &&
     car.vdp_features) ? car.vdp_features : null;
@@ -11231,6 +11270,7 @@ function buildRichDescription(car, settings) {
     ? vf.engine_detail.trim() : "";
   const trans = typeof vf.transmission_detail === "string"
     ? vf.transmission_detail.trim() : "";
+  const engineSpecsLine = richEngineSpecsLine(vf);
   // The facts block: the composer's lines, in the
   // composer's order, under the emoji header — Price
   // (omitted when there is no usable advertised price: the
@@ -11251,7 +11291,8 @@ function buildRichDescription(car, settings) {
     lines.push(`🛣️ Miles: ${lm.miles.toLocaleString()}`);
   }
   const engParts = [];
-  if (engine) engParts.push(`Engine: ${engine}`);
+  if (engineSpecsLine) engParts.push(`Engine: ${engineSpecsLine}`);
+  else if (engine) engParts.push(`Engine: ${engine}`);
   if (trans) engParts.push(`Transmission: ${trans}`);
   if (engParts.length) {
     lines.push(`⚙️ ${engParts.join(" | ⚙️ ")}`);
