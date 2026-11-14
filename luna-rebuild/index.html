@@ -5532,6 +5532,18 @@ function setOwnTierForTesting(v) {
 // the automatic trial-start resolution (it grandfathers them to
 // 'active'). See needsSignupChoice / applySignupChoiceGate below.
 
+// USAGE TRIAL UPDATE (2026-11-14, Matthew's call; REBUILD-FIRST):
+// trials granted by the updated trial-start carry
+// user_settings.trial_model = 'usage5' and run THIS model instead
+// of the staged phases: full Automate from day 1, free posting in
+// two buckets (5 auto + 10 manual — counted only on
+// helper-confirmed posts, by the database counting trigger that
+// maintains trial_usage), and the trial ends when both buckets are
+// spent OR 5 days pass, whichever comes first — then the same
+// purchase gate locks the whole app. Trials without the marker
+// (staged 4-day, legacy) resolve exactly as before. Spec:
+// trial-usage-model-spec-2026-11-14.md.
+
 // Prices and plan copy live in PLAN_DETAILS (plans section above) —
 // the single source every plan surface renders from. The old
 // BILLING_PRICES / BILLING_PLAN_COPY constants were retired into it
@@ -5543,6 +5555,13 @@ let currentBilling = {
   status: null, // 'trialing' | 'active' | 'expired' | 'trial_blocked' | null
   trialStartedAt: null,
   trialEndsAt: null,
+  // USAGE TRIAL (2026-11-14): the model marker from
+  // user_settings.trial_model ('usage5' | null — null is every
+  // staged/legacy trial) and the bucket counters from trial_usage
+  // (written only by the DB counting trigger; read here).
+  trialModel: null,
+  trialAutoUsed: 0,
+  trialManualUsed: 0,
   blockReason: null,
   periodEnd: null,
   hasStripeCustomer: false,
@@ -5738,6 +5757,25 @@ const TRIAL_ALLOWED_FEATURES = ["inventory", "queue", "manual_posting"];
 const TRIAL_PHASE2_AFTER_MS = 48 * 60 * 60 * 1000;
 const TRIAL_STAGED_WINDOW_MAX_MS = 4 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000;
 
+// USAGE TRIAL (2026-11-14): the new trial model, keyed off the
+// trial record's marker (user_settings.trial_model). A usage trial
+// runs the full Automate set from day 1 and meters POSTS, not days:
+// TRIAL_USAGE_AUTO_LIMIT free auto posts + TRIAL_USAGE_MANUAL_LIMIT
+// free manual posts, counted only on helper-confirmed posts. The
+// trial ends when both buckets are spent or the stored window
+// (5 days) runs out — computeAccessState below holds that rule.
+const TRIAL_USAGE_MODEL = "usage5";
+const TRIAL_USAGE_AUTO_LIMIT = 5;
+const TRIAL_USAGE_MANUAL_LIMIT = 10;
+
+// Usage-model manual-bucket fit (pure): a manual batch fits when
+// confirmed manual successes + still-pending manual rows + this
+// batch stay within the manual bucket.
+function trialUsageManualFits(manualUsed, pendingManual, carCount) {
+  return (Number(manualUsed) || 0) + (Number(pendingManual) || 0) +
+    (Number(carCount) || 0) <= TRIAL_USAGE_MANUAL_LIMIT;
+}
+
 function trialPhaseState(startedAtMs, endsAtMs, nowMs) {
   const started = Number(startedAtMs), ends = Number(endsAtMs), now = Number(nowMs);
   if (!isFinite(started) || !isFinite(ends) || !isFinite(now)) return "legacy";
@@ -5754,7 +5792,7 @@ function trialPhaseFeatureAllowed(feature, phase) {
   const need = TIER_FEATURES[feature];
   if (!need) return true;
   if (phase === 1) return TIER_RANK.post >= TIER_RANK[need];
-  if (phase === 2) return TIER_RANK.group >= TIER_RANK[need];
+  if (phase === 2 || phase === "usage") return TIER_RANK.group >= TIER_RANK[need];
   return trialFeatureAllowed(feature);
 }
 
@@ -5770,6 +5808,27 @@ function computeAccessState(input) {
   if (s === "trialing") {
     const ends = input.trialEndsAtMs;
     if (ends && now < ends) {
+      // USAGE TRIAL (2026-11-14): a trial carrying the usage model
+      // marker ends when BOTH posting buckets are spent (the
+      // stored 5-day window still bounds it — the expired branch
+      // below fires first by time). Marker/counters absent (every
+      // pre-model trial, every older caller) resolves exactly as
+      // the staged/legacy line under this branch always has.
+      if (input.trialModel === "usage5") {
+        // (The "usage5" marker and the 5/10 bucket sizes are the
+        // TRIAL_USAGE_* constants above, inlined here so this
+        // function stays self-contained like the staged-phase
+        // numbers in trialPhaseState.)
+        const autoUsed = Number(input.trialAutoUsed) || 0;
+        const manualUsed = Number(input.trialManualUsed) || 0;
+        const usageDaysLeft = Math.max(1, Math.ceil((ends - now) / 86400000));
+        if (autoUsed >= 5 && manualUsed >= 10) {
+          return { mode: "gate", gateKind: "usage_exhausted", daysLeft: usageDaysLeft };
+        }
+        return { mode: "trial", gateKind: null, daysLeft: usageDaysLeft, phase: "usage",
+          autoLeft: Math.max(0, 5 - autoUsed),
+          manualLeft: Math.max(0, 10 - manualUsed) };
+      }
       return { mode: "trial", gateKind: null, daysLeft: Math.max(1, Math.ceil((ends - now) / 86400000)), phase: trialPhaseState(input.trialStartedAtMs, ends, now) };
     }
     return { mode: "gate", gateKind: "expired", daysLeft: 0 };
@@ -5821,7 +5880,7 @@ function trialQueueAllowed(usedToday) {
 function effectiveDailyPostAllowance(tier, userLimit, billingStatus, isOwner, phase) {
   if (billingStatus === "trialing") {
     if (phase === 1) tier = "post";
-    else if (phase === 2) tier = "group";
+    else if (phase === 2 || phase === "usage") tier = "group";
     else return 1;
   }
   if (isOwner) return userLimit;
@@ -5863,7 +5922,7 @@ function syncCooldownState(access, lastSyncAtISO, priorNonTestCount, nowMs) {
     // (18h), phase 2 at the Group cadence (6h); legacy trials keep
     // the original 24h trial cadence.
     hours = access.phase === 1 ? SYNC_COOLDOWN_HOURS.post
-      : access.phase === 2 ? SYNC_COOLDOWN_HOURS.group
+      : (access.phase === 2 || access.phase === "usage") ? SYNC_COOLDOWN_HOURS.group
       : SYNC_COOLDOWN_HOURS.trial;
   } else if (access.mode === "gate") {
     hours = null;
@@ -5924,7 +5983,7 @@ const POST_DELAY_POST_TIER_MINUTES = 30;
 
 function postDelayState(mode, tier, storedMinutes, phase) {
   const adjustable = (mode === "full" && (TIER_RANK[tier] || 0) >= TIER_RANK.automate) ||
-    (mode === "trial" && phase === 2);
+    (mode === "trial" && (phase === 2 || phase === "usage"));
   if (!adjustable) {
     const postResolution = tier === "post" || (mode === "trial" && phase === 1);
     return { minutes: postResolution ? POST_DELAY_POST_TIER_MINUTES : POST_DELAY_FIXED_MINUTES, adjustable: false };
@@ -5955,6 +6014,9 @@ function billingAccess() {
     trialEndsAtMs: currentBilling.trialEndsAt ? Date.parse(currentBilling.trialEndsAt) : null,
     periodEndMs: currentBilling.periodEnd ? Date.parse(currentBilling.periodEnd) : null,
     hasSubscription: currentBilling.hasSubscription,
+    trialModel: currentBilling.trialModel || null,
+    trialAutoUsed: currentBilling.trialAutoUsed || 0,
+    trialManualUsed: currentBilling.trialManualUsed || 0,
     nowMs: Date.now()
   });
 }
@@ -6046,12 +6108,45 @@ async function ensureBillingStatus() {
       if (data.trial_started_at) currentBilling.trialStartedAt = data.trial_started_at;
       if (data.trial_ends_at) currentBilling.trialEndsAt = data.trial_ends_at;
       if (data.current_period_end) currentBilling.periodEnd = data.current_period_end;
+      if (data.trial_model) currentBilling.trialModel = data.trial_model;
+      if (typeof data.trial_auto_used === "number") currentBilling.trialAutoUsed = data.trial_auto_used;
+      if (typeof data.trial_manual_used === "number") currentBilling.trialManualUsed = data.trial_manual_used;
     }
   } catch (e) {
     console.error("trial-start call failed:", e);
   } finally {
     billingEnsureInFlight = false;
   }
+}
+
+// USAGE TRIAL counters (2026-11-14): re-read this account's
+// trial_usage row (the counters the DB counting trigger maintains
+// from helper-confirmed posts) into currentBilling. Runs on settings
+// load and whenever posting state refreshes, so a post the helper
+// lands mid-session moves the banner — and can close the purchase
+// gate — without a reload. Fail-open: a read error keeps the last
+// known counters. A no-op for every account not on the usage model.
+let trialUsageRefreshInFlight = false;
+async function refreshTrialUsage(applyUi) {
+  if (!currentUser || trialUsageRefreshInFlight) return;
+  if (currentBilling.trialModel !== TRIAL_USAGE_MODEL) return;
+  trialUsageRefreshInFlight = true;
+  try {
+    const { data, error } = await supabaseClient
+      .from("trial_usage")
+      .select("auto_used, manual_used")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    if (!error && data) {
+      const a = Number(data.auto_used) || 0;
+      const m = Number(data.manual_used) || 0;
+      const changed = a !== currentBilling.trialAutoUsed || m !== currentBilling.trialManualUsed;
+      currentBilling.trialAutoUsed = a;
+      currentBilling.trialManualUsed = m;
+      if (changed && applyUi) applyBillingUI();
+    }
+  } catch (e) { /* fail-open: counters keep their last known values */ }
+  trialUsageRefreshInFlight = false;
 }
 
 // ---- Signup choice gate -----------------------------------------------
@@ -6167,6 +6262,36 @@ async function getTrialQueueUsedToday() {
 async function trialQueueGate(carCount) {
   if (billingMode() !== "trial") return true;
   const phase = trialPhase();
+  if (phase === "usage") {
+    // USAGE TRIAL (2026-11-14): manual queueing is capped by the
+    // manual bucket — confirmed manual successes (fresh counters)
+    // plus this account's still-pending manual rows plus this
+    // batch must fit. Failed posts never count: the counters only
+    // move on the helper's confirmed-post stamp, and a failed row
+    // leaves the pending set without touching them. Auto-posting
+    // is gated producer-side (the scraper), never here.
+    await refreshTrialUsage(false);
+    let pendingManual = 0;
+    try {
+      const { data, error } = await supabaseClient
+        .from("auto_posting_queue")
+        .select("id, status, post_origin, action")
+        .eq("user_id", currentUser.id)
+        .in("status", ["pending", "processing"]);
+      if (!error) (data || []).forEach(function (r) {
+        if (r.post_origin === "manual" && (r.action === null || r.action === undefined || r.action === "post")) pendingManual++;
+      });
+    } catch (e) { /* fail-open: the confirmed counters still gate */ }
+    if (currentBilling.trialManualUsed + pendingManual >= TRIAL_USAGE_MANUAL_LIMIT) {
+      showTrialNotice("usage_manual_done");
+      return false;
+    }
+    if (!trialUsageManualFits(currentBilling.trialManualUsed, pendingManual, carCount || 1)) {
+      showTrialNotice("usage_manual_multi");
+      return false;
+    }
+    return true;
+  }
   if (phase === 2) return true; // Automate days: no trial queue cap (the plan gate and the user's own limit still apply downstream)
   const used = await getTrialQueueUsedToday();
   if (phase === 1) {
@@ -6234,6 +6359,14 @@ function showPostCapNotice() {
 }
 
 // ---- Trial notice ----------------------------------------------------
+// Usage-trial notice helper: how the auto bucket stands, for the
+// manual-bucket notices (the two buckets exhaust independently).
+function usageAutoLeftText() {
+  const left = Math.max(0, TRIAL_USAGE_AUTO_LIMIT - (Number(currentBilling.trialAutoUsed) || 0));
+  if (left <= 0) return "Your free auto posts are used up too.";
+  return "Auto-posting still has " + left + " free post" + (left === 1 ? "" : "s") + " left — new arrivals keep posting on their own.";
+}
+
 function showTrialNotice(kind, feature) {
   const title = document.getElementById("trialNoticeTitle");
   const body = document.getElementById("trialNoticeBody");
@@ -6250,6 +6383,12 @@ function showTrialNotice(kind, feature) {
     } else if (kind === "queue_multi_cap") {
       title.innerText = "That batch passes today's cap";
       body.innerText = "Days 1–2 of the trial run the Self Post plan — 5 queued posts per day, so that batch doesn't fit today's cap. Queue fewer cars, or wait for day 3 when the full Automate plan unlocks. Or pick a plan now and skip the wait.";
+    } else if (kind === "usage_manual_done") {
+      title.innerText = "Your free manual posts are used up";
+      body.innerText = "Your free trial includes " + TRIAL_USAGE_MANUAL_LIMIT + " manual posts — and you've used them all. " + usageAutoLeftText() + " Or pick a plan now and post without trial limits.";
+    } else if (kind === "usage_manual_multi") {
+      title.innerText = "That batch passes your manual posts left";
+      body.innerText = "Your free trial includes " + TRIAL_USAGE_MANUAL_LIMIT + " manual posts, and that batch doesn't fit what's left. Queue fewer cars — or pick a plan now and post without trial limits.";
     } else {
       const label = FEATURE_LABELS[feature] || (feature === "listing_copy" ? "Listing copy (AI)" : "This feature");
       title.innerText = "Not in the free trial";
@@ -6852,6 +6991,9 @@ function applyPurchaseGate() {
         if (head) head.innerText = "This account isn't eligible for a free trial";
         if (sub) sub.innerText = "Pick a plan to start using AutoLaunch:";
       }
+    } else if (access.gateKind === "usage_exhausted") {
+      if (head) head.innerText = "You've used your free trial posts";
+      if (sub) sub.innerText = "That's all 15 free posts from your trial (5 auto + 10 manual). Pick a plan to keep posting:";
     } else if (access.gateKind === "term_ended") {
       if (head) head.innerText = "Your prepaid term has ended";
       if (sub) sub.innerText = "Pick a plan to keep posting:";
@@ -6884,7 +7026,11 @@ function renderTrialBanner() {
   if (text) {
     const daysPart = access.daysLeft === 1 ? "last day" : access.daysLeft + " days left";
     const endsPart = endsMs ? " · ends " + fmtBillingDate(endsMs) : "";
-    if (access.phase === 1) {
+    if (access.phase === "usage") {
+      text.innerText = "Free trial · " + access.autoLeft + " of 5 auto posts left · " +
+        access.manualLeft + " of 10 manual posts left · " + daysPart + endsPart +
+        " — full Automate is on for your whole trial.";
+    } else if (access.phase === 1) {
       text.innerText = "Free trial · " + daysPart + endsPart +
         " — you're on Self Post for days 1–2. Automate unlocks on day 3.";
     } else if (access.phase === 2) {
@@ -6929,15 +7075,21 @@ function renderBillingPanel() {
         ? "Your dealership prepaid in full — access paid through " + fmtBillingDate(Date.parse(currentDealership.periodEnd)) + ". No subscription is needed on this account."
         : "No subscription is needed on this account.";
   } else if (access.mode === "trial") {
-    status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
-    detail = access.phase === 1
-      ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". Days 1–2 run the Self Post plan (5 queued posts per day, sync every 18 hours); the full Automate plan unlocks on day 3."
-      : access.phase === 2
-        ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". The full Automate plan is unlocked for the rest of your trial — Luca + Prospects included."
-        : "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
+    if (access.phase === "usage") {
+      status = "Free trial — " + access.autoLeft + " of 5 auto posts left · " + access.manualLeft + " of 10 manual posts left · " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
+      detail = "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ", or as soon as both sets of free posts are used — whichever comes first. The full Automate plan is on for the whole trial, Luca + Prospects included.";
+    } else {
+      status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
+      detail = access.phase === 1
+        ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". Days 1–2 run the Self Post plan (5 queued posts per day, sync every 18 hours); the full Automate plan unlocks on day 3."
+        : access.phase === 2
+          ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". The full Automate plan is unlocked for the rest of your trial — Luca + Prospects included."
+          : "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
+    }
   } else if (access.mode === "gate") {
     status = access.gateKind === "blocked"
       ? (currentBilling.blockReason === "dealership_trial_used" ? "Free trial has already been used for this dealership." : "This account isn't eligible for a free trial.")
+      : access.gateKind === "usage_exhausted" ? "You've used all your free trial posts."
       : access.gateKind === "term_ended" ? "Your prepaid term has ended." : "Your free trial has ended.";
     detail = access.gateKind === "blocked" && currentBilling.blockReason === "dealership_trial_used"
       ? "One free trial per dealership. If you're a different person at this store, contact support (Ask Luna) — or pick a plan below to start now."
@@ -8366,6 +8518,9 @@ async function loadUserStoreSettings() {
       status: data && data.billing_status !== undefined ? data.billing_status : null,
       trialStartedAt: data ? (data.trial_started_at || null) : null,
       trialEndsAt: data ? (data.trial_ends_at || null) : null,
+      trialModel: data ? (data.trial_model || null) : null,
+      trialAutoUsed: 0,
+      trialManualUsed: 0,
       blockReason: data ? (data.trial_block_reason || null) : null,
       periodEnd: data ? (data.current_period_end || null) : null,
       hasStripeCustomer: !!(data && data.stripe_customer_id),
@@ -8380,6 +8535,13 @@ async function loadUserStoreSettings() {
       seenAt: data ? (data.helper_seen_at || null) : null,
       leaseExpiresAt: data ? (data.helper_lease_expires_at || null) : null
     };
+    // USAGE TRIAL (2026-11-14): a usage-model trial's bucket
+    // counters live in trial_usage — load them alongside the
+    // billing state (refreshTrialUsage fills currentBilling and
+    // leaves the last known values in place on any read error).
+    if (currentBilling.status === "trialing" && currentBilling.trialModel === TRIAL_USAGE_MODEL) {
+      await refreshTrialUsage(false);
+    }
     if (currentUser && !isOwnerUser(currentUser.id) && !isDealershipLeader() && !dealershipCovered() &&
         (currentBilling.status === null || currentBilling.status === "trialing")) {
       if (currentBilling.status === "trialing") {
@@ -19289,6 +19451,10 @@ async function refreshSafetyCounter() {
   const split = await getDailyPostUsageSplit();
   updateSafetyCounterUI(used, currentDailyPostAllowance(), split);
   updateMobileHeaderSummary();
+  // USAGE TRIAL (2026-11-14): posting state just refreshed — the
+  // trial counters may have moved (helper-confirmed posts), so the
+  // banner and gate re-read them here. No-op for other accounts.
+  refreshTrialUsage(true);
 }
 function toggleSelectAllCars(master) {
   const filtered = Array.isArray(window.currentFilteredInventory)
