@@ -1516,7 +1516,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <div class="flex items-center justify-between">
         <div>
           <strong class="text-slate-900 block">Luca auto-reply — availability only</strong>
-          <span class="text-[11px] text-slate-500">When ON, Luca himself answers a buyer's very first "Is this available?" message — and only that message — with one fixed reply, after checking the car is really still in your inventory. Everything else stays draft-only: any extra question, a second message, or a car he can't verify means no auto-reply. Needs helper 3.01 or newer. Off by default; turning this off stops it instantly.</span>
+          <span class="text-[11px] text-slate-500">When ON, Luca himself answers a buyer's very first "Is this available?" message — and only that message — with one fixed reply, after checking the car is really still in your inventory. Everything else stays draft-only: any extra question, a second message, or a car he can't verify means no auto-reply. Needs helper 2.1.117 or newer. Off by default; turning this off stops it instantly.</span>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="lucaAutoReplyToggle" class="sr-only peer" onchange="lucaAutoReplyToggleChanged(this)">
@@ -1769,7 +1769,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <i class="fa-solid fa-download"></i>
             <span>Download the helper (ZIP)</span>
           </a><br>
-          <span class="text-xs text-slate-400">Helper 2.91 — manual install</span></span>
+          <span class="text-xs text-slate-400">Helper 2.117 — manual install</span></span>
         </li>
         <li class="flex gap-3">
           <span class="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
@@ -17081,7 +17081,7 @@ async function loadCloserProfile() {
 
 // Luca availability-only auto-reply setting (Matthew's amendment,
 // 2026-11-12): one opt-in flag in user_settings. The helper
-// (3.01+) is the only thing that ever acts on it — older helpers
+// (2.1.117+) is the only thing that ever acts on it — older helpers
 // never read it, so the flag alone can never cause a send.
 async function loadLucaAutoReplySetting() {
   const el = document.getElementById("lucaAutoReplyToggle");
