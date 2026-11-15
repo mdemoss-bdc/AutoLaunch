@@ -61,6 +61,26 @@
 // herself get one honest line; the trial days-left line is now
 // forbidden above 2 days (the battery caught a "3 days left" nudge).
 //
+// PHASE 4 (2026-11-15, graduation): (1) TRIAL — the solo trial is
+// now the usage model (trial_model='usage5': full Automate from
+// day 1, 5 automatic + 10 manual free posts, 5-day max, whole-app
+// lock at the end). The snapshot reads trial_model + the
+// trial_usage counters and reports usage trials as such (6h
+// cadence); staged/legacy trials and dealership trials resolve
+// exactly as before. The KB + pricing chunk say the same.
+// (2) VIN REELS graduated to the live app: the KB gains a VIN
+// REELS section and DOC_CHUNKS gains guide:vinreels (22 chunks),
+// regenerated from HEAD with extract_corpus.mjs. (3) KB
+// CORRECTED: the color guard now names the per-account "Allow
+// posting cars without colors" waiver; Luca's never-sends line
+// now carries the one availability auto-reply exception (opt-in,
+// default off, live 2026-11-14); the helper section names the
+// current versions (Web Store 2.1.91; in-app manual download
+// 2.1.129). (4) EXPECTED_EXT_VERSION aligned to the app's floor,
+// 2.1.91, per the keep-in-step note above it. The terms chunk
+// still quotes the 2026-10-26 Terms verbatim — the Terms
+// document itself has not been re-issued.
+//
 // verify_jwt=false at the platform level; the caller's JWT is verified
 // manually (same pattern as listing-copy / luca-draft). The snapshot
 // NEVER reads token/secret columns — user_settings is selected by an
@@ -84,7 +104,7 @@ function json(body: unknown, status = 200) {
 }
 
 // Keep in step with EXPECTED_EXT_VERSION in luna-rebuild/index.html.
-const EXPECTED_EXT_VERSION = "2.1.54";
+const EXPECTED_EXT_VERSION = "2.1.91";
 
 // Inventory sync cadence (hours between syncs) by access level — the
 // same map as SYNC_COOLDOWN_HOURS in luna-rebuild/index.html (see
@@ -163,7 +183,7 @@ const SETTINGS_COLUMNS =
   "support_plan_status, support_period_end, " +
   "auto_post_min_photos, auto_post_locations, auto_post_conditions, " +
   "enable_auto_repost, repost_frequency_days, " +
-  "helper_version, helper_seen_at";
+  "helper_version, helper_seen_at, trial_model";
 
 interface Snapshot {
   text: string;          // formatted for the system prompt
@@ -241,7 +261,7 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   const [
     settingsRes, jobsRes, queueRes, activeRes, postedRes, memberRes,
     qTotalRes, qPostedRes, qPendingRes, qProcessingRes, qFailedRes,
-    failedRes, invFreshRes, invNewRes,
+    failedRes, invFreshRes, invNewRes, trialUsageRes,
   ] = await Promise.all([
       supabase.from("user_settings").select(SETTINGS_COLUMNS)
         .eq("user_id", userId).maybeSingle(),
@@ -281,6 +301,8 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
         .eq("user_id", userId).order("last_updated", { ascending: false }).limit(1),
       supabase.from("scraped_inventory").select("first_seen")
         .eq("user_id", userId).order("first_seen", { ascending: false }).limit(1),
+      supabase.from("trial_usage").select("auto_used, manual_used")
+        .eq("user_id", userId).maybeSingle(),
     ]);
 
   const s = settingsRes.data || null;
@@ -299,6 +321,7 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   const failedRows = failedRes.data || [];
   const invUpdatedAt = invFreshRes.data?.[0]?.last_updated || null;
   const invFirstSeenAt = invNewRes.data?.[0]?.first_seen || null;
+  const trialUsage = trialUsageRes.data || null;
 
   const memberships = (memberRes.data || []).map((m: any) => ({
     role: m.role,
@@ -345,10 +368,11 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   // flavor; a trialing solo account rides at its stage's cadence
   // (phase 1 Post 18h, phase 2 Group 6h, legacy trials the 24h
   // trial cadence); everyone else their tier.
-  const soloPhase = billingState === "trialing"
+  const isUsageTrial = billingState === "trialing" && s?.trial_model === "usage5";
+  const soloPhase = billingState === "trialing" && !isUsageTrial
     ? stagedTrialPhase(s?.trial_started_at, s?.trial_ends_at, now.getTime())
     : null;
-  const cadenceKey = covered ? (coveredFlavor || "group") : billingState === "trialing" ? (soloPhase === 1 ? "post" : soloPhase === 2 ? "group" : "trial") : tier;
+  const cadenceKey = covered ? (coveredFlavor || "group") : billingState === "trialing" ? (isUsageTrial ? "group" : soloPhase === 1 ? "post" : soloPhase === 2 ? "group" : "trial") : tier;
   const cadenceHours = SYNC_COOLDOWN_HOURS[cadenceKey] ?? 18;
   const lastRealSync = jobs.find((j: any) => j.sync_mode !== "test");
   let syncLine = "No inventory sync has run yet on this account.";
@@ -381,11 +405,13 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
       `- Plan tier: ${tier}. Billing status: ${billingState}.` +
       (billingState === "trialing"
         ? ` Trial ends ${s.trial_ends_at} (${trialDaysLeft} day(s) left).` +
-          (soloPhase === 1
-            ? " Trial stage: phase 1 of 2 — Self Post features; the full Automate plan unlocks at 48 hours."
-            : soloPhase === 2
-              ? " Trial stage: phase 2 of 2 — full Automate features, Luca + Prospects included."
-              : " Trial stage: legacy trial scope (a pre-staged trial).")
+          (isUsageTrial
+            ? ` Trial model: usage — the full Automate plan from day 1. Free posts used so far: ${trialUsage?.auto_used ?? 0} of 5 automatic, ${trialUsage?.manual_used ?? 0} of 10 manual. The trial ends when both sets are used up or the window ends, whichever comes first; the app then locks until a plan is picked.`
+            : soloPhase === 1
+              ? " Trial stage: phase 1 of 2 — Self Post features; the full Automate plan unlocks at 48 hours."
+              : soloPhase === 2
+                ? " Trial stage: phase 2 of 2 — full Automate features, Luca + Prospects included."
+                : " Trial stage: legacy trial scope (a pre-staged trial).")
         : "") +
       (billingState === "trial_blocked" && s.trial_block_reason === "dealership_trial_used"
         ? " Trial stopped: the free trial was already used for this account's dealership source (one free trial per dealership). The account can still buy a plan; if the user is a different person at the same store, support can review it and release the claim."
@@ -512,13 +538,16 @@ inventory from their website and posts it to Facebook Marketplace (plus
 optional channels — Facebook Page posting is live, and TikTok and Instagram are coming soon). It is NOT a CRM.
 
 PLANS AND PRICES:
-- 4-day free trial: no card needed, and it runs in two stages. Days
-  1–2 are the Self Post plan (queue up to 5 posts per day, inventory
-  sync once every 18 hours, posting delay fixed at 30 minutes, no
-  automation, no Prospects). Days 3–4 unlock the full Automate plan
-  (auto-post, delete & repost, channels, Luca + Prospects; no plan
-  cap on queued posts; sync once every 6 hours). When the trial
-  ends, a plan is required to keep posting.
+- Free trial (solo accounts): no card needed, and the FULL Automate
+  plan runs from day 1 (auto-post, delete & repost, channels, Luca +
+  Prospects, VIN Reels). The trial is counted in posts, not stages:
+  5 automatic posts and 10 manual posts are free, and it ends when
+  both are used up or 5 days pass, whichever comes first. Sync runs
+  every 6 hours and the posting delay is yours to set, like Automate.
+  When the trial ends, the app locks until a plan is picked.
+  (Trials started before 2026-11-15 run the older staged model —
+  days 1–2 Self Post, days 3–4 full Automate — and dealership
+  trials still stage; see DEALERSHIP ACCOUNTS.)
 - One free trial per dealership: a trial is claimed for a dealership
   the first time a trialing account syncs (or saves) that
   dealership's inventory website. If a trial stopped with "Free
@@ -617,6 +646,10 @@ THE HELPER (Chrome extension "AutoLaunch Vehicle Assistant"):
   for message flow — the small chat popup is not enough. Exempt
   facebook.com from Chrome's Memory Saver (Settings -> Performance)
   so the tab is never discarded.
+- Helper versions: the Chrome Web Store install is 2.1.91 and
+  Chrome updates it on its own; the manual download on the app's
+  Chrome Extension page is 2.1.129. The app expects helper 2.1.91
+  or newer; Luca's availability auto-reply needs 2.1.117 or newer.
 
 POSTING — HOW IT WORKS AND WHY CARS FAIL:
 - Queue a car from the Dashboard (Post button, or the auto-poster queues
@@ -631,9 +664,12 @@ POSTING — HOW IT WORKS AND WHY CARS FAIL:
   information only — a failed post NEVER consumes a limit slot, so it
   can always be retried without using up the day's allowance.
 - A car with NO real photos can never post.
-- Exterior AND interior color must both be set and not "Standard" —
-  a missing color fails at Facebook's Publish step. On the Dashboard the
-  car shows an amber "Updates needed" button; set the colors there.
+- Colors: a car whose exterior or interior color is missing (or
+  "Standard") is flagged "Updates needed" on the Dashboard and held
+  from posting — a missing color can fail at Facebook's Publish
+  step; set the colors on the Dashboard. Exception: an account can
+  turn on "Allow posting cars without colors" in Settings, and then
+  cars without colors may post anyway.
 - Price: listings use the advertised final price (retail minus savings
   plus doc fee). No price yet -> the car is blocked from posting until
   a price exists ("Price: call" cars can't auto-post).
@@ -651,16 +687,43 @@ AUTOMATIONS (Automate tier and up):
 - Auto-post new arrivals: after each clean full sync, matching
   never-posted cars (locations + conditions chosen in the auto-post
   modal; empty = all) are queued up to the remaining daily allowance.
-  Guards: not sold, price > 0, both colors set, real-photo count at
-  least the chosen minimum.
+  Guards: not sold, price > 0, both colors set (unless the account
+  allows posting without colors), real-photo count at least the
+  chosen minimum.
 - Auto delete & repost: refreshes listings on the chosen frequency;
   sold/exited cars are removed automatically.
 - Sync Inventory (left sidebar) pulls the inventory now, subject to
   the plan's sync cadence above.
 
+VIN REELS (Automate tier and up):
+- A short narrated showcase video made automatically from each
+  car's real photos; the year, make, model and stock number appear
+  on screen. Create one from the car's reel button (Dashboard grid
+  or table row, or the car's menu -> Create reel) or the VIN Reel
+  section in the car's details. The car's chip shows the state:
+  Reel queued, Rendering reel, Reel ready, or Reel failed.
+- Settings -> "Make a video before posting": when ON, auto-posts
+  hold each car until its reel is ready, then the video is
+  attached to the Marketplace post right after it goes up. A car
+  NEVER posts without its video — no ready video, no post.
+- If the video can't be attached after the car posts, the bare
+  listing is taken back down and the post is retried; after 3
+  failed attempts the car stops and is flagged for the rep's
+  attention in the health bar — nothing is left live without
+  its video.
+- Renders run in the background from the car's real photos, so a
+  car needs usable photos to get a reel. A failed render can be
+  retried from the car's reel section.
+
 LUCA + PROSPECTS (Automate tier and up):
-- Luca drafts replies to Marketplace buyers; the rep ALWAYS sends —
-  Luca never sends anything on its own, ever.
+- Luca drafts replies to Marketplace buyers; the rep sends — with
+  ONE exception: the availability auto-reply (in Settings, off by
+  default). If the rep turns it on, Luca itself answers a buyer's
+  very first "Is this available?" message — only that message,
+  only with one fixed reply, and only after checking the car is
+  really still in inventory. An extra question, a second message,
+  or a car that can't be verified gets no auto-reply; everything
+  else is always drafted for the rep to send.
 - Buyer chats flow in through the helper: full Messenger tab open,
   and the "🌙 Capture chat for Luca" button (it appears ON Facebook,
   added by the helper) captures a thread into Prospects. Plain
@@ -1027,7 +1090,23 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "spacing",
+    1
+   ],
+   [
+    "post",
+    1
+   ],
+   [
+    "pick",
+    1
+   ],
+   [
     "limit",
+    1
+   ],
+   [
+    "plan",
     1
    ],
    [
@@ -1043,10 +1122,6 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "post",
-    1
-   ],
-   [
     "like",
     1
    ],
@@ -1057,21 +1132,9 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    [
     "number",
     1
-   ],
-   [
-    "card",
-    1
-   ],
-   [
-    "pick",
-    1
-   ],
-   [
-    "unlimited",
-    1
    ]
   ],
-  "text": "Safe posting limits: A daily cap and human-like pacing for your posts. Facebook restricts accounts that post like robots — this keeps your posting looking like a person, and stops you at the number you set.\nSteps:\n1. Open this card.\n2. Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.\n3. Pick a posting speed: Standard, or Cautious for twice the spacing between posts.\n4. Press Save. The counter on this card shows how much of today's limit you have used.\nGood to know:\n- The counter counts today's Marketplace queue items that did not fail, plus cars already marked posted today.\n- The Chrome extension checks the same limit before it posts. Hit the cap and queueing stops with a message — nothing is queued past it.\n- Unlimited means no cap at all. It is offered, but it is the fastest way to earn a Facebook restriction."
+  "text": "Safe posting limits: A daily cap and human-like pacing for your posts. Facebook restricts accounts that post like robots — this keeps your posting looking like a person, and stops you at the number you set.\nSteps:\n1. Open this card.\n2. Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.\n3. Pick a posting speed: Standard, or Cautious for twice the spacing between posts.\n4. Set the time between posts — 5, 10 or 15 minutes. On the Post plan the spacing is fixed at 30 minutes; choosing your own spacing is part of the Automate plan. The free trial runs the full Automate plan from day 1, so you can pick your spacing during the trial too.\n5. Press Save. The counter on this card shows how much of today's limit you have used.\nGood to know:\n- The counter counts today's Marketplace queue items that did not fail, plus cars already marked posted today.\n- The Chrome extension checks the same limit before it posts. Hit the cap and queueing stops with a message — nothing is queued past it.\n- Unlimited means no cap at all. It is offered, but it is the fastest way to earn a Facebook restriction."
  },
  {
   "id": "guide:preferences",
@@ -1169,6 +1232,10 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "click",
+    1
+   ],
+   [
     "confirm",
     1
    ],
@@ -1193,19 +1260,15 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "steps",
+    "page",
     1
    ],
    [
     "install",
     1
-   ],
-   [
-    "mode",
-    1
    ]
   ],
-  "text": "The Chrome extension (your posting helper): AutoLaunch posts through a small Chrome extension — the helper — because Facebook Marketplace posting happens in YOUR signed-in Facebook session. The helper also powers Luca: it captures Marketplace chats into Prospects and delivers the replies you send from AutoLaunch. No helper, no posting and no chat sync — but your inventory, wishlist and settings live in AutoLaunch itself and work without it.\nSteps:\n1. Open the Chrome Extension page in AutoLaunch and follow the install steps there (download, unzip, load it in chrome://extensions with Developer mode on). A one-click Chrome Web Store install is coming soon — it's under review with Google; the guided setup here is the way today.\n2. Sign in to the helper with the same AutoLaunch account, and keep Chrome signed in to your Facebook account.\n3. Leave one computer as your hub: it must be AWAKE (locked is fine), with Chrome open and a Facebook or Messenger tab open. Posting, reposts, chat capture and reply delivery all run from that machine.\n4. In Chrome settings, exempt facebook.com from Memory Saver / tab sleeping — a slept Facebook tab can't post or sync.\n5. Confirm vs Full Auto: Confirm mode fills each listing in and waits for your click on Publish. Full Auto posts on its own. Start in Confirm until you trust the flow.\nGood to know: …"
+  "text": "The Chrome extension (your posting helper): AutoLaunch posts through a small Chrome extension — the helper — because Facebook Marketplace posting happens in YOUR signed-in Facebook session. The helper also powers Luca: it captures Marketplace chats into Prospects and delivers the replies you send from AutoLaunch. No helper, no posting and no chat sync — but your inventory, wishlist and settings live in AutoLaunch itself and work without it.\nSteps:\n1. Open the Chrome Extension page in AutoLaunch and click the Chrome Web Store install button there — one click, and Chrome keeps the helper up to date on its own. (A manual install is on the same page as a fallback: download, unzip, load it in chrome://extensions with Developer mode on.)\n2. Sign in to the helper with the same AutoLaunch account, and keep Chrome signed in to your Facebook account.\n3. Leave one computer as your hub: it must be AWAKE (locked is fine), with Chrome open and a Facebook or Messenger tab open. Posting, reposts, chat capture and reply delivery all run from that machine.\n4. In Chrome settings, exempt facebook.com from Memory Saver / tab sleeping — a slept Facebook tab can't post or sync.\n5. Confirm vs Full Auto: Confirm mode fills each listing in and waits for your click on Publish. Full Auto posts on its own. Start in Confirm until you trust the flow.\nGood to know: …"
  },
  {
   "id": "guide:inventory",
@@ -1240,6 +1303,10 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "posting",
+    1
+   ],
+   [
     "answers",
     1
    ],
@@ -1256,10 +1323,6 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "posting",
-    1
-   ],
-   [
     "luca",
     1
    ],
@@ -1268,7 +1331,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "Dashboard: Every vehicle AutoLaunch knows about, synced from your dealership website. Sync runs automatically overnight, and Sync Inventory in the left panel pulls a fresh copy on demand. This list is the single source of truth for posting — and for Luca's answers.\nSteps:\n1. Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.\n2. Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.\n3. Fix flags before posting: a car with no price or a missing color shows 'need attention' and can't post until it's resolved — click through and complete what's missing.\n4. Select cars and use Post Selected, or post one car from its row. Everything goes through the Post Queue.\nGood to know:\n- Prices post at the advertised final price from your website. A car whose price can't be determined is never guessed — it's flagged instead, so a wrong price never reaches Marketplace.\n- A vehicle with no photos on your website is never posted. No exceptions.\n- Luca answers buyers ONLY from this inventory. If a car is missing or wrong here, fix it here — his answers follow within the next draft.\n- Cars that sell or leave your website drop off automatically on the next sync and are never reposted."
+  "text": "Dashboard: Every vehicle AutoLaunch knows about, synced from your dealership website. Sync runs automatically overnight, and Sync Inventory in the left panel pulls a fresh copy on demand. This list is the single source of truth for posting — and for Luca's answers.\nSteps:\n1. Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.\n2. Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.\n3. Fix flags before posting: a car with no price shows 'need attention' and can't post until it's resolved — click through and complete what's missing. A missing color flags the car the same way, unless your account is set to allow posting without colors.\n4. Select cars and use Post Selected, or post one car from its row. Everything goes through the Post Queue.\nGood to know:\n- Prices post at the advertised final price from your website. A car whose price can't be determined is never guessed — it's flagged instead, so a wrong price never reaches Marketplace.\n- A vehicle with no photos on your website is never posted. No exceptions.\n- Luca answers buyers ONLY from this inventory. If a car is missing or wrong here, fix it here — his answers follow within the next draft.\n- Cars that sell or leave your website drop off automatically on the next sync and are never reposted."
  },
  {
   "id": "guide:locations",
@@ -1606,10 +1669,6 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     3
    ],
    [
-    "only",
-    1
-   ],
-   [
     "drafts",
     1
    ],
@@ -1650,11 +1709,15 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "only",
+    1
+   ],
+   [
     "actually",
     1
    ]
   ],
-  "text": "Luca · AI Assistant: Luca drafts your Marketplace replies the way YOU would write them — grounded in your live inventory, your schedule and your rules. He only ever drafts: you review and send every message yourself. He never invents a price, a payment or a promise, and he hands the chat back the moment it needs a human (haggling, financing specifics, trade values, an upset buyer).\nSteps:\n1. Set up his profile on the Luca · AI Assistant page: your name, your credit-app link, the store hours AND your own hours (he only offers times you'd actually be there).\n2. Set 'Your lot' — the location you sell from. If you combined rooftops in Settings → Location Groups, pick the combined name.\n3. Write in the 🎓 Teach Luca box, in your own words: your goals and house rules ('always get them to the lot', 'always ask for the appointment'). He follows it in every draft.\n4. On any Prospects card, tap 'Draft reply with Luca'. Edit freely — when you copy an edited version, he keeps both and learns how you phrase things.\nGood to know:\n- Luca learns your voice from the replies you actually send in chats — the more real conversations get captured, the more he sounds like you. Your voice is never shared with other accounts.\n- He answers about vehicles ONLY from your live inventory — misspellings and run-together words included — and when he says 'we don't have one', that's a search he just ran and verified, not a guess. …"
+  "text": "Luca · AI Assistant: Luca drafts your Marketplace replies the way YOU would write them — grounded in your live inventory, your schedule and your rules. He drafts: you review and send — with one optional exception, the availability auto-reply described in the notes, which is off by default. He never invents a price, a payment or a promise, and he hands the chat back the moment it needs a human (haggling, financing specifics, trade values, an upset buyer).\nSteps:\n1. Set up his profile on the Luca · AI Assistant page: your name, your credit-app link, the store hours AND your own hours (he only offers times you'd actually be there).\n2. Set 'Your lot' — the location you sell from. If you combined rooftops in Settings → Location Groups, pick the combined name.\n3. Write in the 🎓 Teach Luca box, in your own words: your goals and house rules ('always get them to the lot', 'always ask for the appointment'). He follows it in every draft.\n4. On any Prospects card, tap 'Draft reply with Luca'. Edit freely — when you copy an edited version, he keeps both and learns how you phrase things.\nGood to know:\n- Luca learns your voice from the replies you actually send in chats — the more real conversations get captured, the more he sounds like you. Your voice is never shared with other accounts.\n- He answers about vehicles ONLY from your live inventory — misspellings and run-together words included — and when he says 'we don't have one', that's a search he just ran and verified, not a guess. …"
  },
  {
   "id": "guide:channels",
@@ -1801,6 +1864,69 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    ]
   ],
   "text": "My Intro Videos: A short clip of YOU — your face, your name, your lot — that can bookend your vehicle videos on channels like TikTok, so buyers meet the salesperson, not just the car. Filmed once on your phone, used everywhere.\nSteps:\n1. Open Settings → Dealership → My Intro Videos and upload (up to 6 clips, each under 50 MB and 90 seconds — under 30 seconds works best).\n2. Pick whether channels use one selected clip or rotate randomly.\n3. Flip the master toggle on so you're ready the day channels start using clips.\n4. Keep it simple: name, store, and one line about how you work. Buyers decide in the first three seconds.\nGood to know:\n- Not live yet: no channel attaches clips today. Uploading now means your clip is ready the moment channel support lands.\n- Intro videos never affect Marketplace posting — if a clip has any problem, posting carries on without it.\n- Clips are stored on your account only."
+ },
+ {
+  "id": "guide:vinreels",
+  "title": "Guide — VIN Reels",
+  "k": [
+   [
+    "reels",
+    3
+   ],
+   [
+    "vinreels",
+    3
+   ],
+   [
+    "reel",
+    1
+   ],
+   [
+    "video",
+    1
+   ],
+   [
+    "ready",
+    1
+   ],
+   [
+    "photos",
+    1
+   ],
+   [
+    "details",
+    1
+   ],
+   [
+    "make",
+    1
+   ],
+   [
+    "failed",
+    1
+   ],
+   [
+    "after",
+    1
+   ],
+   [
+    "made",
+    1
+   ],
+   [
+    "each",
+    1
+   ],
+   [
+    "real",
+    1
+   ],
+   [
+    "render",
+    1
+   ]
+  ],
+  "text": "VIN Reels: A short narrated showcase video made automatically from each car's real photos and details — the year, make, model and stock number appear on screen. Reels render in the background; you never upload or edit anything.\nSteps:\n1. Make one on demand: use the reel button on any car (Dashboard grid or table row, or the car's menu → Create reel), or open the car and use the VIN Reel section in its details.\n2. Watch the state on the car's chip: Reel queued…, Rendering reel…, Reel ready, or Reel failed. A ready reel plays right in the car's details.\n3. Turn on 'Make a video before posting' in Settings and posting waits for the video: each car is held until its reel is ready, then the video is attached to the Marketplace post right after it goes up.\nGood to know:\n- The gate never posts a car bare: with the setting on, a car whose video isn't ready stays held — it is not posted without its video.\n- If a video can't be attached after the car posts, the bare listing is taken back down and the post is retried. After 3 failed attempts the car stops and is flagged for your attention — nothing is left live without its video.\n- A failed render can be retried from the car's reel section. A reel is made from the car's real photos, so a car needs usable photos to get one.\n- VIN Reels are part of the Automate plan — and the free trial runs the full Automate plan from day 1, so they're included in the trial too."
  },
  {
   "id": "guide:trade",
@@ -1958,7 +2084,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     2
    ]
   ],
-  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: 4 days, staged, no card needed. Days 1–2 run the Self Post plan: queued posts 5 per day; inventory sync 1 sync per 18 hours; posting delay fixed at 30 minutes. Days 3–4 unlock the full Automate plan: no plan cap on queued posts (your own daily limit applies); inventory sync 1 sync per 6 hours; auto-post, delete & repost, channels, Luca + Prospects. One free trial per person, per network, and per dealership source.\n- Self Post — $75/month: POSTING ONLY — queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no delete (removing a listing in the app is an Automate feature), no auto-post, no channels, no Luca.\n- Post + Automate (a legacy tier some older accounts still hold — not sold anymore; Settings -> Plans shows it as Automate): everything in Self Post plus auto-post new arrivals, delete listings + auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Automate — $100/month: everything in Self Post, plus all the automation and team features. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Self Post 1 year $855, 2 years $1,620, 3 years $2,295; Automate 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Self Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
+  "text": "AutoLaunch plan prices (current, from the app's plan data):\n- Free trial: no card needed — the full Automate plan from day 1. Free posts on the trial: 5 automatic + 10 manual, free; inventory sync 1 sync per 6 hours. The trial ends when both sets of free posts are used up or 5 days pass, whichever comes first; then the app locks until a plan is picked. (Dealership trials still run the staged 4-day model.)\n- Self Post — $75/month: POSTING ONLY — queued posts 5 per day; inventory sync 1 sync per 18 hours; AI listing copy included; no delete (removing a listing in the app is an Automate feature), no auto-post, no channels, no Luca.\n- Post + Automate (a legacy tier some older accounts still hold — not sold anymore; Settings -> Plans shows it as Automate): everything in Self Post plus auto-post new arrivals, delete listings + auto delete & repost, channels, Luca + Prospects, Wishlist, Trade Appraisals, intro videos, VIN Reels. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 12 hours.\n- Automate — $100/month: everything in Self Post, plus all the automation and team features. Queued posts: No plan cap — your own safety limit; inventory sync 1 sync per 6 hours.\n- Prepaid solo terms (one-time payment, never renews automatically, terms stack): Self Post 1 year $855, 2 years $1,620, 3 years $2,295; Automate 1 year $1,140, 2 years $2,160, 3 years $3,060. Discounts: 1 year 5% off, 2 years 10% off, 3 years 15% off the monthly totals.\n- Dealership accounts (per-seat pricing, 1–50 seats; EVERY seat bills at the rate for the total seat count; the leader/admin account is free and never counts as a seat):\n  * Dealership Self Post — $75/seat/mo for 1–9 seats, $75/seat/mo for 10–24 seats, $69/seat/mo for 25–50 seats.\n  * Dealership Group — $99/seat/mo for 1–9 seats, $95/seat/mo for 10–24 seats, $89/seat/mo for 25–50 seats.\n  * Dealership prepaid terms use the same ladder (1 yr 5% off, 2 yr 10% off, 3 yr 15% off), billed in full up front. A 10-seat Group store is 10 x $95 = $950/mo.\n- Priority Support add-on: $199/year, any account can buy it (Settings -> Plans). Bug reports are always free with or without it."
  },
  {
   "id": "terms",
