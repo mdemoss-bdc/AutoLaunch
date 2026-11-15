@@ -23,7 +23,7 @@ qa.card_url) — the helper appends it as the listing's last photo.
 Nothing here changes: the worker still just runs the generator per
 claimed row.
 """
-import argparse, os, subprocess, sys, time
+import argparse, os, subprocess, sys, time, urllib.parse
 from datetime import datetime, timezone, timedelta
 
 import generator as gen
@@ -61,7 +61,8 @@ def warn_stale():
               - timedelta(minutes=45)).isoformat()
     st, rows = gen.rest(
         "GET", "/rest/v1/vin_reels?status=eq.generating"
-               f"&updated_at=lt.{cutoff}&select=id,vin,updated_at")
+               f"&updated_at=lt.{urllib.parse.quote(cutoff, safe='')}"
+               "&select=id,vin,updated_at")
     if st == 200 and rows:
         for r in rows:
             log(f"WARN stale generating row {r['id']} vin={r['vin']} "
@@ -70,23 +71,60 @@ def warn_stale():
 HOLD_STALE_MINUTES = 60  # phase 2: a hold older than this with no
 # ready reel releases flagged — a dead worker never starves posts.
 
-def _release_hold(user_id, vin, flagged):
-    """Flip every held queue row for (user, vin) claimable again.
-    flagged=True also stamps reel_failed (the health bar's
-    'posted without video' chip reads it after the post lands)."""
+# Helper gate-hold markers (helper 2.1.118, ready-only gate):
+# when the helper gate-aborts a chained post it settles the
+# queue row BACK to held itself — status='pending',
+# awaiting_reel=true — with the outcome in error_message:
+# "reel_gate_abort:<stage> reel_gate_aborts:N/3" for aborts
+# 1-2 (a bounded retry; the row carries its own count),
+# "reel_gate_hold: ..." when a flagged claim found no ready
+# reel, and "reel_needs_attention: ..." once the abort budget
+# is spent (that settle also fails the row). A row carrying
+# any of these markers is NOT waiting on this worker: the
+# helper's chain logic — or a human, for needs-attention —
+# owns its next step. Re-releasing it (the pre-fix reconcile
+# patched by (user, vin) and never read error_message) made
+# the helper re-claim and re-abort the same post every few
+# minutes, burning the car's 3-abort budget on a post nobody
+# had fixed yet (proven Nov 14). "reel_claim_hold" is the
+# spelling the graduation spec uses for the claim-time hold;
+# the helper writes "reel_gate_hold" — both are honored.
+GATE_HOLD_MARKERS = ("reel_gate_abort", "reel_needs_attention",
+                     "reel_gate_hold", "reel_claim_hold")
+
+def _gate_held(row):
+    """True when a held queue row carries a helper gate-hold
+    marker in error_message (see GATE_HOLD_MARKERS). The
+    count marker "reel_gate_aborts:N" contains the substring
+    "reel_gate_abort", so one entry covers both spellings
+    the helper writes."""
+    text = str((row or {}).get("error_message") or "")
+    return any(m in text for m in GATE_HOLD_MARKERS)
+
+def _release_hold(row_ids, flagged):
+    """Flip the given held queue rows claimable again — by
+    row id, never as a (user, vin) blanket: a gate-held
+    sibling row for the same car must stay held (see
+    GATE_HOLD_MARKERS). flagged=True also stamps reel_failed
+    (the health bar's 'posted without video' chip reads it
+    after the post lands). Returns True when every patch
+    landed."""
     body = {"awaiting_reel": False}
     if flagged:
         body["reel_failed"] = True
-    st, resp = gen.rest(
-        "PATCH", f"/rest/v1/auto_posting_queue?user_id=eq.{user_id}"
-                 f"&vin=eq.{vin}&awaiting_reel=eq.true",
-        body=body, headers={"Prefer": "return=minimal"})
-    if st >= 300:
-        log(f"hold release failed for vin={vin}: {st} {resp}")
-        return False
-    log(f"hold released vin={vin} "
-        f"({'flagged reel_failed' if flagged else 'reel ready'})")
-    return True
+    ok = True
+    for rid in row_ids:
+        st, resp = gen.rest(
+            "PATCH", f"/rest/v1/auto_posting_queue?id=eq.{rid}"
+                     "&awaiting_reel=eq.true",
+            body=body, headers={"Prefer": "return=minimal"})
+        if st >= 300:
+            log(f"hold release failed for row={rid}: {st} {resp}")
+            ok = False
+    if ok and row_ids:
+        log(f"hold released rows={len(row_ids)} "
+            f"({'flagged reel_failed' if flagged else 'reel ready'})")
+    return ok
 
 def _has_live_reel(user_id, vin):
     """True when ANY reel for (user, vin) is still live —
@@ -122,28 +160,47 @@ def reconcile_holds():
     starves a post. Only rows still
     awaiting_reel=true are ever patched, so a reel finishing after
     its hold already released changes nothing (no resurrection).
+
+    Gate-hold exception (Nov 15 graduation fix): a held row
+    carrying a helper gate marker (see GATE_HOLD_MARKERS) is
+    never released here, on ANY verdict — ready included.
+    The helper settled that row back to held on purpose; only
+    its own chain logic or a human moves it next. The verdicts
+    above apply per row to the car's marker-free held rows
+    only, and releases patch those rows by id, so a gate-held
+    sibling is never flipped as collateral.
     """
     st, holds = gen.rest(
         "GET", "/rest/v1/auto_posting_queue?awaiting_reel=eq.true"
                "&status=eq.pending"
-               "&select=user_id,vin,reel_requested_at"
+               "&select=id,user_id,vin,reel_requested_at,error_message"
                "&order=reel_requested_at.asc&limit=200")
     if st != 200 or not holds:
         return
     now = datetime.now(timezone.utc)
-    seen = set()
+    groups = {}
     for h in holds:
         key = (h.get("user_id"), h.get("vin"))
-        if not all(key) or key in seen:
+        if not all(key):
             continue
-        seen.add(key)
+        groups.setdefault(key, []).append(h)
+    for key, rows in groups.items():
+        clean_ids = [r.get("id") for r in rows
+                     if r.get("id") and not _gate_held(r)]
+        blocked = [r for r in rows if _gate_held(r)]
+        if blocked:
+            log(f"hold kept vin={key[1]}: {len(blocked)} gate-held "
+                f"row(s) carry a helper marker — worker does not "
+                f"re-release (helper chain / human owns them)")
+        if not clean_ids:
+            continue
         st2, reels = gen.rest(
             "GET", f"/rest/v1/vin_reels?user_id=eq.{key[0]}"
                    f"&vin=eq.{key[1]}&order=created_at.desc&limit=1"
                    "&select=status")
         latest = reels[0].get("status") if (st2 == 200 and reels) else None
         stale = False
-        req = h.get("reel_requested_at")
+        req = rows[0].get("reel_requested_at")
         if req:
             try:
                 asked = datetime.fromisoformat(
@@ -153,11 +210,11 @@ def reconcile_holds():
             except Exception:
                 stale = False
         if latest == "ready":
-            _release_hold(key[0], key[1], flagged=False)
+            _release_hold(clean_ids, flagged=False)
         elif latest in ("failed", "consumed"):
-            _release_hold(key[0], key[1], flagged=True)
+            _release_hold(clean_ids, flagged=True)
         elif stale and not _has_live_reel(key[0], key[1]):
-            _release_hold(key[0], key[1], flagged=True)
+            _release_hold(clean_ids, flagged=True)
         # else: a fresh hold with a live or imminent reel — wait.
         # A STALE hold with a live reel also waits (v2.1.86):
         # the stale branch above is the only guarded verdict —

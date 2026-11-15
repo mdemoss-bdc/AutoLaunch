@@ -150,7 +150,19 @@ def rest(method, path, body=None, headers=None, raw=None):
                 txt = resp.read().decode()
                 return resp.status, (json.loads(txt) if txt.strip() else None)
         except urllib.error.HTTPError as e:
-            txt = e.read().decode("utf-8", errors="replace")
+            try:
+                txt = e.read().decode("utf-8", errors="replace")
+            except Exception as read_err:
+                # The proxy can truncate even an error body mid-read
+                # (IncompleteRead) — that is a transport failure, not
+                # a response. Retry like one; never let it escape and
+                # abort the caller's whole cycle (2026-11-07: a
+                # deterministic 400 from warn_stale whose body kept
+                # truncating froze the worker's polls for 35 min).
+                last_exc = read_err
+                if attempt < 4:
+                    time.sleep(2 ** attempt)
+                continue
             try:
                 parsed = json.loads(txt)
             except Exception:
@@ -484,11 +496,20 @@ def _layer():
 def _car_name(car):
     return f"{car['year']} {car['make']} {car['model']}"
 
+def _car_display_name(car):
+    """The name SHOWN on the video (title card, lower third, end card):
+    year/make/model + stock number, e.g. '2018 Honda CR-V HT678756'
+    (Matthew, 2026-11-14). The spoken script keeps _car_name — a stock
+    number is never read aloud."""
+    stock = (car.get("stock_number") or "").strip()
+    base = _car_name(car)
+    return f"{base} {stock}" if stock else base
+
 def make_title_overlay(car):
     img = _layer()
     d = ImageDraw.Draw(img)
     margin, max_w = _px(64), W - 2 * _px(64)
-    name = _car_name(car)
+    name = _car_display_name(car)
     dealer = (car.get("_dealership") or "").upper()
     parts = []
     if car.get("color"):
@@ -518,7 +539,7 @@ def make_lowerthird_overlay(car):
     img = _layer()
     d = ImageDraw.Draw(img)
     margin = _px(64)
-    name = _car_name(car)
+    name = _car_display_name(car)
     nf = font("mont", _px(31), 600)
     y = H - _px(96) - nf.size
     d.text((margin, y), name, font=nf, fill=WHITE + (235,))
@@ -533,7 +554,7 @@ def make_end_card(car):
     img = Image.new("RGB", (W, H), NAVY)
     d = ImageDraw.Draw(img)
     cx = W // 2
-    name = _car_name(car)
+    name = _car_display_name(car)
     dealer = (car.get("_dealership") or "").upper()
     y = int(H * 0.40)
     if dealer:
