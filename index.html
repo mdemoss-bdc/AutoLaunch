@@ -653,7 +653,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <p>Everything in Self Post, plus the machine does the posting: auto-post new arrivals, automatic delete &amp; repost, Facebook Page posting, Luca reply drafts with Prospects, trade appraisals and wishlist. Inventory pulls every 6 hours.</p>
       </div>
     </div>
-    <p style="margin-top:22px">Dealership accounts with per-seat pricing are also available. Every plan starts with a <strong style="color:#FFFFFF">free 4-day trial</strong> — no card up front. AutoLaunch gives your team back the hours that manual posting eats; what you do with that time is up to you.</p>
+    <p style="margin-top:22px">Dealership accounts with per-seat pricing are also available. Every plan starts with a <strong style="color:#FFFFFF">free trial</strong> — the full Automate plan from day 1, with 5 automatic and 10 manual posts free over up to 5 days. No card up front. AutoLaunch gives your team back the hours that manual posting eats; what you do with that time is up to you.</p>
     <a class="al-cta" href="https://autolaunch.org/">Sign in or start your free trial</a>
     <div class="al-links">
       <a href="https://autolaunch.org/terms.html">Terms of Service</a>
@@ -677,7 +677,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
        only: no auth, trial or billing logic lives in this markup. -->
   <div class="min-h-full w-full max-w-[1440px] mx-auto flex flex-col items-center justify-center gap-4 lg:gap-5 p-4">
     <div class="text-center px-2 shrink-0">
-      <p class="text-2xl lg:text-[2rem] font-extrabold tracking-tight text-slate-900 leading-tight">Start your free 4-day trial</p>
+      <p class="text-2xl lg:text-[2rem] font-extrabold tracking-tight text-slate-900 leading-tight">Start your free trial — full Automate from day 1</p>
       <p class="text-sm lg:text-[15px] text-slate-600 font-medium mt-1.5">No card up front — see what it does for your lot.</p>
     </div>
     <div class="w-full flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-4 lg:gap-5">
@@ -700,7 +700,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <p class="text-[13px] font-bold text-slate-700 leading-relaxed mt-1.5">TikTok &amp; Instagram — coming soon, Automate only.</p>
           </div>
         </div>
-        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 4 days on us.</p>
+        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 5 auto + 10 manual posts, up to 5 days.</p>
         <button type="button" class="landing-trial-btn btn-gradient w-full py-2.5 rounded-xl text-white font-bold text-sm shadow-lg cursor-pointer mt-3">Start free trial</button>
       </section>
       <div class="order-3 lg:order-2 w-full max-w-md shrink-0">
@@ -967,7 +967,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     </div>
     <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 mb-3">
       <div id="signupChoiceTrialCard"></div>
-      <button id="signupChoiceTrialBtn" onclick="chooseStartTrial()" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Start my 4-day free trial</button>
+      <button id="signupChoiceTrialBtn" onclick="chooseStartTrial()" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Start my free trial</button>
     </div>
     <p class="text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 my-3">or choose a plan now</p>
     <div id="signupChoiceCards" class="grid sm:grid-cols-2 gap-3"></div>
@@ -1769,7 +1769,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <i class="fa-solid fa-download"></i>
             <span>Download the helper (ZIP)</span>
           </a><br>
-          <span class="text-xs text-slate-400">Helper 2.117 — manual install</span></span>
+          <span class="text-xs text-slate-400">Helper 2.129 — manual install</span></span>
         </li>
         <li class="flex gap-3">
           <span class="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
@@ -2261,6 +2261,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
   <button onclick="handleDropdownAction('listing_copy')" class="ai-gradient-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition cursor-pointer text-left font-bold">
     <i class="fa-solid fa-wand-magic-sparkles w-4"></i>
     <span>✨ Listing copy (AI)</span>
+  </button>
+  <button id="dropdownVinReelItem" onclick="handleDropdownAction('create_reel')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
+    <i class="fa-solid fa-clapperboard w-4 text-slate-400"></i>
+    <span id="dropdownVinReelLabel">Create reel</span>
   </button>
   <button onclick="handleDropdownAction('add_link')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer text-left font-medium">
     <i class="fa-solid fa-link w-4 text-slate-400"></i>
@@ -3152,6 +3156,40 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
                 type="checkbox"
                 id="chkAllowPostWithoutColors"
                 onchange="toggleAllowPostWithoutColorsSetting(this)"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
+        </div>
+
+        <!-- VIN REEL BEFORE POST (Matthew, 2026-11-05) -->
+
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Make a video before posting
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                Auto-posts wait for the car's generated VIN Reel video, which is attached to the Marketplace post. A car never posts without its video: if the video can't be made, the car stays held; if it can't be attached after posting, the bare listing is taken down and the post is retried — after 3 failed attempts the car is flagged for your attention in the health bar. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('vinreels')">How VIN Reels work →</span>
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkVinReelBeforePost"
+                onchange="toggleVinReelBeforePostSetting(this)"
                 class="sr-only peer">
 
               <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
@@ -4333,6 +4371,8 @@ document.addEventListener("click", function (e) {
   } else if (action === "listing-copy") {
     const car = rawInventory.find(c => c.vin === vin);
     if (car) openListingCopyModal(car);
+  } else if (action === "vin-reel") {
+    vinReelAction(vin);
   } else if (action === "row-dropdown") {
     toggleRowDropdown({
       stopPropagation: () => e.stopPropagation(),
@@ -4640,6 +4680,7 @@ const TIER_FEATURES = {
   wishlist: "automate",    // Customer Wishlist
   trade: "automate",       // Trade Appraisals
   intro_videos: "automate",// My Intro Videos
+  vin_reels: "automate",   // VIN Reels — per-car narrated showcase video (worker-rendered)
   teams: "group"           // future team/org features — nothing calls this yet
 };
 
@@ -4753,21 +4794,22 @@ const PLAN_DETAILS = {
     name: "Free trial",
     priceLabel: "Free",
     price: null,
-    tagline: "Four days free — Self Post first, then full Automate.",
-    note: "Days 1–2 run the Self Post plan; days 3–4 unlock the full Automate plan, Luca + Prospects included. No card needed. When the trial ends, pick a plan to keep posting.",
+    tagline: "Five days free — the full Automate plan from day 1.",
+    note: "The whole Automate plan is on from day 1: 5 automatic posts and 10 manual posts are free, and the trial ends when both are used up or 5 days pass, whichever comes first. No card needed. When the trial ends, the app locks until you pick a plan.",
     features: [
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
-      { label: "Queued posts per day", value: "5 per day (days 1–2) · no plan cap (days 3–4)" },
-      { label: "Inventory sync", value: "1 sync per 18 hours (days 1–2) · 1 per 6 hours (days 3–4)" },
+      { label: "Queued posts per day", value: "5 automatic + 10 manual, free" },
+      { label: "Inventory sync", value: "1 sync per 6 hours" },
       { label: "AI listing copy", included: true },
-      { label: "Auto-post new arrivals", included: true, note: "days 3–4" },
-      { label: "Delete listings + auto delete & repost", included: true, note: "days 3–4" },
-      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true, note: "days 3–4" },
-      { label: "Luca AI Assistant + Prospects", included: true, note: "days 3–4" },
-      { label: "Customer Wishlist", included: true, note: "days 3–4" },
-      { label: "Trade Appraisals", included: true, note: "days 3–4" },
-      { label: "Intro videos", included: true, note: "days 3–4" },
+      { label: "Auto-post new arrivals", included: true },
+      { label: "Delete listings + auto delete & repost", included: true },
+      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true },
+      { label: "Luca AI Assistant + Prospects", included: true },
+      { label: "Customer Wishlist", included: true },
+      { label: "Trade Appraisals", included: true },
+      { label: "Intro videos", included: true },
+      { label: "VIN Reels", included: true },
     ]
   },
   post: {
@@ -4788,6 +4830,7 @@ const PLAN_DETAILS = {
       { label: "Customer Wishlist", included: false },
       { label: "Trade Appraisals", included: false },
       { label: "Intro videos", included: false },
+      { label: "VIN Reels", included: false },
     ]
   },
   automate: {
@@ -4808,6 +4851,7 @@ const PLAN_DETAILS = {
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
       { label: "Intro videos", included: true },
+      { label: "VIN Reels", included: true },
     ]
   },
   group: {
@@ -4828,6 +4872,7 @@ const PLAN_DETAILS = {
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
       { label: "Intro videos", included: true },
+      { label: "VIN Reels", included: true },
     ]
   }
 };
@@ -4864,6 +4909,7 @@ const FEATURE_LABELS = {
   wishlist: "Customer Wishlist",
   trade: "Trade Appraisals",
   intro_videos: "Intro videos",
+  vin_reels: "VIN Reels",
   post_delay: "Time between posts",
   teams: "Team features"
 };
@@ -5480,11 +5526,23 @@ function setOwnTierForTesting(v) {
 // UPDATE (2026-10-26, Matthew's call): a brand-new signup no longer
 // starts the trial silently. Post-cutoff accounts (auth created_at on
 // or after 2026-10-26T00:00:00Z) whose billing_status is still null
-// get the SIGNUP CHOICE GATE instead: "Start my 4-day free trial" or
+// get the SIGNUP CHOICE GATE instead: "Start my free trial" or
 // "Choose a plan now". The choice is the trigger — trial-start is not
 // called for them until they pick the trial. Pre-cutoff accounts keep
 // the automatic trial-start resolution (it grandfathers them to
 // 'active'). See needsSignupChoice / applySignupChoiceGate below.
+
+// USAGE TRIAL UPDATE (2026-11-14, Matthew's call; REBUILD-FIRST):
+// trials granted by the updated trial-start carry
+// user_settings.trial_model = 'usage5' and run THIS model instead
+// of the staged phases: full Automate from day 1, free posting in
+// two buckets (5 auto + 10 manual — counted only on
+// helper-confirmed posts, by the database counting trigger that
+// maintains trial_usage), and the trial ends when both buckets are
+// spent OR 5 days pass, whichever comes first — then the same
+// purchase gate locks the whole app. Trials without the marker
+// (staged 4-day, legacy) resolve exactly as before. Spec:
+// trial-usage-model-spec-2026-11-14.md.
 
 // Prices and plan copy live in PLAN_DETAILS (plans section above) —
 // the single source every plan surface renders from. The old
@@ -5497,6 +5555,13 @@ let currentBilling = {
   status: null, // 'trialing' | 'active' | 'expired' | 'trial_blocked' | null
   trialStartedAt: null,
   trialEndsAt: null,
+  // USAGE TRIAL (2026-11-14): the model marker from
+  // user_settings.trial_model ('usage5' | null — null is every
+  // staged/legacy trial) and the bucket counters from trial_usage
+  // (written only by the DB counting trigger; read here).
+  trialModel: null,
+  trialAutoUsed: 0,
+  trialManualUsed: 0,
   blockReason: null,
   periodEnd: null,
   hasStripeCustomer: false,
@@ -5692,6 +5757,25 @@ const TRIAL_ALLOWED_FEATURES = ["inventory", "queue", "manual_posting"];
 const TRIAL_PHASE2_AFTER_MS = 48 * 60 * 60 * 1000;
 const TRIAL_STAGED_WINDOW_MAX_MS = 4 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000;
 
+// USAGE TRIAL (2026-11-14): the new trial model, keyed off the
+// trial record's marker (user_settings.trial_model). A usage trial
+// runs the full Automate set from day 1 and meters POSTS, not days:
+// TRIAL_USAGE_AUTO_LIMIT free auto posts + TRIAL_USAGE_MANUAL_LIMIT
+// free manual posts, counted only on helper-confirmed posts. The
+// trial ends when both buckets are spent or the stored window
+// (5 days) runs out — computeAccessState below holds that rule.
+const TRIAL_USAGE_MODEL = "usage5";
+const TRIAL_USAGE_AUTO_LIMIT = 5;
+const TRIAL_USAGE_MANUAL_LIMIT = 10;
+
+// Usage-model manual-bucket fit (pure): a manual batch fits when
+// confirmed manual successes + still-pending manual rows + this
+// batch stay within the manual bucket.
+function trialUsageManualFits(manualUsed, pendingManual, carCount) {
+  return (Number(manualUsed) || 0) + (Number(pendingManual) || 0) +
+    (Number(carCount) || 0) <= TRIAL_USAGE_MANUAL_LIMIT;
+}
+
 function trialPhaseState(startedAtMs, endsAtMs, nowMs) {
   const started = Number(startedAtMs), ends = Number(endsAtMs), now = Number(nowMs);
   if (!isFinite(started) || !isFinite(ends) || !isFinite(now)) return "legacy";
@@ -5708,7 +5792,7 @@ function trialPhaseFeatureAllowed(feature, phase) {
   const need = TIER_FEATURES[feature];
   if (!need) return true;
   if (phase === 1) return TIER_RANK.post >= TIER_RANK[need];
-  if (phase === 2) return TIER_RANK.group >= TIER_RANK[need];
+  if (phase === 2 || phase === "usage") return TIER_RANK.group >= TIER_RANK[need];
   return trialFeatureAllowed(feature);
 }
 
@@ -5724,6 +5808,27 @@ function computeAccessState(input) {
   if (s === "trialing") {
     const ends = input.trialEndsAtMs;
     if (ends && now < ends) {
+      // USAGE TRIAL (2026-11-14): a trial carrying the usage model
+      // marker ends when BOTH posting buckets are spent (the
+      // stored 5-day window still bounds it — the expired branch
+      // below fires first by time). Marker/counters absent (every
+      // pre-model trial, every older caller) resolves exactly as
+      // the staged/legacy line under this branch always has.
+      if (input.trialModel === "usage5") {
+        // (The "usage5" marker and the 5/10 bucket sizes are the
+        // TRIAL_USAGE_* constants above, inlined here so this
+        // function stays self-contained like the staged-phase
+        // numbers in trialPhaseState.)
+        const autoUsed = Number(input.trialAutoUsed) || 0;
+        const manualUsed = Number(input.trialManualUsed) || 0;
+        const usageDaysLeft = Math.max(1, Math.ceil((ends - now) / 86400000));
+        if (autoUsed >= 5 && manualUsed >= 10) {
+          return { mode: "gate", gateKind: "usage_exhausted", daysLeft: usageDaysLeft };
+        }
+        return { mode: "trial", gateKind: null, daysLeft: usageDaysLeft, phase: "usage",
+          autoLeft: Math.max(0, 5 - autoUsed),
+          manualLeft: Math.max(0, 10 - manualUsed) };
+      }
       return { mode: "trial", gateKind: null, daysLeft: Math.max(1, Math.ceil((ends - now) / 86400000)), phase: trialPhaseState(input.trialStartedAtMs, ends, now) };
     }
     return { mode: "gate", gateKind: "expired", daysLeft: 0 };
@@ -5775,7 +5880,7 @@ function trialQueueAllowed(usedToday) {
 function effectiveDailyPostAllowance(tier, userLimit, billingStatus, isOwner, phase) {
   if (billingStatus === "trialing") {
     if (phase === 1) tier = "post";
-    else if (phase === 2) tier = "group";
+    else if (phase === 2 || phase === "usage") tier = "group";
     else return 1;
   }
   if (isOwner) return userLimit;
@@ -5817,7 +5922,7 @@ function syncCooldownState(access, lastSyncAtISO, priorNonTestCount, nowMs) {
     // (18h), phase 2 at the Group cadence (6h); legacy trials keep
     // the original 24h trial cadence.
     hours = access.phase === 1 ? SYNC_COOLDOWN_HOURS.post
-      : access.phase === 2 ? SYNC_COOLDOWN_HOURS.group
+      : (access.phase === 2 || access.phase === "usage") ? SYNC_COOLDOWN_HOURS.group
       : SYNC_COOLDOWN_HOURS.trial;
   } else if (access.mode === "gate") {
     hours = null;
@@ -5878,7 +5983,7 @@ const POST_DELAY_POST_TIER_MINUTES = 30;
 
 function postDelayState(mode, tier, storedMinutes, phase) {
   const adjustable = (mode === "full" && (TIER_RANK[tier] || 0) >= TIER_RANK.automate) ||
-    (mode === "trial" && phase === 2);
+    (mode === "trial" && (phase === 2 || phase === "usage"));
   if (!adjustable) {
     const postResolution = tier === "post" || (mode === "trial" && phase === 1);
     return { minutes: postResolution ? POST_DELAY_POST_TIER_MINUTES : POST_DELAY_FIXED_MINUTES, adjustable: false };
@@ -5909,6 +6014,9 @@ function billingAccess() {
     trialEndsAtMs: currentBilling.trialEndsAt ? Date.parse(currentBilling.trialEndsAt) : null,
     periodEndMs: currentBilling.periodEnd ? Date.parse(currentBilling.periodEnd) : null,
     hasSubscription: currentBilling.hasSubscription,
+    trialModel: currentBilling.trialModel || null,
+    trialAutoUsed: currentBilling.trialAutoUsed || 0,
+    trialManualUsed: currentBilling.trialManualUsed || 0,
     nowMs: Date.now()
   });
 }
@@ -6000,6 +6108,9 @@ async function ensureBillingStatus() {
       if (data.trial_started_at) currentBilling.trialStartedAt = data.trial_started_at;
       if (data.trial_ends_at) currentBilling.trialEndsAt = data.trial_ends_at;
       if (data.current_period_end) currentBilling.periodEnd = data.current_period_end;
+      if (data.trial_model) currentBilling.trialModel = data.trial_model;
+      if (typeof data.trial_auto_used === "number") currentBilling.trialAutoUsed = data.trial_auto_used;
+      if (typeof data.trial_manual_used === "number") currentBilling.trialManualUsed = data.trial_manual_used;
     }
   } catch (e) {
     console.error("trial-start call failed:", e);
@@ -6008,9 +6119,39 @@ async function ensureBillingStatus() {
   }
 }
 
+// USAGE TRIAL counters (2026-11-14): re-read this account's
+// trial_usage row (the counters the DB counting trigger maintains
+// from helper-confirmed posts) into currentBilling. Runs on settings
+// load and whenever posting state refreshes, so a post the helper
+// lands mid-session moves the banner — and can close the purchase
+// gate — without a reload. Fail-open: a read error keeps the last
+// known counters. A no-op for every account not on the usage model.
+let trialUsageRefreshInFlight = false;
+async function refreshTrialUsage(applyUi) {
+  if (!currentUser || trialUsageRefreshInFlight) return;
+  if (currentBilling.trialModel !== TRIAL_USAGE_MODEL) return;
+  trialUsageRefreshInFlight = true;
+  try {
+    const { data, error } = await supabaseClient
+      .from("trial_usage")
+      .select("auto_used, manual_used")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    if (!error && data) {
+      const a = Number(data.auto_used) || 0;
+      const m = Number(data.manual_used) || 0;
+      const changed = a !== currentBilling.trialAutoUsed || m !== currentBilling.trialManualUsed;
+      currentBilling.trialAutoUsed = a;
+      currentBilling.trialManualUsed = m;
+      if (changed && applyUi) applyBillingUI();
+    }
+  } catch (e) { /* fail-open: counters keep their last known values */ }
+  trialUsageRefreshInFlight = false;
+}
+
 // ---- Signup choice gate -----------------------------------------------
 // The gate is the trigger for post-cutoff signups: nothing calls
-// trial-start for them until they pick "Start my 4-day free trial"
+// trial-start for them until they pick "Start my free trial"
 // here (chooseStartTrial below runs the exact call the old automatic
 // flow made). Picking a plan instead runs the same startCheckout as
 // the purchase gate. Closing or refreshing decides nothing — the
@@ -6121,6 +6262,36 @@ async function getTrialQueueUsedToday() {
 async function trialQueueGate(carCount) {
   if (billingMode() !== "trial") return true;
   const phase = trialPhase();
+  if (phase === "usage") {
+    // USAGE TRIAL (2026-11-14): manual queueing is capped by the
+    // manual bucket — confirmed manual successes (fresh counters)
+    // plus this account's still-pending manual rows plus this
+    // batch must fit. Failed posts never count: the counters only
+    // move on the helper's confirmed-post stamp, and a failed row
+    // leaves the pending set without touching them. Auto-posting
+    // is gated producer-side (the scraper), never here.
+    await refreshTrialUsage(false);
+    let pendingManual = 0;
+    try {
+      const { data, error } = await supabaseClient
+        .from("auto_posting_queue")
+        .select("id, status, post_origin, action")
+        .eq("user_id", currentUser.id)
+        .in("status", ["pending", "processing"]);
+      if (!error) (data || []).forEach(function (r) {
+        if (r.post_origin === "manual" && (r.action === null || r.action === undefined || r.action === "post")) pendingManual++;
+      });
+    } catch (e) { /* fail-open: the confirmed counters still gate */ }
+    if (currentBilling.trialManualUsed + pendingManual >= TRIAL_USAGE_MANUAL_LIMIT) {
+      showTrialNotice("usage_manual_done");
+      return false;
+    }
+    if (!trialUsageManualFits(currentBilling.trialManualUsed, pendingManual, carCount || 1)) {
+      showTrialNotice("usage_manual_multi");
+      return false;
+    }
+    return true;
+  }
   if (phase === 2) return true; // Automate days: no trial queue cap (the plan gate and the user's own limit still apply downstream)
   const used = await getTrialQueueUsedToday();
   if (phase === 1) {
@@ -6188,6 +6359,14 @@ function showPostCapNotice() {
 }
 
 // ---- Trial notice ----------------------------------------------------
+// Usage-trial notice helper: how the auto bucket stands, for the
+// manual-bucket notices (the two buckets exhaust independently).
+function usageAutoLeftText() {
+  const left = Math.max(0, TRIAL_USAGE_AUTO_LIMIT - (Number(currentBilling.trialAutoUsed) || 0));
+  if (left <= 0) return "Your free auto posts are used up too.";
+  return "Auto-posting still has " + left + " free post" + (left === 1 ? "" : "s") + " left — new arrivals keep posting on their own.";
+}
+
 function showTrialNotice(kind, feature) {
   const title = document.getElementById("trialNoticeTitle");
   const body = document.getElementById("trialNoticeBody");
@@ -6204,6 +6383,12 @@ function showTrialNotice(kind, feature) {
     } else if (kind === "queue_multi_cap") {
       title.innerText = "That batch passes today's cap";
       body.innerText = "Days 1–2 of the trial run the Self Post plan — 5 queued posts per day, so that batch doesn't fit today's cap. Queue fewer cars, or wait for day 3 when the full Automate plan unlocks. Or pick a plan now and skip the wait.";
+    } else if (kind === "usage_manual_done") {
+      title.innerText = "Your free manual posts are used up";
+      body.innerText = "Your free trial includes " + TRIAL_USAGE_MANUAL_LIMIT + " manual posts — and you've used them all. " + usageAutoLeftText() + " Or pick a plan now and post without trial limits.";
+    } else if (kind === "usage_manual_multi") {
+      title.innerText = "That batch passes your manual posts left";
+      body.innerText = "Your free trial includes " + TRIAL_USAGE_MANUAL_LIMIT + " manual posts, and that batch doesn't fit what's left. Queue fewer cars — or pick a plan now and post without trial limits.";
     } else {
       const label = FEATURE_LABELS[feature] || (feature === "listing_copy" ? "Listing copy (AI)" : "This feature");
       title.innerText = "Not in the free trial";
@@ -6806,6 +6991,9 @@ function applyPurchaseGate() {
         if (head) head.innerText = "This account isn't eligible for a free trial";
         if (sub) sub.innerText = "Pick a plan to start using AutoLaunch:";
       }
+    } else if (access.gateKind === "usage_exhausted") {
+      if (head) head.innerText = "You've used your free trial posts";
+      if (sub) sub.innerText = "That's all 15 free posts from your trial (5 auto + 10 manual). Pick a plan to keep posting:";
     } else if (access.gateKind === "term_ended") {
       if (head) head.innerText = "Your prepaid term has ended";
       if (sub) sub.innerText = "Pick a plan to keep posting:";
@@ -6838,7 +7026,11 @@ function renderTrialBanner() {
   if (text) {
     const daysPart = access.daysLeft === 1 ? "last day" : access.daysLeft + " days left";
     const endsPart = endsMs ? " · ends " + fmtBillingDate(endsMs) : "";
-    if (access.phase === 1) {
+    if (access.phase === "usage") {
+      text.innerText = "Free trial · " + access.autoLeft + " of 5 auto posts left · " +
+        access.manualLeft + " of 10 manual posts left · " + daysPart + endsPart +
+        " — full Automate is on for your whole trial.";
+    } else if (access.phase === 1) {
       text.innerText = "Free trial · " + daysPart + endsPart +
         " — you're on Self Post for days 1–2. Automate unlocks on day 3.";
     } else if (access.phase === 2) {
@@ -6883,15 +7075,21 @@ function renderBillingPanel() {
         ? "Your dealership prepaid in full — access paid through " + fmtBillingDate(Date.parse(currentDealership.periodEnd)) + ". No subscription is needed on this account."
         : "No subscription is needed on this account.";
   } else if (access.mode === "trial") {
-    status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
-    detail = access.phase === 1
-      ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". Days 1–2 run the Self Post plan (5 queued posts per day, sync every 18 hours); the full Automate plan unlocks on day 3."
-      : access.phase === 2
-        ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". The full Automate plan is unlocked for the rest of your trial — Luca + Prospects included."
-        : "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
+    if (access.phase === "usage") {
+      status = "Free trial — " + access.autoLeft + " of 5 auto posts left · " + access.manualLeft + " of 10 manual posts left · " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
+      detail = "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ", or as soon as both sets of free posts are used — whichever comes first. The full Automate plan is on for the whole trial, Luca + Prospects included.";
+    } else {
+      status = "Free trial — " + (access.daysLeft === 1 ? "last day" : access.daysLeft + " days left") + ".";
+      detail = access.phase === 1
+        ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". Days 1–2 run the Self Post plan (5 queued posts per day, sync every 18 hours); the full Automate plan unlocks on day 3."
+        : access.phase === 2
+          ? "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". The full Automate plan is unlocked for the rest of your trial — Luca + Prospects included."
+          : "Your trial ends " + fmtBillingDate(trialEndsDisplayMs()) + ". During the trial you can pull inventory and queue 1 car per day.";
+    }
   } else if (access.mode === "gate") {
     status = access.gateKind === "blocked"
       ? (currentBilling.blockReason === "dealership_trial_used" ? "Free trial has already been used for this dealership." : "This account isn't eligible for a free trial.")
+      : access.gateKind === "usage_exhausted" ? "You've used all your free trial posts."
       : access.gateKind === "term_ended" ? "Your prepaid term has ended." : "Your free trial has ended.";
     detail = access.gateKind === "blocked" && currentBilling.blockReason === "dealership_trial_used"
       ? "One free trial per dealership. If you're a different person at this store, contact support (Ask Luna) — or pick a plan below to start now."
@@ -8320,6 +8518,9 @@ async function loadUserStoreSettings() {
       status: data && data.billing_status !== undefined ? data.billing_status : null,
       trialStartedAt: data ? (data.trial_started_at || null) : null,
       trialEndsAt: data ? (data.trial_ends_at || null) : null,
+      trialModel: data ? (data.trial_model || null) : null,
+      trialAutoUsed: 0,
+      trialManualUsed: 0,
       blockReason: data ? (data.trial_block_reason || null) : null,
       periodEnd: data ? (data.current_period_end || null) : null,
       hasStripeCustomer: !!(data && data.stripe_customer_id),
@@ -8334,6 +8535,13 @@ async function loadUserStoreSettings() {
       seenAt: data ? (data.helper_seen_at || null) : null,
       leaseExpiresAt: data ? (data.helper_lease_expires_at || null) : null
     };
+    // USAGE TRIAL (2026-11-14): a usage-model trial's bucket
+    // counters live in trial_usage — load them alongside the
+    // billing state (refreshTrialUsage fills currentBilling and
+    // leaves the last known values in place on any read error).
+    if (currentBilling.status === "trialing" && currentBilling.trialModel === TRIAL_USAGE_MODEL) {
+      await refreshTrialUsage(false);
+    }
     if (currentUser && !isOwnerUser(currentUser.id) && !isDealershipLeader() && !dealershipCovered() &&
         (currentBilling.status === null || currentBilling.status === "trialing")) {
       if (currentBilling.status === "trialing") {
@@ -8468,6 +8676,12 @@ updateLastSyncDisplay();
         if (chkNoColors) chkNoColors.checked = allowPostWithoutColorsSetting;
         const chkModalNoColors = document.getElementById("chkModalAllowPostWithoutColors");
         if (chkModalNoColors) chkModalNoColors.checked = allowPostWithoutColorsSetting;
+      }
+      // VIN Reel before post: absent column leaves the default (OFF — opt-in).
+      if (data.vin_reel_before_post !== undefined && data.vin_reel_before_post !== null) {
+        vinReelBeforePostSetting = !!data.vin_reel_before_post;
+        const chkReel = document.getElementById("chkVinReelBeforePost");
+        if (chkReel) chkReel.checked = vinReelBeforePostSetting;
       }
       if (data.auto_post_min_photos) setMinPhotos(parseInt(data.auto_post_min_photos, 10) || 1);
       syncRibbonMasterCheckbox();
@@ -9799,7 +10013,8 @@ if (filterMileageRange) {
     if (activePillFilter === 'POSTED' && !car.marketplace_posted_at) return false;
     if (activePillFilter === 'UNPOSTED' && (car.marketplace_posted_at || isSold(car))) return false;
     if (needsAttentionOnly && !carNeedsAttention(car)) return false;
-    if (autoPostBlockerFilter && autoPostBlockerOf(car) !== autoPostBlockerFilter) return false;
+    if (autoPostBlockerFilter === "novideo") { if (!reelFlaggedToday.vins.has(car.vin)) return false; }
+    else if (autoPostBlockerFilter && autoPostBlockerOf(car) !== autoPostBlockerFilter) return false;
 
     return carMatchesInventorySearch(car, query);
   });
@@ -10229,6 +10444,17 @@ let autoPostEnabledSetting = false;
 // bar's blocker walk skips the colors leg, exactly like the
 // scraper's auto-post pass does.
 let allowPostWithoutColorsSetting = false;
+// VIN Reel before post (Matthew, 2026-11-05): mirrors
+// user_settings.vin_reel_before_post. When true the scraper's
+// auto-post pass holds each marketplace row behind a generated
+// VIN Reel (see _auto_post_filtered); the helper attaches the
+// ready reel to the post.
+let vinReelBeforePostSetting = false;
+// Today's reel-flagged posts (queue rows that went up with
+// reel_failed set), captured in loadPostingQueue BEFORE the
+// queue-hygiene sweep deletes the finished rows. Session-scoped:
+// a reload re-derives it from any flagged rows still present.
+let reelFlaggedToday = { day: "", vins: new Set() };
 function localDayKey(d) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
@@ -10456,7 +10682,8 @@ function renderAutoPostHealth() {
   rawInventory.forEach(car => { const b = autoPostBlockerOf(car); if (b) counts[b]++; });
   const held = counts.price + counts.colors + counts.photos;
   const total = counts.ready + held + counts.filter;
-  if (!total) { bar.style.display = "none"; return; }
+  const flaggedCount = (reelFlaggedToday.day === localDayKey(new Date())) ? reelFlaggedToday.vins.size : 0;
+  if (!total && !flaggedCount) { bar.style.display = "none"; return; }
   const chip = (kind, label, cls, title) => {
     const active = autoPostBlockerFilter === kind;
     return `<button type="button" onclick="setAutoPostBlockerFilter('${kind}')" title="${title}" class="px-2.5 py-0.5 rounded-full border font-semibold cursor-pointer ${cls}${active ? " ring-2 ring-slate-700" : ""}">${label}</button>`;
@@ -10470,6 +10697,7 @@ function renderAutoPostHealth() {
     if (counts.photos) html += chip("photos", `${counts.photos} need photos`, "bg-amber-50 text-amber-700 border-amber-300", `Fewer than your minimum of ${selectedMinPhotos} usable photos`);
   }
   if (counts.filter) html += chip("filter", `${counts.filter} outside your posting filter`, "bg-white text-slate-500 border-slate-300", "Outside the locations / conditions picked in Automation — widen the filter there to include them");
+  if (flaggedCount) html += chip("novideo", `${flaggedCount} posted without video`, "bg-sky-50 text-sky-700 border-sky-300", "Posted today without their VIN Reel video — the render failed or the wait timed out, so the post went up without it (it never holds a car back)");
   bar.innerHTML = html;
   bar.style.display = "flex";
 }
@@ -10572,6 +10800,7 @@ function gridCardHtml(car) {
         <div class="text-[11px] text-slate-500 mt-1">Stock: ${escapeHtml(car.stock_num || car.stock_number || 'N/A')} &bull; VIN: ${escapeHtml(car.vin || 'N/A')}</div>
         ${carColorsHtml(car)}
         ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(displayLocation(car.location_name))}</span></div>` : ''}
+        ${vinReelChipHtml(car)}
         <div class="flex items-baseline gap-2.5 pt-2">
           ${hasPrice(car)
             ? `<span class="text-sm font-bold text-blue-600">${priceText}</span>`
@@ -10583,6 +10812,9 @@ function gridCardHtml(car) {
         ${actions}
         <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="ai-gradient-btn w-8 h-8 shrink-0 rounded-xl flex items-center justify-center cursor-pointer">
           <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+        </button>
+        <button data-action="vin-reel" data-vin="${vinAttr}" title="VIN Reel — a narrated showcase video of this car" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+          <i class="fa-solid fa-clapperboard text-xs"></i>
         </button>
         <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
           <i class="fa-solid fa-ellipsis text-xs"></i>
@@ -10784,6 +11016,7 @@ ${car.location_name ? `
         </span>
       `
   }
+  ${vinReelChipHtml(car)}
 </td>
       <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2 relative">
@@ -10833,6 +11066,9 @@ ${car.location_name ? `
           <button data-action="listing-copy" data-vin="${vinAttr}" title="AI listing copy — Marketplace, TikTok & Page versions written from this car's real data" class="ai-gradient-btn w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer">
             <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
           </button>
+          <button data-action="vin-reel" data-vin="${vinAttr}" title="VIN Reel — a narrated showcase video of this car" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+            <i class="fa-solid fa-clapperboard text-xs"></i>
+          </button>
           <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
             <i class="fa-solid fa-ellipsis text-xs"></i>
           </button>
@@ -10862,6 +11098,15 @@ function toggleRowDropdown(event, vin) {
   const addItem = document.getElementById("dropdownAddPhotosItem");
   if (addItem) addItem.classList.toggle("hidden", !!ddCar && !addPhotosOffered(ddCar));
 
+  // VIN Reel item label follows the car's reel state.
+  const reelLabel = document.getElementById("dropdownVinReelLabel");
+  if (reelLabel && ddCar) {
+    const ddReel = vinReelFor(ddCar);
+    reelLabel.innerText = !ddReel ? "Create reel"
+      : ddReel.status === "ready" ? "View reel"
+      : ddReel.status === "failed" ? "Create reel (failed last time)"
+      : vinReelStatusText(ddReel);
+  }
 
   // The menu is position:fixed, so its coordinates are viewport
   // coordinates — scroll offsets must NOT be added (the old code
@@ -10915,6 +11160,7 @@ function handleDropdownAction(action) {
     case "add_photos": openAddPhotosModal(car.vin); break;
     case "sync_one": syncSingleCar(car.vin); break;
     case "listing_copy": openListingCopyModal(car); break;
+    case "create_reel": vinReelAction(vin); break;
     case "add_link": openAddFbLinkModal(car.vin); break;
     case "remove_inventory": removeVehicleFromInventory(car.vin); break;
   }
@@ -12065,11 +12311,172 @@ async function saveExistingFbLink() {
   }
 }
 
+// =====================================================================
+// VIN REELS (Matthew, 2026-11-05): a per-car narrated showcase video,
+// rendered off-app by the VIN Reels worker from the car's real photos
+// and data. The app only queues (an insert into vin_reels) and
+// reflects state — chips on inventory cards/rows, the player in this
+// details modal. Creating a reel is an Automate feature
+// (TIER_FEATURES.vin_reels, so trial phase 1 sees the locked button
+// and phase 2 can create); watching a finished reel is never gated.
+// State refresh rides the queue poller (pollQueueTick) — no new
+// timers. The finished file lives at a stable public URL
+// (vin-reels bucket, <user_id>/<vin>.mp4) so the poster and the
+// TikTok channel can attach it later.
+// =====================================================================
+let vinReelsByVin = {};
+let vinReelsSig = "";
+let detailsReelVin = null;
+let detailsReelRenderedSig = "";
+
+function vinReelFor(car) {
+  return (car && vinReelsByVin[car.vin]) || null;
+}
+
+function vinReelStatusText(reel) {
+  if (!reel) return "";
+  if (reel.status === "queued") return "Reel queued…";
+  if (reel.status === "generating") return "Rendering reel…";
+  if (reel.status === "ready") return "Reel ready";
+  if (reel.status === "failed") return "Reel failed";
+  return "";
+}
+
+function vinReelChipHtml(car) {
+  const reel = vinReelFor(car);
+  if (!reel) return "";
+  const cls = reel.status === "ready"
+    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+    : reel.status === "failed"
+    ? "bg-rose-50 text-rose-700 border-rose-200"
+    : "bg-amber-50 text-amber-700 border-amber-200";
+  return `<div class="mt-1.5"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}"><i class="fa-solid fa-clapperboard mr-1"></i>${vinReelStatusText(reel)}</span></div>`;
+}
+
+async function refreshVinReels() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("vin_reels")
+      .select("id, vin, stock_number, status, video_url, error, created_at")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    // One display row per VIN: a live render wins, then the newest
+    // ready reel, then the newest failure (rows arrive newest-first,
+    // so the first row seen at the winning rank is the newest of it).
+    // 'consumed' rows (phase 2: the poster attached the reel, then
+    // deleted the file) are history only — their video_url is dead,
+    // so they must never render a chip or a player.
+    const rank = { queued: 0, generating: 0, ready: 1, failed: 2 };
+    const byVin = {};
+    (data || []).forEach(r => {
+      if (r.status === "consumed") return;
+      const cur = byVin[r.vin];
+      if (!cur || rank[r.status] < rank[cur.status]) byVin[r.vin] = r;
+    });
+    vinReelsByVin = byVin;
+    const sig = Object.keys(byVin).sort().map(v => {
+      const r = byVin[v];
+      return v + ":" + r.status + ":" + (r.video_url || "");
+    }).join(";");
+    if (sig !== vinReelsSig) {
+      vinReelsSig = sig;
+      if (typeof applyFilters === "function") applyFilters();
+    }
+    renderDetailsReelSection();
+  } catch (e) { /* reel state is decoration on the inventory view — a failed read must never break it */ }
+}
+
+async function vinReelAction(vin) {
+  const car = rawInventory.find(c => c.vin === vin);
+  if (!car || !currentUser) return;
+  const reel = vinReelFor(car);
+  if (reel && reel.status !== "failed") { openVehicleDetailsModal(car); return; }
+  if (!requireTier("vin_reels")) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("vin_reels")
+      .insert({ user_id: currentUser.id, vin: car.vin, stock_number: car.stock_num || car.stock_number || null, status: "queued" })
+      .select()
+      .single();
+    if (error) throw error;
+    vinReelsByVin[car.vin] = data;
+    if (typeof applyFilters === "function") applyFilters();
+    openVehicleDetailsModal(car);
+    refreshVinReels();
+  } catch (err) {
+    // 23505 = a live reel already exists for this VIN (double-click or
+    // a second device beat us to it) — that is the state we wanted.
+    if (err && (err.code === "23505" || /duplicate/i.test(err.message || ""))) {
+      refreshVinReels();
+      openVehicleDetailsModal(car);
+      return;
+    }
+    alert("Could not queue the reel: " + (err.message || err));
+  }
+}
+
+function vinReelSectionHtml(car) {
+  return `<div id="detailsReelSection">${vinReelSectionInnerHtml(car)}</div>`;
+}
+
+function renderDetailsReelSection() {
+  const el = document.getElementById("detailsReelSection");
+  if (!el || !detailsReelVin) return;
+  const car = rawInventory.find(c => c.vin === detailsReelVin);
+  if (!car) return;
+  const reel = vinReelFor(car);
+  const sig = detailsReelVin + ":" + (reel ? reel.status + ":" + (reel.video_url || "") : "none");
+  if (sig === detailsReelRenderedSig) return; // never restart a playing video on a poll tick
+  detailsReelRenderedSig = sig;
+  el.innerHTML = vinReelSectionInnerHtml(car);
+}
+
+function vinReelSectionInnerHtml(car) {
+  const reel = vinReelFor(car);
+  const head = `<div class="flex items-center gap-2 pt-1">
+      <i class="fa-solid fa-clapperboard text-slate-400 text-xs"></i>
+      <span class="text-[10px] uppercase font-bold text-slate-500">VIN Reel</span>
+    </div>`;
+  if (reel && reel.status === "ready" && reel.video_url) {
+    return `${head}
+    <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-900 mt-2">
+      <video controls playsinline preload="metadata" src="${escapeHtml(reel.video_url)}" class="w-full max-h-96"></video>
+    </div>
+    <div class="pt-2 flex items-center justify-end gap-2">
+      <a href="${escapeHtml(reel.video_url)}" download class="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-sm">
+        <i class="fa-solid fa-download text-[10px]"></i><span>Download</span>
+      </a>
+      <button type="button" onclick="vinReelAction('${escapeHtml(car.vin)}')" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-rotate text-[10px]"></i><span>Re-create</span>
+      </button>
+    </div>`;
+  }
+  if (reel && (reel.status === "queued" || reel.status === "generating")) {
+    return `${head}
+    <div class="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 font-semibold flex items-center gap-2">
+      <i class="fa-solid fa-hourglass-half"></i><span>${vinReelStatusText(reel)} — it will appear here when it's done.</span>
+    </div>`;
+  }
+  const failedNote = reel && reel.status === "failed"
+    ? `<div class="mt-2 p-3 bg-rose-50 rounded-xl border border-rose-200 text-xs text-rose-700">${escapeHtml(reel.error || "The last render failed.")}</div>` : "";
+  const allowed = tierAllows("vin_reels");
+  return `${head}${failedNote}
+  <div class="pt-2 flex justify-end">
+    <button type="button" onclick="vinReelAction('${escapeHtml(car.vin)}')" class="px-4 py-2 rounded-xl ${allowed ? "btn-gradient text-white" : "border border-slate-300 text-slate-500 bg-slate-50"} text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+      <i class="fa-solid ${allowed ? "fa-clapperboard" : "fa-lock"} text-[10px]"></i><span>${reel && reel.status === "failed" ? "Try again" : "Create reel"}</span>
+    </button>
+  </div>`;
+}
 
 async function openVehicleDetailsModal(car) {
   car = await ensureFullCar(car);
   document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'} ${car.trim || ''}`;
   document.getElementById("detailsModalVin").innerText = `VIN: ${car.vin || 'N/A'} • Stock: ${car.stock_num || car.stock_number || 'N/A'}`;
+  detailsReelVin = car.vin;
+  detailsReelRenderedSig = "";
 
   // PHOTO GALLERY (Matthew, 2026-11-05): show ALL of the car's
   // pictures in the modal — a thumbnail strip under the big photo,
@@ -12126,9 +12533,11 @@ async function openVehicleDetailsModal(car) {
         <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
       </a>
     </div>
+    ${vinReelSectionHtml(car)}
   `;
 
   document.getElementById("vehicleDetailsModal").classList.remove("hidden");
+  refreshVinReels();
 }
 
 async function removeVehicleFromInventory(vin) {
@@ -12410,6 +12819,20 @@ async function loadPostingQueue() {
         // (marketplace_posted_at drives the Posted pill), so nothing is
         // lost. Failed rows stay: they carry the error diagnostics.
         const allRows = data || [];
+        // VIN REELS PHASE 2: remember today's reel-flagged posts
+        // (posted rows carrying reel_failed) BEFORE the hygiene
+        // sweep below deletes the finished rows — the health
+        // bar's "posted without video" chip counts from this.
+        try {
+          const todayKey = localDayKey(new Date());
+          if (reelFlaggedToday.day !== todayKey) reelFlaggedToday = { day: todayKey, vins: new Set() };
+          allRows.forEach(i => {
+            if (i && i.reel_failed === true && i.status === "posted" && i.vin && i.created_at
+                && localDayKey(new Date(i.created_at)) === todayKey) {
+              reelFlaggedToday.vins.add(i.vin);
+            }
+          });
+        } catch (e) { /* the chip is informational; never break the queue load */ }
         const doneRows = allRows.filter(i => i.status === "posted" || i.status === "completed");
         postingQueue = allRows.filter(i => i.status !== "posted" && i.status !== "completed");
         syncQueueBulkBar();
@@ -12623,6 +13046,7 @@ async function pollQueueTick() {
 
         if (modalOpen) await loadPostingQueue();       // list + sidebar badge
         if (invVisible) await pollInventoryDelta(); // rows + Posted pills (delta — full reload stays on sign-in/Sync)
+        await refreshVinReels(); // VIN Reel chips + details-modal player ride this poller — no new timers
 
         if (card) card.scrollTop = cardScroll;
         if (window.scrollY !== winScroll) window.scrollTo(0, winScroll);
@@ -17808,6 +18232,33 @@ async function toggleAllowPostWithoutColorsSetting(el) {
   }
 }
 
+// Make a video before posting (Matthew, 2026-11-05): writes
+// user_settings.vin_reel_before_post immediately, like the
+// colors waiver. The scraper's auto-post pass reads the same
+// column and holds marketplace rows behind poster VIN Reels
+// while it is on. Turning it ON belongs to the VIN Reels
+// feature, so it carries that plan gate; turning it off is
+// always allowed.
+async function toggleVinReelBeforePostSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  // PLANS: the hold only matters for VIN Reels (enabling only).
+  if (value && !requireTier("vin_reels")) { el.checked = false; return; }
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        vin_reel_before_post: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    vinReelBeforePostSetting = value;
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the video-before-posting setting: " + (err.message || "Unknown error"));
+  }
+}
 
 // The Settings modal's Auto Posting switch controls the same column as the
 // ribbon's "Auto-post new arrivals" switch. Route it through the same save.
@@ -17874,7 +18325,8 @@ const GUIDES = {
       "Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.",
       "Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.",
       "Every auto-posted car counts against your daily posting limit, same as cars you queue by hand.",
-      "A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website."
+      "A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website.",
+      "Turn on 'Make a video before posting' in Settings and auto-posts also wait for each car's VIN Reel: a car with no ready video is held, never posted bare. See the VIN Reels guide." 
     ]
   },
   repost: {
@@ -17925,7 +18377,7 @@ const GUIDES = {
       "Open this card.",
       "Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.",
       "Pick a posting speed: Standard, or Cautious for twice the spacing between posts.",
-      "Set the time between posts — 5, 10 or 15 minutes. On the Post plan — and on days 1–2 of the free trial — posts are spaced 30 minutes apart; choosing your own spacing is part of the Automate plan, which the trial unlocks in full on day 3.",
+      "Set the time between posts — 5, 10 or 15 minutes. On the Post plan the spacing is fixed at 30 minutes; choosing your own spacing is part of the Automate plan. The free trial runs the full Automate plan from day 1, so you can pick your spacing during the trial too.",
       "Press Save. The counter on this card shows how much of today's limit you have used."
     ],
     notes: [
@@ -17981,7 +18433,7 @@ const GUIDES = {
     steps: [
       "Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.",
       "Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.",
-      "Fix flags before posting: a car with no price or a missing color shows 'need attention' and can't post until it's resolved — click through and complete what's missing.",
+      "Fix flags before posting: a car with no price shows 'need attention' and can't post until it's resolved — click through and complete what's missing. A missing color flags the car the same way, unless your account is set to allow posting without colors.",
       "Select cars and use Post Selected, or post one car from its row. Everything goes through the Post Queue."
     ],
     notes: [
@@ -18086,7 +18538,7 @@ const GUIDES = {
       "Only the little chat pane open? Open facebook.com/messages in its own tab and leave it there.",
       "If the PC was asleep or off, nothing is lost: messages sync in on their own once it's awake again.",
       "Signed out of Facebook? Sign back in — the helper can't read an inbox it can't see.",
-      "Luca drafts replies on the prospect card, in your voice. He never sends: you read every draft, edit if you like, and you press send."
+      "Luca drafts replies on the prospect card, in your voice: you read every draft, edit if you like, and you press send. The only message that can ever send itself is the availability auto-reply, if you've switched it on in Settings — one fixed reply to a buyer's first \"Is this available?\", sent only after the car is verified still in stock."
     ]
   },
   luca: {
@@ -18095,7 +18547,7 @@ const GUIDES = {
     icon: "fa-solid fa-moon",
     iconClasses: "bg-violet-50 text-violet-600 border-violet-200",
     modal: null,
-    what: "Luca drafts your Marketplace replies the way YOU would write them — grounded in your live inventory, your schedule and your rules. He only ever drafts: you review and send every message yourself. He never invents a price, a payment or a promise, and he hands the chat back the moment it needs a human (haggling, financing specifics, trade values, an upset buyer).",
+    what: "Luca drafts your Marketplace replies the way YOU would write them — grounded in your live inventory, your schedule and your rules. He drafts: you review and send — with one optional exception, the availability auto-reply described in the notes, which is off by default. He never invents a price, a payment or a promise, and he hands the chat back the moment it needs a human (haggling, financing specifics, trade values, an upset buyer).",
     steps: [
       "Set up his profile on the Luca · AI Assistant page: your name, your credit-app link, the store hours AND your own hours (he only offers times you'd actually be there).",
       "Set 'Your lot' — the location you sell from. If you combined rooftops in Settings → Location Groups, pick the combined name.",
@@ -18106,7 +18558,7 @@ const GUIDES = {
       "Luca learns your voice from the replies you actually send in chats — the more real conversations get captured, the more he sounds like you. Your voice is never shared with other accounts.",
       "He answers about vehicles ONLY from your live inventory — misspellings and run-together words included — and when he says 'we don't have one', that's a search he just ran and verified, not a guess. Cars at sister lots come with the transfer talk: he'll confirm the buyer's good with the price before anyone moves a car.",
       "Luca needs the helper hub (PC awake, Chrome open with a Messenger/Facebook tab, signed in) to capture chats and deliver replies. He drafts in AutoLaunch even when the hub is asleep — sending waits for the hub.",
-      "There is no auto-send. That's by design, permanently: a human sends every message."
+      "Auto-send has exactly one narrow exception, and it stays off unless you turn it on: the availability auto-reply in Settings. It answers a buyer's very first \"Is this available?\" message — and only that message — with one fixed reply, and only after checking the car is really still in your inventory. An extra question, a second message, or a car that can't be verified means no auto-reply. Everything else is draft-only: a human sends every other message."
     ]
   },
   channels: {
@@ -18144,6 +18596,24 @@ const GUIDES = {
       "Not live yet: no channel attaches clips today. Uploading now means your clip is ready the moment channel support lands.",
       "Intro videos never affect Marketplace posting — if a clip has any problem, posting carries on without it.",
       "Clips are stored on your account only."
+    ]
+  },
+  vinreels: {
+    title: "VIN Reels",
+    icon: "fa-solid fa-clapperboard",
+    iconClasses: "bg-violet-50 text-violet-600 border-violet-200",
+    modal: null,
+    what: "A short narrated showcase video made automatically from each car's real photos and details — the year, make, model and stock number appear on screen. Reels render in the background; you never upload or edit anything.",
+    steps: [
+      "Make one on demand: use the reel button on any car (Dashboard grid or table row, or the car's menu → Create reel), or open the car and use the VIN Reel section in its details.",
+      "Watch the state on the car's chip: Reel queued…, Rendering reel…, Reel ready, or Reel failed. A ready reel plays right in the car's details.",
+      "Turn on 'Make a video before posting' in Settings and posting waits for the video: each car is held until its reel is ready, then the video is attached to the Marketplace post right after it goes up."
+    ],
+    notes: [
+      "The gate never posts a car bare: with the setting on, a car whose video isn't ready stays held — it is not posted without its video.",
+      "If a video can't be attached after the car posts, the bare listing is taken back down and the post is retried. After 3 failed attempts the car stops and is flagged for your attention — nothing is left live without its video.",
+      "A failed render can be retried from the car's reel section. A reel is made from the car's real photos, so a car needs usable photos to get one.",
+      "VIN Reels are part of the Automate plan — and the free trial runs the full Automate plan from day 1, so they're included in the trial too."
     ]
   },
   trade: {
@@ -18577,6 +19047,10 @@ async function refreshSafetyCounter() {
   const split = await getDailyPostUsageSplit();
   updateSafetyCounterUI(used, currentDailyPostAllowance(), split);
   updateMobileHeaderSummary();
+  // USAGE TRIAL (2026-11-14): posting state just refreshed — the
+  // trial counters may have moved (helper-confirmed posts), so the
+  // banner and gate re-read them here. No-op for other accounts.
+  refreshTrialUsage(true);
 }
 function toggleSelectAllCars(master) {
   const filtered = Array.isArray(window.currentFilteredInventory)

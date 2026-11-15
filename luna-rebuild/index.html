@@ -653,7 +653,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <p>Everything in Self Post, plus the machine does the posting: auto-post new arrivals, automatic delete &amp; repost, Facebook Page posting, Luca reply drafts with Prospects, trade appraisals and wishlist. Inventory pulls every 6 hours.</p>
       </div>
     </div>
-    <p style="margin-top:22px">Dealership accounts with per-seat pricing are also available. Every plan starts with a <strong style="color:#FFFFFF">free 4-day trial</strong> — no card up front. AutoLaunch gives your team back the hours that manual posting eats; what you do with that time is up to you.</p>
+    <p style="margin-top:22px">Dealership accounts with per-seat pricing are also available. Every plan starts with a <strong style="color:#FFFFFF">free trial</strong> — the full Automate plan from day 1, with 5 automatic and 10 manual posts free over up to 5 days. No card up front. AutoLaunch gives your team back the hours that manual posting eats; what you do with that time is up to you.</p>
     <a class="al-cta" href="https://autolaunch.org/">Sign in or start your free trial</a>
     <div class="al-links">
       <a href="https://autolaunch.org/terms.html">Terms of Service</a>
@@ -677,7 +677,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
        only: no auth, trial or billing logic lives in this markup. -->
   <div class="min-h-full w-full max-w-[1440px] mx-auto flex flex-col items-center justify-center gap-4 lg:gap-5 p-4">
     <div class="text-center px-2 shrink-0">
-      <p class="text-2xl lg:text-[2rem] font-extrabold tracking-tight text-slate-900 leading-tight">Start your free 4-day trial</p>
+      <p class="text-2xl lg:text-[2rem] font-extrabold tracking-tight text-slate-900 leading-tight">Start your free trial — full Automate from day 1</p>
       <p class="text-sm lg:text-[15px] text-slate-600 font-medium mt-1.5">No card up front — see what it does for your lot.</p>
     </div>
     <div class="w-full flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-4 lg:gap-5">
@@ -700,7 +700,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <p class="text-[13px] font-bold text-slate-700 leading-relaxed mt-1.5">TikTok &amp; Instagram — coming soon, Automate only.</p>
           </div>
         </div>
-        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 4 days on us.</p>
+        <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 5 auto + 10 manual posts, up to 5 days.</p>
         <button type="button" class="landing-trial-btn btn-gradient w-full py-2.5 rounded-xl text-white font-bold text-sm shadow-lg cursor-pointer mt-3">Start free trial</button>
       </section>
       <div class="order-3 lg:order-2 w-full max-w-md shrink-0">
@@ -967,7 +967,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
     </div>
     <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 mb-3">
       <div id="signupChoiceTrialCard"></div>
-      <button id="signupChoiceTrialBtn" onclick="chooseStartTrial()" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Start my 4-day free trial</button>
+      <button id="signupChoiceTrialBtn" onclick="chooseStartTrial()" class="mt-3 w-full py-2.5 rounded-xl btn-gradient text-white font-bold text-sm cursor-pointer">Start my free trial</button>
     </div>
     <p class="text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 my-3">or choose a plan now</p>
     <div id="signupChoiceCards" class="grid sm:grid-cols-2 gap-3"></div>
@@ -1769,7 +1769,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             <i class="fa-solid fa-download"></i>
             <span>Download the helper (ZIP)</span>
           </a><br>
-          <span class="text-xs text-slate-400">Helper 2.117 — manual install</span></span>
+          <span class="text-xs text-slate-400">Helper 2.129 — manual install</span></span>
         </li>
         <li class="flex gap-3">
           <span class="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
@@ -3183,7 +3183,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
               </h3>
 
               <p class="text-sm text-slate-500">
-                Auto-posts wait for the car's generated VIN Reel video and include it in the Marketplace post. If a video can't be made, the car posts anyway and is flagged in the health bar.
+                Auto-posts wait for the car's generated VIN Reel video, which is attached to the Marketplace post. A car never posts without its video: if the video can't be made, the car stays held; if it can't be attached after posting, the bare listing is taken down and the post is retried — after 3 failed attempts the car is flagged for your attention in the health bar. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('vinreels')">How VIN Reels work →</span>
               </p>
 
             </div>
@@ -4798,21 +4798,22 @@ const PLAN_DETAILS = {
     name: "Free trial",
     priceLabel: "Free",
     price: null,
-    tagline: "Four days free — Self Post first, then full Automate.",
-    note: "Days 1–2 run the Self Post plan; days 3–4 unlock the full Automate plan, Luca + Prospects included. No card needed. When the trial ends, pick a plan to keep posting.",
+    tagline: "Five days free — the full Automate plan from day 1.",
+    note: "The whole Automate plan is on from day 1: 5 automatic posts and 10 manual posts are free, and the trial ends when both are used up or 5 days pass, whichever comes first. No card needed. When the trial ends, the app locks until you pick a plan.",
     features: [
       { label: "Inventory sync & workspace", included: true },
       { label: "Manual Marketplace posting", included: true },
-      { label: "Queued posts per day", value: "5 per day (days 1–2) · no plan cap (days 3–4)" },
-      { label: "Inventory sync", value: "1 sync per 18 hours (days 1–2) · 1 per 6 hours (days 3–4)" },
+      { label: "Queued posts per day", value: "5 automatic + 10 manual, free" },
+      { label: "Inventory sync", value: "1 sync per 6 hours" },
       { label: "AI listing copy", included: true },
-      { label: "Auto-post new arrivals", included: true, note: "days 3–4" },
-      { label: "Delete listings + auto delete & repost", included: true, note: "days 3–4" },
-      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true, note: "days 3–4" },
-      { label: "Luca AI Assistant + Prospects", included: true, note: "days 3–4" },
-      { label: "Customer Wishlist", included: true, note: "days 3–4" },
-      { label: "Trade Appraisals", included: true, note: "days 3–4" },
-      { label: "Intro videos", included: true, note: "days 3–4" },
+      { label: "Auto-post new arrivals", included: true },
+      { label: "Delete listings + auto delete & repost", included: true },
+      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true },
+      { label: "Luca AI Assistant + Prospects", included: true },
+      { label: "Customer Wishlist", included: true },
+      { label: "Trade Appraisals", included: true },
+      { label: "Intro videos", included: true },
+      { label: "VIN Reels", included: true },
     ]
   },
   post: {
@@ -4833,6 +4834,7 @@ const PLAN_DETAILS = {
       { label: "Customer Wishlist", included: false },
       { label: "Trade Appraisals", included: false },
       { label: "Intro videos", included: false },
+      { label: "VIN Reels", included: false },
     ]
   },
   automate: {
@@ -4853,6 +4855,7 @@ const PLAN_DETAILS = {
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
       { label: "Intro videos", included: true },
+      { label: "VIN Reels", included: true },
     ]
   },
   group: {
@@ -4873,6 +4876,7 @@ const PLAN_DETAILS = {
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
       { label: "Intro videos", included: true },
+      { label: "VIN Reels", included: true },
     ]
   }
 };
@@ -5526,7 +5530,7 @@ function setOwnTierForTesting(v) {
 // UPDATE (2026-10-26, Matthew's call): a brand-new signup no longer
 // starts the trial silently. Post-cutoff accounts (auth created_at on
 // or after 2026-10-26T00:00:00Z) whose billing_status is still null
-// get the SIGNUP CHOICE GATE instead: "Start my 4-day free trial" or
+// get the SIGNUP CHOICE GATE instead: "Start my free trial" or
 // "Choose a plan now". The choice is the trigger — trial-start is not
 // called for them until they pick the trial. Pre-cutoff accounts keep
 // the automatic trial-start resolution (it grandfathers them to
@@ -6151,7 +6155,7 @@ async function refreshTrialUsage(applyUi) {
 
 // ---- Signup choice gate -----------------------------------------------
 // The gate is the trigger for post-cutoff signups: nothing calls
-// trial-start for them until they pick "Start my 4-day free trial"
+// trial-start for them until they pick "Start my free trial"
 // here (chooseStartTrial below runs the exact call the old automatic
 // flow made). Picking a plan instead runs the same startCheckout as
 // the purchase gate. Closing or refreshing decides nothing — the
@@ -18748,7 +18752,8 @@ const GUIDES = {
       "Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.",
       "Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.",
       "Every auto-posted car counts against your daily posting limit, same as cars you queue by hand.",
-      "A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website."
+      "A car that arrives short on photos is not skipped forever — it posts once its photos show up on your website.",
+      "Turn on 'Make a video before posting' in Settings and auto-posts also wait for each car's VIN Reel: a car with no ready video is held, never posted bare. See the VIN Reels guide." 
     ]
   },
   repost: {
@@ -18799,7 +18804,7 @@ const GUIDES = {
       "Open this card.",
       "Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.",
       "Pick a posting speed: Standard, or Cautious for twice the spacing between posts.",
-      "Set the time between posts — 5, 10 or 15 minutes. On the Post plan — and on days 1–2 of the free trial — posts are spaced 30 minutes apart; choosing your own spacing is part of the Automate plan, which the trial unlocks in full on day 3.",
+      "Set the time between posts — 5, 10 or 15 minutes. On the Post plan the spacing is fixed at 30 minutes; choosing your own spacing is part of the Automate plan. The free trial runs the full Automate plan from day 1, so you can pick your spacing during the trial too.",
       "Press Save. The counter on this card shows how much of today's limit you have used."
     ],
     notes: [
@@ -18855,7 +18860,7 @@ const GUIDES = {
     steps: [
       "Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.",
       "Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.",
-      "Fix flags before posting: a car with no price or a missing color shows 'need attention' and can't post until it's resolved — click through and complete what's missing.",
+      "Fix flags before posting: a car with no price shows 'need attention' and can't post until it's resolved — click through and complete what's missing. A missing color flags the car the same way, unless your account is set to allow posting without colors.",
       "Select cars and use Post Selected, or post one car from its row. Everything goes through the Post Queue."
     ],
     notes: [
@@ -18960,7 +18965,7 @@ const GUIDES = {
       "Only the little chat pane open? Open facebook.com/messages in its own tab and leave it there.",
       "If the PC was asleep or off, nothing is lost: messages sync in on their own once it's awake again.",
       "Signed out of Facebook? Sign back in — the helper can't read an inbox it can't see.",
-      "Luca drafts replies on the prospect card, in your voice. He never sends: you read every draft, edit if you like, and you press send."
+      "Luca drafts replies on the prospect card, in your voice: you read every draft, edit if you like, and you press send. The only message that can ever send itself is the availability auto-reply, if you've switched it on in Settings — one fixed reply to a buyer's first \"Is this available?\", sent only after the car is verified still in stock."
     ]
   },
   luca: {
@@ -18969,7 +18974,7 @@ const GUIDES = {
     icon: "fa-solid fa-moon",
     iconClasses: "bg-violet-50 text-violet-600 border-violet-200",
     modal: null,
-    what: "Luca drafts your Marketplace replies the way YOU would write them — grounded in your live inventory, your schedule and your rules. He only ever drafts: you review and send every message yourself. He never invents a price, a payment or a promise, and he hands the chat back the moment it needs a human (haggling, financing specifics, trade values, an upset buyer).",
+    what: "Luca drafts your Marketplace replies the way YOU would write them — grounded in your live inventory, your schedule and your rules. He drafts: you review and send — with one optional exception, the availability auto-reply described in the notes, which is off by default. He never invents a price, a payment or a promise, and he hands the chat back the moment it needs a human (haggling, financing specifics, trade values, an upset buyer).",
     steps: [
       "Set up his profile on the Luca · AI Assistant page: your name, your credit-app link, the store hours AND your own hours (he only offers times you'd actually be there).",
       "Set 'Your lot' — the location you sell from. If you combined rooftops in Settings → Location Groups, pick the combined name.",
@@ -18980,7 +18985,7 @@ const GUIDES = {
       "Luca learns your voice from the replies you actually send in chats — the more real conversations get captured, the more he sounds like you. Your voice is never shared with other accounts.",
       "He answers about vehicles ONLY from your live inventory — misspellings and run-together words included — and when he says 'we don't have one', that's a search he just ran and verified, not a guess. Cars at sister lots come with the transfer talk: he'll confirm the buyer's good with the price before anyone moves a car.",
       "Luca needs the helper hub (PC awake, Chrome open with a Messenger/Facebook tab, signed in) to capture chats and deliver replies. He drafts in AutoLaunch even when the hub is asleep — sending waits for the hub.",
-      "There is no auto-send. That's by design, permanently: a human sends every message."
+      "Auto-send has exactly one narrow exception, and it stays off unless you turn it on: the availability auto-reply in Settings. It answers a buyer's very first \"Is this available?\" message — and only that message — with one fixed reply, and only after checking the car is really still in your inventory. An extra question, a second message, or a car that can't be verified means no auto-reply. Everything else is draft-only: a human sends every other message."
     ]
   },
   channels: {
@@ -19018,6 +19023,24 @@ const GUIDES = {
       "Not live yet: no channel attaches clips today. Uploading now means your clip is ready the moment channel support lands.",
       "Intro videos never affect Marketplace posting — if a clip has any problem, posting carries on without it.",
       "Clips are stored on your account only."
+    ]
+  },
+  vinreels: {
+    title: "VIN Reels",
+    icon: "fa-solid fa-clapperboard",
+    iconClasses: "bg-violet-50 text-violet-600 border-violet-200",
+    modal: null,
+    what: "A short narrated showcase video made automatically from each car's real photos and details — the year, make, model and stock number appear on screen. Reels render in the background; you never upload or edit anything.",
+    steps: [
+      "Make one on demand: use the reel button on any car (Dashboard grid or table row, or the car's menu → Create reel), or open the car and use the VIN Reel section in its details.",
+      "Watch the state on the car's chip: Reel queued…, Rendering reel…, Reel ready, or Reel failed. A ready reel plays right in the car's details.",
+      "Turn on 'Make a video before posting' in Settings and posting waits for the video: each car is held until its reel is ready, then the video is attached to the Marketplace post right after it goes up."
+    ],
+    notes: [
+      "The gate never posts a car bare: with the setting on, a car whose video isn't ready stays held — it is not posted without its video.",
+      "If a video can't be attached after the car posts, the bare listing is taken back down and the post is retried. After 3 failed attempts the car stops and is flagged for your attention — nothing is left live without its video.",
+      "A failed render can be retried from the car's reel section. A reel is made from the car's real photos, so a car needs usable photos to get one.",
+      "VIN Reels are part of the Automate plan — and the free trial runs the full Automate plan from day 1, so they're included in the trial too."
     ]
   },
   trade: {
