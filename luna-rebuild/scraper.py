@@ -31,6 +31,24 @@ from supabase import create_client
 #   Tucson -> 11327.
 # =============================================================================
 
+# =============================================================================
+# STAGED BUILD (2026-11-14) — usage-based trial model. *** NOT PUSHED ***
+# Prepared for the usage5 graduation; the repo's luna-rebuild/scraper.py
+# remains the staged-4-day version until Matthew approves the graduation
+# ship (trial-start deploy + this scraper + app push, in that order —
+# see trial-usage-model-spec-2026-11-14). Changes vs HEAD, all keyed
+# off user_settings.trial_model == 'usage5' and all fail-open:
+#   * _sync_cooldown_hours(): a usage trial (trial_model on the
+#     settings row, which the job runner fetches with select *)
+#     syncs at the Automate cadence (6h) from day 1, like app
+#     phase "usage".
+#   * _auto_post_filtered(): a usage trial's auto bucket (5) caps
+#     the pass — confirmed auto successes (trial_usage.auto_used)
+#     + live auto post rows; a spent bucket (or an elapsed trial
+#     window) queues nothing. Every other account resolves exactly
+#     as before.
+# =============================================================================
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or "https://tdsipiltwajwhzgjsupx.supabase.co"
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or "sb_publishable_hkEU-TniEPk-ShSxBZQ-kQ_zGrDUC8w"
 
@@ -3672,7 +3690,7 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
     try:
         res = (
             db.table("user_settings")
-            .select("auto_post_enabled, auto_post_min_photos, auto_post_locations, auto_post_conditions, location_groups, daily_post_limit, channel_instagram_enabled, channel_tiktok_enabled, channel_facebook_page_enabled, allow_post_without_colors, vin_reel_before_post")
+            .select("auto_post_enabled, auto_post_min_photos, auto_post_locations, auto_post_conditions, location_groups, daily_post_limit, channel_instagram_enabled, channel_tiktok_enabled, channel_facebook_page_enabled, allow_post_without_colors, vin_reel_before_post, billing_status, trial_model, trial_ends_at")
             .eq("user_id", uid)
             .limit(1)
             .execute()
@@ -3756,6 +3774,50 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
         if allowance is not None and allowance <= 0:
             print(f"[*] Auto-post for user {uid[:8]}: daily limit already reached ({used}/{limit}).")
             return 0
+
+        # USAGE TRIAL AUTO BUCKET (2026-11-14, staged): a
+        # usage-model trial's free AUTO posts are finite (5 total,
+        # not per day). The bucket = helper-confirmed auto
+        # successes (trial_usage.auto_used, maintained by the DB
+        # counting trigger — failed posts never land there) plus
+        # this account's live auto post rows. A spent bucket stops
+        # auto-posting ONLY: the manual bucket, shares, deletes and
+        # price updates are untouched, and an elapsed trial window
+        # stops the pass outright (at lock, nothing sends). Any
+        # read error fails open to the pre-model behavior.
+        if s.get("billing_status") == "trialing" and s.get("trial_model") == TRIAL_USAGE_MODEL:
+            try:
+                _ends = _parse_job_ts(s.get("trial_ends_at"))
+                if _ends is not None and datetime.now(timezone.utc) >= _ends:
+                    print(f"[*] Auto-post for user {uid[:8]}: usage trial window elapsed — nothing queues.")
+                    return 0
+                _trows = (
+                    db.table("trial_usage")
+                    .select("auto_used")
+                    .eq("user_id", uid)
+                    .limit(1)
+                    .execute()
+                ).data or []
+                _auto_used = int((_trows[0] or {}).get("auto_used") or 0) if _trows else 0
+                _live_rows = (
+                    db.table("auto_posting_queue")
+                    .select("action, post_origin")
+                    .eq("user_id", uid)
+                    .in_("status", ["pending", "processing"])
+                    .execute()
+                ).data or []
+                _live_auto = sum(
+                    1 for r in _live_rows
+                    if r.get("post_origin") == "auto"
+                    and r.get("action") in (None, "post")
+                )
+                _bucket_left = max(0, TRIAL_USAGE_AUTO_LIMIT - _auto_used - _live_auto)
+                if _bucket_left <= 0:
+                    print(f"[*] Auto-post for user {uid[:8]}: usage trial auto bucket spent ({_auto_used} confirmed + {_live_auto} live).")
+                    return 0
+                allowance = _bucket_left if allowance is None else min(allowance, _bucket_left)
+            except Exception as e:
+                print(f"[!] Usage-trial auto bucket check failed for user {uid[:8]} (non-fatal): {e}")
 
         # A VIN already holding a live post job never gets a second.
         # Paginated like the candidate scan below: past 1,000 live
@@ -4478,6 +4540,12 @@ def _parse_job_ts(value):
 TRIAL_PHASE2_AFTER = timedelta(hours=48)
 TRIAL_STAGED_WINDOW_MAX = timedelta(days=4, hours=1)
 
+# USAGE TRIAL (2026-11-14, staged): the new trial model marker and
+# its free auto-post bucket, mirrored from the app
+# (TRIAL_USAGE_MODEL / TRIAL_USAGE_AUTO_LIMIT).
+TRIAL_USAGE_MODEL = "usage5"
+TRIAL_USAGE_AUTO_LIMIT = 5
+
 
 def _trial_phase_scraper(started_iso, ends_iso, now):
     """Mirror of the app's trialPhaseState(): 1 during the first
@@ -4513,6 +4581,12 @@ def _sync_cooldown_hours(uid, settings_row, covered, now=None):
         ends = _parse_job_ts(settings_row.get("trial_ends_at"))
         if ends is None or now is None or now >= ends:
             return None
+        if settings_row.get("trial_model") == TRIAL_USAGE_MODEL:
+            # USAGE TRIAL (2026-11-14, staged): full Automate from
+            # day 1 — the Automate cadence (6h), like app phase
+            # "usage". The window check above already returned None
+            # for an elapsed trial (the gate carries no cadence).
+            return SYNC_COOLDOWN_HOURS["group"]
         phase = _trial_phase_scraper(
             settings_row.get("trial_started_at"),
             settings_row.get("trial_ends_at"),
