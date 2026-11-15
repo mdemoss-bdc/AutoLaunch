@@ -1,4 +1,23 @@
 // =====================================================================
+// trial-start — STAGED BUILD (2026-11-14): usage-based trial model.
+// *** NOT DEPLOYED *** — prepared for the usage5 graduation; the live
+// function remains the 4-day staged version below until Matthew
+// approves the graduation ship (function deploy + scraper push +
+// app push, in that order — see trial-usage-model-spec-2026-11-14).
+//
+// What changes vs the deployed source (grant path ONLY):
+//   * New grants are usage-model trials: user_settings.trial_model
+//     = 'usage5', a 5-day window, full Automate from day 1 in the
+//     app, and a zeroed trial_usage counters row. Posting buckets
+//     (5 auto + 10 manual) are counted by the database trigger on
+//     helper-confirmed posts — nothing in this function counts.
+//   * Responses carry trial_model / trial_auto_used /
+//     trial_manual_used (nulls for pre-model trials).
+//   * Claims, grandfathering, the first-use re-check and every
+//     fail-open rule are byte-identical in behavior: accounts
+//     already trialing are never re-granted, so no running trial
+//     can change model mid-flight.
+// =====================================================================
 // trial-start — AutoLaunch 4-day staged trial + one-trial-per-claim locks
 // (2026-10-26, see TIERS.md "Trial + Billing" and "Trial abuse
 // defenses").
@@ -77,6 +96,12 @@ const cors = {
 // are grandfathered to 'active' forever.
 const GRANDFATHER_CUTOFF = Date.parse("2026-10-26T00:00:00Z");
 const TRIAL_MS = 4 * 24 * 60 * 60 * 1000;
+// Usage-model trial (2026-11-14, staged): new grants run the usage
+// model — 5-day window, marker on the settings row, counters row
+// created at zero. TRIAL_MS above stays as the record of the staged
+// model's window; the grant below uses USAGE_TRIAL_MS.
+const TRIAL_MODEL_USAGE = "usage5";
+const USAGE_TRIAL_MS = 5 * 24 * 60 * 60 * 1000;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -161,6 +186,30 @@ function normalizeEmailForClaim(email: string): string | null {
 }
 // [normalizer:end]
 
+// The usage-model response fields for an account: the marker plus
+// its bucket counters from trial_usage. Pre-model trials (and any
+// read error) resolve to nulls — the app treats nulls as "not the
+// usage model" and resolves exactly as before this build.
+async function usageResponseFields(
+  svc: any,
+  userId: string,
+  trialModel: unknown,
+): Promise<Record<string, unknown>> {
+  if (trialModel !== TRIAL_MODEL_USAGE) {
+    return { trial_model: null, trial_auto_used: null, trial_manual_used: null };
+  }
+  const { data } = await svc
+    .from("trial_usage")
+    .select("auto_used, manual_used")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return {
+    trial_model: TRIAL_MODEL_USAGE,
+    trial_auto_used: data && typeof data.auto_used === "number" ? data.auto_used : 0,
+    trial_manual_used: data && typeof data.manual_used === "number" ? data.manual_used : 0,
+  };
+}
+
 // Read an existing claim row's owner, or null when unclaimed.
 async function claimOwner(
   svc: any,
@@ -234,6 +283,9 @@ async function firstUseRecheck(
         trial_ends_at: null,
         current_period_end: null,
         decided: "not_eligible",
+        trial_model: null,
+        trial_auto_used: null,
+        trial_manual_used: null,
       });
     }
     if (!owner) toBind.push(plan);
@@ -284,7 +336,7 @@ Deno.serve(async (req) => {
   // re-checked and can never be claim-flipped.
   const { data: row } = await svc
     .from("user_settings")
-    .select("billing_status, trial_started_at, trial_ends_at, current_period_end")
+    .select("billing_status, trial_started_at, trial_ends_at, current_period_end, trial_model")
     .eq("user_id", userId)
     .maybeSingle();
   if (row && row.billing_status) {
@@ -299,6 +351,7 @@ Deno.serve(async (req) => {
       trial_ends_at: row.trial_ends_at ?? null,
       current_period_end: row.current_period_end ?? null,
       decided: "existing",
+      ...(await usageResponseFields(svc, userId, row.trial_model)),
     });
   }
 
@@ -316,6 +369,9 @@ Deno.serve(async (req) => {
       trial_ends_at: null,
       current_period_end: null,
       decided: "grandfathered",
+      trial_model: null,
+      trial_auto_used: null,
+      trial_manual_used: null,
     });
   }
 
@@ -394,6 +450,9 @@ Deno.serve(async (req) => {
         trial_ends_at: null,
         current_period_end: null,
         decided: "not_eligible",
+        trial_model: null,
+        trial_auto_used: null,
+        trial_manual_used: null,
       });
     }
     if (owner === userId) plan.status = "already_claimed_same_user";
@@ -416,9 +475,13 @@ Deno.serve(async (req) => {
   if (extPlan) extClaimStatus = extPlan.status;
   if (emailPlan) emailClaimStatus = emailPlan.status;
 
-  // Grant the 4-day staged trial.
+  // Grant the usage-model trial (2026-11-14): 5-day window, the
+  // model marker on the settings row, full Automate in the app
+  // from day 1. (The staged 4-day grant this replaces is preserved
+  // in git history; accounts already trialing never reach this
+  // path, so no running trial changes model.)
   const now = new Date();
-  const ends = new Date(now.getTime() + TRIAL_MS);
+  const ends = new Date(now.getTime() + USAGE_TRIAL_MS);
   const { error } = await svc
     .from("user_settings")
     .upsert(
@@ -427,10 +490,21 @@ Deno.serve(async (req) => {
         billing_status: "trialing",
         trial_started_at: now.toISOString(),
         trial_ends_at: ends.toISOString(),
+        trial_model: TRIAL_MODEL_USAGE,
       },
       { onConflict: "user_id" },
     );
   if (error) return json({ ok: false, error: "settings_write_failed" }, 500);
+  // The bucket counters row, created at zero. Best-effort: the
+  // counting trigger upserts the row on the first counted post
+  // anyway, so a failure here must not cost the user their trial.
+  const { error: usageErr } = await svc
+    .from("trial_usage")
+    .upsert(
+      { user_id: userId, auto_used: 0, manual_used: 0 },
+      { onConflict: "user_id", ignoreDuplicates: true },
+    );
+  if (usageErr) console.log("trial usage row create failed", { user_id: userId });
   return json({
     ok: true,
     status: "trialing",
@@ -438,6 +512,9 @@ Deno.serve(async (req) => {
     trial_ends_at: ends.toISOString(),
     current_period_end: null,
     decided: "trial_granted",
+    trial_model: TRIAL_MODEL_USAGE,
+    trial_auto_used: 0,
+    trial_manual_used: 0,
     ip_claim: ipClaimStatus,
     ip_hash_prefix: ipPlan ? ipPlan.hash.slice(0, 8) : null,
     ext_claim: extClaimStatus,
