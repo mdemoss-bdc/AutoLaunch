@@ -12676,7 +12676,7 @@ function paintQueueRowPending(id) {
         for (const span of spans) {
             if (span.className && span.className.indexOf("rounded-full") !== -1) {
                 span.className = "px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold";
-                span.textContent = item && item.action === "delete" ? "🟡 Removal queued" : item && item.action === "share" ? "🟡 Share queued" : item && item.action === "update_price" ? "🟡 Price update queued" : "🟡 Pending";
+                span.textContent = item && item.action === "delete" ? "🟡 Removal queued" : item && item.action === "share" ? "🟡 Share queued" : item && item.action === "update_price" ? "🟡 Price update queued" : item && item.action === "attach_video" ? "🟡 Video attach queued" : "🟡 Pending";
                 break;
             }
         }
@@ -12886,9 +12886,9 @@ const car = rawInventory.find(c => c.vin === item.vin) || null;
 // left is blocked — it renders as "No photos — won't post" and the
 // extension fails it rather than handing it to the poster. Delete
 // jobs are exempt: they remove a listing, photos are irrelevant.
-const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && !!car && !hasRealPhoto(car);
-const blockedNoPrice = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && !!car && hasRealPhoto(car) && !hasPrice(car);
-const blockedInfo = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && !!car && hasRealPhoto(car) && hasPrice(car) && postingGaps(car).length > 0;
+const blockedNoPhoto = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && item.action !== "attach_video" && !!car && !hasRealPhoto(car);
+const blockedNoPrice = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && item.action !== "attach_video" && !!car && hasRealPhoto(car) && !hasPrice(car);
+const blockedInfo = item.status === "pending" && item.action !== "delete" && item.action !== "share" && item.action !== "update_price" && item.action !== "attach_video" && !!car && hasRealPhoto(car) && hasPrice(car) && postingGaps(car).length > 0;
 // Phase B: a DELETE job (e.g. a sold car's listing removal) must read as
 // a removal at every stage — pending = queued, processing = in flight,
 // completed = removed — never as a generic post "Pending".
@@ -12898,7 +12898,7 @@ const statusChip = blockedNoPhoto
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 No price — won't post</span>`
     : blockedInfo
     ? `<span class="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">🚫 Missing info — won't post</span>`
-    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.action === "share" && item.status === "pending" ? "🟡 Share queued" : item.action === "share" && item.status === "processing" ? "🔵 Sharing" : item.action === "update_price" && item.status === "pending" ? "🟡 Price update queued" : item.action === "update_price" && item.status === "processing" ? "🔵 Updating price" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : item.action === "share" ? "🟢 Shared" : item.action === "update_price" ? "🟢 Price updated" : "🟢 Completed") : item.status === "failed" ? "🔴 Failed" : escapeHtml(item.status)}</span>`;
+    : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${item.action === "delete" && item.status === "pending" ? "🟡 Removal queued" : item.action === "delete" && item.status === "processing" ? "🔵 Removal in progress" : item.action === "share" && item.status === "pending" ? "🟡 Share queued" : item.action === "share" && item.status === "processing" ? "🔵 Sharing" : item.action === "update_price" && item.status === "pending" ? "🟡 Price update queued" : item.action === "update_price" && item.status === "processing" ? "🔵 Updating price" : item.action === "attach_video" && item.status === "pending" ? "🟡 Video attach queued" : item.action === "attach_video" && item.status === "processing" ? "🔵 Attaching video" : item.status === "pending" ? "🟡 Pending" : item.status === "processing" ? "🔵 Processing" : item.status === "posted" ? "🟢 Posted" : item.status === "completed" ? (item.action === "delete" ? "🟢 Removed" : item.action === "share" ? "🟢 Shared" : item.action === "update_price" ? "🟢 Price updated" : item.action === "attach_video" ? "🟢 Video attached" : "🟢 Completed") : item.status === "failed" ? (item.action === "attach_video" ? "🔴 Video attach failed" : "🔴 Failed") : escapeHtml(item.status)}</span>`;
 
     return `
 
@@ -12931,6 +12931,18 @@ const statusChip = blockedNoPhoto
                     ${item.action === 'delete' ? `
                     <div class="text-xs font-semibold text-rose-600">
                         Action: Delete listing from Facebook
+                    </div>` : item.action === 'post' ? `
+                    <div class="text-xs font-semibold text-rose-600">
+                        Action: Post this car to ${item.target_channel && item.target_channel !== 'marketplace' ? escapeHtml(item.target_channel) : 'Facebook Marketplace'}
+                    </div>` : item.action === 'attach_video' ? `
+                    <div class="text-xs font-semibold text-rose-600">
+                        Action: Attach this car's video to its listing
+                    </div>` : item.action === 'update_price' ? `
+                    <div class="text-xs font-semibold text-rose-600">
+                        Action: Change the listing price${item.update_from_price != null && item.price != null && isFinite(Number(item.update_from_price)) && isFinite(Number(item.price)) ? ` — $${Number(item.update_from_price).toLocaleString('en-US')} → $${Number(item.price).toLocaleString('en-US')}` : ''}
+                    </div>` : item.action === 'share' ? `
+                    <div class="text-xs font-semibold text-rose-600">
+                        Action: Share this listing to your feed
                     </div>` : ''}
 
                 </div>
