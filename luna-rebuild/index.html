@@ -12844,6 +12844,51 @@ function removeAllQueueItems() {
         (running ? `\n\n${running} item(s) already being worked on will finish — they can't be pulled back.` : ""));
 }
 
+// QUEUE FAILURE REASONS (Matthew, 2026-11-16): a failed queue row
+// carries the helper's raw diagnostics in error_message — usually a
+// field_diag JSON blob no person should have to read. Translate the
+// shapes we know into one plain sentence; never render the raw blob.
+function queueFailReason(item) {
+    try {
+        const raw = item && item.error_message ? String(item.error_message) : "";
+        if (!raw) return "";
+        let diag = null;
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.field_diag)) diag = parsed.field_diag;
+        } catch (e) { /* not JSON — plain-text path below */ }
+        if (diag) {
+            const byField = {};
+            diag.forEach(d => { if (d && d.field && !byField[d.field]) byField[d.field] = d; });
+            const before = byField["price_field_before"];
+            if (before && before.note && /expect/i.test(before.note)) {
+                const shown = (before.note.split("|")[0] || "").trim();
+                const fromTxt = item.update_from_price != null && isFinite(Number(item.update_from_price)) ? "$" + Number(item.update_from_price).toLocaleString("en-US") : "the price this job expected";
+                return "The listing's price reads " + (shown || "differently") + " on Facebook, not " + fromTxt + " — it stopped rather than change a price that didn't match.";
+            }
+            const settle = byField["price_save_settle_read"];
+            const vscan = byField["price_verify_scan"];
+            if (settle && vscan && /new:0/.test(vscan.note || "")) {
+                return "The new price was typed in and read back right, but the follow-up check still showed the old price — the change may have landed anyway. Check the listing before retrying.";
+            }
+            const match = byField["price_match_scan"];
+            if (match && /strict:0/.test(match.note || "") && /title:0/.test(match.note || "")) {
+                return "It couldn't pick this car's listing out on the Selling page, so it stopped rather than risk editing the wrong car.";
+            }
+            if (byField["attach_fail_trace"] || byField["reel_attach"]) {
+                return "The video attach didn't complete — Facebook's editor never confirmed it, so the listing is still without its video.";
+            }
+            return "It failed partway through — tap Retry to run it again.";
+        }
+        // Plain-text errors: strip machine markers and any JSON tail.
+        const clean = raw.replace(/\{[\s\S]*$/, "").replace(/\b(reel_gate_aborts:\d+\/\d+|reel_needs_attention|reel_gate_abort)\b/g, "").replace(/\s+/g, " ").trim();
+        if (!clean) return "";
+        return clean.length > 180 ? clean.slice(0, 177).trim() + "…" : clean;
+    } catch (e) {
+        return "";
+    }
+}
+
 async function loadPostingQueue() {
 
     if (!currentUser) return;
@@ -12988,6 +13033,10 @@ const statusChip = blockedNoPhoto
                     </div>` : item.action === 'share' ? `
                     <div class="text-xs font-semibold text-rose-600">
                         Action: Share this listing to your feed
+                    </div>` : ''}
+                    ${item.status === 'failed' && queueFailReason(item) ? `
+                    <div class="text-xs font-semibold text-rose-600">
+                        Why: ${escapeHtml(queueFailReason(item))}
                     </div>` : ''}
 
                 </div>
