@@ -823,17 +823,15 @@ def push_batch_to_supabase(records: List[dict]) -> int:
     # found real dealer photos for a car whose stored row still
     # carries user photos, the dealer's gallery takes over — retire
     # the manual set (clear it on the record) so hand-shot photos
-    # never trail along behind the dealer's own. "Real" is the
-    # counter's own test, so a scrape that surfaced only the
-    # placeholder (the degraded-document variant) retires nothing.
+    # never trail along behind the dealer's own. "Real" is
+    # _real_photo_count's test (Matthew, 2026-11-16): factory stock
+    # art (/assets/stock/ renders) and placeholders retire nothing,
+    # so a rep's own photos survive until the dealer's site
+    # publishes photos of the actual vehicle.
     try:
         retire_by_user = {}
         for r in unique_by_vin.values():
-            if r.get("user_id") and _usable_photo_count({
-                "image_url": r.get("image_url"),
-                "photos": r.get("photos"),
-                "custom_photo_urls": [],
-            }) > 0:
+            if r.get("user_id") and _real_photo_count(r) > 0:
                 retire_by_user.setdefault(r["user_id"], []).append(r["vin"])
         for uid, vins in retire_by_user.items():
             stored_custom = {}

@@ -2532,7 +2532,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </h3>
       <button onclick="closeAddPhotosModal()" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
     </div>
-    <p class="text-[11px] text-slate-500 leading-relaxed">This car has no photos on the dealer's site, so it can't post. Add your own — the first photo becomes the cover. Your photos carry the car until the dealer's site publishes real photos for it; then theirs take over.</p>
+    <p class="text-[11px] text-slate-500 leading-relaxed">Add your own photos — they lead the listing ahead of the dealer's site photos, and the first one becomes the cover. Your photos stay until the dealer's site publishes real photos of this actual vehicle; then theirs take over.</p>
     <div id="addPhotosStrip" class="flex flex-wrap gap-2"></div>
     <p id="addPhotosStatus" class="text-[11px] font-semibold text-slate-500"></p>
     <div class="flex flex-wrap gap-2">
@@ -10607,12 +10607,12 @@ function showsAddPhotosButton(car) {
   return dealerUsablePhotoCount(car) === 0 && usableCustomCount(car) === 0;
 }
 
-// The (⋯) menu offers "Add / manage photos" exactly when the modal
-// would admit the car: no usable dealer photos (placeholder-only
-// included), or the user already added photos of their own to manage.
+// The (⋯) menu offers "Add / manage photos" on EVERY car (Matthew,
+// 2026-11-16): a dealer's feed often carries only factory stock art,
+// which posts but is not a photo of the actual vehicle — the rep's own
+// photos lead the listing whenever they exist.
 function addPhotosOffered(car) {
-  if (!car) return false;
-  return dealerUsablePhotoCount(car) === 0 || usableCustomCount(car) > 0;
+  return !!car;
 }
 
 function missingColorJS(v) {
@@ -11967,11 +11967,6 @@ function addPhotosCar() {
 async function openAddPhotosModal(vin) {
   const car = rawInventory.find(c => c.vin === vin);
   if (!car) return;
-  const dealerCount = dealerUsablePhotoCount(car);
-  if (dealerCount > 0 && usableCustomCount(car) === 0) {
-    alert("This car already has photos from the dealer's site — nothing to add. (Photos you add yourself are for cars the dealer's site shows with none.)");
-    return;
-  }
   await ensureFullCar(car);
   addPhotosVin = vin;
   const title = document.getElementById("addPhotosTitle");
@@ -14392,6 +14387,7 @@ function probeHelperVersionOnce() {
     window.removeEventListener("message", listener);
     if (timer) { clearTimeout(timer); timer = null; }
     if (data.version) persistHelperVersion(data.version);
+    maybeShowHelperUpdatePopup(data.version || null);
   };
   window.addEventListener("message", listener);
   timer = setTimeout(function () { window.removeEventListener("message", listener); }, 2000);
@@ -14401,6 +14397,71 @@ function probeHelperVersionOnce() {
     window.removeEventListener("message", listener);
     if (timer) clearTimeout(timer);
   }
+}
+
+/* =====================================================================
+   Helper update popup (Matthew, 2026-11-16): when the helper in THIS
+   browser reports a version below EXPECTED_EXT_VERSION — or no version
+   at all (pre-2.1.24 helpers can't report one) — say so where the user
+   actually is, not only on the Extension page. Fires from the sign-in
+   version probe and from the Extension page's stale verdict. At most
+   once per outdated version per 24h: every dismissal (Remind me
+   tomorrow, backdrop click) snoozes that version for a day. Never
+   fires when no helper answers — a missing helper is a setup problem,
+   not an update. Inline styles throughout: the popup is injected at
+   runtime, so it cannot rely on the compiled utility CSS containing
+   its classes.
+   ===================================================================== */
+const HELPER_UPDATE_POPUP_KEY = "autolaunch_helper_update_popup";
+let helperUpdatePopupShown = false;
+
+function helperUpdatePopupState() {
+  try { return JSON.parse(localStorage.getItem(HELPER_UPDATE_POPUP_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+
+function snoozeHelperUpdatePopup(installedKey) {
+  try {
+    localStorage.setItem(HELPER_UPDATE_POPUP_KEY, JSON.stringify({ v: installedKey, until: Date.now() + 24 * 60 * 60 * 1000 }));
+  } catch (e) { /* storage unavailable — the session flag still prevents a loop */ }
+}
+
+function dismissHelperUpdatePopup() {
+  const el = document.getElementById("helperUpdatePopup");
+  if (el) el.remove();
+}
+
+function maybeShowHelperUpdatePopup(installed) {
+  if (helperUpdatePopupShown) return;
+  if (installed && extVersionAtLeast(installed, EXPECTED_EXT_VERSION)) return;
+  const installedKey = installed ? String(installed) : "pre-version";
+  const st = helperUpdatePopupState();
+  if (st.v === installedKey && st.until && Date.now() < st.until) return;
+  helperUpdatePopupShown = true;
+  const have = installed ? "v" + installed : "a version too old to report itself";
+  const overlay = document.createElement("div");
+  overlay.id = "helperUpdatePopup";
+  overlay.setAttribute("style", "position:fixed;inset:0;z-index:95;background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;padding:16px;");
+  overlay.innerHTML =
+    '<div style="background:#fff;border-radius:16px;box-shadow:0 25px 50px -12px rgba(0,0,0,.35);max-width:28rem;width:100%;padding:24px;">' +
+      '<div style="display:flex;align-items:flex-start;gap:12px;">' +
+        '<span style="width:40px;height:40px;border-radius:12px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fa-solid fa-triangle-exclamation"></i></span>' +
+        '<div style="min-width:0;">' +
+          '<h3 style="font-size:16px;font-weight:900;color:#0f172a;margin:0;">Your helper is out of date</h3>' +
+          '<p style="font-size:14px;color:#475569;margin-top:4px;line-height:1.55;">You are running helper <strong>' + have + '</strong>; the current version is <strong>v' + EXPECTED_EXT_VERSION + '</strong>. Updates carry the latest posting fixes — an out-of-date helper can miss posts or stall.</p>' +
+        '</div>' +
+      '</div>' +
+      '<div style="margin-top:20px;">' +
+        '<a href="https://chromewebstore.google.com/detail/cnicmlnclohognndlpfgoklikhdolejj" target="_blank" rel="noopener" style="display:block;text-align:center;padding:12px 20px;border-radius:12px;background:#2563eb;color:#fff;font-weight:700;font-size:14px;text-decoration:none;cursor:pointer;">Update from the Chrome Web Store</a>' +
+        '<p style="font-size:12px;color:#64748b;margin-top:10px;line-height:1.55;">Store installs usually update on their own within a few hours. To force it now: open <strong>chrome://extensions</strong>, turn on <strong>Developer mode</strong> (top right), then click <strong>Update</strong>.</p>' +
+        '<a href="/helper/autolaunch-helper.zip" style="display:block;text-align:center;padding:12px 20px;border-radius:12px;background:#f1f5f9;color:#1e293b;font-weight:700;font-size:14px;text-decoration:none;cursor:pointer;margin-top:8px;">Download the manual install instead</a>' +
+        '<button id="helperUpdateSnooze" style="display:block;width:100%;text-align:center;padding:8px 20px;background:none;border:none;color:#64748b;font-weight:600;font-size:14px;cursor:pointer;margin-top:4px;">Remind me tomorrow</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  const snooze = function () { snoozeHelperUpdatePopup(installedKey); dismissHelperUpdatePopup(); };
+  document.getElementById("helperUpdateSnooze").addEventListener("click", snooze);
+  overlay.addEventListener("click", function (e) { if (e.target === overlay) snooze(); });
 }
 
 function extVersionParts(v) {
@@ -14465,6 +14526,7 @@ function checkExtensionStatus() {
         // that silence is itself the out-of-date signal.
         if (!data.version || !extVersionAtLeast(data.version, EXPECTED_EXT_VERSION)) {
             renderExtStatus("stale", { installed: data.version || null, expected: EXPECTED_EXT_VERSION });
+            maybeShowHelperUpdatePopup(data.version || null);
         } else {
             renderExtStatus("ready", { installed: data.version });
         }
