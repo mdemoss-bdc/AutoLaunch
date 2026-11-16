@@ -1,22 +1,25 @@
 // =====================================================================
-// trial-start — STAGED BUILD (2026-11-14): usage-based trial model.
-// *** NOT DEPLOYED *** — prepared for the usage5 graduation; the live
-// function remains the 4-day staged version below until Matthew
-// approves the graduation ship (function deploy + scraper push +
-// app push, in that order — see trial-usage-model-spec-2026-11-14).
+// trial-start — usage-based trial model (BUILT 2026-11-14, DEPLOYED
+// 2026-11-15 as v28 with the usage5 graduation; verified live
+// 2026-11-16 by disposable-account probes: fresh grants carry
+// trial_model = 'usage5', an exact 5-day window, and a zeroed
+// trial_usage counters row).
 //
-// What changes vs the deployed source (grant path ONLY):
-//   * New grants are usage-model trials: user_settings.trial_model
-//     = 'usage5', a 5-day window, full Automate from day 1 in the
-//     app, and a zeroed trial_usage counters row. Posting buckets
-//     (5 auto + 10 manual) are counted by the database trigger on
-//     helper-confirmed posts — nothing in this function counts.
-//   * Responses carry trial_model / trial_auto_used /
-//     trial_manual_used (nulls for pre-model trials).
-//   * Claims, grandfathering, the first-use re-check and every
-//     fail-open rule are byte-identical in behavior: accounts
-//     already trialing are never re-granted, so no running trial
-//     can change model mid-flight.
+// New grants are usage-model trials: user_settings.trial_model
+// = 'usage5', a 5-day window, full Automate from day 1 in the
+// app, and a zeroed trial_usage counters row. Posting buckets
+// (5 auto + 10 manual) are counted by the database trigger on
+// helper-confirmed posts — nothing in this function counts.
+// Responses carry trial_model / trial_auto_used /
+// trial_manual_used (nulls for pre-model trials).
+// Grandfathering, the first-use re-check and every fail-open rule
+// are unchanged: accounts already trialing are never re-granted,
+// so no running trial can change model mid-flight.
+//
+// UPDATE (2026-11-16, Matthew: solo trials open for everyone):
+// the IP claim is retired (see the claims section below) and the
+// companion trial-source-claim function no longer blocks on
+// dealership sources. EMAIL and EXT claims still apply.
 // =====================================================================
 // trial-start — AutoLaunch 4-day staged trial + one-trial-per-claim locks
 // (2026-10-26, see TIERS.md "Trial + Billing" and "Trial abuse
@@ -32,14 +35,13 @@
 //   1. Accounts created before the trial system existed
 //      (auth created_at < 2026-10-26T00:00:00Z) are grandfathered:
 //      billing_status = 'active', no trial, no claims of any kind.
-//   2. Otherwise up to THREE independent one-trial claims are checked
+//   2. Otherwise up to TWO independent one-trial claims are checked
 //      (each is a salted SHA-256, TRIAL_IP_SALT; raw values are never
 //      stored or logged):
-//        IP    — the caller's IP (x-forwarded-for first entry, else
-//                cf-connecting-ip) in trial_ip_claims. The hash
-//                formula (salt + ":" + ip) is the v1 original, kept
-//                byte-identical so claims written before v4 keep
-//                matching.
+//        IP    — RETIRED 2026-11-16 (Matthew: solo trials open for
+//                everyone). It made one trial per network, so a
+//                whole dealership behind one public IP blocked
+//                itself. No longer checked or written at grant.
 //        EXT   — the helper's per-install id (v2.45+; the app passes
 //                ext_install_id in the body when the helper answered)
 //                in trial_ext_claims, hashed as salt + ":ext:" + id.
@@ -64,9 +66,8 @@
 //      'trial_blocked' (same generic 'not_eligible' response); an
 //      unclaimed one is recorded for this account, binding the
 //      trial to the first helper it is actually used with. IP is
-//      NOT re-checked or claimed on this path — roaming and shared
-//      dealership IPs make post-grant IP enforcement a
-//      false-positive machine; IP stays a grant-time gate only.
+//      not checked on this path either — and since 2026-11-16 it
+//      is not checked at grant time anymore (see rule 2).
 //      Accounts in any other state are never re-checked or flipped:
 //      a paying customer cannot be claim-blocked.
 //   3. On pass, the account gets billing_status = 'trialing' with a
@@ -399,12 +400,16 @@ Deno.serve(async (req) => {
   if (!salt) {
     ipClaimStatus = ip ? "skipped_no_salt" : "skipped_no_ip";
   } else {
-    if (ip) {
-      plans.push({
-        kind: "ip", table: "trial_ip_claims", keyColumn: "ip_hash",
-        hash: await sha256Hex(salt + ":" + ip), status: "claimed",
-      });
-    }
+    // IP CLAIM RETIRED (2026-11-16, Matthew: solo trials open for
+    // everyone). An IP claim made a whole store share one trial —
+    // every rep behind the same dealership NAT/public IP blocked
+    // each other at grant (proven live 2026-11-16: a second account
+    // from the same IP was trial_blocked by the first account's IP
+    // claim). No IP plan is built, checked, or written anymore;
+    // trial_ip_claims keeps its historical rows, unused. The EMAIL
+    // and EXT claims below still apply — one trial per inbox and
+    // per helper install.
+    ipClaimStatus = "skipped_open_trials";
     if (extInstallId) {
       plans.push({
         kind: "ext", table: "trial_ext_claims", keyColumn: "ext_hash",
