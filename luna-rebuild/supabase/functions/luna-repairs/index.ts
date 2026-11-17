@@ -355,6 +355,10 @@ async function runDetection(svc: any, userId: string): Promise<number> {
       .is("verify_queue_id", null)
       .limit(10);
     for (const prop of waiting ?? []) {
+      // Escalated proposals (spec §11) are waiting on agent-Luna:
+      // she stops re-asking the helper until the escalation is
+      // resolved and the flag is cleared.
+      if (prop.evidence?.escalated) continue;
       const { data: qrow } = await svc.from("auto_posting_queue")
         .select("*").eq("id", prop.queue_row_id).maybeSingle();
       if (!qrow) {
@@ -464,12 +468,40 @@ async function consumeVerdicts(svc: any, userId: string): Promise<void> {
             updated_at: new Date().toISOString(),
           }).eq("id", prop.id);
         } else {
-          // Verify job failed without a verdict: allow a later retry
-          // by clearing the pointer; the proposal stays needs_verify.
-          await svc.from("luna_repairs").update({
-            verify_queue_id: null,
-            updated_at: new Date().toISOString(),
-          }).eq("id", prop.id);
+          // Verify job failed without a verdict. Count the silent
+          // failure; at two in a row Luna stops re-asking (a broken
+          // check looping looks like random tabs opening on the
+          // user's screen) and ESCALATES to agent-Luna with the
+          // diagnostics (spec §11). Clearing evidence.escalated
+          // after a fix resumes normal verify enqueueing.
+          const fails = (Number(prop.evidence?.verify_failures) || 0) + 1;
+          const failure = typeof vrow.error_message === "string" && vrow.error_message
+            ? vrow.error_message.slice(0, 200) : null;
+          const ev: any = {
+            ...prop.evidence,
+            verify_failures: fails,
+            last_verify_failure: failure,
+          };
+          if (fails >= 2) {
+            ev.escalated = {
+              at: new Date().toISOString(),
+              reason: "verify produced no verdict twice in a row",
+              failure,
+              reported: false,
+            };
+            await svc.from("luna_repairs").update({
+              verify_queue_id: null,
+              evidence: ev,
+              summary: `Luna's live check isn't completing, so she stopped retrying and escalated it for a closer look. Nothing was changed.`,
+              updated_at: new Date().toISOString(),
+            }).eq("id", prop.id);
+          } else {
+            await svc.from("luna_repairs").update({
+              verify_queue_id: null,
+              evidence: ev,
+              updated_at: new Date().toISOString(),
+            }).eq("id", prop.id);
+          }
         }
       }
     }
