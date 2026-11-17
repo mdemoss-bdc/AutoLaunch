@@ -237,8 +237,16 @@ async function runDetection(svc: any, userId: string): Promise<number> {
     const err = typeof row.error_message === "string" ? row.error_message : "";
 
     // Action 1: clear_false_attach_failure (verify-gated) ------------
-    if (row.action === "attach_video" &&
-        (err.includes("attach_unverified") || err.includes("saved_unproven"))) {
+    // Widened 2026-11-17 at Matthew's direction ("teach Luna"), after
+    // the Grand Cherokee ZTP1517A miss: the original marker-only rule
+    // (attach_unverified / saved_unproven) missed a failed attach
+    // whose video had in fact landed under a different failure
+    // signature. Now ANY failed attach on a car with a live posted
+    // stamp is proposed. The verify verdict — never the proposal —
+    // decides whether the row clears, so a genuinely failed attach
+    // simply closes back out as "checked, not fixed".
+    if (row.action === "attach_video" && inv && inv.marketplace_posted_at) {
+      const knownClass = err.includes("attach_unverified") || err.includes("saved_unproven");
       const ok = await insertProposal(svc, {
         user_id: userId,
         action: "clear_false_attach_failure",
@@ -246,8 +254,14 @@ async function runDetection(svc: any, userId: string): Promise<number> {
         queue_row_id: row.id,
         lane: "ask",
         status: "needs_verify",
-        evidence: { failure: err.slice(0, 400), checks: ["listing_present", "video_present"] },
-        summary: `The video attach for your ${carLabel(row)} is marked failed — but that failure class is often wrong (the editor never confirmed either way). Luna can check the live listing first, and only clear the bad row if the video is really there.`,
+        evidence: {
+          failure: err.slice(0, 400),
+          failure_class: knownClass ? "counter_unverified" : "unclassified",
+          checks: ["listing_present", "video_present"],
+        },
+        summary: knownClass
+          ? `The video attach for your ${carLabel(row)} is marked failed — but that failure class is often wrong (the editor never confirmed either way). Luna can check the live listing first, and only clear the bad row if the video is really there.`
+          : `The video attach for your ${carLabel(row)} is marked failed. Luna can check the live listing first — if the video is really there, she'll clear the bad row; if it isn't, she'll leave everything exactly as it is.`,
       });
       if (ok) created++;
       continue;
