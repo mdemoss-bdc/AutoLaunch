@@ -190,6 +190,31 @@ async function runDetection(svc: any, userId: string): Promise<number> {
     [...new Set(failed.map((r: any) => r.vin))],
   );
 
+  // Verdict-failed guard (2026-11-17, shipped with the detector
+  // widening): a repair the helper's verdict already closed as
+  // "checked, not fixed" must not re-propose — and re-verify —
+  // on every evaluation while the queue row sits unchanged; that
+  // loop would burn a helper verify run per evaluation forever.
+  // The guard keys on the failure text captured in the repair's
+  // evidence: a byte-identical error means the same evidence the
+  // verdict already judged. A retry rewrites the row's error
+  // (fresh diagnostics), which lifts the guard and earns a
+  // fresh look — a retried row is never locked out.
+  const { data: verdictFailed } = await svc.from("luna_repairs")
+    .select("action, queue_row_id, evidence")
+    .eq("user_id", userId)
+    .eq("status", "failed")
+    .in("action", ["clear_false_attach_failure", "correct_stamp_price"]);
+  const checkedFailures = new Map<string, string>();
+  for (const r of verdictFailed ?? []) {
+    if (r.queue_row_id && r.evidence && typeof r.evidence.failure === "string") {
+      checkedFailures.set(`${r.action}:${r.queue_row_id}`, r.evidence.failure);
+    }
+  }
+  const alreadyChecked = (action: string, row: any) =>
+    checkedFailures.get(`${action}:${row.id}`) ===
+    (typeof row.error_message === "string" ? row.error_message.slice(0, 400) : "");
+
   // --- Action 2: release_stuck_reel_hold (DB-only evidence) ---------
   for (const row of heldPosts) {
     const reel = reelMap.get(row.vin);
@@ -245,7 +270,8 @@ async function runDetection(svc: any, userId: string): Promise<number> {
     // stamp is proposed. The verify verdict — never the proposal —
     // decides whether the row clears, so a genuinely failed attach
     // simply closes back out as "checked, not fixed".
-    if (row.action === "attach_video" && inv && inv.marketplace_posted_at) {
+    if (row.action === "attach_video" && inv && inv.marketplace_posted_at &&
+        !alreadyChecked("clear_false_attach_failure", row)) {
       const knownClass = err.includes("attach_unverified") || err.includes("saved_unproven");
       const ok = await insertProposal(svc, {
         user_id: userId,
@@ -269,7 +295,8 @@ async function runDetection(svc: any, userId: string): Promise<number> {
 
     // Action 3: correct_stamp_price (verify-gated) -------------------
     if (row.action === "update_price" && typeof row.price === "number" &&
-        inv && inv.marketplace_posted_price !== row.price) {
+        inv && inv.marketplace_posted_price !== row.price &&
+        !alreadyChecked("correct_stamp_price", row)) {
       const ok = await insertProposal(svc, {
         user_id: userId,
         action: "correct_stamp_price",
