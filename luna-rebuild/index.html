@@ -4251,6 +4251,12 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </h3>
       <button onclick="closeModal('lunaSupportModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
     </div>
+    <!-- [LUNA-REPAIRS-342-MARKUP-BEGIN] Luna Repairs (Phase 1):
+         proposal cards + activity, rendered by lunaRepairsRender
+         from the luna-repairs Edge Function. Hidden until the
+         function returns something to show. -->
+    <div id="lunaRepairsSection" class="hidden space-y-2"></div>
+    <!-- [LUNA-REPAIRS-342-MARKUP-END] -->
     <div id="lunaSupportMessages" class="flex-1 overflow-y-auto space-y-3 pr-1 min-h-[220px]"></div>
     <div class="flex items-end gap-2">
       <textarea id="lunaSupportInput" rows="2" maxlength="2000" placeholder="Ask about anything in AutoLaunch…"
@@ -8193,6 +8199,7 @@ function lunaSupportHideThinking() {
 
 function openLunaSupport() {
   openModal("lunaSupportModal");
+  lunaRepairsLoad();
   if (!lunaSupportHistory.length) {
     lunaSupportHistory.push({ role: "assistant", body: LUNA_SUPPORT_GREETING });
     lunaSupportRender("assistant", LUNA_SUPPORT_GREETING);
@@ -8312,6 +8319,156 @@ async function sendLunaSupportTicket() {
     showTikTokToast("Couldn't send that just now — please try again in a moment.");
   }
 }
+
+// ---- Luna Repairs (Phase 1, 2026-11-17) ------------------------------
+// [LUNA-REPAIRS-342-JS-BEGIN]
+// Detection + one-tap fixes for the user's OWN bookkeeping, served by
+// the luna-repairs Edge Function. The function owns every
+// precondition and every write; this panel only renders proposals
+// and carries the user's tap back. Fail-silent throughout: if the
+// function is unreachable, the section never appears and the chat
+// behaves exactly as before.
+let lunaRepairsBusy = false;
+let lunaRepairsOpen = [];
+let lunaRepairsActivity = [];
+
+async function lunaRepairsInvoke(body) {
+  try {
+    const { data, error } = await supabaseClient.functions.invoke("luna-repairs", { body });
+    if (error || !data) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+function lunaRepairsChip(p) {
+  if (p.status === "needs_verify") return "Checking your listing first\u2026";
+  if (p.status === "ready") return "Checked live \u2014 ready";
+  return "Ready";
+}
+
+function lunaRepairsActivityText(a) {
+  const when = a.applied_at ? new Date(a.applied_at) : (a.updated_at ? new Date(a.updated_at) : null);
+  const whenTxt = when ? " \u00b7 " + when.toLocaleDateString() : "";
+  if (a.status === "applied") return "Fixed: " + (a.summary || a.action) + whenTxt;
+  if (a.status === "undone") return "Undone: " + (a.summary || a.action) + whenTxt;
+  if (a.status === "failed") return "Checked, not fixed: " + (a.summary || a.action) + whenTxt;
+  return (a.summary || a.action) + whenTxt;
+}
+
+function lunaRepairsUndoable(a) {
+  if (!a.applied_at) return false;
+  return Date.now() - new Date(a.applied_at).getTime() < 7 * 24 * 3600 * 1000;
+}
+
+function lunaRepairsRender() {
+  const sec = document.getElementById("lunaRepairsSection");
+  if (!sec) return;
+  sec.innerHTML = "";
+  if (!lunaRepairsOpen.length && !lunaRepairsActivity.length) {
+    sec.classList.add("hidden");
+    return;
+  }
+  sec.classList.remove("hidden");
+  if (lunaRepairsOpen.length) {
+    const h = document.createElement("p");
+    h.className = "text-[11px] font-bold text-slate-500 uppercase tracking-wide";
+    h.textContent = "Luna found things she can fix";
+    sec.appendChild(h);
+  }
+  for (const p of lunaRepairsOpen) {
+    const card = document.createElement("div");
+    card.className = "rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 space-y-2";
+    const t = document.createElement("p");
+    t.className = "text-xs text-slate-800 leading-relaxed";
+    t.textContent = p.summary || "Luna found a bookkeeping problem she can fix.";
+    card.appendChild(t);
+    const row = document.createElement("div");
+    row.className = "flex items-center gap-2";
+    const chip = document.createElement("span");
+    chip.className = "text-[11px] font-semibold text-slate-500";
+    chip.textContent = lunaRepairsChip(p);
+    row.appendChild(chip);
+    const spacer = document.createElement("span");
+    spacer.className = "flex-1";
+    row.appendChild(spacer);
+    if (p.status === "proposed" || p.status === "ready") {
+      const fix = document.createElement("button");
+      fix.className = "px-3.5 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm";
+      fix.textContent = "Fix it";
+      fix.setAttribute("data-repair-action", "execute");
+      fix.setAttribute("data-repair-id", p.id);
+      row.appendChild(fix);
+    }
+    const no = document.createElement("button");
+    no.className = "px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer";
+    no.textContent = "Not now";
+    no.setAttribute("data-repair-action", "dismiss");
+    no.setAttribute("data-repair-id", p.id);
+    row.appendChild(no);
+    card.appendChild(row);
+    sec.appendChild(card);
+  }
+  if (lunaRepairsActivity.length) {
+    const h = document.createElement("p");
+    h.className = "text-[11px] font-bold text-slate-500 uppercase tracking-wide pt-1";
+    h.textContent = "Recent Luna activity";
+    sec.appendChild(h);
+    for (const a of lunaRepairsActivity.slice(0, 5)) {
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2";
+      const t = document.createElement("span");
+      t.className = "flex-1 text-[11px] text-slate-600 leading-relaxed";
+      t.textContent = lunaRepairsActivityText(a);
+      row.appendChild(t);
+      if (a.status === "applied" && lunaRepairsUndoable(a)) {
+        const undo = document.createElement("button");
+        undo.className = "px-3.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold cursor-pointer";
+        undo.textContent = "Undo";
+        undo.setAttribute("data-repair-action", "undo");
+        undo.setAttribute("data-repair-id", a.id);
+        row.appendChild(undo);
+      }
+      sec.appendChild(row);
+    }
+  }
+}
+
+async function lunaRepairsLoad() {
+  const data = await lunaRepairsInvoke({ action: "evaluate" });
+  if (!data || !data.ok) return;
+  lunaRepairsOpen = data.proposals || [];
+  lunaRepairsActivity = data.activity || [];
+  lunaRepairsRender();
+}
+
+async function lunaRepairsAct(action, id, btn) {
+  if (lunaRepairsBusy || !id) return;
+  lunaRepairsBusy = true;
+  if (btn) { btn.disabled = true; btn.classList.add("opacity-60"); }
+  try {
+    const data = await lunaRepairsInvoke({ action, repair_id: id });
+    if (data && data.message) showTikTokToast(data.message);
+    else if (!data) showTikTokToast("That didn\u2019t go through \u2014 try again in a moment.");
+  } catch (e) {
+    showTikTokToast("That didn\u2019t go through \u2014 try again in a moment.");
+  } finally {
+    lunaRepairsBusy = false;
+    lunaRepairsLoad();
+  }
+}
+
+(function lunaRepairsWire() {
+  const sec = document.getElementById("lunaRepairsSection");
+  if (!sec) return;
+  sec.addEventListener("click", (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest("[data-repair-action]") : null;
+    if (!btn) return;
+    lunaRepairsAct(btn.getAttribute("data-repair-action"), btn.getAttribute("data-repair-id"), btn);
+  });
+})();
+// [LUNA-REPAIRS-342-JS-END]
 
 // Hand the signed-in session to the Chrome extension (via bridge.js on
 // this origin). The worker needs the access token, not just the user id:
