@@ -375,6 +375,15 @@ async function runDetection(svc: any, userId: string): Promise<number> {
         year: qrow.year, make: qrow.make, model: qrow.model,
         stock_num: qrow.stock_num,
         price: typeof qrow.price === "number" ? qrow.price : null,
+        // Luna's jobs supersede the queue (Matthew, 2026-11-17):
+        // the helper claims oldest-first, so her read-only verify
+        // rows are stamped a year back and always land at the
+        // front of the line — a verify left behind a dozen posts
+        // reads as "Luna is stuck" when she is only in line. The
+        // stamp preserves FIFO among her own rows (each new
+        // verify is newer than the last). A job already running
+        // is never preempted; front-of-line means next claim.
+        created_at: new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString(),
         share_text: JSON.stringify({ luna_verify: { repair_id: prop.id, checks } }),
       }).select("id").single();
       if (!error && vrow) {
