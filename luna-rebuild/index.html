@@ -8800,7 +8800,7 @@ function lunaAssistantBriefingLines(proposals, activity, reminders, now) {
   if (proposals && proposals.length) {
     lines.push({
       target: "repairs",
-      text: proposals.length + (proposals.length === 1 ? " repair is" : " repairs are") + " waiting for your OK \u2014 the cards are in the support box below."
+      text: proposals.length + (proposals.length === 1 ? " repair is" : " repairs are") + " waiting for your OK \u2014 the cards are in the support box."
     });
   }
   const open = (reminders || []).filter(function (r) { return !r.done_at; });
@@ -8999,7 +8999,7 @@ async function lunaAssistantWhatsWrong() {
   if (!lunaRepairsOpen.length) {
     msg = "I checked just now \u2014 nothing is stuck that I can fix. If something looks wrong, tell me which car and I\u2019ll dig in.";
   } else {
-    msg = "I checked just now \u2014 I found " + lunaRepairsOpen.length + (lunaRepairsOpen.length === 1 ? " thing" : " things") + " I can fix. The cards are in the support box below \u2014 tap \u201cFix it\u201d on any of them and I\u2019ll take care of it.";
+    msg = "I checked just now \u2014 I found " + lunaRepairsOpen.length + (lunaRepairsOpen.length === 1 ? " thing" : " things") + " I can fix. The cards are in the support box \u2014 tap \u201cFix it\u201d on any of them and I\u2019ll take care of it.";
   }
   lunaSupportHistory.push({ role: "assistant", body: msg });
   lunaSupportRender("assistant", msg);
