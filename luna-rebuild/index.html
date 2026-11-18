@@ -1484,6 +1484,8 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
     <p id="prospectsPipelineStats" class="hidden text-xs font-semibold text-slate-600"></p>
 
+    <div id="prospectsNudgeStrip" class="hidden"></div>
+
     <div id="prospectsList" class="space-y-4">
       <p class="text-sm text-slate-400">Loading your prospects…</p>
     </div>
@@ -1512,6 +1514,11 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       🌙 <strong>Luca only drafts — you always send.</strong> Your profile below is what he works from: your name, your schedule, your lot, your credit-app link, your rules. He answers buyers from your live inventory and never invents a price, a payment, or a promise.
     </div>
 
+    <div>
+      <h2 class="text-base font-black text-slate-900">Luca auto-replies</h2>
+      <p class="text-[11px] text-slate-500 mt-0.5">The only messages Luca ever sends himself. Each one is a fixed reply with its own switch, every one is off by default, and each switch stops its replies instantly. Everything else stays draft-only — Luca drafts, you send.</p>
+    </div>
+
     <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
       <div class="flex items-center justify-between">
         <div>
@@ -1520,6 +1527,46 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="lucaAutoReplyToggle" class="sr-only peer" onchange="lucaAutoReplyToggleChanged(this)">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+    </div>
+
+
+    <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <strong class="text-slate-900 block">Auto-reply: hours &amp; location</strong>
+          <span class="text-[11px] text-slate-500">When ON, Luca himself answers a buyer's “What are your hours?” or “Where are you located?” with your store hours and address from your profile below — fixed wording, facts only, at most once per conversation per day, and never after you've already answered it. Needs helper 2.1.146 or newer. Off by default; turning this off stops it instantly.</span>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="lucaAutoReplyHoursToggle" class="sr-only peer" onchange="lucaAutoReplyHoursToggleChanged(this)">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <strong class="text-slate-900 block">Auto-reply: test-drive invites</strong>
+          <span class="text-[11px] text-slate-500">When ON, Luca himself answers a buyer's “Can I come see it?” or “Can I test drive it?” about one specific car — and only after checking that car is really still in your inventory — with its real price, its page link, and the days you're at the store, then asks what time works. Any extra question in the same message means no auto-reply. Needs helper 2.1.146 or newer. Off by default; turning this off stops it instantly.</span>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="lucaAutoReplyVisitToggle" class="sr-only peer" onchange="lucaAutoReplyVisitToggleChanged(this)">
+          <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <strong class="text-slate-900 block">Auto-reply: trade form link</strong>
+          <span class="text-[11px] text-slate-500">When ON, Luca himself answers a buyer's “I have a trade” or “Do you take trade-ins?” with your trade appraisal form link and a short how-to (photos, mileage, condition — about two minutes). He never puts a value on a trade: the moment a buyer asks what theirs is worth, or asks about price or payments in the same message, it stays draft-only for you. Needs helper 2.1.146 or newer. Off by default; turning this off stops it instantly.</span>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="lucaAutoReplyTradeToggle" class="sr-only peer" onchange="lucaAutoReplyTradeToggleChanged(this)">
           <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
@@ -15346,6 +15393,99 @@ function prospectLastActivity(p, chat) {
   return (p && (p.updated_at || p.created_at)) || null;
 }
 // [pipeline-pure:end]
+// [luca-nudge-pure:start]
+/* LUCA PHASE 2 — FOLLOW-UP NUDGES (rebuild only, spec
+   2026-11-17 Track A): rules-based, no AI guessing. Quiet = no
+   real message (buyer or rep; Luca's own draft rows never count)
+   since last touch. Stage rules:
+   - New: the buyer's message is still unanswered after 4 of the
+     rep's WORKING hours (schedule-aware; wall clock when the
+     profile carries no schedule).
+   - Talking: quiet 48h.
+   - Visit set: quiet 24h. The prospect row stores no appointment
+     date, so a full quiet day in Visit set is the "the visit day
+     has come and gone with no outcome" signal.
+   - Came in: quiet 72h.
+   - Sold / Lost: never nudged.
+   A prospect whose nudge_snooze_until is still ahead is skipped.
+   Pure + injectable clock and schedule so the harness can pin
+   the rules. */
+const LUCA_NUDGE_NEW_WORK_MIN = 240;
+const LUCA_NUDGE_TALKING_MS = 48 * 3600 * 1000;
+const LUCA_NUDGE_VISIT_MS = 24 * 3600 * 1000;
+const LUCA_NUDGE_CAMEIN_MS = 72 * 3600 * 1000;
+const LUCA_NUDGE_SNOOZE_MS = 72 * 3600 * 1000;
+const LUCA_NUDGE_DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+function lucaNudgeLastTouch(msgs) {
+  let best = null;
+  (msgs || []).forEach(m => {
+    if (!m || m.origin === "ai") return;
+    const t = Date.parse(m.created_at || "");
+    if (!isFinite(t)) return;
+    if (!best || t > best.at) best = { at: t, direction: m.direction || "in" };
+  });
+  return best;
+}
+function lucaNudgeWorkMinutes(fromMs, toMs, sched) {
+  // Minutes inside the rep's working windows between two
+  // instants, in 15-minute steps. sched is clEffectiveSchedule's
+  // shape: {dayKey: {on, start: "HH:MM", end: "HH:MM"}} local.
+  // No schedule -> wall-clock minutes (the spec's fallback).
+  if (!(toMs > fromMs)) return 0;
+  if (!sched) return Math.round((toMs - fromMs) / 60000);
+  const STEP = 15 * 60000;
+  let mins = 0;
+  for (let t = fromMs; t < toMs; t += STEP) {
+    const d = new Date(t);
+    const day = sched[LUCA_NUDGE_DAYS[d.getDay()]];
+    if (!day || !day.on) continue;
+    const hm = d.getHours() * 60 + d.getMinutes();
+    const sp = String(day.start || "09:00").split(":").map(Number);
+    const ep = String(day.end || "19:00").split(":").map(Number);
+    if (hm >= sp[0] * 60 + (sp[1] || 0) && hm < ep[0] * 60 + (ep[1] || 0)) mins += 15;
+  }
+  return mins;
+}
+function lucaComputeNudges(prospectList, msgsById, nowMs, sched) {
+  const out = [];
+  (prospectList || []).forEach(p => {
+    if (!p) return;
+    const stage = p.stage || "new";
+    if (stage === "sold" || stage === "not_now") return;
+    const snooze = Date.parse(p.nudge_snooze_until || "");
+    if (isFinite(snooze) && snooze > nowMs) return;
+    const touch = lucaNudgeLastTouch((msgsById || {})[p.id]);
+    if (!touch) return;
+    const quietMs = nowMs - touch.at;
+    const quietHrs = Math.floor(quietMs / 3600000);
+    if (stage === "new") {
+      if (touch.direction !== "in") return;
+      const workMin = lucaNudgeWorkMinutes(touch.at, nowMs, sched);
+      if (workMin >= LUCA_NUDGE_NEW_WORK_MIN) {
+        out.push({ id: p.id, rule: "new_unanswered", lastTouchAt: touch.at,
+          why: "Unanswered opener — waiting " + (Math.round(workMin / 6) / 10) + " working hours" });
+      }
+    } else if (stage === "talking") {
+      if (quietMs >= LUCA_NUDGE_TALKING_MS) {
+        out.push({ id: p.id, rule: "talking_quiet", lastTouchAt: touch.at,
+          why: "gone quiet — no messages for " + quietHrs + " hours" });
+      }
+    } else if (stage === "visit_set") {
+      if (quietMs >= LUCA_NUDGE_VISIT_MS) {
+        out.push({ id: p.id, rule: "visit_passed", lastTouchAt: touch.at,
+          why: "visit day has passed with no update — quiet for " + quietHrs + " hours" });
+      }
+    } else if (stage === "came_in") {
+      if (quietMs >= LUCA_NUDGE_CAMEIN_MS) {
+        out.push({ id: p.id, rule: "camein_quiet", lastTouchAt: touch.at,
+          why: "came in, then quiet — no messages for " + quietHrs + " hours" });
+      }
+    }
+  });
+  return out;
+}
+// [luca-nudge-pure:end]
+
 // [autopull-pure:start]
 /* LIGHT CRM — PROSPECTS AUTO-PULL (rebuild only, 2026-11-12,
    Matthew's ask: "a light version on rebuild only"). Deterministic
@@ -16536,6 +16676,45 @@ function renderProspects() {
     pipeStats.innerHTML = parts.join(" · ");
     pipeStats.classList.toggle("hidden", !parts.length);
   }
+  // LUCA PHASE 2 — "Needs a follow-up" strip (Track A). Rules
+  // live in [luca-nudge-pure]; the strip only renders them.
+  // Draft asks luca-draft into the strip's own panel; Dismiss
+  // snoozes 72h. Nothing auto-sends, nothing auto-applies.
+  const nudgeStrip = document.getElementById("prospectsNudgeStrip");
+  if (nudgeStrip) {
+    const nudgeProf = (closerRecord && closerRecord.profile) || {};
+    const nudgeHasSched = !!(nudgeProf.schedule || (Array.isArray(nudgeProf.work_days) && nudgeProf.work_days.length));
+    const nudges = lucaComputeNudges(prospects, prospectMessages, Date.now(), nudgeHasSched ? clEffectiveSchedule(nudgeProf) : null);
+    if (!nudges.length) {
+      nudgeStrip.innerHTML = "";
+      nudgeStrip.classList.add("hidden");
+    } else {
+      const nudgeById = {};
+      prospects.forEach(p => { nudgeById[p.id] = p; });
+      nudgeStrip.innerHTML = `<div class="glass-card rounded-2xl border border-amber-200 bg-amber-50 shadow-sm p-5">
+        <h3 class="font-bold text-slate-900 text-sm">⏰ Needs a follow-up <span class="font-mono text-amber-700">${nudges.length}</span></h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Luca flagged these from your stages and message history. He drafts — you send.</p>
+        <div class="mt-3 space-y-3">${nudges.map(n => {
+          const np = nudgeById[n.id] || {};
+          return `<div class="rounded-xl bg-white border border-amber-200 p-3">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+              <div class="min-w-0">
+                <p class="text-sm font-bold text-slate-900">${escapeHtml(np.name || "Prospect")}${np.vehicle_label ? ` <span class="font-semibold text-slate-500">· ${escapeHtml(np.vehicle_label)}</span>` : ""}</p>
+                <p class="text-[11px] text-amber-800 font-semibold">${escapeHtml(n.why)}</p>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button data-prospect-action="nudge-draft" data-prospect-id="${escapeHtml(String(n.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm">🌙 Draft with Luca</button>
+                <button data-prospect-action="nudge-dismiss" data-prospect-id="${escapeHtml(String(n.id))}" class="px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer">Dismiss</button>
+              </div>
+            </div>
+            <div id="lucaNudgeDraft-${escapeHtml(String(n.id))}"></div>
+          </div>`;
+        }).join("")}</div>
+      </div>`;
+      nudgeStrip.classList.remove("hidden");
+    }
+  }
+
 
   const visible = prospectsStageFilter === "all"
     ? prospects
@@ -16649,6 +16828,9 @@ document.addEventListener("click", function (e) {
   else if (act === "crm") openProspectCrm(id);
   else if (act === "draft") draftLucaReply(id, el);
   else if (act === "copy-draft") copyLucaDraft(id, el);
+  else if (act === "nudge-draft") draftLucaNudgeReply(id, el);
+  else if (act === "copy-nudge-draft") copyLucaNudgeDraft(id, el);
+  else if (act === "nudge-dismiss") dismissLucaNudge(id);
   else if (act === "trade-link") copyProspectTradeLink(id, el);
   else if (act === "reply") sendLucaReply(id, el);
   else if (act === "toggle-thread") toggleThread(id, el);
@@ -17347,6 +17529,85 @@ function copyLucaDraft(id, btn) {
     done();
   }
 }
+
+// LUCA PHASE 2 — nudge strip actions (Track A). The draft call is
+// the same luca-draft request draftLucaReply makes (same endpoint,
+// same headers, same learning retention); only the landing panel
+// differs, so a strip draft never hijacks the prospect card below.
+async function draftLucaNudgeReply(id, btn) {
+  const panel = document.getElementById("lucaNudgeDraft-" + id);
+  if (!panel) return;
+  const headers = await tiktokFunctionHeaders();
+  if (!headers) { panel.innerHTML = `<p class="mt-2 text-xs text-rose-600 font-semibold">Sign in to AutoLaunch first.</p>`; return; }
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "Luca is thinking…";
+  panel.innerHTML = "";
+  try {
+    const res = await fetch(SUPABASE_URL + "/functions/v1/luca-draft", {
+      method: "POST", headers, body: JSON.stringify({ prospect_id: id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP " + res.status));
+    lucaDrafts[id] = data.draft;
+    retainLucaPendingDraft(id, data.draft);
+    panel.innerHTML = `
+      ${data.needs_human ? `<p class="mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">⚠ Luca flagged this one for you personally${data.reason ? " — " + escapeHtml(data.reason) : ""}. The draft below is just a safe holding reply.</p>` : ""}
+      <textarea id="lucaNudgeDraftText-${escapeHtml(String(id))}" rows="3" class="mt-2 w-full p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600">${escapeHtml(data.draft)}</textarea>
+      <p class="mt-1 text-[11px] text-slate-400">Edit it right here if you want — Luca learns from the version you actually send.</p>
+      <div class="mt-2 flex items-center gap-2 flex-wrap">
+        <button data-prospect-action="copy-nudge-draft" data-prospect-id="${escapeHtml(String(id))}" class="px-3 py-1.5 rounded-lg btn-gradient text-white text-[11px] font-bold cursor-pointer">Copy draft</button>
+        <span class="text-[11px] text-slate-400">Paste it into the Facebook chat — in Draft mode, Luca never sends for you.</span>
+      </div>`;
+  } catch (err) {
+    panel.innerHTML = `<p class="mt-2 text-xs text-rose-600 font-semibold">Luca couldn't draft: ${escapeHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+function copyLucaNudgeDraft(id, btn) {
+  const ta = document.getElementById("lucaNudgeDraftText-" + id);
+  const text = (ta ? ta.value : lucaDrafts[id] || "").trim();
+  if (!text) return;
+  const original = lucaDrafts[id] || "";
+  if (original && text !== original) recordLucaCorrection(id, original, text);
+  const done = () => { const o = btn.innerHTML; btn.innerHTML = "Copied ✓"; setTimeout(() => { btn.innerHTML = o; }, 2000); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(done);
+  } else {
+    const tmp = document.createElement("textarea");
+    tmp.value = text;
+    document.body.appendChild(tmp);
+    tmp.select();
+    try { document.execCommand("copy"); } catch (e) { /* best effort */ }
+    tmp.remove();
+    done();
+  }
+}
+
+// Dismiss = snooze this prospect's nudge for 72h
+// (prospects.nudge_snooze_until). The in-memory row is updated
+// first so the strip re-renders without it even if the write
+// fails; in local mode the snooze persists with the prospect.
+async function dismissLucaNudge(id) {
+  const until = new Date(Date.now() + LUCA_NUDGE_SNOOZE_MS).toISOString();
+  const p = prospects.find(x => String(x.id) === String(id));
+  if (p) p.nudge_snooze_until = until;
+  if (prospectsStorageMode === "local") {
+    saveLocalProspects();
+  } else if (currentUser) {
+    try {
+      const { error } = await supabaseClient.from(PROSPECTS_TABLE)
+        .update({ nudge_snooze_until: until, updated_at: new Date().toISOString() })
+        .eq("id", id).eq("user_id", currentUser.id);
+      if (error) throw error;
+    } catch (e) { /* the in-memory snooze still applies this session */ }
+  }
+  renderProspects();
+}
+
 // SEND-TO-CRM EXPORT (Pipeline build, 2026-10-28): build a plain-text
 // lead summary from what the prospect row + captured chat already
 // know, show it in a modal, and let the REP copy it into their CRM or
@@ -17553,6 +17814,45 @@ async function lucaAutoReplyToggleChanged(el) {
     alert("Could not save the auto-reply setting — please try again.");
   }
 }
+// Luca Phase 2 auto-reply toggles (2026-11-17): hours & location,
+// test-drive invites, trade form link. Same one-flag-per-capability
+// pattern as the availability toggle above — one user_settings
+// column each, and the helper (2.1.146+) is the only thing that
+// ever acts on them, so a flag alone can never cause a send.
+const LUCA_AUTOREPLY2_TOGGLES = [
+  { id: "lucaAutoReplyHoursToggle", col: "luca_autoreply_hours_location" },
+  { id: "lucaAutoReplyVisitToggle", col: "luca_autoreply_visit" },
+  { id: "lucaAutoReplyTradeToggle", col: "luca_autoreply_trade_link" }
+];
+async function loadLucaAutoReply2Settings() {
+  if (!currentUser) return;
+  try {
+    const { data } = await supabaseClient.from("user_settings")
+      .select("luca_autoreply_hours_location, luca_autoreply_visit, luca_autoreply_trade_link")
+      .eq("user_id", currentUser.id).maybeSingle();
+    if (!data) return;
+    LUCA_AUTOREPLY2_TOGGLES.forEach(t => {
+      const el = document.getElementById(t.id);
+      if (el) el.checked = !!data[t.col];
+    });
+  } catch (e) { /* leave the switches as-is on failure */ }
+}
+async function lucaAutoReply2ToggleChanged(el, col) {
+  if (!currentUser) { el.checked = false; return; }
+  try {
+    const row = { user_id: currentUser.id, updated_at: new Date().toISOString() };
+    row[col] = !!el.checked;
+    const { error } = await supabaseClient.from("user_settings").upsert(row, { onConflict: "user_id" });
+    if (error) throw error;
+  } catch (e) {
+    el.checked = !el.checked;
+    alert("Could not save the auto-reply setting — please try again.");
+  }
+}
+function lucaAutoReplyHoursToggleChanged(el) { return lucaAutoReply2ToggleChanged(el, "luca_autoreply_hours_location"); }
+function lucaAutoReplyVisitToggleChanged(el) { return lucaAutoReply2ToggleChanged(el, "luca_autoreply_visit"); }
+function lucaAutoReplyTradeToggleChanged(el) { return lucaAutoReply2ToggleChanged(el, "luca_autoreply_trade_link"); }
+
 
 async function persistCloserProfile() {
   if (closerStorageMode !== "local" && currentUser) {
@@ -17777,6 +18077,7 @@ async function showCloserPage() {
   await loadCloserProfile();
   fillCloserForm();
   loadLucaAutoReplySetting();
+  loadLucaAutoReply2Settings();
   syncQueuePoller();
 }
 
