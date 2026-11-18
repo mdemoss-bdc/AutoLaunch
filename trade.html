@@ -29,6 +29,8 @@
   p, li { font-size: 15px; }
   .soft { color: var(--soft); font-size: 14px; }
   .fair { background: rgba(46,124,246,.12); border: 1px solid var(--edge); border-radius: 14px; padding: 14px 16px; font-size: 14.5px; }
+  .fair.warn { background: rgba(245,158,11,.13); border: 2px solid #f59e0b; color: var(--h); }
+  .fair.warn .warnlead { color: #fbbf24; }
   label { display: block; font-size: 13px; font-weight: 700; color: var(--h); margin: 16px 0 6px; }
   label .req { color: var(--err); }
   label .opt { color: var(--soft); font-weight: 600; }
@@ -252,20 +254,13 @@
         </div>
       </div>
       <div class="q">
-        <div class="qt">What are you hoping to do?</div>
-        <div class="yn">
-          <label><input type="radio" name="tradeGoal" value="Pay it off and move on"><span>Pay it off and move on</span></label>
-          <label><input type="radio" name="tradeGoal" value="Lower my monthly payment"><span>Lower my monthly payment</span></label>
-        </div>
-        <div class="yn">
-          <label><input type="radio" name="tradeGoal" value="I just need it gone"><span>I just need it gone</span></label>
-          <label><input type="radio" name="tradeGoal" value="Not sure yet"><span>Not sure yet</span></label>
-        </div>
+        <label for="fDesired">What are you hoping to get for it? — $</label>
+        <input type="text" id="fDesired" inputmode="decimal" placeholder="e.g. 6,000">
       </div>
     </div>
 
     <div class="card">
-      <div class="fair"><span id="disclaimerBottom"></span></div>
+      <div class="fair warn"><strong class="warnlead">⚠ Please read first:</strong> <span id="disclaimerBottom"></span></div>
       <label class="ack"><input type="checkbox" id="ackBox"><span>I understand my trade will be appraised in Fair condition based on the answers and photos I&rsquo;ve provided, and if anything is left out or different when the dealership sees my vehicle in person, the appraisal amount could be lower.</span></label>
       <p class="submit-hint hidden" id="submitHint" role="status"></p>
       <button type="button" id="submitBtn" disabled>Submit my trade appraisal</button>
@@ -308,7 +303,7 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const photos = { vin: null, dash: null, gallery: [] };
 
 document.getElementById("disclaimerTop").textContent = DISCLAIMER;
-document.getElementById("disclaimerBottom").textContent = DISCLAIMER;
+document.getElementById("disclaimerBottom").innerHTML = DISCLAIMER.replace("Fair condition", "<strong>Fair condition</strong>").replace("could be lower", "<strong>could be lower</strong>");
 if (!token || token.length < 8) {
   document.getElementById("formRoot").classList.add("hidden");
   document.getElementById("badLinkRoot").classList.remove("hidden");
@@ -1222,13 +1217,12 @@ document.getElementById("submitBtn").onclick = async () => {
     vin_read: photoGate.vin.read || ""
   };
   const owePicked = document.querySelector('input[name="oweMoney"]:checked');
-  const goalPicked = document.querySelector('input[name="tradeGoal"]:checked');
   const owesMoney = !!owePicked && owePicked.value === "Yes, I still owe on it";
   answers._intent = {
     owes_money: owePicked ? owePicked.value : "",
     payoff_amount: owesMoney ? document.getElementById("fPayoff").value.trim() : "",
     loan_bank: owesMoney ? document.getElementById("fLoanBank").value.trim() : "",
-    goal: goalPicked ? goalPicked.value : ""
+    desired_amount: document.getElementById("fDesired").value.trim()
   };
   answers._location = {
     zip: document.getElementById("fZip").value.trim(),
