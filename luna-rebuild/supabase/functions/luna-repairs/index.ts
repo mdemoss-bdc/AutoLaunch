@@ -54,6 +54,19 @@
 // same class for a user inside 14 days, the next case escalates
 // (evidence.escalated, watchdog-visible) instead of applying —
 // repeated identical repairs are a defect signal, not maintenance.
+//
+// Post-failure clusters (2026-11-18, Matthew's direction after a
+// run of video-gate aborts Luna never saw): a detector watches for
+// >= 3 failed POST rows sharing one failure signature inside 24h
+// and raises ONE escalation-only proposal (action
+// post_failure_cluster, vin null — it spans cars). There is no
+// user-side repair for a cluster: execute refuses the class and
+// the card is an alert with a dismiss only. The proposal is born
+// escalated (evidence.escalated, watchdog-surfaced), because a
+// same-signature cluster is a platform/helper defect signal, not
+// bookkeeping. Dedup is manual (the open-proposal index keys on
+// queue_row_id, which is null here): an open proposal for the same
+// signature is updated in place as the cluster grows.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -68,6 +81,8 @@ const VERIFY_MIN_HELPER = [2, 1, 142];
 const BUMP_MIN_POSTS_AHEAD = 5;
 const BUMP_MIN_AGE_MS = 30 * 60 * 1000;
 const UNDO_WINDOW_MS = 7 * 24 * 3600 * 1000;
+const CLUSTER_WINDOW_MS = 24 * 3600 * 1000;
+const CLUSTER_MIN_ROWS = 3;
 
 // Phase 2 auto-apply (spec §12). Exactly these classes may ever
 // auto-apply; clear_phantom_stamp is deliberately absent — absence
@@ -211,6 +226,52 @@ async function insertProposal(svc: any, p: any): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+// The stable reason token of a failure: the first line of the
+// helper's error text, minus the trailing JSON diagnostics blob
+// and minus a leading wrapper segment ("pwv348_abort:"), so the
+// same failure mode groups together across cars. Deterministic;
+// the reason grammar is fixed tokens (gate/build tags), never
+// per-car values, so no volatile ids survive into a signature.
+function postFailureSignature(err: string): string | null {
+  if (!err) return null;
+  const firstLine = err.split("\n")[0].split("{")[0].trim();
+  if (!firstLine) return null;
+  const parts = firstLine.split(":").map((s) => s.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  const segs = parts.length >= 3 ? parts.slice(1) : parts;
+  return segs.join(":");
+}
+
+// Failed POST rows inside the cluster window, grouped by failure
+// signature, keeping only groups at cluster size. Pure given its
+// inputs (rows arrive from loadUserRows, all status "failed").
+// Queue rows carry no settle timestamp (no updated_at, and
+// executed_at is null on failed rows), so the window rides on
+// created_at — the only clock a queue row has.
+function clusterGroups(failed: any[], now: number): Map<string, any[]> {
+  const groups = new Map<string, any[]>();
+  for (const row of failed) {
+    if (row.action !== "post") continue;
+    if (now - new Date(row.created_at).getTime() > CLUSTER_WINDOW_MS) continue;
+    const sig = postFailureSignature(
+      typeof row.error_message === "string" ? row.error_message : "");
+    if (!sig) continue;
+    if (!groups.has(sig)) groups.set(sig, []);
+    groups.get(sig)!.push(row);
+  }
+  for (const [sig, rows] of groups) {
+    if (rows.length < CLUSTER_MIN_ROWS) groups.delete(sig);
+  }
+  return groups;
+}
+
+function clusterSummaryText(sig: string, count: number): string {
+  const what = sig.includes("gate_rejected")
+    ? `failed at the video gate (${sig.split(":").pop()})`
+    : `failed the same way (${sig})`;
+  return `${count} posts ${what} in the last 24 hours \u2014 every one stopped safely before publishing, so nothing went out wrong. This usually points to a Facebook-side or helper-side problem, not your cars. Luna has escalated it for investigation.`;
 }
 
 async function runDetection(svc: any, userId: string): Promise<number> {
@@ -391,6 +452,89 @@ async function runDetection(svc: any, userId: string): Promise<number> {
       });
       if (ok) created++;
     }
+  }
+
+  // --- Action 7: post_failure_cluster (escalation-only) -------------
+  // The open-proposal dedupe index keys on queue_row_id, which is
+  // null for a multi-car cluster, so dedup is manual: an open
+  // proposal for the same signature is updated in place (a growing
+  // cluster re-surfaces via the new count, and a growth resets the
+  // escalation's reported flag so the watchdog digest picks it up
+  // again). A dismissed cluster stays dismissed unless it was
+  // dismissed over 24h ago or has since grown by >= CLUSTER_MIN_ROWS
+  // rows — a user who said "got it" is not re-nagged by the same
+  // evidence.
+  for (const [sig, rows] of clusterGroups(failed, now)) {
+    const stocks = [...new Set(rows.map((r: any) => r.stock_num).filter(Boolean))];
+    const times = rows.map((r: any) => new Date(r.created_at).getTime());
+    const summary = clusterSummaryText(sig, rows.length);
+    const reason = `post-failure cluster: ${rows.length} posts failed with ${sig} in 24h`;
+    const { data: openClusters } = await svc.from("luna_repairs")
+      .select("id, evidence")
+      .eq("user_id", userId).eq("action", "post_failure_cluster")
+      .eq("status", "proposed").limit(20);
+    const existing = (openClusters ?? []).find(
+      (p: any) => p.evidence?.signature === sig);
+    if (existing) {
+      const prev = existing.evidence ?? {};
+      const grew = rows.length > (Number(prev.count) || 0);
+      await svc.from("luna_repairs").update({
+        evidence: {
+          signature: sig,
+          count: rows.length,
+          stocks,
+          first_at: new Date(Math.min(...times)).toISOString(),
+          last_at: new Date(Math.max(...times)).toISOString(),
+          escalated: {
+            at: grew || !prev.escalated
+              ? new Date().toISOString() : prev.escalated.at,
+            reason,
+            failure: null,
+            reported: grew ? false : (prev.escalated?.reported ?? false),
+          },
+        },
+        summary,
+        updated_at: new Date().toISOString(),
+      }).eq("id", existing.id);
+      continue;
+    }
+    const { data: dismissedClusters } = await svc.from("luna_repairs")
+      .select("evidence, updated_at")
+      .eq("user_id", userId).eq("action", "post_failure_cluster")
+      .eq("status", "dismissed")
+      .order("updated_at", { ascending: false }).limit(20);
+    const dismissed = (dismissedClusters ?? []).find(
+      (p: any) => p.evidence?.signature === sig);
+    if (dismissed) {
+      const age = now - new Date(dismissed.updated_at).getTime();
+      const prevCount = Number(dismissed.evidence?.count) || 0;
+      if (age < CLUSTER_WINDOW_MS &&
+          rows.length < prevCount + CLUSTER_MIN_ROWS) continue;
+    }
+    const ok = await insertProposal(svc, {
+      user_id: userId,
+      action: "post_failure_cluster",
+      vin: null,
+      queue_row_id: null,
+      lane: "ask",
+      actor: "luna",
+      status: "proposed",
+      evidence: {
+        signature: sig,
+        count: rows.length,
+        stocks,
+        first_at: new Date(Math.min(...times)).toISOString(),
+        last_at: new Date(Math.max(...times)).toISOString(),
+        escalated: {
+          at: new Date().toISOString(),
+          reason,
+          failure: null,
+          reported: false,
+        },
+      },
+      summary,
+    });
+    if (ok) created++;
   }
 
   // --- Verify enqueueing for needs_verify proposals ------------------
@@ -689,6 +833,12 @@ async function executeRepair(
       await svc.from("auto_posting_queue").delete().eq("id", row.id);
       await markApplied(svc, prop, before, { marketplace_posted_price: target, row_deleted: true }, actor);
       return json({ ok: true, message: "Record corrected to the live price and the failed row cleared." });
+    }
+
+    case "post_failure_cluster": {
+      // Escalation-only: there is no data repair for a cluster and
+      // no user tap should ever "fix" one. The card is an alert.
+      return json({ ok: false, message: "There's nothing to fix on your side for this one \u2014 Luna has escalated it and is investigating." }, 200);
     }
 
     default:
