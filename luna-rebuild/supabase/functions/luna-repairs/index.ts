@@ -67,6 +67,18 @@
 // bookkeeping. Dedup is manual (the open-proposal index keys on
 // queue_row_id, which is null here): an open proposal for the same
 // signature is updated in place as the cluster grows.
+//
+// Auto-retry (2026-11-18, Matthew's approval — a graduated
+// capability under the teach-back rule): ONE bounded re-queue for
+// an isolated failed post whose signature is on a tiny allowlist
+// of proven transients (AUTO_RETRY_ALLOWLIST), gated by
+// luna_repairs_config like the other classes, demoted to an ASK
+// proposal for opted-out users, and hard-paused whenever an open
+// post_failure_cluster covers the signature. One retry per queue
+// row, ever; at most 2 per signature per user per 14 days, then
+// the recurrence guard escalates instead. The action is
+// data-only: a failed row returns to pending with its error
+// cleared — the helper's normal claim path does the rest.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -83,6 +95,15 @@ const BUMP_MIN_AGE_MS = 30 * 60 * 1000;
 const UNDO_WINDOW_MS = 7 * 24 * 3600 * 1000;
 const CLUSTER_WINDOW_MS = 24 * 3600 * 1000;
 const CLUSTER_MIN_ROWS = 3;
+
+// Bounded auto-retry: the allowlist is deliberately tiny — a
+// retry must never be able to do the wrong thing twice, so
+// identity/VIN mismatches, price-gate rejections, media failures,
+// and auth/session errors are never eligible. Founding member,
+// proven transient the day it was added: the Bronco took this
+// exact gate abort once and posted clean on retry.
+const AUTO_RETRY_ALLOWLIST = ["pwv348_gate_rejected:counter_vanished"];
+const AUTO_RETRY_COOLDOWN_MS = 20 * 60 * 1000;
 
 // Phase 2 auto-apply (spec §12). Exactly these classes may ever
 // auto-apply; clear_phantom_stamp is deliberately absent — absence
@@ -841,6 +862,65 @@ async function executeRepair(
       return json({ ok: false, message: "There's nothing to fix on your side for this one \u2014 Luna has escalated it and is investigating." }, 200);
     }
 
+    case "auto_retry_post": {
+      // The opt-out path's Fix it: the same bounded re-queue the
+      // sweep performs automatically, with every precondition
+      // re-checked against the live rows — a stale proposal
+      // expires instead of retrying blind.
+      if (!row || row.action !== "post" || row.status !== "failed") {
+        return markExpired(svc, prop,
+          "That post is no longer in a failed state, so there's nothing to retry.");
+      }
+      const sig = postFailureSignature(
+        typeof row.error_message === "string" ? row.error_message : "");
+      if (!sig || !AUTO_RETRY_ALLOWLIST.includes(sig)) {
+        return markExpired(svc, prop,
+          "That failure isn't one Luna retries — it needs a human look instead.");
+      }
+      const { data: openClusters } = await svc.from("luna_repairs")
+        .select("evidence").eq("user_id", userId)
+        .eq("action", "post_failure_cluster")
+        .in("status", ["proposed", "needs_verify", "ready"]).limit(20);
+      if ((openClusters ?? []).some(
+          (p: any) => p.evidence?.signature === sig)) {
+        return markExpired(svc, prop,
+          "Several posts are failing the same way right now — Luna escalated that as a cluster instead of retrying one car into it.");
+      }
+      const { data: priorApplied } = await svc.from("luna_repairs")
+        .select("queue_row_id, before_state, applied_at")
+        .eq("user_id", userId).eq("action", "auto_retry_post")
+        .eq("status", "applied").limit(200);
+      if ((priorApplied ?? []).some(
+          (p: any) => p.queue_row_id === row.id)) {
+        return markExpired(svc, prop,
+          "Luna already retried this post once — a second retry is a human call.");
+      }
+      const windowStart = Date.now() - AUTO_RECURRENCE_WINDOW_MS;
+      const priorForSig = (priorApplied ?? []).filter((p: any) =>
+        p.before_state?.signature === sig && p.applied_at &&
+        new Date(p.applied_at).getTime() >= windowStart).length;
+      if (priorForSig >= AUTO_RECURRENCE_PRIOR_LIMIT) {
+        return markExpired(svc, prop,
+          "Luna has already retried this same failure a couple of times in the last two weeks — she flagged it for a closer look instead.");
+      }
+      const { data: reel } = await svc.from("vin_reels")
+        .select("status").eq("user_id", userId).eq("vin", row.vin)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (!reel || reel.status !== "ready") {
+        return markExpired(svc, prop,
+          "The car's video isn't ready, so a retry would fail the same way — Luna left the row alone.");
+      }
+      const { error } = await svc.from("auto_posting_queue").update({
+        status: "pending", error_message: null, awaiting_reel: false,
+      }).eq("id", row.id).eq("status", "failed");
+      if (error) {
+        return json({ ok: false, message: "The re-queue didn't go through — nothing was changed." }, 200);
+      }
+      await markApplied(svc, prop,
+        { status: "failed", signature: sig }, { status: "pending" }, actor);
+      return json({ ok: true, message: "Queued to try once more." });
+    }
+
     default:
       return json({ ok: false, message: "Unknown repair action." }, 200);
   }
@@ -867,6 +947,159 @@ async function loadAutoConfig(svc: any): Promise<Map<string, boolean>> {
     .select("action, auto_apply");
   for (const r of data ?? []) map.set(r.action, r.auto_apply === true);
   return map;
+}
+
+// ---------------------------------------------------------------------
+// Bounded auto-retry for isolated transient post failures. Runs in
+// the sweep after detection and auto-apply (so a cluster raised by
+// this same pass already pauses retries). Returns the number of
+// rows actually re-queued.
+// ---------------------------------------------------------------------
+async function autoRetryForUser(
+  svc: any, userId: string, config: Map<string, boolean>,
+): Promise<number> {
+  if (config.get("auto_retry_post") !== true) return 0;
+
+  const { data: settings } = await svc.from("user_settings")
+    .select("luna_ask_before_fixing").eq("user_id", userId).maybeSingle();
+  const optedOut = settings?.luna_ask_before_fixing === true;
+
+  const { data: failedPosts } = await svc.from("auto_posting_queue")
+    .select("*").eq("user_id", userId)
+    .eq("action", "post").eq("status", "failed")
+    .order("created_at", { ascending: true }).limit(100);
+  const rows = (failedPosts ?? []).filter((r: any) =>
+    AUTO_RETRY_ALLOWLIST.includes(
+      postFailureSignature(
+        typeof r.error_message === "string" ? r.error_message : "") ?? ""));
+  if (!rows.length) return 0;
+
+  // Precondition (d): an open cluster for the same signature
+  // pauses individual retries — retrying into a known cluster is
+  // the harm case; the cluster escalates instead.
+  const { data: openClusters } = await svc.from("luna_repairs")
+    .select("evidence").eq("user_id", userId)
+    .eq("action", "post_failure_cluster")
+    .in("status", ["proposed", "needs_verify", "ready"]).limit(20);
+  const clustered = new Set(
+    (openClusters ?? []).map((p: any) => p.evidence?.signature).filter(Boolean));
+
+  // Precondition (c) + the recurrence guard read the same history:
+  // every auto-retry that actually happened for this user.
+  const { data: priorRetries } = await svc.from("luna_repairs")
+    .select("queue_row_id, before_state, applied_at")
+    .eq("user_id", userId).eq("action", "auto_retry_post")
+    .eq("status", "applied").limit(200);
+  const retriedRowIds = new Set(
+    (priorRetries ?? []).map((p: any) => p.queue_row_id).filter(Boolean));
+  const windowStart = Date.now() - AUTO_RECURRENCE_WINDOW_MS;
+  const priorBySig = new Map<string, number>();
+  for (const p of priorRetries ?? []) {
+    const sig = p.before_state?.signature;
+    if (sig && p.applied_at &&
+        new Date(p.applied_at).getTime() >= windowStart) {
+      priorBySig.set(sig, (priorBySig.get(sig) ?? 0) + 1);
+    }
+  }
+
+  // Open auto-retry proposals (the opt-out path) already claim
+  // their row — never double-offer or double-retry.
+  const { data: openRetryProps } = await svc.from("luna_repairs")
+    .select("queue_row_id").eq("user_id", userId)
+    .eq("action", "auto_retry_post")
+    .in("status", ["proposed", "needs_verify", "ready"]).limit(100);
+  const proposedRowIds = new Set(
+    (openRetryProps ?? []).map((p: any) => p.queue_row_id).filter(Boolean));
+
+  const reelMap = await latestReelByVin(
+    svc, userId, [...new Set(rows.map((r: any) => r.vin))]);
+
+  const now = Date.now();
+  let retried = 0;
+  for (const row of rows) {
+    const sig = postFailureSignature(
+      typeof row.error_message === "string" ? row.error_message : "");
+    if (!sig) continue;
+    if (clustered.has(sig)) continue;                       // (d)
+    if (retriedRowIds.has(row.id)) continue;                // (c)
+    if (proposedRowIds.has(row.id)) continue;               // already offered
+    if (now - new Date(row.created_at).getTime() <
+        AUTO_RETRY_COOLDOWN_MS) continue;                   // (b)
+    const reel = reelMap.get(row.vin);
+    if (!reel || reel.status !== "ready") continue;         // (a)
+
+    if ((priorBySig.get(sig) ?? 0) >= AUTO_RECURRENCE_PRIOR_LIMIT) {
+      // Recurrence guard: stop retrying this failure mode and
+      // escalate instead (the watchdog evidence shape, so the
+      // digest surfaces it like every other escalation).
+      const ok = await insertProposal(svc, {
+        user_id: userId,
+        action: "auto_retry_post",
+        vin: row.vin,
+        queue_row_id: row.id,
+        lane: "ask",
+        status: "proposed",
+        evidence: {
+          signature: sig,
+          failure: (row.error_message ?? "").slice(0, 400),
+          escalated: {
+            at: new Date().toISOString(),
+            reason: `auto-retry paused: ${sig} has already been auto-retried ${AUTO_RECURRENCE_PRIOR_LIMIT} times in 14 days — repeated identical failures are a defect signal, not maintenance`,
+            failure: null,
+            reported: false,
+          },
+        },
+        summary: "This post keeps failing the same way, and Luna has already retried this failure a couple of times in the last two weeks — so she stopped retrying it on her own and flagged it for a closer look.",
+      });
+      if (ok) proposedRowIds.add(row.id);
+      continue;
+    }
+
+    if (optedOut) {
+      const ok = await insertProposal(svc, {
+        user_id: userId,
+        action: "auto_retry_post",
+        vin: row.vin,
+        queue_row_id: row.id,
+        lane: "ask",
+        status: "proposed",
+        evidence: {
+          signature: sig,
+          failure: (row.error_message ?? "").slice(0, 400),
+        },
+        summary: "This post failed at the video gate, which is usually temporary. Luna can queue it to try once more.",
+      });
+      if (ok) proposedRowIds.add(row.id);
+      continue;
+    }
+
+    // The retry itself: exactly one data move — re-queue the row.
+    const { error } = await svc.from("auto_posting_queue").update({
+      status: "pending", error_message: null, awaiting_reel: false,
+    }).eq("id", row.id).eq("status", "failed");
+    if (error) {
+      console.error("luna-repairs autoRetry requeue", error);
+      continue;
+    }
+    await svc.from("luna_repairs").insert({
+      user_id: userId,
+      action: "auto_retry_post",
+      vin: row.vin,
+      queue_row_id: row.id,
+      lane: "auto",
+      actor: "luna",
+      status: "applied",
+      evidence: { signature: sig },
+      before_state: { status: "failed", signature: sig },
+      after_state: { status: "pending" },
+      summary: "This post failed at the video gate, which is usually temporary — Luna queued it to try once more.",
+      applied_at: new Date().toISOString(),
+    });
+    retriedRowIds.add(row.id);
+    priorBySig.set(sig, (priorBySig.get(sig) ?? 0) + 1);
+    retried++;
+  }
+  return retried;
 }
 
 async function autoApplyForUser(
@@ -1016,14 +1249,16 @@ Deno.serve(async (req: Request) => {
       : await svc.from("user_settings").select("user_id").limit(2000);
     let proposals = 0;
     let autoApplied = 0;
+    let autoRetried = 0;
     for (const u of users ?? []) {
       await consumeVerdicts(svc, u.user_id);
       proposals += await runDetection(svc, u.user_id);
       autoApplied += await autoApplyForUser(svc, u.user_id, config);
+      autoRetried += await autoRetryForUser(svc, u.user_id, config);
     }
     return json({
       ok: true, users: (users ?? []).length,
-      proposals_created: proposals, auto_applied: autoApplied,
+      proposals_created: proposals, auto_applied: autoApplied, auto_retried: autoRetried,
     });
   }
 
