@@ -18,10 +18,13 @@
 //                                       live rows, then apply the fix.
 //   { action: "dismiss", repair_id }  → user said "not now".
 //   { action: "undo", repair_id }    → restore before_state (7 days).
-//   { action: "sweep", secret }      → propose-mode detection for ALL
-//                                       accounts (daily sweep, §12).
+//   { action: "sweep", secret }      → detection for ALL accounts
+//                                       (daily sweep, §12), plus the
+//                                       Phase 2 auto-apply pass below.
 //                                       Gated by LUNA_SWEEP_SECRET.
-//                                       NEVER executes a fix.
+//                                       Optional "only_user" scopes a
+//                                       sweep to one account (smoke
+//                                       tests); default is all users.
 //
 // Phase 1 rules (spec §7/§10/§12): every lane is ASK — nothing applies
 // without the user's tap. Verify-gated repairs (actions 1 and 3)
@@ -32,6 +35,25 @@
 // Blast radius (spec §3.5): a fix may touch only the caller's own
 // queue rows, stamps, and hold markers. Never a live listing, never a
 // new post, never a message, never settings, never billing.
+//
+// Phase 2 (spec §7/§12, built 2026-11-17): SAFE auto-apply for the
+// three verify-proven / DB-fact classes ONLY — clear_false_attach_
+// failure, release_stuck_reel_hold, correct_stamp_price. The pass
+// runs ONLY inside the nightly sweep (never interactive evaluate),
+// ONLY on proposals whose evidence bar is already met (verify-gated
+// classes must be "ready"; the hold release is a DB fact re-checked
+// at execution), and ONLY while the owner kill switch for that class
+// is ON in public.luna_repairs_config (auto_apply) — every class
+// ships OFF, so deploying this build changes nothing until Matthew
+// flips a class on. clear_phantom_stamp is absence-based and is
+// NEVER auto-applied, in any phase. Auto-applied repairs are logged
+// with actor "auto", appear in Recent Luna activity with the same
+// 7-day undo, respect the per-user opt-out (user_settings.
+// luna_ask_before_fixing = true demotes that user to proposals),
+// and stop under the recurrence guard: after 2 auto-applies of the
+// same class for a user inside 14 days, the next case escalates
+// (evidence.escalated, watchdog-visible) instead of applying —
+// repeated identical repairs are a defect signal, not maintenance.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -46,6 +68,30 @@ const VERIFY_MIN_HELPER = [2, 1, 142];
 const BUMP_MIN_POSTS_AHEAD = 5;
 const BUMP_MIN_AGE_MS = 30 * 60 * 1000;
 const UNDO_WINDOW_MS = 7 * 24 * 3600 * 1000;
+
+// Phase 2 auto-apply (spec §12). Exactly these classes may ever
+// auto-apply; clear_phantom_stamp is deliberately absent — absence
+// evidence never auto-fixes.
+const AUTO_APPLY_ACTIONS = [
+  "clear_false_attach_failure",
+  "release_stuck_reel_hold",
+  "correct_stamp_price",
+];
+// Recurrence guard: this many PRIOR auto-applies of one class for
+// one user inside the window means the next case escalates instead
+// of applying (i.e. the 3rd case in 14 days trips the guard).
+const AUTO_RECURRENCE_PRIOR_LIMIT = 2;
+const AUTO_RECURRENCE_WINDOW_MS = 14 * 24 * 3600 * 1000;
+// Past-tense summaries for auto-applied repairs, so the activity
+// list reads as a report ("Fixed: ...") rather than an offer.
+const AUTO_SUMMARIES: Record<string, string> = {
+  clear_false_attach_failure:
+    "Luna fixed this on her own overnight: she checked the live listing, the video was on it, and she cleared the false failure row.",
+  release_stuck_reel_hold:
+    "Luna fixed this on her own overnight: the video was ready, so she released the hold and the post will go ahead.",
+  correct_stamp_price:
+    "Luna fixed this on her own overnight: she checked the live listing, it already showed the new price, and she corrected your records.",
+};
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -517,15 +563,24 @@ async function consumeVerdicts(svc: any, userId: string): Promise<void> {
 // proposal instead of being touched.
 // ---------------------------------------------------------------------
 
-async function markApplied(svc: any, prop: any, before: any, after: any) {
-  await svc.from("luna_repairs").update({
+async function markApplied(
+  svc: any, prop: any, before: any, after: any,
+  actor: string = "user_tap",
+) {
+  const patch: any = {
     status: "applied",
-    actor: "user_tap",
+    actor,
     before_state: before,
     after_state: after,
     applied_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  }).eq("id", prop.id);
+  };
+  // Report-after (spec §12): an auto-applied repair's summary reads
+  // as something Luna DID, not something she is offering to do.
+  if (actor === "auto" && AUTO_SUMMARIES[prop.action]) {
+    patch.summary = AUTO_SUMMARIES[prop.action];
+  }
+  await svc.from("luna_repairs").update(patch).eq("id", prop.id);
 }
 
 async function markExpired(svc: any, prop: any, note: string) {
@@ -537,7 +592,9 @@ async function markExpired(svc: any, prop: any, note: string) {
   return json({ ok: false, expired: true, message: note }, 200);
 }
 
-async function executeRepair(svc: any, userId: string, prop: any) {
+async function executeRepair(
+  svc: any, userId: string, prop: any, actor: string = "user_tap",
+) {
   const { data: row } = await svc.from("auto_posting_queue")
     .select("*").eq("id", prop.queue_row_id).eq("user_id", userId).maybeSingle();
 
@@ -558,7 +615,7 @@ async function executeRepair(svc: any, userId: string, prop: any) {
         awaiting_reel: false, error_message: cleaned,
       }).eq("id", row.id);
       if (error) return json({ ok: false, message: "The update didn't go through — nothing was changed." }, 200);
-      await markApplied(svc, prop, before, { awaiting_reel: false, error_message: cleaned });
+      await markApplied(svc, prop, before, { awaiting_reel: false, error_message: cleaned }, actor);
       return json({ ok: true, message: "Hold released — the post will go ahead on the next pass." });
     }
 
@@ -576,7 +633,7 @@ async function executeRepair(svc: any, userId: string, prop: any) {
       const { error } = await svc.from("auto_posting_queue")
         .update({ created_at: front }).eq("id", row.id);
       if (error) return json({ ok: false, message: "The reorder didn't go through — nothing was changed." }, 200);
-      await markApplied(svc, prop, before, { created_at: front });
+      await markApplied(svc, prop, before, { created_at: front }, actor);
       return json({ ok: true, message: "Moved to the front — the video attach runs next." });
     }
 
@@ -587,7 +644,7 @@ async function executeRepair(svc: any, userId: string, prop: any) {
       const before = { row };
       const { error } = await svc.from("auto_posting_queue").delete().eq("id", row.id);
       if (error) return json({ ok: false, message: "The removal didn't go through — nothing was changed." }, 200);
-      await markApplied(svc, prop, before, { deleted: true });
+      await markApplied(svc, prop, before, { deleted: true }, actor);
       return json({ ok: true, message: "Dead row removed." });
     }
 
@@ -601,7 +658,7 @@ async function executeRepair(svc: any, userId: string, prop: any) {
       const before = { row };
       const { error } = await svc.from("auto_posting_queue").delete().eq("id", row.id);
       if (error) return json({ ok: false, message: "The removal didn't go through — nothing was changed." }, 200);
-      await markApplied(svc, prop, before, { deleted: true });
+      await markApplied(svc, prop, before, { deleted: true }, actor);
       return json({ ok: true, message: "False failure cleared — the video was on the listing all along." });
     }
 
@@ -630,13 +687,108 @@ async function executeRepair(svc: any, userId: string, prop: any) {
       }).eq("user_id", userId).eq("vin", row.vin);
       if (invErr) return json({ ok: false, message: "The record update didn't go through — nothing was changed." }, 200);
       await svc.from("auto_posting_queue").delete().eq("id", row.id);
-      await markApplied(svc, prop, before, { marketplace_posted_price: target, row_deleted: true });
+      await markApplied(svc, prop, before, { marketplace_posted_price: target, row_deleted: true }, actor);
       return json({ ok: true, message: "Record corrected to the live price and the failed row cleared." });
     }
 
     default:
       return json({ ok: false, message: "Unknown repair action." }, 200);
   }
+}
+
+// ---------------------------------------------------------------------
+// Phase 2 auto-apply (spec §12). Runs ONLY from the sweep handler —
+// interactive evaluate never auto-applies. A proposal may auto-apply
+// only when ALL of these hold:
+//   - its class is one of AUTO_APPLY_ACTIONS and the owner kill
+//     switch for that class is ON in luna_repairs_config;
+//   - the user has not opted out (luna_ask_before_fixing);
+//   - the evidence bar is already met: verify-gated classes must be
+//     "ready" (a verdict proved the fix); the hold release is
+//     "proposed" on a DB fact that executeRepair re-checks live;
+//   - the recurrence guard has not tripped for (user, class).
+// clear_phantom_stamp can never appear here: it is not in
+// AUTO_APPLY_ACTIONS, has no config row, and has no applier.
+// ---------------------------------------------------------------------
+
+async function loadAutoConfig(svc: any): Promise<Map<string, boolean>> {
+  const map = new Map<string, boolean>();
+  const { data } = await svc.from("luna_repairs_config")
+    .select("action, auto_apply");
+  for (const r of data ?? []) map.set(r.action, r.auto_apply === true);
+  return map;
+}
+
+async function autoApplyForUser(
+  svc: any, userId: string, config: Map<string, boolean>,
+): Promise<number> {
+  const enabled = AUTO_APPLY_ACTIONS.filter((a) => config.get(a) === true);
+  if (!enabled.length) return 0;
+
+  // Per-user opt-out (spec §12): "Ask me before fixing" demotes
+  // every auto-fix for this account back to an ASK proposal.
+  const { data: settings } = await svc.from("user_settings")
+    .select("luna_ask_before_fixing").eq("user_id", userId).maybeSingle();
+  if (settings?.luna_ask_before_fixing === true) return 0;
+
+  const { data: open } = await svc.from("luna_repairs")
+    .select("*").eq("user_id", userId)
+    .in("action", enabled)
+    .in("status", ["proposed", "ready"])
+    .order("created_at", { ascending: true }).limit(20);
+
+  // Evidence bar per class: verify-gated classes only at "ready"
+  // (verdict-proven); the hold release at "proposed" (DB fact,
+  // re-checked inside executeRepair against the live rows).
+  const candidates = (open ?? []).filter((p: any) =>
+    !p.evidence?.escalated &&
+    (p.action === "release_stuck_reel_hold" || p.status === "ready"));
+  if (!candidates.length) return 0;
+
+  // Recurrence guard (spec §12): count this user's auto-applies per
+  // class inside the window once, then track locally as we apply.
+  const since = new Date(Date.now() - AUTO_RECURRENCE_WINDOW_MS).toISOString();
+  const priorByAction = new Map<string, number>();
+  for (const a of enabled) {
+    const { count } = await svc.from("luna_repairs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId).eq("action", a)
+      .eq("actor", "auto").eq("status", "applied")
+      .gte("applied_at", since);
+    priorByAction.set(a, count ?? 0);
+  }
+
+  let applied = 0;
+  for (const prop of candidates) {
+    if ((priorByAction.get(prop.action) ?? 0) >= AUTO_RECURRENCE_PRIOR_LIMIT) {
+      // The guard trips: stop fixing this class for this user and
+      // escalate (same evidence shape as the verify escalation, so
+      // the watchdog digest surfaces it). The proposal stays open —
+      // the user can still tap Fix; Luna just stops doing it alone.
+      await svc.from("luna_repairs").update({
+        evidence: {
+          ...prop.evidence,
+          escalated: {
+            at: new Date().toISOString(),
+            reason: `auto-fix paused: this is the 3rd ${prop.action} case in 14 days — repeated identical repairs are a defect signal, not maintenance`,
+            failure: null,
+            reported: false,
+          },
+        },
+        summary: `Luna has fixed this same kind of problem several times in the last two weeks, so she stopped fixing it on her own and flagged it for a closer look. You can still tap Fix here — but if this keeps happening, something upstream is broken.`,
+        updated_at: new Date().toISOString(),
+      }).eq("id", prop.id);
+      continue;
+    }
+    await executeRepair(svc, userId, prop, "auto");
+    const { data: after } = await svc.from("luna_repairs")
+      .select("status").eq("id", prop.id).maybeSingle();
+    if (after?.status === "applied") {
+      applied++;
+      priorByAction.set(prop.action, (priorByAction.get(prop.action) ?? 0) + 1);
+    }
+  }
+  return applied;
 }
 
 // ---------------------------------------------------------------------
@@ -697,17 +849,32 @@ Deno.serve(async (req: Request) => {
   const action = body?.action;
   const svc = serviceClient();
 
-  // Daily sweep: propose-only, secret-gated (spec §12).
+  // Daily sweep: secret-gated (spec §12). Detection + verdict
+  // consumption for every account, then the Phase 2 auto-apply pass
+  // (a no-op unless a class is enabled in luna_repairs_config — with
+  // every class off, the sweep's outcome is exactly Phase 1's:
+  // proposals only). "only_user" scopes the run to one account for
+  // smoke tests; the nightly cron never sends it.
   if (action === "sweep") {
     const secret = Deno.env.get("LUNA_SWEEP_SECRET") ?? "";
     if (!secret || body?.secret !== secret) return json({ error: "unauthorized" }, 401);
-    const { data: users } = await svc.from("user_settings").select("user_id").limit(2000);
+    const onlyUser = typeof body?.only_user === "string" && body.only_user
+      ? body.only_user : null;
+    const config = await loadAutoConfig(svc);
+    const { data: users } = onlyUser
+      ? { data: [{ user_id: onlyUser }] }
+      : await svc.from("user_settings").select("user_id").limit(2000);
     let proposals = 0;
+    let autoApplied = 0;
     for (const u of users ?? []) {
       await consumeVerdicts(svc, u.user_id);
       proposals += await runDetection(svc, u.user_id);
+      autoApplied += await autoApplyForUser(svc, u.user_id, config);
     }
-    return json({ ok: true, users: (users ?? []).length, proposals_created: proposals });
+    return json({
+      ok: true, users: (users ?? []).length,
+      proposals_created: proposals, auto_applied: autoApplied,
+    });
   }
 
   const user = await verifyUser(req);
