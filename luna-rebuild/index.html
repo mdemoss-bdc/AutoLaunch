@@ -8598,6 +8598,11 @@ function lunaAssistantParseTimeOfDay(s) {
   if (/\bmidnight\b/.test(t)) return { h: 0, m: 0 };
   const m = t.match(/\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b/);
   if (!m) return null;
+  // The time must be a standalone token: in a malformed time like
+  // "12.10pm" or "12-10pm" the pattern would otherwise match the
+  // "10pm" fragment, silently producing a 10 PM due time and mangled
+  // reminder text (2026-11-18 text-fidelity fix).
+  if (m.index > 0 && (t.charAt(m.index - 1) === "." || t.charAt(m.index - 1) === "-")) return null;
   let h = parseInt(m[1], 10);
   const min = m[2] ? parseInt(m[2], 10) : 0;
   if (h < 1 || h > 12) return null;
@@ -8633,11 +8638,23 @@ function lunaAssistantParseReminder(raw, now) {
     .replace(/\b(tomorrow|today)\b/gi, " ")
     .replace(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi, " ")
     .replace(/\bnoon\b|\bmidnight\b/gi, " ")
-    .replace(/\b\d{1,2}(?::[0-5]\d)?\s*(am|pm)\b/gi, " ")
+    .replace(/\b\d{1,2}(?::[0-5]\d)?\s*(am|pm)\b/gi, function (mm, g1, off, whole) {
+      // Same standalone-token guard as lunaAssistantParseTimeOfDay:
+      // never eat a fragment of a malformed time like "12.10pm".
+      const prev = off > 0 ? whole.charAt(off - 1) : "";
+      return (prev === "." || prev === "-") ? mm : " ";
+    })
     .replace(/\s+/g, " ")
     .trim();
-  while (/^(on|at|by|to)\s/i.test(text) || /\s(on|at|by)$/i.test(text)) {
-    text = text.replace(/^(on|at|by|to)\s+/i, "").replace(/\s+(on|at|by)$/i, "").trim();
+  // Strip framing connectors and stray edge punctuation the time
+  // expression leaves behind ("call Tom at 5pm." -> "call Tom"),
+  // looping until stable. The reminder text itself is preserved
+  // byte-for-byte beyond the framing (2026-11-18 text-fidelity fix).
+  for (;;) {
+    const before = text;
+    text = text.replace(/^(on|at|by|to)\s+/i, "").replace(/\s+(on|at|by)$/i, "")
+      .replace(/^[.,!?;:]+\s*/, "").replace(/[.,!?;:]+$/, "").trim();
+    if (text === before) break;
   }
   if (!text) return null;
   const due = new Date(now.getTime());
