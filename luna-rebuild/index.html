@@ -8588,6 +8588,7 @@ async function lunaRepairsAct(action, id, btn) {
 // patterns below can't match gets a plain "I can't do that one yet".
 let lunaRemindersOpen = [];
 let lunaAssistantPending = null;
+let lunaAssistantNotice = null;
 let lunaAssistantBusy = false;
 
 const LUNA_WEEKDAYS = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
@@ -8610,13 +8611,31 @@ function lunaAssistantParseTimeOfDay(s) {
   return { h: h, m: min };
 }
 
+// Parse a relative time offset — "in 5 minutes", "in 2 hours",
+// "in an hour", "in half an hour", "in a minute" — into { ms }, or
+// null when the string carries no relative offset. Pure.
+function lunaAssistantParseRelative(s) {
+  const t = String(s || "").toLowerCase();
+  if (/\bin\s+half\s+an\s+hour\b/.test(t)) return { ms: 30 * 60000 };
+  if (/\bin\s+an\s+hour\b/.test(t)) return { ms: 60 * 60000 };
+  if (/\bin\s+a\s+minute\b/.test(t)) return { ms: 60000 };
+  const m = t.match(/\bin\s+(\d+)\s*(minutes?|mins?|hours?|hrs?)\b/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n > 0) return { ms: n * (m[2].charAt(0) === "h" ? 3600000 : 60000) };
+  }
+  return null;
+}
+
 // Parse a reminder command into { text, dueAt } — or null when there
 // is no clean time reference. Pure: `now` is injected for testing.
 // Accepts "remind me to <text> at 5pm", "remind me <text> tomorrow",
 // "remind me to <text> tomorrow at 5pm", "remind me to <text> on
-// Friday at 8:30am". A date with no clock time lands at 9:00 AM; a
-// clock time with no date means today, rolling to tomorrow when that
-// time has already passed.
+// Friday at 8:30am", "remind me to <text> in 5 minutes". A date
+// with no clock time lands at 9:00 AM; a clock time with no date
+// means today, rolling to tomorrow when that time has already
+// passed. A relative offset means now + the offset and stands
+// alone as the command's time expression.
 function lunaAssistantParseReminder(raw, now) {
   const s = String(raw || "").trim().replace(/\s+/g, " ");
   const head = s.match(/^remind me(?: to)?\s+(.+)$/i);
@@ -8632,9 +8651,14 @@ function lunaAssistantParseReminder(raw, now) {
     const wm = lower.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
     if (wm) weekday = LUNA_WEEKDAYS[wm[1]];
   }
+  const rel = lunaAssistantParseRelative(lower);
   const tod = lunaAssistantParseTimeOfDay(lower);
-  if (dayOffset === null && weekday === null && !tod) return null;
+  if (!rel && dayOffset === null && weekday === null && !tod) return null;
   let text = rest
+    .replace(/\bin\s+half\s+an\s+hour\b/gi, " ")
+    .replace(/\bin\s+an\s+hour\b/gi, " ")
+    .replace(/\bin\s+a\s+minute\b/gi, " ")
+    .replace(/\bin\s+\d+\s*(?:minutes?|mins?|hours?|hrs?)\b/gi, " ")
     .replace(/\b(tomorrow|today)\b/gi, " ")
     .replace(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi, " ")
     .replace(/\bnoon\b|\bmidnight\b/gi, " ")
@@ -8657,6 +8681,13 @@ function lunaAssistantParseReminder(raw, now) {
     if (text === before) break;
   }
   if (!text) return null;
+  if (rel) {
+    // A relative offset stands alone as the time expression: it
+    // takes precedence over any clock/day words in the same command
+    // (those were still stripped from the text above), and the due
+    // time is simply now + the offset (2026-11-18 relative times).
+    return { text: text, dueAt: new Date(now.getTime() + rel.ms) };
+  }
   const due = new Date(now.getTime());
   if (weekday !== null) {
     const add = (weekday - now.getDay() + 7) % 7;
@@ -8855,6 +8886,15 @@ function lunaAssistantRender() {
     // below the fold with no way to scroll to it (2026-11-18).
     card.scrollIntoView({ block: "nearest" });
   }
+  if (lunaAssistantNotice) {
+    const nCard = document.createElement("div");
+    nCard.className = "rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5";
+    const np = document.createElement("p");
+    np.className = "text-xs text-amber-800 leading-relaxed";
+    np.textContent = lunaAssistantNotice;
+    nCard.appendChild(np);
+    sec.appendChild(nCard);
+  }
   const cmdRow = document.createElement("div");
   cmdRow.className = "flex items-center gap-2";
   const input = document.createElement("input");
@@ -8914,14 +8954,19 @@ function lunaAssistantRun() {
   if (!raw || lunaAssistantBusy) return;
   const intent = lunaAssistantParseCommand(raw, new Date());
   if (!intent) {
-    lunaSupportHistory.push({ role: "user", body: raw });
-    lunaSupportRender("user", raw);
-    const msg = "I can\u2019t do that one yet. I can set reminders \u2014 try \u201cremind me to call Tom tomorrow at 5pm\u201d \u2014 and I can check your account: ask \u201cwhat\u2019s wrong?\u201d";
-    lunaSupportHistory.push({ role: "assistant", body: msg });
-    lunaSupportRender("assistant", msg);
+    // The failure belongs in THIS panel: the user typed in the
+    // assistant box and is looking here. The old fall-through
+    // pushed the deflection into the support chat, where it read
+    // as if the chat had rejected a command it never saw
+    // (2026-11-18).
+    lunaAssistantNotice = /^remind me\b/i.test(raw)
+      ? "I couldn\u2019t set that reminder \u2014 I need a time I understand, like \u201c5pm\u201d, \u201ctomorrow at 9am\u201d, or \u201cin 5 minutes\u201d."
+      : "I can\u2019t do that one yet. I can set reminders \u2014 try \u201cremind me to call Tom tomorrow at 5pm\u201d \u2014 and I can check your account: ask \u201cwhat\u2019s wrong?\u201d";
     if (input) input.value = "";
+    lunaAssistantRender();
     return;
   }
+  lunaAssistantNotice = null;
   if (intent.kind === "remind") {
     lunaAssistantPending = intent;
     if (input) input.value = "";
