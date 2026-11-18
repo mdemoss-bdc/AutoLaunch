@@ -3208,7 +3208,7 @@ def _price_update_queue_rows(uid, inv_rows, blocked_vins, failed_rows, now=None)
             current_i = int(current_price)
         except (TypeError, ValueError):
             continue
-        if current_i <= 0 or posted_i <= 0 or current_i == posted_i:
+        if current_i <= 0 or posted_i <= 0 or abs(current_i - posted_i) < 500:
             continue
         fail_key = (vin, posted_i, current_i)
         if attempts.get(fail_key, 0) >= PRICE_RETRY_MAX_ATTEMPTS:
