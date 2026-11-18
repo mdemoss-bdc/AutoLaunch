@@ -575,6 +575,17 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 /* Pills bar scrolls internally on narrow screens instead of widening the page */
 .pills-scroll { scrollbar-width: none; }
 .pills-scroll::-webkit-scrollbar { display: none; }
+/* Ask Luna two-column balance (346, 2026-11-18): on wide screens the
+   personal-assistant box sizes to its own content instead of
+   stretching to the support column's height — flex stretch painted
+   its pale background over a tall empty box while the support side
+   stacked repairs + chat ("layout alignment is off, makes it look
+   cheesy" — Matt). Top-aligned, content-height; it still scrolls
+   internally if its content ever outgrows the row. Below the lg
+   breakpoint the boxes stack and this rule does not apply. */
+@media (min-width: 1024px) {
+  #lunaSupportModal #lunaAssistantBox { align-self: flex-start; max-height: 100%; }
+}
 </style>
 </head>
 <!-- ============================================================================== -->
@@ -4313,6 +4324,11 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
          the other. Below the lg breakpoint they stack, assistant
          first, as 344 shipped. The card keeps its own
          overflow-y-auto as a safety net. -->
+    <!-- [LUNA-PANEL-346] Balance pass (2026-11-18): the assistant
+         box no longer stretches to the support column's height —
+         see the #lunaAssistantBox rule in the head <style> — and
+         Recent Luna activity is a collapsible drop-down in the
+         repairs render (collapsed by default). -->
     <div class="flex flex-col lg:flex-row gap-4 flex-1" style="min-height:0;">
     <div id="lunaAssistantBox" class="rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-3.5 space-y-3 flex-1 min-w-0 overflow-y-auto">
       <div class="flex items-center gap-2">
@@ -8437,6 +8453,11 @@ async function sendLunaSupportTicket() {
 let lunaRepairsBusy = false;
 let lunaRepairsOpen = [];
 let lunaRepairsActivity = [];
+// [LUNA-PANEL-346] Recent Luna activity renders as a collapsible
+// drop-down, collapsed by default (Matt, 2026-11-18). The flag lives
+// outside the render so a reload after an Undo doesn't slam it shut
+// on the user mid-task.
+let lunaRepairsActivityOpen = false;
 
 async function lunaRepairsInvoke(body) {
   try {
@@ -8517,11 +8538,38 @@ function lunaRepairsRender() {
     sec.appendChild(card);
   }
   if (lunaRepairsActivity.length) {
-    const h = document.createElement("p");
-    h.className = "text-[11px] font-bold text-slate-500 uppercase tracking-wide pt-1";
-    h.textContent = "Recent Luna activity";
-    sec.appendChild(h);
-    for (const a of lunaRepairsActivity.slice(0, 5)) {
+    // [LUNA-PANEL-346] The activity list is a collapsible drop-down,
+    // collapsed by default: a header row (label + entry count +
+    // chevron) toggles the list. Entries and their Undo buttons are
+    // built exactly as before, just nested in the collapsible
+    // container; the section's delegated click handling covers both
+    // the toggle and Undo.
+    const acts = lunaRepairsActivity.slice(0, 5);
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "flex items-center gap-2 w-full pt-1 cursor-pointer text-left";
+    head.setAttribute("data-luna-activity-toggle", "1");
+    head.setAttribute("aria-expanded", lunaRepairsActivityOpen ? "true" : "false");
+    const hl = document.createElement("span");
+    hl.className = "text-[11px] font-bold text-slate-500 uppercase tracking-wide";
+    hl.textContent = "Recent Luna activity";
+    head.appendChild(hl);
+    const count = document.createElement("span");
+    count.className = "px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-bold leading-none";
+    count.textContent = String(acts.length);
+    head.appendChild(count);
+    const hsp = document.createElement("span");
+    hsp.className = "flex-1";
+    head.appendChild(hsp);
+    const chev = document.createElement("i");
+    chev.className = "fa-solid fa-chevron-down text-[11px] text-slate-400";
+    chev.style.transition = "transform .15s ease";
+    if (lunaRepairsActivityOpen) chev.style.transform = "rotate(180deg)";
+    head.appendChild(chev);
+    sec.appendChild(head);
+    const list = document.createElement("div");
+    list.className = lunaRepairsActivityOpen ? "space-y-2" : "space-y-2 hidden";
+    for (const a of acts) {
       const row = document.createElement("div");
       row.className = "flex items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2";
       const t = document.createElement("span");
@@ -8536,8 +8584,9 @@ function lunaRepairsRender() {
         undo.setAttribute("data-repair-id", a.id);
         row.appendChild(undo);
       }
-      sec.appendChild(row);
+      list.appendChild(row);
     }
+    sec.appendChild(list);
   }
 }
 
@@ -8569,6 +8618,14 @@ async function lunaRepairsAct(action, id, btn) {
   const sec = document.getElementById("lunaRepairsSection");
   if (!sec) return;
   sec.addEventListener("click", (ev) => {
+    // [LUNA-PANEL-346] The activity drop-down header toggles the
+    // list open/closed; it is not a repair action.
+    const tog = ev.target && ev.target.closest ? ev.target.closest("[data-luna-activity-toggle]") : null;
+    if (tog) {
+      lunaRepairsActivityOpen = !lunaRepairsActivityOpen;
+      lunaRepairsRender();
+      return;
+    }
     const btn = ev.target && ev.target.closest ? ev.target.closest("[data-repair-action]") : null;
     if (!btn) return;
     lunaRepairsAct(btn.getAttribute("data-repair-action"), btn.getAttribute("data-repair-id"), btn);
