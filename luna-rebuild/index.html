@@ -8484,6 +8484,20 @@ function lunaRepairsActivityText(a) {
   return (a.summary || a.action) + whenTxt;
 }
 
+function lunaRepairsIsCluster(p) {
+  return !!p && p.action === "post_failure_cluster";
+}
+
+function lunaClusterPlain(p) {
+  const ev = (p && p.evidence) || {};
+  const n = Number(ev.count) || 0;
+  const sig = typeof ev.signature === "string" ? ev.signature : "";
+  if (sig.indexOf("gate_rejected") >= 0) {
+    return n + (n === 1 ? " post" : " posts") + " failed at the video gate (" + sig.split(":").pop() + ")";
+  }
+  return n + (n === 1 ? " post" : " posts") + " failed the same way (" + sig + ")";
+}
+
 function lunaRepairsUndoable(a) {
   if (!a.applied_at) return false;
   return Date.now() - new Date(a.applied_at).getTime() < 7 * 24 * 3600 * 1000;
@@ -8498,13 +8512,50 @@ function lunaRepairsRender() {
     return;
   }
   sec.classList.remove("hidden");
-  if (lunaRepairsOpen.length) {
+  if (lunaRepairsOpen.some(function (p) { return !lunaRepairsIsCluster(p); })) {
     const h = document.createElement("p");
     h.className = "text-[11px] font-bold text-slate-500 uppercase tracking-wide";
     h.textContent = "Luna found things she can fix";
     sec.appendChild(h);
   }
   for (const p of lunaRepairsOpen) {
+    if (lunaRepairsIsCluster(p)) {
+      // Alert card, not a repair: no Fix it (there is nothing for
+      // the user to fix) — summary, the failure in plain terms,
+      // the escalation note, and a dismiss only.
+      const card = document.createElement("div");
+      card.className = "rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 space-y-2";
+      const h = document.createElement("p");
+      h.className = "text-[11px] font-bold text-amber-700 uppercase tracking-wide";
+      h.textContent = "Heads up \u2014 repeated post failures";
+      card.appendChild(h);
+      const t = document.createElement("p");
+      t.className = "text-xs text-slate-800 leading-relaxed";
+      t.textContent = p.summary || "Several posts hit the same failure.";
+      card.appendChild(t);
+      const d = document.createElement("p");
+      d.className = "text-[11px] font-semibold text-slate-500";
+      d.textContent = lunaClusterPlain(p);
+      card.appendChild(d);
+      const note = document.createElement("p");
+      note.className = "text-[11px] text-slate-500 leading-relaxed";
+      note.textContent = "Luna escalated this for investigation \u2014 there's nothing you need to fix.";
+      card.appendChild(note);
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-2";
+      const spacer = document.createElement("span");
+      spacer.className = "flex-1";
+      row.appendChild(spacer);
+      const no = document.createElement("button");
+      no.className = "px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer";
+      no.textContent = "Got it";
+      no.setAttribute("data-repair-action", "dismiss");
+      no.setAttribute("data-repair-id", p.id);
+      row.appendChild(no);
+      card.appendChild(row);
+      sec.appendChild(card);
+      continue;
+    }
     const card = document.createElement("div");
     card.className = "rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 space-y-2";
     const t = document.createElement("p");
@@ -8797,10 +8848,19 @@ function lunaAssistantFmtDue(d) {
 // user's open reminders. Pure given its inputs.
 function lunaAssistantBriefingLines(proposals, activity, reminders, now) {
   const lines = [];
-  if (proposals && proposals.length) {
+  const fixable = (proposals || []).filter(function (p) { return !lunaRepairsIsCluster(p); });
+  const clusters = (proposals || []).filter(function (p) { return lunaRepairsIsCluster(p); });
+  if (clusters.length) {
+    const nHit = clusters.reduce(function (sum, p) { return sum + (Number((p.evidence || {}).count) || 0); }, 0);
     lines.push({
       target: "repairs",
-      text: proposals.length + (proposals.length === 1 ? " repair is" : " repairs are") + " waiting for your OK \u2014 the cards are in the support box."
+      text: "Heads up: " + nHit + (nHit === 1 ? " post" : " posts") + " hit the same failure \u2014 details in the support box."
+    });
+  }
+  if (fixable.length) {
+    lines.push({
+      target: "repairs",
+      text: fixable.length + (fixable.length === 1 ? " repair is" : " repairs are") + " waiting for your OK \u2014 the cards are in the support box."
     });
   }
   const open = (reminders || []).filter(function (r) { return !r.done_at; });
@@ -8996,10 +9056,14 @@ async function lunaAssistantWhatsWrong() {
   await lunaRepairsLoad();
   lunaAssistantRender();
   let msg;
+  const fixableCount = lunaRepairsOpen.filter(function (p) { return !lunaRepairsIsCluster(p); }).length;
+  const hasCluster = lunaRepairsOpen.length > fixableCount;
   if (!lunaRepairsOpen.length) {
     msg = "I checked just now \u2014 nothing is stuck that I can fix. If something looks wrong, tell me which car and I\u2019ll dig in.";
+  } else if (fixableCount) {
+    msg = "I checked just now \u2014 I found " + fixableCount + (fixableCount === 1 ? " thing" : " things") + " I can fix. The cards are in the support box \u2014 tap \u201cFix it\u201d on any of them and I\u2019ll take care of it." + (hasCluster ? " Separately, several posts hit the same failure \u2014 there's a heads-up card in the support box about that one, and I've escalated it." : "");
   } else {
-    msg = "I checked just now \u2014 I found " + lunaRepairsOpen.length + (lunaRepairsOpen.length === 1 ? " thing" : " things") + " I can fix. The cards are in the support box \u2014 tap \u201cFix it\u201d on any of them and I\u2019ll take care of it.";
+    msg = "I checked just now \u2014 several posts hit the same failure. There's a heads-up card in the support box with the details, and I've escalated it for a closer look \u2014 that one isn't something you need to fix.";
   }
   lunaSupportHistory.push({ role: "assistant", body: msg });
   lunaSupportRender("assistant", msg);
