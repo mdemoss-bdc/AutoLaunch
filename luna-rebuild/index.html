@@ -4291,7 +4291,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
      (RLS-scoped) plus the support knowledge base. The "Send to
      support" button files a support ticket with the transcript. -->
 <div id="lunaSupportModal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-lg rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900 max-h-[90vh] flex flex-col">
+  <div class="glass-card w-full max-w-lg rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xl bg-white text-slate-900 max-h-[90vh] overflow-y-auto flex flex-col">
     <div class="flex items-center justify-between border-b border-slate-200 pb-3">
       <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
         <span>🌙</span> <span>Ask Luna</span>
@@ -8781,6 +8781,11 @@ function lunaAssistantRender() {
     row.appendChild(no);
     card.appendChild(row);
     sec.appendChild(card);
+    // Keep the echo-back reachable: the modal card scrolls (see the
+    // overflow-y-auto on #lunaSupportModal's card), so pull a freshly
+    // rendered confirm card into view — it used to render clipped
+    // below the fold with no way to scroll to it (2026-11-18).
+    card.scrollIntoView({ block: "nearest" });
   }
   const cmdRow = document.createElement("div");
   cmdRow.className = "flex items-center gap-2";
