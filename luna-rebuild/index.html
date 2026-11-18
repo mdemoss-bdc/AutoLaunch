@@ -1085,6 +1085,7 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <a href="#" onclick="openLunaSupport(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <span class="w-4 text-center text-xs">🌙</span>
         <span>Ask Luna</span>
+        <span id="lunaReminderNavBadge" class="ml-auto rounded-full bg-rose-500 text-white text-[10px] font-bold" style="display:none; min-width:18px; height:18px; line-height:18px; padding:0 5px; text-align:center;">0</span>
       </a>
       <a href="#" onclick="openSuggestionModal(); return false;" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
         <i class="fa-solid fa-lightbulb w-4 text-amber-500 text-xs"></i>
@@ -4298,18 +4299,36 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       </h3>
       <button onclick="closeModal('lunaSupportModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-sm"></i></button>
     </div>
-    <!-- [LUNA-REPAIRS-342-MARKUP-BEGIN] Luna Repairs (Phase 1):
-         proposal cards + activity, rendered by lunaRepairsRender
-         from the luna-repairs Edge Function. Hidden until the
-         function returns something to show. -->
-    <div id="lunaRepairsSection" class="hidden space-y-2"></div>
-    <!-- [LUNA-REPAIRS-342-MARKUP-END] -->
-    <!-- [LUNA-ASSISTANT-343-MARKUP-BEGIN] Luna Phase 3 (assistant):
-         briefing + reminders + commands, rendered by
-         lunaAssistantRender from luna_reminders + the luna-repairs
-         data loaded above. Sits under the repairs section. -->
-    <div id="lunaAssistantSection" class="hidden space-y-2"></div>
-    <!-- [LUNA-ASSISTANT-343-MARKUP-END] -->
+    <!-- [LUNA-BOXES-344-MARKUP-BEGIN] Luna Phase 3 surface pass
+         (2026-11-18): the two Lunas get separate boxes so their
+         inputs can no longer be mistaken for each other — the
+         personal assistant (briefing + reminders + Tell Luna
+         commands) in its own card first, AutoLaunch support
+         (repairs + chat) in its own card below. -->
+    <div id="lunaAssistantBox" class="rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-3.5 space-y-3">
+      <div class="flex items-center gap-2">
+        <span class="text-sm">🌙</span>
+        <p class="text-xs font-extrabold text-slate-900 uppercase tracking-wide">Your personal assistant</p>
+      </div>
+      <!-- [LUNA-ASSISTANT-343-MARKUP-BEGIN] Luna Phase 3 (assistant):
+           briefing + reminders + commands, rendered by
+           lunaAssistantRender from luna_reminders + the luna-repairs
+           data loaded below. Lives in its own box (344) above the
+           AutoLaunch support box. -->
+      <div id="lunaAssistantSection" class="hidden space-y-2"></div>
+      <!-- [LUNA-ASSISTANT-343-MARKUP-END] -->
+    </div>
+    <div id="lunaSupportBox" class="rounded-2xl border border-slate-200 p-3.5 space-y-3 flex flex-col flex-1" style="min-height:0;">
+      <div class="flex items-center gap-2">
+        <span class="text-sm">🔧</span>
+        <p class="text-xs font-extrabold text-slate-900 uppercase tracking-wide">AutoLaunch support</p>
+      </div>
+      <!-- [LUNA-REPAIRS-342-MARKUP-BEGIN] Luna Repairs (Phase 1):
+           proposal cards + activity, rendered by lunaRepairsRender
+           from the luna-repairs Edge Function. Hidden until the
+           function returns something to show. -->
+      <div id="lunaRepairsSection" class="hidden space-y-2"></div>
+      <!-- [LUNA-REPAIRS-342-MARKUP-END] -->
     <div id="lunaSupportMessages" class="flex-1 overflow-y-auto space-y-3 pr-1 min-h-[220px]"></div>
     <div class="flex items-end gap-2">
       <textarea id="lunaSupportInput" rows="2" maxlength="2000" placeholder="Ask about anything in AutoLaunch…"
@@ -4321,8 +4340,31 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <span class="text-[11px] text-slate-400">Luna can look at your account to diagnose problems.</span>
       <button onclick="sendLunaSupportTicket()" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Send to support</button>
     </div>
+    </div>
+    <!-- [LUNA-BOXES-344-MARKUP-END] -->
   </div>
 </div>
+
+<!-- [LUNA-WATCH-344-MARKUP-BEGIN] Due-reminder pop-up: filled and
+     shown by lunaReminderPopShow (the watcher in the script below)
+     when a reminder comes due while the app is open. It lives
+     OUTSIDE the Ask Luna modal so it can appear while the modal
+     is closed — the gap Matt's 2026-11-18 fire test caught. -->
+<div id="lunaReminderPop" class="fixed bottom-5 right-4 max-w-sm" style="display:none; z-index:80; width:min(24rem, calc(100vw - 2rem));">
+  <div class="glass-card rounded-2xl border-2 border-indigo-200 bg-white shadow-2xl p-4 space-y-2.5 text-slate-900">
+    <div class="flex items-center gap-2">
+      <span class="text-sm">🌙</span>
+      <p class="text-xs font-extrabold text-slate-900 uppercase tracking-wide">Reminder</p>
+    </div>
+    <p id="lunaReminderPopText" class="text-sm text-slate-800 leading-relaxed"></p>
+    <p id="lunaReminderPopWhen" class="text-[11px] text-slate-500"></p>
+    <div class="flex items-center gap-2">
+      <button id="lunaReminderPopDone" class="px-3.5 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Done</button>
+      <button id="lunaReminderPopDismiss" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Dismiss</button>
+    </div>
+  </div>
+</div>
+<!-- [LUNA-WATCH-344-MARKUP-END] -->
 
 <!-- Suggest an improvement: the sidebar tab files the signed-in
      user's idea into the `suggestions` table (insert-own RLS; the
@@ -8642,7 +8684,7 @@ function lunaAssistantBriefingLines(proposals, activity, reminders, now) {
   if (proposals && proposals.length) {
     lines.push({
       target: "repairs",
-      text: proposals.length + (proposals.length === 1 ? " repair is" : " repairs are") + " waiting for your OK \u2014 the cards are right above."
+      text: proposals.length + (proposals.length === 1 ? " repair is" : " repairs are") + " waiting for your OK \u2014 the cards are in the support box below."
     });
   }
   const open = (reminders || []).filter(function (r) { return !r.done_at; });
@@ -8695,10 +8737,8 @@ function lunaAssistantRender() {
   if (!sec) return;
   sec.innerHTML = "";
   sec.classList.remove("hidden");
-  const h = document.createElement("p");
-  h.className = "text-[11px] font-bold text-slate-500 uppercase tracking-wide";
-  h.textContent = "Luna assistant";
-  sec.appendChild(h);
+  // No in-section header: the surrounding box (344) carries the
+  // "Your personal assistant" label now.
   const lines = lunaAssistantBriefingLines(lunaRepairsOpen, lunaRepairsActivity, lunaRemindersOpen, new Date());
   const bCard = document.createElement("div");
   bCard.className = "rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 space-y-1.5";
@@ -8834,7 +8874,7 @@ async function lunaAssistantWhatsWrong() {
   if (!lunaRepairsOpen.length) {
     msg = "I checked just now \u2014 nothing is stuck that I can fix. If something looks wrong, tell me which car and I\u2019ll dig in.";
   } else {
-    msg = "I checked just now \u2014 I found " + lunaRepairsOpen.length + (lunaRepairsOpen.length === 1 ? " thing" : " things") + " I can fix. The cards are at the top of this window \u2014 tap \u201cFix it\u201d on any of them and I\u2019ll take care of it.";
+    msg = "I checked just now \u2014 I found " + lunaRepairsOpen.length + (lunaRepairsOpen.length === 1 ? " thing" : " things") + " I can fix. The cards are in the support box below \u2014 tap \u201cFix it\u201d on any of them and I\u2019ll take care of it.";
   }
   lunaSupportHistory.push({ role: "assistant", body: msg });
   lunaSupportRender("assistant", msg);
@@ -8961,6 +9001,119 @@ async function lunaAssistantDelete(id, btn) {
   });
 })();
 // [LUNA-ASSISTANT-343-JS-END]
+
+// ---- Luna reminder watcher (Phase 3 surface pass, 2026-11-18) ------
+// [LUNA-WATCH-344-JS-BEGIN]
+// The panel alone never reminded anyone: a reminder that came due
+// with the Ask Luna window closed just sat in the list (Matt's
+// 11:43 AM fire test, 2026-11-18 — no pop-up, nothing). This
+// watcher polls the user's open reminders while the app is open,
+// pops a card the first time each reminder is seen due this
+// session, and keeps a due-count badge on the Ask Luna sidebar
+// item. In-app only, no external notifications. The only write is
+// Done stamping done_at — the same update the panel's Done button
+// makes (via lunaAssistantDone). Dismiss closes the card only;
+// the reminder stays open and overdue in the panel.
+let lunaReminderPopped = {};
+let lunaReminderPopCurrentId = null;
+let lunaReminderWatchBusy = false;
+
+// [LUNA-WATCH-344-PURE-BEGIN]
+// Pure: the reminders from `list` that are due at `now` — open
+// (no done_at) with due_at <= now — earliest first. Rows with a
+// missing or unparseable due_at never count as due (the explicit
+// !r.due_at guard is load-bearing: new Date(null) is the epoch,
+// not NaN, so a null due_at would otherwise read as due).
+function lunaReminderDueList(list, now) {
+  const t = now.getTime();
+  return (list || []).filter(function (r) {
+    if (!r || r.done_at || !r.due_at) return false;
+    const d = new Date(r.due_at).getTime();
+    return !isNaN(d) && d <= t;
+  }).sort(function (a, b) { return new Date(a.due_at) - new Date(b.due_at); });
+}
+// [LUNA-WATCH-344-PURE-END]
+
+function lunaReminderBadgeRender(count) {
+  const b = document.getElementById("lunaReminderNavBadge");
+  if (!b) return;
+  if (count > 0) {
+    b.textContent = count > 9 ? "9+" : String(count);
+    b.style.display = "inline-block";
+  } else {
+    b.style.display = "none";
+  }
+}
+
+function lunaReminderPopHide() {
+  const pop = document.getElementById("lunaReminderPop");
+  if (pop) pop.style.display = "none";
+  lunaReminderPopCurrentId = null;
+}
+
+function lunaReminderPopShow(r) {
+  const pop = document.getElementById("lunaReminderPop");
+  if (!pop || !r) return;
+  lunaReminderPopCurrentId = r.id;
+  const t = document.getElementById("lunaReminderPopText");
+  if (t) t.textContent = r.text;
+  const w = document.getElementById("lunaReminderPopWhen");
+  if (w) {
+    const fw = lunaAssistantFmtDue(r.due_at);
+    w.textContent = fw.charAt(0).toUpperCase() + fw.slice(1) + ".";
+  }
+  pop.style.display = "block";
+}
+
+function lunaReminderPopNext() {
+  const due = lunaReminderDueList(lunaRemindersOpen, new Date());
+  const next = due.find(function (r) { return !lunaReminderPopped[r.id]; });
+  if (next) lunaReminderPopShow(next);
+}
+
+async function lunaReminderPopMarkDone() {
+  const id = lunaReminderPopCurrentId;
+  if (!id) { lunaReminderPopHide(); return; }
+  lunaReminderPopped[id] = true;
+  lunaReminderPopHide();
+  await lunaAssistantDone(id, null);
+  lunaReminderWatchTick();
+}
+
+function lunaReminderPopDismiss() {
+  if (lunaReminderPopCurrentId) lunaReminderPopped[lunaReminderPopCurrentId] = true;
+  lunaReminderPopHide();
+  lunaReminderPopNext();
+}
+
+async function lunaReminderWatchTick() {
+  if (lunaReminderWatchBusy) return;
+  if (!currentUser || typeof supabaseClient === "undefined" || !supabaseClient) {
+    lunaReminderBadgeRender(0);
+    return;
+  }
+  lunaReminderWatchBusy = true;
+  try {
+    await lunaRemindersLoad();
+    const due = lunaReminderDueList(lunaRemindersOpen, new Date());
+    lunaReminderBadgeRender(due.length);
+    if (!lunaReminderPopCurrentId) {
+      const next = due.find(function (r) { return !lunaReminderPopped[r.id]; });
+      if (next) lunaReminderPopShow(next);
+    }
+  } catch (e) { /* fail-silent: a missed tick retries in 45s */ }
+  finally { lunaReminderWatchBusy = false; }
+}
+
+(function lunaReminderWatchWire() {
+  const doneBtn = document.getElementById("lunaReminderPopDone");
+  const dismissBtn = document.getElementById("lunaReminderPopDismiss");
+  if (doneBtn) doneBtn.addEventListener("click", function () { lunaReminderPopMarkDone(); });
+  if (dismissBtn) dismissBtn.addEventListener("click", function () { lunaReminderPopDismiss(); });
+  setInterval(function () { lunaReminderWatchTick(); }, 45000);
+  setTimeout(function () { lunaReminderWatchTick(); }, 4000);
+})();
+// [LUNA-WATCH-344-JS-END]
 
 // Hand the signed-in session to the Chrome extension (via bridge.js on
 // this origin). The worker needs the access token, not just the user id:
