@@ -4304,6 +4304,12 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
          function returns something to show. -->
     <div id="lunaRepairsSection" class="hidden space-y-2"></div>
     <!-- [LUNA-REPAIRS-342-MARKUP-END] -->
+    <!-- [LUNA-ASSISTANT-343-MARKUP-BEGIN] Luna Phase 3 (assistant):
+         briefing + reminders + commands, rendered by
+         lunaAssistantRender from luna_reminders + the luna-repairs
+         data loaded above. Sits under the repairs section. -->
+    <div id="lunaAssistantSection" class="hidden space-y-2"></div>
+    <!-- [LUNA-ASSISTANT-343-MARKUP-END] -->
     <div id="lunaSupportMessages" class="flex-1 overflow-y-auto space-y-3 pr-1 min-h-[220px]"></div>
     <div class="flex items-end gap-2">
       <textarea id="lunaSupportInput" rows="2" maxlength="2000" placeholder="Ask about anything in AutoLaunch…"
@@ -8246,7 +8252,7 @@ function lunaSupportHideThinking() {
 
 function openLunaSupport() {
   openModal("lunaSupportModal");
-  lunaRepairsLoad();
+  lunaAssistantLoad();
   if (!lunaSupportHistory.length) {
     lunaSupportHistory.push({ role: "assistant", body: LUNA_SUPPORT_GREETING });
     lunaSupportRender("assistant", LUNA_SUPPORT_GREETING);
@@ -8516,6 +8522,440 @@ async function lunaRepairsAct(action, id, btn) {
   });
 })();
 // [LUNA-REPAIRS-342-JS-END]
+
+// ---- Luna Assistant (Phase 3, 2026-11-17) ----------------------------
+// [LUNA-ASSISTANT-343-JS-BEGIN]
+// The assistant half of Luna, inside the Ask Luna window: a briefing
+// card (repairs waiting on the user, reminders due today, yesterday's
+// Luna activity), reminders Luna keeps for the user
+// (public.luna_reminders, own-rows RLS), and a small deterministic
+// command set. Commands never send anything outward and never touch
+// code, settings, or listings: the reminder insert is the only write,
+// and it happens only after an echo-back confirmation. Anything the
+// patterns below can't match gets a plain "I can't do that one yet".
+let lunaRemindersOpen = [];
+let lunaAssistantPending = null;
+let lunaAssistantBusy = false;
+
+const LUNA_WEEKDAYS = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+
+function lunaAssistantParseTimeOfDay(s) {
+  const t = String(s || "").toLowerCase();
+  if (/\bnoon\b/.test(t)) return { h: 12, m: 0 };
+  if (/\bmidnight\b/.test(t)) return { h: 0, m: 0 };
+  const m = t.match(/\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  if (h < 1 || h > 12) return null;
+  if (m[3] === "am") { if (h === 12) h = 0; } else if (h !== 12) h += 12;
+  return { h: h, m: min };
+}
+
+// Parse a reminder command into { text, dueAt } — or null when there
+// is no clean time reference. Pure: `now` is injected for testing.
+// Accepts "remind me to <text> at 5pm", "remind me <text> tomorrow",
+// "remind me to <text> tomorrow at 5pm", "remind me to <text> on
+// Friday at 8:30am". A date with no clock time lands at 9:00 AM; a
+// clock time with no date means today, rolling to tomorrow when that
+// time has already passed.
+function lunaAssistantParseReminder(raw, now) {
+  const s = String(raw || "").trim().replace(/\s+/g, " ");
+  const head = s.match(/^remind me(?: to)?\s+(.+)$/i);
+  if (!head) return null;
+  const rest = head[1].trim();
+  if (!rest) return null;
+  const lower = rest.toLowerCase();
+  let dayOffset = null;
+  let weekday = null;
+  if (/\btomorrow\b/.test(lower)) dayOffset = 1;
+  else if (/\btoday\b/.test(lower)) dayOffset = 0;
+  else {
+    const wm = lower.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+    if (wm) weekday = LUNA_WEEKDAYS[wm[1]];
+  }
+  const tod = lunaAssistantParseTimeOfDay(lower);
+  if (dayOffset === null && weekday === null && !tod) return null;
+  let text = rest
+    .replace(/\b(tomorrow|today)\b/gi, " ")
+    .replace(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi, " ")
+    .replace(/\bnoon\b|\bmidnight\b/gi, " ")
+    .replace(/\b\d{1,2}(?::[0-5]\d)?\s*(am|pm)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  while (/^(on|at|by|to)\s/i.test(text) || /\s(on|at|by)$/i.test(text)) {
+    text = text.replace(/^(on|at|by|to)\s+/i, "").replace(/\s+(on|at|by)$/i, "").trim();
+  }
+  if (!text) return null;
+  const due = new Date(now.getTime());
+  if (weekday !== null) {
+    const add = (weekday - now.getDay() + 7) % 7;
+    due.setDate(due.getDate() + add);
+    due.setHours(tod ? tod.h : 9, tod ? tod.m : 0, 0, 0);
+    if (due.getTime() <= now.getTime()) due.setDate(due.getDate() + 7);
+  } else {
+    due.setDate(due.getDate() + (dayOffset || 0));
+    due.setHours(tod ? tod.h : 9, tod ? tod.m : 0, 0, 0);
+    if (due.getTime() <= now.getTime()) due.setDate(due.getDate() + 1);
+  }
+  return { text: text, dueAt: due };
+}
+
+// The full Phase 3 command set. Returns a typed intent or null.
+// Read-only intents run immediately; the reminder intent parks in
+// lunaAssistantPending until the user confirms the echo-back.
+function lunaAssistantParseCommand(raw, now) {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  if (/^remind me\b/i.test(s)) {
+    const r = lunaAssistantParseReminder(s, now);
+    return r ? { kind: "remind", text: r.text, dueAt: r.dueAt } : null;
+  }
+  if (/\bwhat\b[^.?!]*\b(wrong|broken|stuck)\b/i.test(s) || /\bwhat does luna see\b/i.test(s)) {
+    return { kind: "whats_wrong" };
+  }
+  if (/^(briefing|good morning|catch me up)\b/i.test(s)) {
+    return { kind: "briefing" };
+  }
+  return null;
+}
+
+function lunaAssistantFmtDue(d) {
+  const dt = new Date(d);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const day = new Date(dt);
+  day.setHours(0, 0, 0, 0);
+  const days = Math.round((day - start) / 86400000);
+  const time = dt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (days < 0) return "overdue \u00b7 " + dt.toLocaleDateString() + " " + time;
+  if (days === 0) return "today at " + time;
+  if (days === 1) return "tomorrow at " + time;
+  return dt.toLocaleDateString() + " " + time;
+}
+
+// Rules-based briefing lines from data the app already has: the
+// repairs evaluation (open proposals + recent activity) and the
+// user's open reminders. Pure given its inputs.
+function lunaAssistantBriefingLines(proposals, activity, reminders, now) {
+  const lines = [];
+  if (proposals && proposals.length) {
+    lines.push({
+      target: "repairs",
+      text: proposals.length + (proposals.length === 1 ? " repair is" : " repairs are") + " waiting for your OK \u2014 the cards are right above."
+    });
+  }
+  const open = (reminders || []).filter(function (r) { return !r.done_at; });
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const overdue = open.filter(function (r) { return new Date(r.due_at) < start; });
+  const dueToday = open.filter(function (r) {
+    const d = new Date(r.due_at);
+    return d >= start && d < end;
+  });
+  if (overdue.length) {
+    lines.push({
+      target: "reminders",
+      text: overdue.length + (overdue.length === 1 ? " reminder is" : " reminders are") + " overdue \u2014 first: \u201c" + overdue[0].text + "\u201d."
+    });
+  }
+  if (dueToday.length) {
+    lines.push({
+      target: "reminders",
+      text: dueToday.length + (dueToday.length === 1 ? " reminder" : " reminders") + " due today \u2014 first: \u201c" + dueToday[0].text + "\u201d."
+    });
+  }
+  const yStart = new Date(start);
+  yStart.setDate(yStart.getDate() - 1);
+  const yAct = (activity || []).filter(function (a) {
+    const t = a.applied_at ? new Date(a.applied_at) : (a.updated_at ? new Date(a.updated_at) : null);
+    return t && t >= yStart && t < start;
+  });
+  const yFixed = yAct.filter(function (a) { return a.status === "applied"; }).length;
+  const ySkip = yAct.filter(function (a) { return a.status === "dismissed"; }).length;
+  if (yFixed) {
+    lines.push({
+      target: null,
+      text: "Yesterday you approved " + yFixed + (yFixed === 1 ? " fix" : " fixes") + " and Luna applied " + (yFixed === 1 ? "it" : "them") + "."
+    });
+  }
+  if (ySkip) {
+    lines.push({
+      target: null,
+      text: "Yesterday you set aside " + ySkip + (ySkip === 1 ? " proposed fix" : " proposed fixes") + "."
+    });
+  }
+  return lines;
+}
+
+function lunaAssistantRender() {
+  const sec = document.getElementById("lunaAssistantSection");
+  if (!sec) return;
+  sec.innerHTML = "";
+  sec.classList.remove("hidden");
+  const h = document.createElement("p");
+  h.className = "text-[11px] font-bold text-slate-500 uppercase tracking-wide";
+  h.textContent = "Luna assistant";
+  sec.appendChild(h);
+  const lines = lunaAssistantBriefingLines(lunaRepairsOpen, lunaRepairsActivity, lunaRemindersOpen, new Date());
+  const bCard = document.createElement("div");
+  bCard.className = "rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 space-y-1.5";
+  if (!lines.length) {
+    const p = document.createElement("p");
+    p.className = "text-xs text-slate-600 leading-relaxed";
+    p.textContent = "All quiet \u2014 no repairs waiting, no reminders due, nothing overdue.";
+    bCard.appendChild(p);
+  }
+  for (const ln of lines) {
+    if (ln.target) {
+      const b = document.createElement("button");
+      b.className = "block w-full text-left text-xs text-slate-700 leading-relaxed cursor-pointer";
+      b.textContent = ln.text;
+      b.setAttribute("data-assistant-action", ln.target === "repairs" ? "scroll-repairs" : "scroll-reminders");
+      bCard.appendChild(b);
+    } else {
+      const p = document.createElement("p");
+      p.className = "text-xs text-slate-700 leading-relaxed";
+      p.textContent = ln.text;
+      bCard.appendChild(p);
+    }
+  }
+  sec.appendChild(bCard);
+  if (lunaRemindersOpen.length) {
+    const rh = document.createElement("p");
+    rh.className = "text-[11px] font-bold text-slate-500 uppercase tracking-wide pt-1";
+    rh.textContent = "Reminders";
+    sec.appendChild(rh);
+    const list = document.createElement("div");
+    list.id = "lunaRemindersList";
+    list.className = "space-y-2";
+    for (const r of lunaRemindersOpen.slice(0, 6)) {
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2";
+      const t = document.createElement("span");
+      t.className = "flex-1 text-[11px] text-slate-600 leading-relaxed";
+      t.textContent = r.text + " \u00b7 " + lunaAssistantFmtDue(r.due_at);
+      row.appendChild(t);
+      const done = document.createElement("button");
+      done.className = "px-3.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold cursor-pointer";
+      done.textContent = "Done";
+      done.setAttribute("data-assistant-action", "done");
+      done.setAttribute("data-reminder-id", r.id);
+      row.appendChild(done);
+      const del = document.createElement("button");
+      del.className = "px-3.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold cursor-pointer";
+      del.textContent = "Delete";
+      del.setAttribute("data-assistant-action", "delete");
+      del.setAttribute("data-reminder-id", r.id);
+      row.appendChild(del);
+      list.appendChild(row);
+    }
+    sec.appendChild(list);
+    if (lunaRemindersOpen.length > 6) {
+      const more = document.createElement("p");
+      more.className = "text-[11px] text-slate-400";
+      more.textContent = "+ " + (lunaRemindersOpen.length - 6) + " more reminders";
+      sec.appendChild(more);
+    }
+  }
+  if (lunaAssistantPending) {
+    const card = document.createElement("div");
+    card.className = "rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 space-y-2";
+    const t = document.createElement("p");
+    t.className = "text-xs text-slate-800 leading-relaxed";
+    t.textContent = "Set this reminder? \u201c" + lunaAssistantPending.text + "\u201d \u00b7 " + lunaAssistantFmtDue(lunaAssistantPending.dueAt);
+    card.appendChild(t);
+    const row = document.createElement("div");
+    row.className = "flex items-center gap-2";
+    const yes = document.createElement("button");
+    yes.className = "px-3.5 py-1.5 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm";
+    yes.textContent = "Yes, set it";
+    yes.setAttribute("data-assistant-action", "confirm");
+    row.appendChild(yes);
+    const no = document.createElement("button");
+    no.className = "px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer";
+    no.textContent = "No";
+    no.setAttribute("data-assistant-action", "cancel");
+    row.appendChild(no);
+    card.appendChild(row);
+    sec.appendChild(card);
+  }
+  const cmdRow = document.createElement("div");
+  cmdRow.className = "flex items-center gap-2";
+  const input = document.createElement("input");
+  input.id = "lunaAssistantInput";
+  input.type = "text";
+  input.maxLength = 300;
+  input.placeholder = "Tell Luna: remind me to call Tom tomorrow at 5pm";
+  input.className = "flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600";
+  input.addEventListener("keydown", function (ev) {
+    if (ev.key === "Enter") { ev.preventDefault(); lunaAssistantRun(); }
+  });
+  cmdRow.appendChild(input);
+  const go = document.createElement("button");
+  go.className = "px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm";
+  go.textContent = "Do it";
+  go.setAttribute("data-assistant-action", "run");
+  cmdRow.appendChild(go);
+  sec.appendChild(cmdRow);
+}
+
+async function lunaRemindersLoad() {
+  if (!currentUser) { lunaRemindersOpen = []; return; }
+  try {
+    const { data, error } = await supabaseClient.from("luna_reminders")
+      .select("id, text, due_at, done_at, created_at")
+      .is("done_at", null)
+      .order("due_at", { ascending: true })
+      .limit(50);
+    if (!error && data) lunaRemindersOpen = data;
+  } catch (e) { /* fail-silent: the panel just shows no reminders */ }
+}
+
+async function lunaAssistantLoad() {
+  try {
+    await lunaRepairsLoad();
+    await lunaRemindersLoad();
+    lunaAssistantRender();
+  } catch (e) { /* fail-silent, same as the repairs panel */ }
+}
+
+async function lunaAssistantWhatsWrong() {
+  await lunaRepairsLoad();
+  lunaAssistantRender();
+  let msg;
+  if (!lunaRepairsOpen.length) {
+    msg = "I checked just now \u2014 nothing is stuck that I can fix. If something looks wrong, tell me which car and I\u2019ll dig in.";
+  } else {
+    msg = "I checked just now \u2014 I found " + lunaRepairsOpen.length + (lunaRepairsOpen.length === 1 ? " thing" : " things") + " I can fix. The cards are at the top of this window \u2014 tap \u201cFix it\u201d on any of them and I\u2019ll take care of it.";
+  }
+  lunaSupportHistory.push({ role: "assistant", body: msg });
+  lunaSupportRender("assistant", msg);
+}
+
+function lunaAssistantRun() {
+  const input = document.getElementById("lunaAssistantInput");
+  const raw = ((input && input.value) || "").trim();
+  if (!raw || lunaAssistantBusy) return;
+  const intent = lunaAssistantParseCommand(raw, new Date());
+  if (!intent) {
+    lunaSupportHistory.push({ role: "user", body: raw });
+    lunaSupportRender("user", raw);
+    const msg = "I can\u2019t do that one yet. I can set reminders \u2014 try \u201cremind me to call Tom tomorrow at 5pm\u201d \u2014 and I can check your account: ask \u201cwhat\u2019s wrong?\u201d";
+    lunaSupportHistory.push({ role: "assistant", body: msg });
+    lunaSupportRender("assistant", msg);
+    if (input) input.value = "";
+    return;
+  }
+  if (intent.kind === "remind") {
+    lunaAssistantPending = intent;
+    if (input) input.value = "";
+    lunaAssistantRender();
+    return;
+  }
+  lunaSupportHistory.push({ role: "user", body: raw });
+  lunaSupportRender("user", raw);
+  if (input) input.value = "";
+  if (intent.kind === "whats_wrong") {
+    lunaAssistantWhatsWrong();
+    return;
+  }
+  if (intent.kind === "briefing") {
+    lunaAssistantLoad().then(function () {
+      const lines = lunaAssistantBriefingLines(lunaRepairsOpen, lunaRepairsActivity, lunaRemindersOpen, new Date());
+      const msg = lines.length ? lines.map(function (l) { return l.text; }).join("\n") : "All quiet \u2014 no repairs waiting, no reminders due, nothing overdue.";
+      lunaSupportHistory.push({ role: "assistant", body: msg });
+      lunaSupportRender("assistant", msg);
+    });
+  }
+}
+
+async function lunaAssistantConfirm() {
+  const p = lunaAssistantPending;
+  if (!p || lunaAssistantBusy) return;
+  if (!currentUser) {
+    showTikTokToast("You need to be signed in for reminders.");
+    return;
+  }
+  lunaAssistantBusy = true;
+  try {
+    const { error } = await supabaseClient.from("luna_reminders").insert({
+      user_id: currentUser.id,
+      text: p.text,
+      due_at: p.dueAt.toISOString()
+    });
+    if (error) throw error;
+    lunaAssistantPending = null;
+    showTikTokToast("Reminder set \u2014 " + p.text + " \u00b7 " + lunaAssistantFmtDue(p.dueAt) + ".");
+    await lunaRemindersLoad();
+  } catch (e) {
+    showTikTokToast("That reminder didn\u2019t save \u2014 try again in a moment.");
+  } finally {
+    lunaAssistantBusy = false;
+    lunaAssistantRender();
+  }
+}
+
+async function lunaAssistantDone(id, btn) {
+  if (lunaAssistantBusy || !id) return;
+  lunaAssistantBusy = true;
+  if (btn) { btn.disabled = true; btn.classList.add("opacity-60"); }
+  try {
+    const { error } = await supabaseClient.from("luna_reminders")
+      .update({ done_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
+    await lunaRemindersLoad();
+  } catch (e) {
+    showTikTokToast("That didn\u2019t go through \u2014 try again in a moment.");
+  } finally {
+    lunaAssistantBusy = false;
+    lunaAssistantRender();
+  }
+}
+
+async function lunaAssistantDelete(id, btn) {
+  if (lunaAssistantBusy || !id) return;
+  lunaAssistantBusy = true;
+  if (btn) { btn.disabled = true; btn.classList.add("opacity-60"); }
+  try {
+    const { error } = await supabaseClient.from("luna_reminders")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+    await lunaRemindersLoad();
+  } catch (e) {
+    showTikTokToast("That didn\u2019t go through \u2014 try again in a moment.");
+  } finally {
+    lunaAssistantBusy = false;
+    lunaAssistantRender();
+  }
+}
+
+(function lunaAssistantWire() {
+  const sec = document.getElementById("lunaAssistantSection");
+  if (!sec) return;
+  sec.addEventListener("click", function (ev) {
+    const btn = ev.target && ev.target.closest ? ev.target.closest("[data-assistant-action]") : null;
+    if (!btn) return;
+    const a = btn.getAttribute("data-assistant-action");
+    if (a === "run") lunaAssistantRun();
+    else if (a === "confirm") lunaAssistantConfirm();
+    else if (a === "cancel") { lunaAssistantPending = null; lunaAssistantRender(); }
+    else if (a === "done") lunaAssistantDone(btn.getAttribute("data-reminder-id"), btn);
+    else if (a === "delete") lunaAssistantDelete(btn.getAttribute("data-reminder-id"), btn);
+    else if (a === "scroll-repairs") {
+      const t = document.getElementById("lunaRepairsSection");
+      if (t) t.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } else if (a === "scroll-reminders") {
+      const t = document.getElementById("lunaRemindersList");
+      if (t) t.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+})();
+// [LUNA-ASSISTANT-343-JS-END]
 
 // Hand the signed-in session to the Chrome extension (via bridge.js on
 // this origin). The worker needs the access token, not just the user id:
