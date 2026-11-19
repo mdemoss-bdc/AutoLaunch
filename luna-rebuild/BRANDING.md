@@ -1,13 +1,18 @@
-# Branding — the AutoLaunch emblem
+# Branding — the AutoLaunch logo
 
-Approved by Matthew, 2026-10-22. The emblem: a blue shield shaped like a
-car front (windshield, headlights, mirrors) with a white lightning bolt.
+Current mark (Matthew's call, 2026-11-19): an electric-blue "A" arrow
+with a swoosh base on deep navy — flat two-color art, #008FFE on
+#101847. Matthew picked it over the shield emblem ("looks more crisp")
+and it fills every slot in the table below in the rebuild. He swaps
+the Facebook Page and Instagram profiles himself; the live app still
+serves the shield emblem until he calls the graduation. Master +
+generated set: ~/workspace/logo-swap-build/ (master.webp, generate.py).
 
-## What replaced what
-
-- The old in-app logo tile — a blue rounded square with a Font Awesome
-  lightning bolt — is gone. The emblem image (`icons/logo-mark-512.png`)
-  now sits in its place in the two logo lockups:
+History: the previous emblem (approved by Matthew, 2026-10-22) was a
+blue shield shaped like a car front (windshield, headlights, mirrors)
+with a white lightning bolt. It replaced the old in-app logo tile — a
+blue rounded square with a Font Awesome lightning bolt — in the two
+logo lockups:
   - the sign-in / register screen, next to the AutoLaunch wordmark
   - the sidebar header, next to the AutoLaunch wordmark
 - The tagline under the wordmark on the sign-in screen now reads
@@ -35,6 +40,7 @@ the page — and the app opens full-screen (standalone) with the blue
 theme colour, like a native app. This is wired in the test copy's
 index.html head: manifest link, apple-touch-icon, favicons, theme-color.
 
-Source artwork lives outside the rebuild in ~/workspace/autolaunch-icons/
-(Matthew's upload, prepared sizes) — the copies in `icons/` here are the
-ones the site serves.
+Source artwork for the shield emblem lives outside the rebuild in
+~/workspace/autolaunch-icons/ (Matthew's upload, prepared sizes); the
+A-arrow master + generator live in ~/workspace/logo-swap-build/. Either
+way, the copies in `icons/` here are the ones the site serves.
