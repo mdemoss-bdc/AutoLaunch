@@ -8826,6 +8826,11 @@ function lunaAssistantParseCommand(raw, now) {
   if (/^(briefing|good morning|catch me up)\b/i.test(s)) {
     return { kind: "briefing" };
   }
+  // [LUNA-INVQUERY-347] Inventory queries ("2024 Honda CR-V",
+  // "blue AWD sedans under $30k"): read-only, resolved against the
+  // vocabulary of the user's own loaded inventory.
+  const iq = lunaInvQueryParseCommand(s, lunaInvQueryVocab(rawInventory));
+  if (iq) return iq;
   return null;
 }
 
@@ -9082,7 +9087,7 @@ function lunaAssistantRun() {
     // (2026-11-18).
     lunaAssistantNotice = /^remind me\b/i.test(raw)
       ? "I couldn\u2019t set that reminder \u2014 I need a time I understand, like \u201c5pm\u201d, \u201ctomorrow at 9am\u201d, or \u201cin 5 minutes\u201d."
-      : "I can\u2019t do that one yet. I can set reminders \u2014 try \u201cremind me to call Tom tomorrow at 5pm\u201d \u2014 and I can check your account: ask \u201cwhat\u2019s wrong?\u201d";
+      : "I can\u2019t do that one yet. I can set reminders \u2014 try \u201cremind me to call Tom tomorrow at 5pm\u201d \u2014 check your account (ask \u201cwhat\u2019s wrong?\u201d), and pull up inventory: try \u201c2024 Honda CR-V\u201d or \u201cblue AWD sedans under $30k\u201d.";
     if (input) input.value = "";
     lunaAssistantRender();
     return;
@@ -9108,6 +9113,10 @@ function lunaAssistantRun() {
       lunaSupportHistory.push({ role: "assistant", body: msg });
       lunaSupportRender("assistant", msg);
     });
+  }
+  if (intent.kind === "inv_query") {
+    lunaAssistantRunInvQuery(intent);
+    return;
   }
 }
 
@@ -9195,6 +9204,555 @@ async function lunaAssistantDelete(id, btn) {
   });
 })();
 // [LUNA-ASSISTANT-343-JS-END]
+
+// [LUNA-INVQUERY-347-JS-BEGIN]
+// Inventory query commands for the assistant (Matthew, 2026-11-19):
+// the rep types (later: says) "2024 Honda CR-V", "AWD vehicles",
+// "blue sedans", "blue AWD sedans under $30k" and Luna pulls the
+// matches up in Inventory and answers with the count + highlights.
+// READ-ONLY: a query never posts, prices, deletes, or sends. It only
+// sets the inventory filter bar (the fields the selects can express)
+// plus an override object for the rest, which applyFilters consults
+// and any manual filter/search/sort change retires. The reply is a
+// single string, so the future voice layer can speak it verbatim.
+//
+// Field reality (checked against the live schema + rows 2026-11-19):
+// year/make/model/trim/price/mileage/condition/color/body_type are
+// columns; there is NO drivetrain column — drivetrain, fuel, and
+// transmission detail live as text in the repaired trim and in
+// vdp_features (all_features / engine_detail / fuel_detail /
+// transmission_detail). Those three are therefore EVIDENCE fields:
+// a car whose data carries no evidence is excluded from that filter
+// and the reply says how many cars the evidence covers, instead of
+// pretending the result is complete.
+let lunaInvQueryOverride = null;
+let lunaInvQueryApplying = false;
+
+const LUNA_INV_STOPWORDS = new Set([
+  "a", "an", "the", "all", "any", "show", "me", "find", "pull", "up",
+  "list", "get", "give", "cars", "car", "vehicles", "vehicle", "with",
+  "that", "have", "has", "in", "on", "our", "my", "inventory", "please",
+  "luna", "what", "whats", "do", "we", "got", "are", "there", "for",
+  "sale", "only", "just", "and", "or", "of", "to", "them", "it", "is",
+  "at", "by", "from", "i", "want", "need", "looking", "look", "see",
+  "can", "you", "lot", "ones", "out", "go", "ahead"
+]);
+
+const LUNA_INV_BODY_SETS = {
+  sedan: ["Sedan"], coupe: ["Coupe"], hatchback: ["Hatchback"],
+  convertible: ["Convertible"], wagon: ["Wagon"], truck: ["Truck"],
+  suv: ["SUV", "Crossover"], crossover: ["Crossover"],
+  van: ["Van", "Cargo Van"], minivan: ["Minivan"]
+};
+const LUNA_INV_BODY_PLURALS = {
+  sedan: "sedans", coupe: "coupes", hatchback: "hatchbacks",
+  convertible: "convertibles", wagon: "wagons", truck: "trucks",
+  suv: "SUVs", crossover: "crossovers", van: "vans", minivan: "minivans"
+};
+const LUNA_INV_COLOR_WORDS = {
+  black: "Black", white: "White", red: "Red", blue: "Blue",
+  gray: "Gray", grey: "Gray", silver: "Silver", green: "Green",
+  brown: "Brown", gold: "Gold", orange: "Orange", purple: "Purple",
+  pink: "Pink", yellow: "Yellow", beige: "Beige"
+};
+
+function lunaInvNorm(s) {
+  return String(s == null ? "" : s).toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function lunaInvCompact(s) {
+  return lunaInvNorm(s).replace(/ /g, "");
+}
+function lunaInvTokens(s) {
+  const n = lunaInvNorm(s);
+  return n ? n.split(" ") : [];
+}
+
+// The vocabulary the parser resolves against: the makes, models,
+// trims, and base colors actually present in the user's loaded
+// inventory, so "CR-V" vs "CRV" and dealer naming resolve against
+// real data. Pure given the car list (display/base-color helpers are
+// the app's own).
+function lunaInvQueryVocab(cars) {
+  const makes = new Map(), models = new Map(), trims = new Map();
+  const colors = new Set();
+  for (const car of cars || []) {
+    const mkD = displayMakeText(car.make || "");
+    const mdD = displayModelText(car.model || "");
+    const mkK = mkD ? lunaInvCompact(mkD) : "";
+    const mdK = mdD ? lunaInvCompact(mdD) : "";
+    if (mkD && !makes.has(mkK)) {
+      makes.set(mkK, { key: mkK, display: mkD, tokens: lunaInvTokens(mkD) });
+    }
+    if (mdD) {
+      const ck = mkK + "|" + mdK;
+      if (!models.has(ck)) {
+        models.set(ck, { key: mdK, display: mdD, makeKey: mkK, tokens: lunaInvTokens(mdD) });
+      }
+    }
+    const bc = car.color ? baseColorFor(car.color) : "";
+    if (bc && bc !== "Other") colors.add(bc);
+    const tr = richTrimDisplay(car);
+    if (tr) {
+      const tk = lunaInvTokens(tr);
+      const ck = mkK + "|" + mdK + "|" + lunaInvCompact(tr);
+      if (!trims.has(ck)) {
+        trims.set(ck, { tokens: tk, makeKey: mkK, modelKey: mdK });
+      }
+    }
+  }
+  return {
+    makes: Array.from(makes.values()),
+    models: Array.from(models.values()),
+    trims: Array.from(trims.values()),
+    colors: Array.from(colors)
+  };
+}
+
+// Find a vocabulary phrase in the token stream: either one token
+// equal to the phrase's compact key ("crv" for CR-V, plural "s"
+// tolerated) or the phrase's exact token sequence ("cr" "v").
+// Returns { phrase, index, len } or null.
+function lunaInvMatchPhrase(tokens, phrases) {
+  for (const p of phrases) {
+    if (!p.tokens.length || !p.key) continue;
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      if (tok === p.key || (tok.length > 2 && tok.endsWith("s") && tok.slice(0, -1) === p.key)) {
+        return { phrase: p, index: i, len: 1 };
+      }
+      if (p.tokens.length > 1 && i + p.tokens.length <= tokens.length) {
+        let ok = true;
+        for (let j = 0; j < p.tokens.length; j++) {
+          const want = p.tokens[j];
+          const got = tokens[i + j];
+          if (got !== want && !(j === p.tokens.length - 1 && got === want + "s")) { ok = false; break; }
+        }
+        if (ok) return { phrase: p, index: i, len: p.tokens.length };
+      }
+    }
+  }
+  return null;
+}
+
+function lunaInvSortPhrases(list) {
+  return list.slice().sort(function (a, b) {
+    return (b.tokens.length - a.tokens.length) || (b.key.length - a.key.length);
+  });
+}
+
+// Parse an inventory utterance into { kind:"inv_query", filters,
+// unknown, highlight } — or null when nothing inventory-shaped is
+// recognized (the caller then gives the standard "can't do that
+// yet"). Pure given the vocabulary. Anything recognized is applied;
+// anything not understood is reported in `unknown`, never silently
+// dropped. Outward verbs (post/delete/send…) are refused up front
+// so an action command is never reinterpreted as a query.
+function lunaInvQueryParseCommand(raw, vocab) {
+  const norm0 = lunaInvNorm(raw);
+  if (!norm0) return null;
+  if (/^(post|repost|delete|remove|send)\b/.test(norm0)) return null;
+  const f = {};
+  let highlight = null;
+  let w = " " + String(raw || "").toLowerCase()
+    .replace(/(\d),(?=\d)/g, "$1")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ") + " ";
+  function grab(re, fn) {
+    const m = w.match(re);
+    if (m) { fn(m); w = w.replace(re, " "); }
+  }
+  function money(m) {
+    let n = parseInt(m[2], 10);
+    if (m[3]) n *= 1000;
+    return n;
+  }
+  // Mileage before price: "under 20k miles" is a mileage bound,
+  // never a price. Mileage phrasing always names the unit.
+  grab(/\b(under|below|less than|at most|up to|max|no more than)\s+(\d+)\s*(k)?\s*(miles|mileage|mi)\b/,
+    function (m) { f.mileageMax = money(m); f.mileageStrict = /^(under|below|less than)$/.test(m[1]); });
+  grab(/\b(under|below|less than|at most|up to|max|no more than)\s+(\d+)\s*(k|grand)?\b/,
+    function (m) { f.priceMax = money(m); f.priceStrict = /^(under|below|less than)$/.test(m[1]); });
+  grab(/\b(over|above|more than|at least|min)\s+(\d+)\s*(k|grand)?\b/,
+    function (m) { f.priceMin = money(m); });
+  grab(/\b((?:19|20)\d{2})\s*(or newer|and newer|or later)\b/,
+    function (m) { f.yearMin = parseInt(m[1], 10); });
+  grab(/\b((?:19|20)\d{2})\s*(or older|and older|or earlier)\b/,
+    function (m) { f.yearMax = parseInt(m[1], 10); });
+  const yearHits = [];
+  w = w.replace(/\b((?:19|20)\d{2})\b/g, function (mm, y) {
+    yearHits.push(parseInt(y, 10));
+    return " ";
+  });
+  if (yearHits.length === 1 && !f.yearMin && !f.yearMax) f.year = yearHits[0];
+  else if (yearHits.length > 1) {
+    f.yearMin = Math.min.apply(null, yearHits);
+    f.yearMax = Math.max.apply(null, yearHits);
+  }
+  grab(/\bcertified( pre-owned| pre owned)?\b/, function () { f.condition = "Certified Pre-Owned"; });
+  if (!f.condition) grab(/\bused\b/, function () { f.condition = "Used"; });
+  if (!f.condition) grab(/\bnew\b/, function () { f.condition = "New"; });
+  grab(/\b(all wheel drive|all wheel|awd|4matic|quattro|xdrive|sh awd)\b/, function () { f.drivetrain = "AWD"; });
+  if (!f.drivetrain) grab(/\b(four wheel drive|four wheel|4wd|4x4)\b/, function () { f.drivetrain = "4WD"; });
+  if (!f.drivetrain) grab(/\b(front wheel drive|front wheel|fwd)\b/, function () { f.drivetrain = "FWD"; });
+  if (!f.drivetrain) grab(/\b(rear wheel drive|rear wheel|rwd)\b/, function () { f.drivetrain = "RWD"; });
+  grab(/\b(minivans?|sedans?|coupes?|hatchbacks?|convertibles?|wagons?|trucks?|pickups?|suvs?|crossovers?|vans?)\b/,
+    function (m) {
+      let word = m[1];
+      if (word === "pickup" || word === "pickups") word = "truck";
+      else if (word.endsWith("s")) word = word.slice(0, -1);
+      f.bodyWord = word;
+      f.bodySet = LUNA_INV_BODY_SETS[word] || null;
+    });
+  grab(/\b(plug in hybrid|phev)\b/, function () { f.fuel = "Plug-in Hybrid"; });
+  if (!f.fuel) grab(/\bhybrid\b/, function () { f.fuel = "Hybrid"; });
+  if (!f.fuel) grab(/\bdiesel\b/, function () { f.fuel = "Diesel"; });
+  if (!f.fuel) grab(/\b(electric|ev)\b/, function () { f.fuel = "Electric"; });
+  if (!f.fuel) grab(/\b(gasoline|gas)\b/, function () { f.fuel = "Gas"; });
+  grab(/\b(manual|stick shift)\b/, function () { f.transmission = "Manual"; });
+  if (!f.transmission) grab(/\bcvt\b/, function () { f.transmission = "CVT"; });
+  if (!f.transmission) grab(/\bautomatic\b/, function () { f.transmission = "Automatic"; });
+  grab(/\bcheapest\b/, function () { highlight = "cheapest"; });
+  grab(/\b(lowest|least|fewest) miles\b/, function () { highlight = "lowest_miles"; });
+  grab(/\b(sitting the longest|sitting longest|longest on the lot|been here the longest|been here longest)\b/,
+    function () { highlight = "longest_lot"; });
+
+  let tokens = w.split(" ").filter(Boolean);
+  // Makes, then models (scoped to the make when one matched), then
+  // a trim fragment: leftover content tokens that some candidate
+  // car's trim fully contains ("ex l" inside "EX-L AWD").
+  const makeHit = lunaInvMatchPhrase(tokens, lunaInvSortPhrases(vocab.makes));
+  if (makeHit) {
+    f.makeKey = makeHit.phrase.key;
+    f.makeDisplay = makeHit.phrase.display;
+    tokens.splice(makeHit.index, makeHit.len);
+  } else {
+    // Distinctive first-token shortcut ("mercedes" for
+    // Mercedes-Benz): a 5+ letter token that starts exactly one
+    // make in the vocabulary.
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].length < 5) continue;
+      const cands = vocab.makes.filter(function (mk) { return mk.tokens[0] === tokens[i]; });
+      if (cands.length === 1) {
+        f.makeKey = cands[0].key;
+        f.makeDisplay = cands[0].display;
+        tokens.splice(i, 1);
+        break;
+      }
+    }
+  }
+  const modelPool = f.makeKey
+    ? vocab.models.filter(function (md) { return md.makeKey === f.makeKey; })
+    : vocab.models;
+  let modelHit = lunaInvMatchPhrase(tokens, lunaInvSortPhrases(modelPool));
+  if (!modelHit && f.makeKey) modelHit = lunaInvMatchPhrase(tokens, lunaInvSortPhrases(vocab.models));
+  if (modelHit) {
+    f.modelKey = modelHit.phrase.key;
+    f.modelDisplay = modelHit.phrase.display;
+    tokens.splice(modelHit.index, modelHit.len);
+  }
+  const residue = tokens.filter(function (t) { return !LUNA_INV_STOPWORDS.has(t); });
+  if (residue.length) {
+    const trimPool = vocab.trims.filter(function (tr) {
+      if (f.modelKey) return tr.modelKey === f.modelKey;
+      if (f.makeKey) return tr.makeKey === f.makeKey;
+      return true;
+    });
+    const trimHit = trimPool.some(function (tr) {
+      return residue.every(function (t) { return tr.tokens.indexOf(t) !== -1; });
+    });
+    if (trimHit) {
+      f.trimTokens = residue.slice();
+      tokens = tokens.filter(function (t) { return residue.indexOf(t) === -1; });
+    }
+  }
+  // Colors come after trims so "Black Edition" can be a trim when
+  // the inventory actually carries one; otherwise "black" is a
+  // color, as the rep meant it.
+  tokens = tokens.filter(function (t) {
+    if (!f.colorBase && LUNA_INV_COLOR_WORDS[t]) {
+      f.colorBase = LUNA_INV_COLOR_WORDS[t];
+      return false;
+    }
+    return true;
+  });
+  const unknown = tokens.filter(function (t) { return !LUNA_INV_STOPWORDS.has(t); });
+  const hasFilter = Object.keys(f).length > 0;
+  if (!hasFilter && !highlight) return null;
+  return {
+    kind: "inv_query",
+    raw: String(raw || ""),
+    filters: f,
+    unknown: unknown,
+    highlight: highlight
+  };
+}
+
+// Evidence extractors: what the car's own data actually says, or
+// null when it says nothing. Never inferred from the model name.
+function lunaInvDrivetrainOf(car) {
+  const vf = (car && typeof car.vdp_features === "object" && car.vdp_features) || {};
+  const parts = [richTrimDisplay(car), vf.engine_detail || ""];
+  if (Array.isArray(vf.all_features)) parts.push(vf.all_features.join(" "));
+  const t = " " + parts.join(" ").toLowerCase() + " ";
+  if (/\bawd\b|all[- ]wheel|4matic|quattro|\bxdrive\b|sh[- ]awd/.test(t)) return "AWD";
+  if (/\b4wd\b|four[- ]wheel|\b4x4\b/.test(t)) return "4WD";
+  if (/\bfwd\b|front[- ]wheel/.test(t)) return "FWD";
+  if (/\brwd\b|rear[- ]wheel/.test(t)) return "RWD";
+  return null;
+}
+function lunaInvFuelOf(car) {
+  const vf = (car && typeof car.vdp_features === "object" && car.vdp_features) || {};
+  const es = (typeof vf.engine_specs === "object" && vf.engine_specs) || {};
+  const t = [vf.fuel_detail || "", es.fuel || "", vf.engine_detail || ""].join(" ").toLowerCase();
+  if (!t.trim()) return null;
+  if (/plug[- ]?in|\bphev\b/.test(t)) return "Plug-in Hybrid";
+  if (/diesel/.test(t)) return "Diesel";
+  if (/hybrid/.test(t)) return "Hybrid";
+  if (/gasoline|\bgas\b/.test(t)) return "Gas";
+  if (/electric/.test(t)) return "Electric";
+  return null;
+}
+function lunaInvTransmissionOf(car) {
+  const vf = (car && typeof car.vdp_features === "object" && car.vdp_features) || {};
+  const t = [vf.transmission_detail || "", car.transmission || ""].join(" ").toLowerCase();
+  if (/manual/.test(t)) return "Manual";
+  if (/\bcvt\b/.test(t)) return "CVT";
+  if (/automatic|\bauto\b/.test(t)) return "Automatic";
+  return null;
+}
+function lunaInvUsablePrice(car) {
+  const ps = String((car && car.price_status) || "").trim().toLowerCase();
+  return ps !== "call" && ps !== "none" && Number(car && car.price) > 0;
+}
+function lunaInvBodyMatch(bodyType, set) {
+  const bt = String(bodyType || "").trim().toLowerCase();
+  if (!bt) return false;
+  for (const b of set) {
+    if (b === "Truck") { if (bt.indexOf("truck") === 0) return true; }
+    else if (bt === b.toLowerCase()) return true;
+  }
+  return false;
+}
+
+// The one matcher applyFilters consults for the override: every
+// parsed filter, exact semantics, over the raw inventory row.
+function lunaInvQueryMatch(car, f) {
+  if (!car || !f) return false;
+  if (f.year && Number(car.year) !== f.year) return false;
+  if (f.yearMin && Number(car.year) < f.yearMin) return false;
+  if (f.yearMax && Number(car.year) > f.yearMax) return false;
+  if (f.makeKey && lunaInvCompact(displayMakeText(car.make || "")) !== f.makeKey) return false;
+  if (f.modelKey && lunaInvCompact(displayModelText(car.model || "")) !== f.modelKey) return false;
+  if (f.trimTokens && f.trimTokens.length) {
+    const ct = lunaInvTokens(richTrimDisplay(car));
+    for (const t of f.trimTokens) if (ct.indexOf(t) === -1) return false;
+  }
+  if (f.colorBase && baseColorFor(car.color || "") !== f.colorBase) return false;
+  if (f.condition && String(car.condition || "") !== f.condition) return false;
+  if (f.bodySet && !lunaInvBodyMatch(car.body_type, f.bodySet)) return false;
+  if (f.drivetrain && lunaInvDrivetrainOf(car) !== f.drivetrain) return false;
+  if (f.fuel && lunaInvFuelOf(car) !== f.fuel) return false;
+  if (f.transmission && lunaInvTransmissionOf(car) !== f.transmission) return false;
+  if (f.priceMax || f.priceMin) {
+    if (!lunaInvUsablePrice(car)) return false;
+    const p = Number(car.price);
+    if (f.priceMax && (f.priceStrict ? p >= f.priceMax : p > f.priceMax)) return false;
+    if (f.priceMin && p < f.priceMin) return false;
+  }
+  if (f.mileageMax) {
+    const m = car.mileage == null ? null : Number(car.mileage);
+    if (m == null || isNaN(m)) return false;
+    if (f.mileageStrict ? m >= f.mileageMax : m > f.mileageMax) return false;
+  }
+  return true;
+}
+
+// Coverage of the evidence-based filters in play, so the reply can
+// say how much of the lot the search could actually see.
+function lunaInvQueryCoverage(f, cars) {
+  const out = [];
+  const list = cars || [];
+  function cov(label, fn) {
+    let have = 0;
+    for (const c of list) if (fn(c)) have++;
+    out.push({ label: label, have: have, total: list.length });
+  }
+  if (f.drivetrain) cov("Drivetrain", function (c) { return lunaInvDrivetrainOf(c) !== null; });
+  if (f.fuel) cov("Fuel type", function (c) { return lunaInvFuelOf(c) !== null; });
+  if (f.transmission) cov("Transmission", function (c) { return lunaInvTransmissionOf(c) !== null; });
+  if (f.trimTokens && f.trimTokens.length) cov("Trim", function (c) { return !!richTrimDisplay(c); });
+  if (f.priceMax || f.priceMin) cov("A listed price", function (c) { return lunaInvUsablePrice(c); });
+  return out;
+}
+
+function lunaInvCarLabel(car) {
+  return [car.year || "", displayMakeText(car.make || ""),
+    displayModelText(car.model || ""), richTrimDisplay(car)]
+    .filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+function lunaInvQueryDescribe(f, singular) {
+  const pre = [];
+  if (f.condition === "Certified Pre-Owned") pre.push("certified");
+  else if (f.condition === "New") pre.push("new");
+  else if (f.condition === "Used") pre.push("used");
+  if (f.colorBase) pre.push(f.colorBase.toLowerCase());
+  if (f.drivetrain) pre.push(f.drivetrain);
+  if (f.fuel === "Hybrid") pre.push("hybrid");
+  else if (f.fuel === "Plug-in Hybrid") pre.push("plug-in hybrid");
+  else if (f.fuel === "Electric") pre.push("electric");
+  else if (f.fuel === "Diesel") pre.push("diesel");
+  const yearPart = f.year ? String(f.year)
+    : (f.yearMin && f.yearMax ? f.yearMin + "\u2013" + f.yearMax
+      : (f.yearMin ? f.yearMin + "-or-newer" : (f.yearMax ? f.yearMax + "-or-older" : "")));
+  let core;
+  if (f.modelDisplay) {
+    core = (yearPart ? yearPart + " " : "") +
+      (f.makeDisplay ? f.makeDisplay + " " : "") + f.modelDisplay;
+    if (f.trimTokens && f.trimTokens.length) core += " (" + f.trimTokens.join(" ") + ")";
+    else if (!singular) core += "s";
+  } else if (f.makeDisplay) {
+    core = (yearPart ? yearPart + " " : "") + f.makeDisplay + " " +
+      (f.bodyWord ? (singular ? f.bodyWord : LUNA_INV_BODY_PLURALS[f.bodyWord]) : (singular ? "vehicle" : "vehicles"));
+  } else if (f.bodyWord) {
+    core = (yearPart ? yearPart + " " : "") +
+      (singular ? f.bodyWord : LUNA_INV_BODY_PLURALS[f.bodyWord]);
+  } else {
+    core = (yearPart ? yearPart + " " : "") + (singular ? "vehicle" : "vehicles");
+  }
+  let desc = (pre.join(" ") + " " + core).trim();
+  if (f.transmission) desc += " with a " + f.transmission.toLowerCase() + " transmission";
+  if (f.priceMax) desc += " under $" + Number(f.priceMax).toLocaleString("en-US");
+  if (f.priceMin) desc += " over $" + Number(f.priceMin).toLocaleString("en-US");
+  if (f.mileageMax) desc += " under " + Number(f.mileageMax).toLocaleString("en-US") + " miles";
+  return desc;
+}
+
+// The reply: one string the panel shows and the future voice layer
+// can speak verbatim. Pure given intent + matches + coverage.
+function lunaInvQueryReply(intent, matches, coverage, now) {
+  const f = intent.filters || {};
+  const list = matches || [];
+  const parts = [];
+  function coverageNotes() {
+    for (const c of coverage || []) {
+      if (c.have >= c.total) continue;
+      if (c.have === 0) {
+        parts.push(c.label + " isn\u2019t listed on any of your cars, so I couldn\u2019t search by it.");
+      } else {
+        parts.push(c.label + " is listed on " + c.have + " of " + c.total + " cars, so I searched those.");
+      }
+    }
+  }
+  function unknownNote() {
+    if (intent.unknown && intent.unknown.length) {
+      parts.push("I didn\u2019t catch \u201c" + intent.unknown.join(", ") + "\u201d, so I left that out.");
+    }
+  }
+  if (!list.length) {
+    parts.push("No " + lunaInvQueryDescribe(f, false) + " in your inventory right now.");
+    coverageNotes();
+    if (f.priceMax) parts.push("Want me to drop the price cap?");
+    else if (f.mileageMax) parts.push("Want me to drop the mileage limit?");
+    else if (f.colorBase) parts.push("Want me to drop the color?");
+    else if (f.drivetrain) parts.push("Want me to drop the drivetrain filter?");
+    else parts.push("Want me to loosen one of those filters?");
+    unknownNote();
+    return parts.join(" ");
+  }
+  parts.push("Found " + list.length + " " +
+    lunaInvQueryDescribe(f, list.length === 1) +
+    " \u2014 pulled up in Inventory.");
+  let cheapest = null, lowMiles = null, longest = null;
+  for (const c of list) {
+    if (lunaInvUsablePrice(c)) {
+      const p = Number(c.price);
+      if (!cheapest || p < cheapest.p) cheapest = { c: c, p: p };
+    }
+    const m = c.mileage == null ? null : Number(c.mileage);
+    if (m != null && !isNaN(m) && (!lowMiles || m < lowMiles.m)) lowMiles = { c: c, m: m };
+    const fs = c.first_seen ? new Date(c.first_seen).getTime() : NaN;
+    if (!isNaN(fs)) {
+      const d = Math.max(0, Math.floor((now.getTime() - fs) / 86400000));
+      if (!longest || d > longest.d) longest = { c: c, d: d };
+    }
+  }
+  const hl = [];
+  if (cheapest) hl.push({ k: "cheapest", s: "Cheapest: " + lunaInvCarLabel(cheapest.c) + " at $" + cheapest.p.toLocaleString("en-US") + "." });
+  if (lowMiles) hl.push({ k: "lowest_miles", s: "Lowest miles: " + lunaInvCarLabel(lowMiles.c) + " at " + lowMiles.m.toLocaleString("en-US") + " miles." });
+  if (longest) hl.push({ k: "longest_lot", s: "Longest on the lot: " + lunaInvCarLabel(longest.c) + ", " + longest.d + (longest.d === 1 ? " day." : " days.") });
+  hl.sort(function (a, b) {
+    const ka = a.k === intent.highlight ? 0 : 1;
+    const kb = b.k === intent.highlight ? 0 : 1;
+    return ka - kb;
+  });
+  for (const h of hl) parts.push(h.s);
+  coverageNotes();
+  unknownNote();
+  return parts.join(" ");
+}
+
+// The executor's plan, pure: which filter-bar values mirror the
+// query (so the user sees the same view the reply describes and can
+// adjust by hand) and the override applyFilters must enforce. The
+// selects only carry buckets for price/mileage, so those two are
+// cleared and the exact bounds live in the override alone.
+function lunaInvQueryPlan(intent) {
+  const f = (intent && intent.filters) || {};
+  return {
+    selectValues: {
+      filterYear: f.year ? String(f.year) : "",
+      filterMake: f.makeDisplay || "",
+      filterModel: f.modelDisplay || "",
+      filterCondition: f.condition || "",
+      filterColor: f.colorBase || "",
+      filterLocation: "",
+      filterPriceRange: "",
+      filterMileageRange: ""
+    },
+    override: f
+  };
+}
+
+function lunaInvSetSelect(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (value === "") { el.value = ""; return; }
+  for (let i = 0; i < el.options.length; i++) {
+    if (el.options[i].value === value) { el.value = value; return; }
+  }
+}
+
+// Run one inventory query: mirror the mappable filters into the
+// filter bar, park the full parsed set as the applyFilters
+// override, render through the normal pipeline, and answer in the
+// assistant with the count + highlights. Read-only throughout.
+function lunaAssistantRunInvQuery(intent) {
+  const plan = lunaInvQueryPlan(intent);
+  const sv = plan.selectValues;
+  lunaInvSetSelect("filterYear", sv.filterYear);
+  lunaInvSetSelect("filterMake", sv.filterMake);
+  if (sv.filterMake) populateFilterDropdowns();
+  lunaInvSetSelect("filterModel", sv.filterModel);
+  lunaInvSetSelect("filterCondition", sv.filterCondition);
+  lunaInvSetSelect("filterColor", sv.filterColor);
+  lunaInvSetSelect("filterLocation", sv.filterLocation);
+  lunaInvSetSelect("filterPriceRange", sv.filterPriceRange);
+  lunaInvSetSelect("filterMileageRange", sv.filterMileageRange);
+  const searchEl = document.getElementById("searchInput");
+  if (searchEl) searchEl.value = "";
+  lunaInvQueryOverride = plan.override;
+  lunaInvQueryApplying = true;
+  try { applyFilters(); } finally { lunaInvQueryApplying = false; }
+  const matches = (window.currentFilteredInventory || []).slice();
+  const reply = lunaInvQueryReply(intent, matches,
+    lunaInvQueryCoverage(intent.filters, rawInventory), new Date());
+  lunaSupportHistory.push({ role: "assistant", body: reply });
+  lunaSupportRender("assistant", reply);
+  if (typeof showInventoryPage === "function") showInventoryPage();
+}
+// [LUNA-INVQUERY-347-JS-END]
 
 // ---- Luna reminder watcher (Phase 3 surface pass, 2026-11-18) ------
 // [LUNA-WATCH-344-JS-BEGIN]
@@ -10950,6 +11508,10 @@ function carMatchesInventorySearch(car, query) {
   });
 }
 function applyFilters() {
+  // [LUNA-INVQUERY-347] Any manual filter/search/sort change retires
+  // the assistant's inventory-query override; only the executor's
+  // own call (lunaInvQueryApplying) keeps it alive.
+  if (!lunaInvQueryApplying) lunaInvQueryOverride = null;
   const query = (document.getElementById("searchInput").value || "").toLowerCase();
   const sort = document.getElementById("sortSelect").value;
 
@@ -11051,6 +11613,11 @@ if (filterMileageRange) {
     if (needsAttentionOnly && !carNeedsAttention(car)) return false;
     if (autoPostBlockerFilter === "novideo") { if (!reelFlaggedToday.vins.has(car.vin)) return false; }
     else if (autoPostBlockerFilter && autoPostBlockerOf(car) !== autoPostBlockerFilter) return false;
+
+    // [LUNA-INVQUERY-347] Assistant inventory query: the parsed
+    // filters the selects cannot express (drivetrain, body style,
+    // trim, fuel, exact price/mileage bounds) ride along here.
+    if (lunaInvQueryOverride && !lunaInvQueryMatch(car, lunaInvQueryOverride)) return false;
 
     return carMatchesInventorySearch(car, query);
   });
@@ -19766,7 +20333,7 @@ function clearFilters() {
 // The bar's Clear button only shows while at least one filter is set.
 function updateClearFiltersVisibility() {
   const ids = ["filterLocation", "filterYear", "filterMake", "filterModel", "filterCondition", "filterColor", "filterPriceRange", "filterMileageRange"];
-  const anyActive = ids.some(id => { const el = document.getElementById(id); return el && el.value !== ""; });
+  const anyActive = !!lunaInvQueryOverride || ids.some(id => { const el = document.getElementById(id); return el && el.value !== ""; });
   const btn = document.getElementById("clearFiltersBtn");
   if (btn) btn.classList.toggle("hidden", !anyActive);
 }
