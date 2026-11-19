@@ -9326,6 +9326,42 @@ function postExtLogin(user, accessToken) {
   } catch (e) {}
 }
 
+// [SESS356-APP-BEGIN]
+// Session self-healing, app side (helper 2.1.156; spec
+// helper-session-self-healing-spec-2026-11-16, A1 + A2).
+// A1: while signed in, re-publish the session to the
+// helper every 5 minutes, so a hand-off the helper
+// missed (tab asleep, bridge hiccup) still lands.
+// A2: when the helper asks for a fresh token (its
+// stored copy was rejected with a 401), answer from
+// the live session. SESSION_SELF_HEAL_APP mirrors the
+// helper's kill switch: false restores the pre-156
+// app behavior exactly (no timer, no answers).
+const SESSION_SELF_HEAL_APP = true;
+let sess356RepublishTimer = null;
+function sess356Republish() {
+  if (!SESSION_SELF_HEAL_APP) return;
+  try {
+    supabaseClient.auth.getSession().then(function (res) {
+      const session = res && res.data && res.data.session;
+      if (session && session.user) postExtLogin(session.user, session.access_token);
+    }).catch(function () {});
+  } catch (e) {}
+}
+function sess356StartRepublish() {
+  if (!SESSION_SELF_HEAL_APP || sess356RepublishTimer) return;
+  sess356RepublishTimer = setInterval(sess356Republish, 5 * 60 * 1000);
+}
+window.addEventListener("message", function (event) {
+  if (!SESSION_SELF_HEAL_APP) return;
+  if (event.source !== window) return;
+  if (event.origin !== window.location.origin) return;
+  const data = event.data;
+  if (!data || data.type !== "AUTOLAUNCH_EXT_TOKEN_REQUEST") return;
+  sess356Republish();
+});
+// [SESS356-APP-END]
+
 async function initAppSession(user) {
   currentUser = user;
   // LOAD SPEED (2026-11-12): the inventory RPC chain depends only on
@@ -15540,6 +15576,10 @@ function renderExtStatus(state, info) {
         dot.className = base + "bg-rose-500";
         title.innerText = "Helper not installed";
         detail.innerText = "No helper answered in this tab. Follow the install steps below, then come back here, hard-refresh (Ctrl+Shift+R) and click Check again. (If you just installed it, the hard-refresh is what connects this tab to it.)";
+    } else if (state === "session_expired") {
+        dot.className = base + "bg-rose-500";
+        title.innerText = "Helper paused \u2014 its sign-in expired and didn't recover.";
+        detail.innerText = "Reload this tab. If it keeps happening, sign out of AutoLaunch and back in. Jobs are safe in the queue meanwhile.";
     } else {
         dot.className = base + "bg-slate-400 animate-pulse";
         title.innerText = "Checking\u2026";
@@ -15563,6 +15603,7 @@ function checkExtensionStatus() {
         clearExtPing();
         if (data.version) persistHelperVersion(data.version);
         if (!data.hasToken) { renderExtStatus("waiting"); return; }
+        if (data.sessionExpired === true) { renderExtStatus("session_expired"); return; }
         // Helpers older than v2.1.24 don't report a version at all —
         // that silence is itself the out-of-date signal.
         if (!data.version || !extVersionAtLeast(data.version, EXPECTED_EXT_VERSION)) {
@@ -21714,6 +21755,7 @@ function startAppForUser(user) {
   if (!user || appSessionStartedFor === user.id) return;
   appSessionStartedFor = user.id;
   initAppSession(user);
+  sess356StartRepublish();
   refreshSyncSummary();
   if (!syncPollerStarted) {
     syncPollerStarted = true;
