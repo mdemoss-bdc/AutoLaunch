@@ -1,43 +1,36 @@
 // =====================================================================
-// DRAFT — NOT DEPLOYED. PREPARED 2026-10-26 (overnight audit pass) so
-// the Instagram channel is ready the day Meta business verification
-// lands. Lives in the rebuild folder for review only. Deploy (by
-// Matthew, at promotion time — see luna-rebuild/INSTAGRAM.md):
-//   supabase functions deploy instagram-auth --no-verify-jwt
-// Plus, BEFORE it can work:
-//   1. Meta business verification APPROVED for the "Auto Launch"
-//      business portfolio (blocked on the bank letter as of drafting).
-//   2. App Review approval for instagram_business_content_publish
-//      (Advanced Access) on the Meta app "Auto Launch Feed"
-//      (app id 1442518901327928), then flip the app to Live.
-//   3. Apply supabase/migrations_draft/instagram_connections_DRAFT.sql
-//      (creates public.instagram_connections).
-//   4. Set the function secrets in the Supabase dashboard:
-//        META_APP_ID      Meta app id (1442518901327928)
-//        META_APP_SECRET  Meta app secret — server-side only, never
-//                         in code, never logged
-//      Optional:
-//        META_REDIRECT_URI  defaults to the rebuild callback page
-//        META_GRAPH_VERSION defaults to v21.0 (one constant below)
-//      SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY
-//      are injected by the Supabase runtime automatically.
-//
 // instagram-auth — Instagram (Meta) account connection for AutoLaunch,
 // modeled directly on tiktok-auth (same routes, same manual JWT
-// verification, same service-role-only writes).
+// verification, same service-role-only writes). Built and deployed
+// 2026-11-19 (rebuild scope). The flow sits DARK until two Meta-side
+// gates clear: (1) the META_APP_ID / META_APP_SECRET function secrets
+// are set, and (2) Meta App Review grants instagram_content_publish
+// Advanced Access on the "Auto Launch Feed" app (1442518901327928) and
+// the app is flipped Live. Until then /exchange still connects the
+// account (identity + Page/IG resolution work under Standard Access
+// for app-role users) but reports publish_permission: "pending", and
+// instagram-post answers instagram_permission_pending. See
+// luna-rebuild/INSTAGRAM_APP_REVIEW.md.
 //
 // Routes (path suffix after /functions/v1/instagram-auth):
 //   POST /exchange    body { code } — exchange the Facebook Login auth
 //                     code for a short-lived user token, upgrade it
-//                     to a long-lived token (~60 days), resolve the
-//                     caller's Facebook Pages and their linked
+//                     to a long-lived token (~60 days), read the
+//                     granted permissions (/me/permissions), resolve
+//                     the caller's Facebook Pages and their linked
 //                     Instagram business accounts, and upsert the
 //                     caller's instagram_connections row (first
 //                     Page/IG pair wins; multi-Page selection is a
 //                     promotion-time refinement).
-//   GET  /status      — { connected, username, display_name } for the
-//                     caller's AutoLaunch account.
+//   GET  /status      — { connected, username, display_name,
+//                     publish_permission } for the caller's
+//                     AutoLaunch account.
 //   POST /disconnect  — delete the caller's connection row.
+//
+// OAuth is Facebook Login requesting the Facebook-Login permission
+// set: instagram_basic, instagram_content_publish, pages_show_list.
+// Publishing runs through graph.facebook.com against the IG user id
+// resolved from the linked Page (Instagram Graph API).
 //
 // The caller is always identified by their Supabase session JWT
 // (Authorization: Bearer …), verified against the Auth API the same
@@ -57,7 +50,14 @@ const cors = {
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v21.0";
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
 const DEFAULT_REDIRECT_URI =
-  "https://mdemoss-bdc.github.io/AutoLaunch/instagram-callback.html";
+  "https://autolaunch.org/luna-rebuild/instagram-callback.html";
+// The Facebook-Login permissions the connect dialog requests. Stored
+// as the fallback scope when /me/permissions cannot be read.
+const REQUESTED_PERMISSIONS = [
+  "instagram_basic",
+  "instagram_content_publish",
+  "pages_show_list",
+];
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -184,7 +184,33 @@ async function handleExchange(req: Request, userId: string): Promise<Response> {
     console.error("instagram-auth: long-lived exchange failed (keeping short-lived): " + e);
   }
 
-  // 3) Resolve the user's Pages and their linked Instagram business
+  // 3) Read the permissions Meta actually granted. This decides the
+  //    publish_permission state the app shows: "granted" only when
+  //    instagram_content_publish is on the granted list (App Review
+  //    Advanced Access, or an app-role user under Standard Access).
+  //    If the read fails we cannot prove the grant, so the state is
+  //    "unknown" and the stored scope falls back to the requested set.
+  let grantedPermissions: string[] | null = null;
+  try {
+    const perms = await graphGet("/me/permissions", accessToken);
+    if (perms.res.ok && Array.isArray(perms.body?.data)) {
+      grantedPermissions = (perms.body.data as Record<string, unknown>[])
+        .filter((p) => p?.status === "granted" && typeof p?.permission === "string")
+        .map((p) => p.permission as string);
+    }
+  } catch (e) {
+    console.error("instagram-auth: permissions read failed: " + e);
+  }
+  const scope = grantedPermissions
+    ? grantedPermissions.join(",")
+    : REQUESTED_PERMISSIONS.join(",");
+  const publishPermission = grantedPermissions
+    ? grantedPermissions.includes("instagram_content_publish")
+      ? "granted"
+      : "pending"
+    : "unknown";
+
+  // 4) Resolve the user's Pages and their linked Instagram business
   //    accounts. Content publishing runs against the IG user id, and
   //    an IG account is only usable here when it is linked to a Page
   //    the user manages.
@@ -235,8 +261,8 @@ async function handleExchange(req: Request, userId: string): Promise<Response> {
     );
   }
 
-  // 4) Upsert the connection row (service role — the browser gets no
-  //    write access to this table at all; see the draft migration).
+  // 5) Upsert the connection row (service role — the browser gets no
+  //    write access to this table at all; see the applied migration).
   const now = Date.now();
   const row = {
     user_id: userId,
@@ -248,7 +274,8 @@ async function handleExchange(req: Request, userId: string): Promise<Response> {
     token_expires_at: expiresIn
       ? new Date(now + expiresIn * 1000).toISOString()
       : null,
-    scope: "instagram_business_basic,instagram_business_content_publish",
+    scope,
+    publish_permission: publishPermission,
     updated_at: new Date(now).toISOString(),
   };
   const { error } = await serviceClient()
@@ -259,25 +286,38 @@ async function handleExchange(req: Request, userId: string): Promise<Response> {
     return json({ error: "connection_save_failed" }, 500);
   }
 
-  // Never return the token — identity display fields only.
-  return json({ ok: true, username, display_name: displayName });
+  // Never return the token — identity display fields + grant state.
+  return json({
+    ok: true,
+    username,
+    display_name: displayName,
+    publish_permission: publishPermission,
+  });
 }
 
 async function handleStatus(userId: string): Promise<Response> {
   const { data, error } = await serviceClient()
     .from("instagram_connections")
-    .select("username, display_name")
+    .select("username, display_name, publish_permission")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) {
     console.error("instagram-auth: status lookup failed: " + error.message);
     return json({ error: "status_lookup_failed" }, 500);
   }
-  if (!data) return json({ connected: false, username: null, display_name: null });
+  if (!data) {
+    return json({
+      connected: false,
+      username: null,
+      display_name: null,
+      publish_permission: null,
+    });
+  }
   return json({
     connected: true,
     username: data.username ?? null,
     display_name: data.display_name ?? null,
+    publish_permission: data.publish_permission ?? "unknown",
   });
 }
 

@@ -2768,6 +2768,10 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
             TikTok
           </button>
 
+          <button data-settings-tab="instagram" onclick="switchSettingsTab('instagram')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
+            Instagram
+          </button>
+
           <button data-settings-tab="automation" onclick="switchSettingsTab('automation')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
             Automation
           </button>
@@ -3374,6 +3378,35 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         </div>
 
       </div><!-- /settingsPanelTiktok -->
+
+      <div id="settingsPanelInstagram" class="space-y-6 hidden">
+
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="font-bold text-lg">Instagram</h3>
+          <p class="text-sm text-slate-500">
+            Connect your Instagram business account so AutoLaunch can post your
+            cars' photos, photo carousels and VIN Reels straight to Instagram.
+            You sign in on Facebook's own site — AutoLaunch never sees your
+            password, and there is no key to paste here. Your Instagram must be
+            a business or creator account linked to a Facebook Page you manage.
+            Posting unlocks once Meta approves AutoLaunch's Instagram app
+            review; connecting now saves your account so you are ready the day
+            it clears.
+          </p>
+          <p id="instagramConnectStatus" class="text-sm font-semibold text-slate-700">Checking connection…</p>
+          <p id="instagramPublishNote" class="hidden text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2"></p>
+          <div class="flex flex-wrap gap-3">
+            <button id="instagramConnectBtn" onclick="connectInstagram()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
+              Connect Instagram
+            </button>
+            <button id="instagramDisconnectBtn" onclick="disconnectInstagram()" class="hidden px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold cursor-pointer">
+              Disconnect
+            </button>
+          </div>
+          <p id="instagramTestResult" class="text-xs text-slate-500"></p>
+        </div>
+
+      </div><!-- /settingsPanelInstagram -->
 
       <div id="settingsPanelAi" class="space-y-6 hidden">
 
@@ -4505,6 +4538,8 @@ document.addEventListener("click", function (e) {
     if (car) openListingCopyModal(car);
   } else if (action === "vin-reel") {
     vinReelAction(vin);
+  } else if (action === "post-instagram") {
+    postToInstagram(vin);
   } else if (action === "row-dropdown") {
     toggleRowDropdown({
       stopPropagation: () => e.stopPropagation(),
@@ -12419,6 +12454,7 @@ function gridCardHtml(car) {
         <button data-action="vin-reel" data-vin="${vinAttr}" title="VIN Reel — a narrated showcase video of this car" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
           <i class="fa-solid fa-clapperboard text-xs"></i>
         </button>
+        ${instagramPostBtnHtml(vinAttr, " shrink-0")}
         <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 shrink-0 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
           <i class="fa-solid fa-ellipsis text-xs"></i>
         </button>
@@ -12672,6 +12708,7 @@ ${car.location_name ? `
           <button data-action="vin-reel" data-vin="${vinAttr}" title="VIN Reel — a narrated showcase video of this car" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
             <i class="fa-solid fa-clapperboard text-xs"></i>
           </button>
+          ${instagramPostBtnHtml(vinAttr, "")}
           <button data-action="row-dropdown" data-vin="${vinAttr}" class="w-8 h-8 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
             <i class="fa-solid fa-ellipsis text-xs"></i>
           </button>
@@ -19481,7 +19518,7 @@ async function showCloserPage() {
   syncQueuePoller();
 }
 
-function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); if (typeof syncOwnerTabVisibility === "function") syncOwnerTabVisibility(); renderLocationGroupsSettings(); renderThemePicker(); refreshTikTokStatus(); safeLoadIntroVideos(); }
+function openSettingsModal() { document.getElementById("settingsModal").classList.remove("hidden"); renderUserId(); if (typeof syncOwnerTabVisibility === "function") syncOwnerTabVisibility(); renderLocationGroupsSettings(); renderThemePicker(); refreshTikTokStatus(); refreshInstagramStatus(); safeLoadIntroVideos(); }
 function renderUserId() { const el = document.getElementById("settingsUserId"); if (el) el.textContent = (currentUser && currentUser.id) ? currentUser.id : "—"; }
 async function copyUserId() {
   const id = (currentUser && currentUser.id) ? currentUser.id : "";
@@ -19497,7 +19534,7 @@ async function copyUserId() {
 }
 // Luna: Settings left-menu tabs (Dealership / Facebook / Automation / AI Settings)
 function switchSettingsTab(tab) {
-  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", tiktok: "settingsPanelTiktok", automation: "settingsPanelAutomation", ai: "settingsPanelAi", appearance: "settingsPanelAppearance", plan: "settingsPanelPlan", owner: "settingsPanelOwner" };
+  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", tiktok: "settingsPanelTiktok", instagram: "settingsPanelInstagram", automation: "settingsPanelAutomation", ai: "settingsPanelAi", appearance: "settingsPanelAppearance", plan: "settingsPanelPlan", owner: "settingsPanelOwner" };
   Object.entries(panels).forEach(([key, id]) => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("hidden", key !== tab);
@@ -19507,6 +19544,7 @@ function switchSettingsTab(tab) {
     btn.className = "w-full text-left px-4 py-3 rounded-xl cursor-pointer " + (active ? "bg-blue-600 text-white font-bold" : "bg-slate-100 text-slate-600 font-semibold");
   });
   if (tab === "dealership") safeLoadIntroVideos();
+  if (tab === "instagram") refreshInstagramStatus();
   if (tab === "owner" && typeof loadOwnerPanel === "function") loadOwnerPanel();
   if (typeof syncOwnerTabVisibility === "function") syncOwnerTabVisibility();
 }
@@ -19695,6 +19733,301 @@ async function sendTikTokTestPost() {
   } catch (e) { /* never let a toast break page load */ }
 })();
 // ======================= TIKTOK CONNECT (SANDBOX) END ========================
+// ==============================================================================
+// ====================== INSTAGRAM CONNECT START ===============================
+// ==============================================================================
+// [INSTAGRAM-348-JS-BEGIN]
+// Settings → Instagram tab + the per-car "Post to Instagram" action.
+// Modeled on the TikTok connect block above: the user authorizes on
+// Facebook's own site (Facebook Login); Facebook redirects to
+// instagram-callback.html, which hands the code to the instagram-auth
+// Edge Function for the server-side token exchange. Tokens live only
+// in the instagram_connections table, read/written by the Edge
+// Functions — this page only ever asks "am I connected, and as who".
+// Posting (the per-car button) goes through the instagram-post
+// function. Publishing sits DARK until Meta's App Review grants
+// instagram_content_publish Advanced Access: until then the post
+// function answers instagram_permission_pending and this UI says
+// exactly that instead of pretending a post went out. See
+// INSTAGRAM_APP_REVIEW.md in this folder.
+// ============================ CONFIG — SET ME ================================
+// META_APP_ID: the "Auto Launch Feed" Meta app id. It is a public
+// identifier (it rides in the authorize URL below), not the app
+// secret — the secret exists only as a Supabase function secret.
+const META_APP_ID = "1442518901327928";
+const INSTAGRAM_REDIRECT_URI = "https://autolaunch.org/luna-rebuild/instagram-callback.html";
+const INSTAGRAM_OAUTH_SCOPE = "instagram_basic,instagram_content_publish,pages_show_list";
+// ========================== /CONFIG — SET ME =================================
+
+// Last /instagram-auth/status answer; null = not checked yet this
+// session. The per-car button renders disabled-with-explanation only
+// when this is known to be disconnected — while unknown it stays
+// clickable and postToInstagram checks live before doing anything.
+let instagramConnState = null;
+
+// Pure media choice for one car, in the channel's preference order:
+// a ready VIN Reel posts as a Reel; otherwise the car's photos post
+// as a single photo (1) or a carousel (2–10). Photos must be JPEG for
+// Meta — when any JPEGs exist they win; if none do, the full list is
+// used and Meta's own verdict comes back verbatim. { kind: "none" }
+// when the car has neither a ready reel nor a usable photo.
+function instagramMediaPlan(photos, reelUrl) {
+  if (reelUrl) return { kind: "reel", video_url: reelUrl };
+  const list = (Array.isArray(photos) ? photos : []).filter(
+    (u) => typeof u === "string" && /^https:\/\//i.test(u)
+  );
+  if (!list.length) return { kind: "none" };
+  const jpgs = list.filter((u) => /\.jpe?g($|[?#])/i.test(u));
+  const use = jpgs.length ? jpgs : list;
+  if (use.length === 1) return { kind: "photo", image_url: use[0] };
+  return { kind: "carousel", image_urls: use.slice(0, 10) };
+}
+
+// Pure caption built from the car's own data only — nothing invented.
+function instagramCaptionFor(car) {
+  if (!car) return "";
+  const parts = [];
+  const title = [car.year, car.make, car.model, car.trim]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if (title) parts.push(title);
+  if (car.price) parts.push("$" + Number(car.price).toLocaleString("en-US"));
+  if (car.mileage) parts.push(Number(car.mileage).toLocaleString("en-US") + " miles");
+  const stock = car.stock_number || car.stock_num;
+  if (stock) parts.push("Stock #" + stock);
+  if (car.location_name) parts.push(car.location_name);
+  const tags = ["#AutoLaunch", "#CarsForSale"];
+  if (car.make) tags.push("#" + String(car.make).replace(/[^A-Za-z0-9]/g, ""));
+  parts.push(tags.join(" "));
+  return parts.join("\n");
+}
+
+// The per-car button, rendered by both inventory renderers next to
+// the VIN Reel button. Known-disconnected renders it disabled with
+// the reason in the title; otherwise it is a live action button.
+function instagramPostBtnHtml(vinAttr, shrinkCls) {
+  if (instagramConnState && instagramConnState.connected === false) {
+    return `<button disabled title="Post to Instagram — connect Instagram in Settings → Instagram first" class="w-8 h-8${shrinkCls} rounded-xl border border-slate-200 text-slate-300 flex items-center justify-center cursor-not-allowed opacity-40">
+          <i class="fa-brands fa-instagram text-xs"></i>
+        </button>`;
+  }
+  return `<button data-action="post-instagram" data-vin="${vinAttr}" title="Post to Instagram — this car's photos, carousel or VIN Reel" class="w-8 h-8${shrinkCls} rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+          <i class="fa-brands fa-instagram text-xs"></i>
+        </button>`;
+}
+
+function renderInstagramStatus(state) {
+  instagramConnState = state;
+  const status = document.getElementById("instagramConnectStatus");
+  const note = document.getElementById("instagramPublishNote");
+  const connectBtn = document.getElementById("instagramConnectBtn");
+  const disconnectBtn = document.getElementById("instagramDisconnectBtn");
+  if (!status || !connectBtn || !disconnectBtn) return;
+  if (state && state.connected) {
+    status.textContent =
+      "Connected as " +
+      (state.display_name ||
+        (state.username ? "@" + state.username : "your Instagram account"));
+    connectBtn.classList.add("hidden");
+    disconnectBtn.classList.remove("hidden");
+    if (note) {
+      if (state.publish_permission === "pending") {
+        note.textContent =
+          "Connected — publishing unlocks once Meta approves AutoLaunch's Instagram app review (instagram_content_publish). A post attempted before then will honestly report that the approval is still pending; nothing goes out.";
+        note.classList.remove("hidden");
+      } else if (state.publish_permission === "granted") {
+        note.textContent =
+          "Publishing is approved for this account — the Instagram button on any car posts it.";
+        note.classList.remove("hidden");
+      } else {
+        note.classList.add("hidden");
+      }
+    }
+  } else {
+    status.textContent = "Not connected yet.";
+    connectBtn.classList.remove("hidden");
+    disconnectBtn.classList.add("hidden");
+    if (note) note.classList.add("hidden");
+  }
+}
+
+async function refreshInstagramStatus() {
+  const status = document.getElementById("instagramConnectStatus");
+  if (!status) return;
+  const headers = await tiktokFunctionHeaders();
+  if (!headers) {
+    renderInstagramStatus(null);
+    return;
+  }
+  try {
+    const res = await fetch(SUPABASE_URL + "/functions/v1/instagram-auth/status", {
+      headers,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+    renderInstagramStatus(data);
+  } catch (e) {
+    renderInstagramStatus(null);
+    status.textContent =
+      "Couldn't check the Instagram connection — it will retry next time Settings opens.";
+  }
+}
+
+async function connectInstagram() {
+  const {
+    data: { session },
+  } = await supabaseClient.auth.getSession();
+  const uid =
+    (session && session.user && session.user.id) ||
+    (currentUser && currentUser.id) ||
+    "";
+  if (!uid) {
+    showTikTokToast("Sign in to AutoLaunch first, then connect Instagram.");
+    return;
+  }
+  const url =
+    "https://www.facebook.com/v21.0/dialog/oauth" +
+    "?client_id=" +
+    encodeURIComponent(META_APP_ID) +
+    "&redirect_uri=" +
+    encodeURIComponent(INSTAGRAM_REDIRECT_URI) +
+    "&scope=" +
+    encodeURIComponent(INSTAGRAM_OAUTH_SCOPE) +
+    "&response_type=code" +
+    "&state=" +
+    encodeURIComponent(uid);
+  window.location.href = url;
+}
+
+async function disconnectInstagram() {
+  const headers = await tiktokFunctionHeaders();
+  if (!headers) {
+    showTikTokToast("Sign in to AutoLaunch first.");
+    return;
+  }
+  try {
+    const res = await fetch(SUPABASE_URL + "/functions/v1/instagram-auth/disconnect", {
+      method: "POST",
+      headers,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || "HTTP " + res.status);
+    showTikTokToast("Instagram disconnected.");
+    const result = document.getElementById("instagramTestResult");
+    if (result) result.textContent = "";
+    renderInstagramStatus(null);
+    instagramConnState = { connected: false };
+  } catch (e) {
+    showTikTokToast("Couldn't disconnect Instagram: " + (e.message || e));
+  }
+}
+
+async function postToInstagram(vin) {
+  const car = rawInventory.find((c) => c.vin === vin);
+  if (!car || !currentUser) return;
+  // Connection first: never attempt a post we know cannot run — say
+  // why, and take the user to the connect panel.
+  let state = instagramConnState;
+  if (!state) {
+    await refreshInstagramStatus();
+    state = instagramConnState;
+  }
+  if (!state || !state.connected) {
+    showTikTokToast(
+      "Connect Instagram first — Settings → Instagram → Connect Instagram. Then this button posts the car's photos or Reel."
+    );
+    openSettingsModal();
+    switchSettingsTab("instagram");
+    return;
+  }
+  const reel = vinReelFor(car);
+  const reelUrl = reel && reel.status === "ready" ? reel.video_url || "" : "";
+  const plan = instagramMediaPlan(vehiclePhotoList(car), reelUrl);
+  if (plan.kind === "none") {
+    showTikTokToast(
+      "No usable photos for this car yet — Instagram needs at least one photo or a ready VIN Reel."
+    );
+    return;
+  }
+  const headers = await tiktokFunctionHeaders();
+  if (!headers) {
+    showTikTokToast("Sign in to AutoLaunch first.");
+    return;
+  }
+  showTikTokToast(
+    plan.kind === "reel"
+      ? "Posting this car's Reel to Instagram…"
+      : "Posting this car to Instagram…"
+  );
+  try {
+    const body = {
+      caption: instagramCaptionFor(car),
+      vin: car.vin,
+      stock_number: car.stock_number || car.stock_num || null,
+    };
+    if (plan.kind === "reel") body.video_url = plan.video_url;
+    else if (plan.kind === "carousel") body.image_urls = plan.image_urls;
+    else body.image_url = plan.image_url;
+    const res = await fetch(SUPABASE_URL + "/functions/v1/instagram-post", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok) {
+      showTikTokToast(
+        "✅ Posted to Instagram" + (data.kind ? " (" + data.kind + ")" : "") + "."
+      );
+    } else if (data.error === "instagram_permission_pending") {
+      showTikTokToast(
+        "Instagram is connected, but posting is still awaiting Meta's app approval — nothing was published. Meta said: " +
+          (data.message || "permission pending")
+      );
+    } else if (data.error === "instagram_not_connected") {
+      instagramConnState = { connected: false };
+      showTikTokToast(
+        "Instagram isn't connected — Settings → Instagram → Connect Instagram."
+      );
+    } else if (data.error === "instagram_token_expired") {
+      showTikTokToast("Instagram login expired — reconnect in Settings → Instagram.");
+    } else {
+      showTikTokToast(
+        "Instagram post didn't go through: " +
+          (data.message || data.error || "HTTP " + res.status)
+      );
+    }
+  } catch (e) {
+    showTikTokToast("Instagram post failed: " + (e.message || e));
+  }
+}
+
+// Returning from instagram-callback.html: ?instagram=connected —
+// celebrate once, then strip the param so a refresh doesn't re-toast.
+(function handleInstagramReturn() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("instagram") !== "connected") return;
+    params.delete("instagram");
+    const qs = params.toString();
+    history.replaceState(
+      null,
+      "",
+      window.location.pathname + (qs ? "?" + qs : "") + window.location.hash
+    );
+    setTimeout(
+      () =>
+        showTikTokToast(
+          "✅ Instagram connected. The Instagram button on any car posts it (publishing unlocks when Meta's review clears)."
+        ),
+      800
+    );
+  } catch (e) {
+    /* never let a toast break page load */
+  }
+})();
+// [INSTAGRAM-348-JS-END]
+// ======================= INSTAGRAM CONNECT END ================================
 // ==============================================================================
 // ====================== INTRO VIDEOS (PHASE 1) START ==========================
 // ==============================================================================

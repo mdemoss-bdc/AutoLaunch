@@ -1,38 +1,43 @@
 // =====================================================================
-// DRAFT — NOT DEPLOYED. PREPARED 2026-10-26 (overnight audit pass) so
-// the Instagram channel is ready the day Meta business verification
-// lands. Lives in the rebuild folder for review only. Deploy (by
-// Matthew, at promotion time — see luna-rebuild/INSTAGRAM.md):
-//   supabase functions deploy instagram-post --no-verify-jwt
-// Requires instagram-auth deployed with the same secrets
-// (META_APP_ID / META_APP_SECRET) and the instagram_connections table
-// to exist (see the draft migration).
-//
 // instagram-post — Publish to the caller's connected Instagram via the
-// Content Publishing API, modeled on tiktok-post (same manual JWT
-// verification, same connection-row lookup, same error shape). POST
-// body, one of:
-//   { image_url: string, caption?: string }   photo post / carousel
-//                                             item (public https URL;
-//                                             JPEG required by Meta)
-//   { video_url: string, caption?: string }   Reels post (public
-//                                             https URL of an .mp4)
+// Content Publishing API (graph.facebook.com), modeled on tiktok-post
+// (same manual JWT verification, same connection-row lookup, same
+// error honesty). Built and deployed 2026-11-19 (rebuild scope).
+// Until Meta App Review grants instagram_content_publish Advanced
+// Access on the "Auto Launch Feed" app, real publishes from accounts
+// without an app role fail at Meta with a permissions error — that is
+// EXPECTED, and this function reports it cleanly as
+// { error: "instagram_permission_pending" } carrying Meta's verbatim
+// message, never as a crash or a fake success. See
+// luna-rebuild/INSTAGRAM_APP_REVIEW.md.
+//
+// POST body, exactly one media shape:
+//   { image_url: string, caption?: string }    single photo post
+//   { image_urls: string[2..10], caption? }    carousel post
+//   { video_url: string, caption?: string }    Reel (the VIN Reel)
+// plus optional bookkeeping fields the app passes for the outcome
+// record: { vin?: string, stock_number?: string }.
 //
 // Flow: verify the caller's Supabase JWT -> load their
-// instagram_connections row -> create the media container
-// (POST /{ig-user-id}/media) -> for video, poll the container's
-// status_code until FINISHED (Meta processes uploads async) ->
-// publish (POST /{ig-user-id}/media_publish) -> return the media id.
+// instagram_connections row -> create the media container(s)
+// (POST /{ig-user-id}/media) -> poll the container's status_code
+// until FINISHED (video + carousel; photo containers are ready
+// immediately) -> publish (POST /{ig-user-id}/media_publish) ->
+// record the outcome in public.instagram_posts (the caller's own
+// rows only — the row is always keyed by the JWT-verified user id,
+// never by anything in the request body).
+//
+// Supported subset, deliberately: single JPEG photo, photo carousel
+// (2–10 images), and one mp4 Reel. Stories, albums mixed with video,
+// and multi-video carousels are not supported by this endpoint.
 //
 // Instagram specifics that differ from TikTok:
-//   - Media must be hosted at a PUBLIC URL Meta's servers can fetch —
-//     in practice a public Supabase Storage URL (the car's photos as
-//     scraped, or a stitched intro-video file). There is no
-//     byte-upload path like TikTok's FILE_UPLOAD.
+//   - Media must be hosted at a PUBLIC https URL Meta's servers can
+//     fetch (Supabase Storage public URLs qualify); photos must be
+//     JPEG. There is no byte-upload path like TikTok's FILE_UPLOAD.
 //   - Publishing is capped by Meta (25 published posts per IG account
-//     per 24h at drafting time); the app's channel fan-out and daily
-//     pacing stay the rep-facing control, this function just executes
-//     one post per call.
+//     per 24h at build time); the app's daily pacing stays the
+//     rep-facing control, this function executes one post per call.
 //   - User tokens are long-lived (~60 days) and are NOT refreshable
 //     in place the way TikTok's are — an expired token means the rep
 //     reconnects Instagram in Settings (instagram-auth /exchange).
@@ -50,6 +55,7 @@ const cors = {
 
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v21.0";
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
+const MAX_CAROUSEL_ITEMS = 10;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -92,26 +98,66 @@ interface ConnectionRow {
   token_expires_at: string | null;
 }
 
-// Pull Meta's own error message out of a Graph response.
-function metaError(step: string, body: Record<string, unknown>, status = 502): Response {
-  const err = body?.error as { message?: string; code?: number } | undefined;
-  const message = err?.message ?? "Meta returned an error.";
-  console.error(`instagram-post: ${step} failed: ${err?.code ?? "?"} ${message}`);
-  return json({ error: "meta_error", step, code: err?.code ?? null, message }, status);
+interface GraphBody {
+  id?: string;
+  status_code?: string;
+  error?: { message?: string; type?: string; code?: number; error_subcode?: number };
+  [key: string]: unknown;
+}
+
+// A Graph error is the not-yet-approved permission state when Meta
+// says the app lacks a publishing permission: OAuthException with
+// code 10 or 200, or any error body naming the permission / a
+// permission requirement. Token failures (code 190) are NOT this —
+// they keep their own expired-token path.
+function isPermissionError(body: GraphBody): boolean {
+  const err = body?.error;
+  if (!err) return false;
+  if (err.code === 190) return false;
+  const msg = `${err.message ?? ""}`;
+  if (/instagram_content_publish/i.test(msg)) return true;
+  if ((err.code === 10 || err.code === 200) && err.type === "OAuthException") return true;
+  if ((err.code === 10 || err.code === 200) && /permission/i.test(msg)) return true;
+  return false;
+}
+
+// Record one attempt's outcome on the caller's own rows. Best-effort
+// by design: a failed insert is logged and never masks the real
+// result the caller is owed.
+async function recordOutcome(
+  db: ReturnType<typeof serviceClient>,
+  row: {
+    user_id: string;
+    vin: string | null;
+    stock_number: string | null;
+    kind: string;
+    media_id: string | null;
+    container_id: string | null;
+    status: string;
+    error_code: string | null;
+    error_message: string | null;
+  },
+): Promise<void> {
+  try {
+    const { error } = await db.from("instagram_posts").insert(row);
+    if (error) console.error("instagram-post: outcome record failed: " + error.message);
+  } catch (e) {
+    console.error("instagram-post: outcome record threw: " + e);
+  }
 }
 
 async function graphPost(
   path: string,
   accessToken: string,
   params: Record<string, string>,
-): Promise<{ res: Response; body: Record<string, unknown> }> {
+): Promise<{ res: Response; body: GraphBody }> {
   const form = new URLSearchParams({ ...params, access_token: accessToken });
   const res = await fetch(`${GRAPH}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form,
   });
-  let body: Record<string, unknown> = {};
+  let body: GraphBody = {};
   try {
     body = await res.json();
   } catch {
@@ -123,16 +169,30 @@ async function graphPost(
 async function graphGet(
   path: string,
   accessToken: string,
-): Promise<{ res: Response; body: Record<string, unknown> }> {
+): Promise<{ res: Response; body: GraphBody }> {
   const url = `${GRAPH}${path}${path.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(accessToken)}`;
   const res = await fetch(url);
-  let body: Record<string, unknown> = {};
+  let body: GraphBody = {};
   try {
     body = await res.json();
   } catch {
     body = {};
   }
   return { res, body };
+}
+
+// Poll a container until Meta finishes processing it (up to ~10
+// checks, 3 seconds apart — same cadence as tiktok-post's publish
+// polling). Returns the final status_code.
+async function pollContainer(accessToken: string, creationId: string): Promise<string> {
+  let statusCode = "";
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const st = await graphGet(`/${creationId}?fields=status_code`, accessToken);
+    statusCode = (st.body?.status_code as string) ?? statusCode;
+    if (statusCode === "FINISHED" || statusCode === "ERROR") break;
+  }
+  return statusCode;
 }
 
 Deno.serve(async (req: Request) => {
@@ -143,24 +203,49 @@ Deno.serve(async (req: Request) => {
   if (!userId) return json({ error: "unauthorized" }, 401);
 
   let imageUrl = "";
+  let imageUrls: string[] = [];
   let videoUrl = "";
   let caption = "";
+  let vin: string | null = null;
+  let stockNumber: string | null = null;
   try {
     const body = await req.json();
     imageUrl = typeof body?.image_url === "string" ? body.image_url : "";
+    imageUrls = Array.isArray(body?.image_urls)
+      ? body.image_urls.filter((u: unknown) => typeof u === "string" && u)
+      : [];
     videoUrl = typeof body?.video_url === "string" ? body.video_url : "";
     caption = typeof body?.caption === "string" ? body.caption : "";
+    vin = typeof body?.vin === "string" && body.vin ? body.vin : null;
+    stockNumber =
+      typeof body?.stock_number === "string" && body.stock_number
+        ? body.stock_number
+        : null;
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
-  if ((imageUrl && videoUrl) || (!imageUrl && !videoUrl)) {
-    return json({ error: "send_exactly_one_of_image_url_or_video_url" }, 400);
+  const shapes = [imageUrl ? 1 : 0, imageUrls.length ? 1 : 0, videoUrl ? 1 : 0]
+    .reduce((a, b) => a + b, 0);
+  if (shapes !== 1) {
+    return json(
+      { error: "send_exactly_one_of_image_url_image_urls_or_video_url" },
+      400,
+    );
   }
-  const mediaUrl = imageUrl || videoUrl;
-  if (!/^https:\/\//i.test(mediaUrl)) {
+  if (imageUrls.length === 1) {
+    return json(
+      { error: "carousel_needs_at_least_two_images", message: "Send a single photo as image_url instead." },
+      400,
+    );
+  }
+  if (imageUrls.length > MAX_CAROUSEL_ITEMS) {
+    imageUrls = imageUrls.slice(0, MAX_CAROUSEL_ITEMS);
+  }
+  const allUrls = videoUrl ? [videoUrl] : imageUrls.length ? imageUrls : [imageUrl];
+  if (!allUrls.every((u) => /^https:\/\//i.test(u))) {
     return json({ error: "media_url_must_be_public_https" }, 400);
   }
-  const isVideo = Boolean(videoUrl);
+  const kind = videoUrl ? "reel" : imageUrls.length ? "carousel" : "photo";
 
   // Load the caller's Instagram connection.
   const db = serviceClient();
@@ -175,12 +260,24 @@ Deno.serve(async (req: Request) => {
   }
   const conn = connData as ConnectionRow | null;
   if (!conn || !conn.access_token || !conn.ig_user_id) {
+    await recordOutcome(db, {
+      user_id: userId, vin, stock_number: stockNumber, kind,
+      media_id: null, container_id: null, status: "failed",
+      error_code: "instagram_not_connected",
+      error_message: "Connect Instagram in Settings first.",
+    });
     return json(
       { error: "instagram_not_connected", message: "Connect Instagram in Settings first." },
       409,
     );
   }
   if (conn.token_expires_at && Date.parse(conn.token_expires_at) < Date.now()) {
+    await recordOutcome(db, {
+      user_id: userId, vin, stock_number: stockNumber, kind,
+      media_id: null, container_id: null, status: "failed",
+      error_code: "instagram_token_expired",
+      error_message: "Instagram login expired — reconnect Instagram in Settings.",
+    });
     return json(
       {
         error: "instagram_token_expired",
@@ -192,40 +289,114 @@ Deno.serve(async (req: Request) => {
   const accessToken = conn.access_token;
   const igUserId = conn.ig_user_id;
 
-  // 1) Create the media container. Photos post as-is; videos post as
-  //    Reels (media_type=REELS) — the listing-video format.
-  const createParams: Record<string, string> = isVideo
-    ? { media_type: "REELS", video_url: videoUrl, caption }
-    : { image_url: imageUrl, caption };
-  const created = await graphPost(`/${igUserId}/media`, accessToken, createParams);
-  const creationId = created.body?.id as string | undefined;
-  if (!created.res.ok || !creationId) {
-    return metaError("media_create", created.body);
+  // Shared failure exit: classify, record, and answer honestly. The
+  // Graph message is always carried verbatim in `message`.
+  async function failWith(
+    step: string,
+    body: GraphBody,
+    containerId: string | null,
+  ): Promise<Response> {
+    const err = body?.error;
+    const message = err?.message ?? "Meta returned an error.";
+    const code = err?.code ?? null;
+    console.error(`instagram-post: ${step} failed: ${code ?? "?"} ${message}`);
+    if (isPermissionError(body)) {
+      await recordOutcome(db, {
+        user_id: userId, vin, stock_number: stockNumber, kind,
+        media_id: null, container_id: containerId, status: "permission_pending",
+        error_code: "instagram_permission_pending", error_message: message,
+      });
+      return json(
+        {
+          ok: false,
+          error: "instagram_permission_pending",
+          step,
+          code,
+          message,
+          detail:
+            "Instagram posting is awaiting Meta's App Review approval for the " +
+            "instagram_content_publish permission. The post was not published.",
+        },
+        403,
+      );
+    }
+    await recordOutcome(db, {
+      user_id: userId, vin, stock_number: stockNumber, kind,
+      media_id: null, container_id: containerId, status: "failed",
+      error_code: code !== null ? String(code) : "meta_error",
+      error_message: message,
+    });
+    return json({ error: "meta_error", step, code, message }, 502);
   }
 
-  // 2) Video containers are processed asynchronously: poll until
-  //    FINISHED (up to ~10 checks, 3 seconds apart — same cadence as
-  //    tiktok-post's publish polling). Photo containers are ready
-  //    immediately; skip the poll for them.
-  if (isVideo) {
-    let statusCode = "";
-    for (let i = 0; i < 10; i++) {
-      await new Promise((r) => setTimeout(r, 3000));
-      const st = await graphGet(`/${creationId}?fields=status_code`, accessToken);
-      statusCode = (st.body?.status_code as string) ?? "";
-      if (statusCode === "FINISHED") break;
-      if (statusCode === "ERROR") {
-        return metaError("media_processing", st.body);
+  // 1) Create the media container(s). A Reel posts as media_type
+  //    REELS; a carousel is one child container per photo plus a
+  //    CAROUSEL parent; a single photo posts as-is.
+  let creationId = "";
+  if (kind === "reel") {
+    const created = await graphPost(`/${igUserId}/media`, accessToken, {
+      media_type: "REELS",
+      video_url: videoUrl,
+      caption,
+    });
+    if (!created.res.ok || !created.body?.id) {
+      return failWith("media_create", created.body, null);
+    }
+    creationId = created.body.id;
+  } else if (kind === "carousel") {
+    const childIds: string[] = [];
+    for (const url of imageUrls) {
+      const child = await graphPost(`/${igUserId}/media`, accessToken, {
+        image_url: url,
+        is_carousel_item: "true",
+      });
+      if (!child.res.ok || !child.body?.id) {
+        return failWith("media_create_child", child.body, null);
       }
+      childIds.push(child.body.id);
+    }
+    const parent = await graphPost(`/${igUserId}/media`, accessToken, {
+      media_type: "CAROUSEL",
+      children: childIds.join(","),
+      caption,
+    });
+    if (!parent.res.ok || !parent.body?.id) {
+      return failWith("media_create", parent.body, null);
+    }
+    creationId = parent.body.id;
+  } else {
+    const created = await graphPost(`/${igUserId}/media`, accessToken, {
+      image_url: imageUrl,
+      caption,
+    });
+    if (!created.res.ok || !created.body?.id) {
+      return failWith("media_create", created.body, null);
+    }
+    creationId = created.body.id;
+  }
+
+  // 2) Video and carousel containers are processed asynchronously:
+  //    poll until FINISHED. Photo containers are ready immediately;
+  //    skip the poll for them.
+  if (kind !== "photo") {
+    const statusCode = await pollContainer(accessToken, creationId);
+    if (statusCode === "ERROR") {
+      return failWith("media_processing", { error: { message: "Meta reported the media container in ERROR state while processing." } }, creationId);
     }
     if (statusCode !== "FINISHED") {
+      await recordOutcome(db, {
+        user_id: userId, vin, stock_number: stockNumber, kind,
+        media_id: null, container_id: creationId, status: "failed",
+        error_code: "media_processing_timeout",
+        error_message: "Instagram is still processing the media — retry the post shortly.",
+      });
       return json(
         {
           ok: false,
           creation_id: creationId,
           status: statusCode || "IN_PROGRESS",
           error: "media_processing_timeout",
-          message: "Instagram is still processing the video — retry the post shortly.",
+          message: "Instagram is still processing the media — retry the post shortly.",
         },
         502,
       );
@@ -238,8 +409,13 @@ Deno.serve(async (req: Request) => {
   });
   const mediaId = published.body?.id as string | undefined;
   if (!published.res.ok || !mediaId) {
-    return metaError("media_publish", published.body);
+    return failWith("media_publish", published.body, creationId);
   }
 
-  return json({ ok: true, media_id: mediaId, kind: isVideo ? "reel" : "photo" });
+  await recordOutcome(db, {
+    user_id: userId, vin, stock_number: stockNumber, kind,
+    media_id: mediaId, container_id: creationId, status: "published",
+    error_code: null, error_message: null,
+  });
+  return json({ ok: true, media_id: mediaId, kind });
 });
