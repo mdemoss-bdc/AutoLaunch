@@ -7,7 +7,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#070D1A">
+<meta name="theme-color" content="#101847">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>AutoLaunch</title>
@@ -184,38 +184,39 @@ body {
 body.dark-shell {
   /* Accent as RGB triplets so every accent-tinted rule below derives from
      ONE value. The theme engine (Settings → Appearance) overrides these
-     inline on <body>; these defaults are the Midnight Blue preset and must
-     stay identical to the original template values. */
-  --accent-rgb: 59, 130, 246;
-  --accent-strong-rgb: 96, 165, 250;
-  --glow-rgb: 46, 124, 246;
-  --btn-rgb: 37, 99, 235;
-  --d-page: #070D1A;
-  --d-page-top: #0B1424;
-  --d-sidebar: #0A1220;
-  --d-deep: #0C1730;
-  --d-card: #101B30;
-  --d-field: #0E1930;
-  --d-track: #22345A;
+     inline on <body>; these defaults are the Electric Energy preset (the
+     2026-11-20 redesign default: #008FFE on deep navy #101847) and must
+     stay identical to ELECTRIC_TOKENS in the theme engine below. */
+  --accent-rgb: 0, 143, 254;
+  --accent-strong-rgb: 92, 184, 255;
+  --glow-rgb: 21, 152, 255;
+  --btn-rgb: 25, 149, 245;
+  --d-page: #101847;
+  --d-page-top: #131C53;
+  --d-sidebar: #121B4E;
+  --d-deep: #111D60;
+  --d-card: #162060;
+  --d-field: #15205E;
+  --d-track: #1E4767;
   --d-edge: rgba(var(--accent-rgb), 0.16);
   --d-edge-strong: rgba(var(--accent-strong-rgb), 0.45);
-  --d-field-edge: #2A3D5F;
+  --d-field-edge: #2C3B93;
   --d-line: rgba(255, 255, 255, 0.055);
-  --d-h: #E9EFF8;
-  --d-body: #CBD5E1;
-  --d-soft: #9FB0C7;
-  --d-micro: #8698B5;
-  --d-faint: #7A90AC;
-  --d-fainter: #54687F;
-  --d-placeholder: #7186A3;
-  --d-link: #58A6FF;
-  --d-link-bright: #93C5FD;
-  --d-electric: #2E7CF6;
-  --d-electric-deep: #1D4ED8;
-  --d-veil: rgba(13, 24, 44, 0.92);
+  --d-h: #E7E9F3;
+  --d-body: #C7CAE1;
+  --d-soft: #9DA2C3;
+  --d-micro: #888DAF;
+  --d-faint: #7980A4;
+  --d-fainter: #50567C;
+  --d-placeholder: #6F769F;
+  --d-link: #57B5FF;
+  --d-link-bright: #8FCEFF;
+  --d-electric: #1598FF;
+  --d-electric-deep: #0E60B2;
+  --d-veil: rgba(20, 30, 90, 0.92);
   background: var(--d-page);
 }
-html:has(> body.dark-shell) { background: #070D1A; }
+html:has(> body.dark-shell) { background: #101847; }
 
 /* Inventory canvas: navy gradient with a soft electric glow near the top */
 body.dark-shell main {
@@ -585,6 +586,105 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
    breakpoint the boxes stack and this rule does not apply. */
 @media (min-width: 1024px) {
   #lunaSupportModal #lunaAssistantBox { align-self: flex-start; max-height: 100%; }
+}
+
+/* =============================================================================
+   ELECTRIC ENERGY LAYER (redesign, 2026-11-20 — Matthew approved the hybrid
+   mockup: the Midnight Command layout with Electric Energy coloring). A
+   purely visual layer painted entirely from the theme tokens, so every
+   preset + custom theme recolors it, and the default Electric Energy
+   preset renders the brand look (#008FFE on deep navy #101847). No markup,
+   behavior or data changes live here: delete this block and the shell
+   returns to the pre-redesign render under any theme.
+   ========================================================================== */
+/* Canvas: a vibrant gradient band across the top of the workspace plus
+   stronger electric glows — the mockups' gradient header, expressed on the
+   existing canvas (the shell layout itself is unchanged). */
+body.dark-shell main {
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.30) 0, rgba(var(--accent-rgb), 0.12) 3px, rgba(var(--accent-rgb), 0) 130px),
+    radial-gradient(1100px 480px at 72% -8%, rgba(var(--glow-rgb), 0.22), rgba(var(--glow-rgb), 0) 60%),
+    radial-gradient(760px 420px at 6% -12%, rgba(var(--accent-strong-rgb), 0.14), rgba(var(--accent-strong-rgb), 0) 62%),
+    linear-gradient(180deg, var(--d-page-top) 0%, var(--d-page) 55%);
+}
+body.dark-shell #getStartedPage,
+body.dark-shell #wishlistPage, #prospectsPage, #closerPage,
+body.dark-shell #extensionPage {
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.30) 0, rgba(var(--accent-rgb), 0.12) 3px, rgba(var(--accent-rgb), 0) 130px),
+    radial-gradient(1100px 480px at 72% -8%, rgba(var(--glow-rgb), 0.22), rgba(var(--glow-rgb), 0) 60%),
+    radial-gradient(760px 420px at 6% -12%, rgba(var(--accent-strong-rgb), 0.14), rgba(var(--accent-strong-rgb), 0) 62%),
+    linear-gradient(180deg, var(--d-page-top) 0%, var(--d-page) 55%);
+  color: var(--d-body);
+}
+/* Sidebar: a soft electric wash down from the brand mark, a glowing logo,
+   and a brighter gradient on the selected nav item. */
+body.dark-shell aside {
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.13), rgba(var(--accent-rgb), 0) 190px), var(--d-sidebar);
+}
+body.dark-shell aside img[alt="AutoLaunch"] {
+  box-shadow: 0 0 16px rgba(var(--glow-rgb), 0.55), 0 4px 10px rgba(2, 6, 17, 0.40);
+}
+body.dark-shell .nav-selected {
+  background: linear-gradient(135deg, rgb(var(--accent-rgb)), var(--d-electric-deep)) !important;
+  box-shadow: 0 6px 22px rgba(var(--glow-rgb), 0.55) !important;
+}
+/* Dashboard automation ribbon = the mockups' stat row: full gradient tiles
+   in the brand's blue / cyan / violet family, rotating token pairs so the
+   row reads as one family and follows the theme accent. Text inside the
+   tiles is set in white strengths — the token text colors are tuned for
+   dark surfaces and would wash out on saturated gradients. */
+body.dark-shell main .ribbon-card {
+  background-image: linear-gradient(135deg, rgb(var(--accent-rgb)), var(--d-electric-deep));
+  border-color: rgba(var(--accent-strong-rgb), 0.55);
+  box-shadow: 0 12px 28px rgba(var(--glow-rgb), 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  color: #FFFFFF;
+}
+body.dark-shell main .ribbon-card:nth-child(2) { background-image: linear-gradient(135deg, var(--d-electric-deep), rgb(var(--accent-strong-rgb))); }
+body.dark-shell main .ribbon-card:nth-child(3) { background-image: linear-gradient(135deg, rgb(var(--accent-strong-rgb)), rgb(var(--btn-rgb))); }
+body.dark-shell main .ribbon-card:nth-child(4) { background-image: linear-gradient(135deg, rgb(var(--btn-rgb)), var(--d-electric-deep)); }
+body.dark-shell main .ribbon-card:nth-child(5) { background-image: linear-gradient(135deg, var(--d-electric-deep), rgb(var(--accent-rgb))); }
+body.dark-shell main .ribbon-card::before {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0));
+}
+body.dark-shell main .ribbon-card:hover {
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 16px 34px rgba(var(--glow-rgb), 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+body.dark-shell main .ribbon-card .text-slate-900 { color: #FFFFFF; }
+body.dark-shell main .ribbon-card .text-slate-500 { color: rgba(255, 255, 255, 0.78); }
+body.dark-shell main .ribbon-card .text-slate-400 { color: rgba(255, 255, 255, 0.66); }
+body.dark-shell main .ribbon-card .text-slate-300 { color: rgba(255, 255, 255, 0.45); }
+body.dark-shell main .ribbon-card .text-blue-600 { color: #EAF6FF; }
+/* Vehicle cards: a glowing electric edge plus a gradient hairline across
+   the photo, so the grid reads like the mockups' cards. */
+body.dark-shell #inventoryGridView .glass-card {
+  position: relative;
+  border-color: rgba(var(--accent-strong-rgb), 0.30);
+  box-shadow: 0 12px 28px rgba(2, 6, 17, 0.50), 0 8px 24px -10px rgba(var(--glow-rgb), 0.40);
+}
+body.dark-shell #inventoryGridView .glass-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  z-index: 5;
+  background: linear-gradient(90deg, rgb(var(--btn-rgb)), rgb(var(--accent-strong-rgb)));
+}
+body.dark-shell #inventoryGridView .glass-card:hover {
+  border-color: rgba(var(--accent-strong-rgb), 0.55);
+  box-shadow: 0 16px 34px rgba(2, 6, 17, 0.55), 0 10px 28px -8px rgba(var(--glow-rgb), 0.55);
+}
+/* Primary buttons: brighter azure gradient + stronger glow. */
+body.dark-shell main .btn-gradient,
+body.dark-shell aside .btn-gradient,
+body.dark-shell .btn-gradient {
+  background: linear-gradient(135deg, rgb(var(--accent-rgb)), var(--d-electric-deep));
+  box-shadow: 0 6px 22px rgba(var(--glow-rgb), 0.50), inset 0 0 0 1px rgba(var(--accent-strong-rgb), 0.30);
+}
+/* Page titles get a soft electric halo. */
+body.dark-shell main h1 {
+  text-shadow: 0 0 26px rgba(var(--glow-rgb), 0.35);
 }
 </style>
 </head>
@@ -11028,7 +11128,7 @@ updateLastSyncDisplay();
       renderLocationGroupsSettings();
 
       // Color theme: restore the saved selection and apply it. Absent
-      // columns / no saved theme leave the Midnight Blue default exactly
+      // columns / no saved theme leave the Electric Energy default exactly
       // as the stylesheet defines it.
       if (data.theme_custom && data.theme_custom.base && data.theme_custom.accent) {
         themeState.custom = { base: data.theme_custom.base, accent: data.theme_custom.accent };
@@ -21498,9 +21598,10 @@ async function deleteIntroVideo(id, storagePath) {
 // just { base, accent, mode }: deriveThemeTokens() expands those two colors
 // into the full --d-* token set the shell CSS consumes, and applyTheme()
 // writes the tokens inline on <body>, overriding the stylesheet defaults
-// (which are the Midnight Blue values, so no saved theme = today's look).
-// Presets may carry literal token overrides; Midnight Blue carries the full
-// original template values so the default render is byte-for-byte the same.
+// (which are the Electric Energy values — the 2026-11-20 redesign default —
+// so no saved theme = the new brand look). Presets may carry literal token
+// overrides; Midnight Blue carries the full original template values so
+// selecting it reproduces the pre-redesign render byte-for-byte.
 // Persisted on user_settings as theme_preset (id, or "custom") and
 // theme_custom ({base, accent}); see loadUserStoreSettings / saveAllSettings.
 // THEME ENGINE START
@@ -21672,7 +21773,8 @@ function deriveThemeTokens(spec) {
   return t;
 }
 // The original template values, verbatim — Midnight Blue's literal token
-// map, so applying the default preset reproduces today's render exactly.
+// map, so applying the Midnight Blue preset reproduces the pre-redesign
+// render exactly. (It was the default until the 2026-11-20 redesign.)
 const MIDNIGHT_TOKENS = {
   "--accent-rgb": "59, 130, 246",
   "--accent-strong-rgb": "96, 165, 250",
@@ -21702,7 +21804,45 @@ const MIDNIGHT_TOKENS = {
   "--d-electric-deep": "#1D4ED8",
   "--d-veil": "rgba(13, 24, 44, 0.92)"
 };
+
+// The redesign default (2026-11-20): Electric Energy's literal token map —
+// the A-arrow brand colors, #008FFE on deep navy #101847, expanded by the
+// same derivation every preset uses (the values below are exactly
+// deriveThemeTokens({ base: "#101847", accent: "#008FFE", mode: "dark" }),
+// pinned literally like Midnight's so the render is deterministic). The
+// stylesheet defaults in body.dark-shell carry these same values, so a
+// user with no saved theme sees this look before and after boot.
+const ELECTRIC_TOKENS = {
+  "--accent-rgb": "0, 143, 254",
+  "--accent-strong-rgb": "92, 184, 255",
+  "--glow-rgb": "21, 152, 255",
+  "--btn-rgb": "25, 149, 245",
+  "--d-page": "#101847",
+  "--d-page-top": "#131C53",
+  "--d-sidebar": "#121B4E",
+  "--d-deep": "#111D60",
+  "--d-card": "#162060",
+  "--d-field": "#15205E",
+  "--d-track": "#1E4767",
+  "--d-edge": "rgba(0, 143, 254, 0.16)",
+  "--d-edge-strong": "rgba(92, 184, 255, 0.45)",
+  "--d-field-edge": "#2C3B93",
+  "--d-line": "rgba(255, 255, 255, 0.055)",
+  "--d-h": "#E7E9F3",
+  "--d-body": "#C7CAE1",
+  "--d-soft": "#9DA2C3",
+  "--d-micro": "#888DAF",
+  "--d-faint": "#7980A4",
+  "--d-fainter": "#50567C",
+  "--d-placeholder": "#6F769F",
+  "--d-link": "#57B5FF",
+  "--d-link-bright": "#8FCEFF",
+  "--d-electric": "#1598FF",
+  "--d-electric-deep": "#0E60B2",
+  "--d-veil": "rgba(20, 30, 90, 0.92)"
+};
 const THEMES = [
+  { id: "electric", name: "Electric Energy", base: "#101847", accent: "#008FFE", mode: "dark", tokens: ELECTRIC_TOKENS },
   { id: "midnight", name: "Midnight Blue", base: "#070D1A", accent: "#3B82F6", mode: "dark", tokens: MIDNIGHT_TOKENS },
   { id: "carbon", name: "Carbon Black / Blue", base: "#08090C", accent: "#3B82F6", mode: "dark" },
   { id: "blackred", name: "Black / Red", base: "#0A0809", accent: "#EF4444", mode: "dark" },
@@ -21715,7 +21855,7 @@ const THEMES = [
 // Committed selection (what Save persists and load restores). Preview-only
 // changes apply visually without touching this until the user commits by
 // picking a preset or pressing "Use custom colors".
-let themeState = { preset: "midnight", custom: null };
+let themeState = { preset: "electric", custom: null };
 function themeTokensForSelection() {
   if (themeState.preset === "custom" && themeState.custom) {
     return deriveThemeTokens({ base: themeState.custom.base, accent: themeState.custom.accent });
