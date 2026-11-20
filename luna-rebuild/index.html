@@ -1502,6 +1502,20 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
       <p class="text-sm text-slate-400">Loading your prospects…</p>
     </div>
 
+    <!-- IG INBOX (IG-MSG-355, Matthew, 2026-11-20): Instagram DMs,
+         stored server-side by the instagram-webhook receiver into
+         instagram_messages. Hidden until igInboxLoad runs — which
+         only happens on the real Prospects path, never the teaser. -->
+    <div id="igInboxSection" class="hidden glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <h2 class="font-extrabold text-base text-slate-900 flex items-center gap-2"><i class="fa-brands fa-instagram" style="color:#d62976"></i> Instagram messages</h2>
+        <button type="button" onclick="igInboxLoad()" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-bold text-xs cursor-pointer shadow-sm">Refresh</button>
+      </div>
+      <p id="igInboxNote" class="text-xs text-slate-500 mt-1">Loading Instagram messages…</p>
+      <div id="igThreadList" class="mt-2"></div>
+      <div id="igThreadView" class="hidden mt-4"></div>
+    </div>
+
   </div>
 </div>
 
@@ -18691,6 +18705,7 @@ async function showProspectsPage() {
   if (dtpF) dtpF.classList.add("hidden");
   document.getElementById("prospectsPage").classList.remove("hidden");
   await loadProspects();
+  igInboxLoad();
   renderProspects();
   updateProspectsSyncStatus();
   markProspectsSeen(); // he's looking at them now — badge clears
@@ -21013,6 +21028,234 @@ async function postToInstagram(vin) {
     /* never let a toast break page load */
   }
 })();
+
+// =====================================================================
+// [IG-MSG-355] Instagram inbox: message watching + reply from the
+// app. Inbound DMs land in instagram_messages through the
+// instagram-webhook receiver (Meta pushes them; no polling and no
+// tab needs to be open). This block only reads the owner's rows
+// (RLS) and writes through the instagram-send function (mark_read
+// + reply), which records every outbound row — sent or refused,
+// with Meta's answer verbatim. Replies are manual: the luca-draft
+// path drafts strictly from a prospect_id + closer_messages, which
+// an Instagram thread does not have, so there is deliberately no
+// Luca button here.
+// =====================================================================
+let igThreadsByParticipant = {};
+let igOpenParticipant = null;
+let igSendErrorText = "";
+
+function igThreadName(t) {
+  return t && t.username ? "@" + t.username : "Instagram user";
+}
+
+async function igInboxLoad() {
+  const section = document.getElementById("igInboxSection");
+  if (section) section.classList.remove("hidden");
+  const note = document.getElementById("igInboxNote");
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("instagram_messages")
+      .select("id, participant_id, participant_username, direction, text, status, error_message, is_read, created_at")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    const threads = {};
+    (data || []).forEach((r) => {
+      if (!r.participant_id) return;
+      if (!threads[r.participant_id]) {
+        threads[r.participant_id] = {
+          participantId: r.participant_id,
+          username: r.participant_username || null,
+          messages: [],
+          unread: 0,
+        };
+      }
+      const t = threads[r.participant_id];
+      if (r.participant_username && !t.username) t.username = r.participant_username;
+      t.messages.push(r);
+      if (r.direction === "in" && !r.is_read) t.unread++;
+    });
+    Object.values(threads).forEach((t) => t.messages.reverse());
+    igThreadsByParticipant = threads;
+    if (note) {
+      const n = Object.keys(threads).length;
+      if (!n && !instagramConnState.connected) {
+        note.textContent = "Connect Instagram in Settings → Instagram, and messages people send your account will land here.";
+      } else if (!n) {
+        note.textContent = "No Instagram conversations yet — when someone DMs your Instagram account, the thread lands here.";
+      } else {
+        note.textContent = n + (n === 1 ? " conversation" : " conversations") + " — newest first. Tap one to read and reply.";
+      }
+    }
+    igRenderThreadList();
+    if (igOpenParticipant) igRenderThreadView();
+  } catch (err) {
+    if (note) note.textContent = "Couldn't load Instagram messages: " + (err.message || "Unknown error");
+  }
+}
+
+function igRenderThreadList() {
+  const host = document.getElementById("igThreadList");
+  if (!host) return;
+  const threads = Object.values(igThreadsByParticipant).sort((a, b) => {
+    const la = a.messages.length ? a.messages[a.messages.length - 1].created_at : "";
+    const lb = b.messages.length ? b.messages[b.messages.length - 1].created_at : "";
+    return lb < la ? -1 : lb > la ? 1 : 0;
+  });
+  if (!threads.length) {
+    host.innerHTML = "";
+    return;
+  }
+  host.innerHTML = threads
+    .map((t) => {
+      const last = t.messages[t.messages.length - 1] || {};
+      const snippet = last.text
+        ? escapeHtml(String(last.text).slice(0, 90))
+        : last.direction === "in"
+          ? "(attachment)"
+          : "";
+      const when = last.created_at ? prospectsRelTime(last.created_at, Date.now()) : "";
+      const badge = t.unread
+        ? '<span class="ml-2 px-1.5 py-0.5 rounded-full text-white text-[10px] font-bold" style="background:#d62976">' + t.unread + " new</span>"
+        : "";
+      return (
+        '<div onclick="igOpenThread(\'' + String(t.participantId).split(String.fromCharCode(34)).join("&quot;") + '\')" class="flex items-center justify-between gap-3 py-2.5 cursor-pointer" style="border-top:1px solid var(--border)">' +
+        '<div class="min-w-0"><span class="font-bold text-sm text-slate-800">' + escapeHtml(igThreadName(t)) + "</span>" + badge +
+        '<div class="text-xs text-slate-500 truncate">' + (last.direction === "out" ? "You: " : "") + snippet + "</div></div>" +
+        '<span class="text-[11px] text-slate-400 shrink-0">' + escapeHtml(when) + "</span></div>"
+      );
+    })
+    .join("");
+}
+
+function igOpenThread(participantId) {
+  igOpenParticipant = participantId;
+  igSendErrorText = "";
+  const t = igThreadsByParticipant[participantId];
+  igRenderThreadView();
+  if (t && t.unread) {
+    t.unread = 0;
+    igRenderThreadList();
+    // The client holds no update policy on instagram_messages —
+    // mark_read through instagram-send is the one write path.
+    (async () => {
+      try {
+        await fetch(SUPABASE_URL + "/functions/v1/instagram-send", {
+          method: "POST",
+          headers: await tiktokFunctionHeaders(),
+          body: JSON.stringify({ action: "mark_read", participant_id: participantId }),
+        });
+      } catch (e) {
+        /* unread state is cosmetic — never surface this */
+      }
+    })();
+  }
+}
+
+function igCloseThread() {
+  igOpenParticipant = null;
+  igSendErrorText = "";
+  const view = document.getElementById("igThreadView");
+  if (view) {
+    view.classList.add("hidden");
+    view.innerHTML = "";
+  }
+}
+
+function igRenderThreadView() {
+  const view = document.getElementById("igThreadView");
+  if (!view || !igOpenParticipant) return;
+  const t = igThreadsByParticipant[igOpenParticipant];
+  if (!t) {
+    igCloseThread();
+    return;
+  }
+  view.classList.remove("hidden");
+  const lastInbound = [...t.messages].reverse().find((mm) => mm.direction === "in");
+  const stale = lastInbound && Date.now() - Date.parse(lastInbound.created_at) > 24 * 60 * 60 * 1000;
+  const bubbles = t.messages
+    .map((mm) => {
+      const body = mm.text ? escapeHtml(mm.text) : "(attachment)";
+      if (mm.direction === "in") {
+        return '<div class="flex justify-start"><div class="px-3 py-2 rounded-2xl text-sm max-w-[80%]" style="background:var(--surface-2);border:1px solid var(--border)">' + body + "</div></div>";
+      }
+      const failed = mm.status === "failed";
+      return (
+        '<div class="flex justify-end"><div class="px-3 py-2 rounded-2xl text-sm max-w-[80%] text-white" style="background:var(--accent)">' + body + "</div></div>" +
+        (failed
+          ? '<div class="flex justify-end"><p class="text-[11px] mt-0.5" style="color:#e11d48">Not sent — Meta said: ' + escapeHtml(mm.error_message || "unknown error") + "</p></div>"
+          : "")
+      );
+    })
+    .join("");
+  view.innerHTML =
+    '<div style="border-top:1px solid var(--border)" class="pt-3">' +
+    '<div class="flex items-center justify-between gap-3">' +
+    '<span class="font-extrabold text-sm text-slate-900">' + escapeHtml(igThreadName(t)) + "</span>" +
+    '<button type="button" onclick="igCloseThread()" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-bold text-xs cursor-pointer shadow-sm">Back to list</button></div>' +
+    (stale
+      ? '<p class="text-[11px] leading-relaxed mt-2 px-3 py-2 rounded-xl" style="background:rgba(245,158,11,0.12);color:#b45309;border:1px solid rgba(245,158,11,0.35)">Their last message was over 24 hours ago. Meta only guarantees replies inside a 24-hour window — if Meta rejects this send, its exact answer will show here.</p>'
+      : "") +
+    '<div class="space-y-2 mt-3">' + bubbles + "</div>" +
+    (igSendErrorText
+      ? '<p class="text-xs mt-3 px-3 py-2 rounded-xl" style="background:rgba(244,63,94,0.10);color:#be123c;border:1px solid rgba(244,63,94,0.30)">Meta refused the reply: ' + escapeHtml(igSendErrorText) + "</p>"
+      : "") +
+    '<div class="flex items-end gap-2 mt-3">' +
+    '<textarea id="igReplyText" rows="2" placeholder="Reply as your Instagram account…" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-sm" style="background:var(--surface-2)"></textarea>' +
+    '<button type="button" id="igSendBtn" onclick="igSendReply()" class="px-4 py-2 rounded-xl btn-gradient text-white font-bold text-xs cursor-pointer shadow-sm">Send</button>' +
+    "</div></div>";
+}
+
+async function igSendReply() {
+  const box = document.getElementById("igReplyText");
+  const btn = document.getElementById("igSendBtn");
+  const text = box ? box.value.trim() : "";
+  if (!text || !igOpenParticipant) return;
+  if (btn) btn.disabled = true;
+  igSendErrorText = "";
+  try {
+    const res = await fetch(SUPABASE_URL + "/functions/v1/instagram-send", {
+      method: "POST",
+      headers: await tiktokFunctionHeaders(),
+      body: JSON.stringify({ participant_id: igOpenParticipant, text }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok) {
+      const t = igThreadsByParticipant[igOpenParticipant];
+      if (t) {
+        t.messages.push({
+          id: data.row_id || "local-" + Date.now(),
+          participant_id: igOpenParticipant,
+          direction: "out",
+          text,
+          status: "sent",
+          error_message: null,
+          is_read: true,
+          created_at: data.created_at || new Date().toISOString(),
+        });
+      }
+      igRenderThreadView();
+      igRenderThreadList();
+      showTikTokToast("✅ Reply sent on Instagram.");
+    } else {
+      // The failed row is recorded server-side; reload so the
+      // thread shows it, and surface Meta's answer verbatim.
+      igSendErrorText = data.message || data.error || "Meta refused the reply.";
+      await igInboxLoad();
+      showTikTokToast("Instagram refused that reply — its answer is shown in the thread.");
+    }
+  } catch (err) {
+    igSendErrorText = "Couldn't reach the reply service: " + (err.message || "network error");
+    igRenderThreadView();
+  } finally {
+    const b2 = document.getElementById("igSendBtn");
+    if (b2) b2.disabled = false;
+  }
+}
+
 // [INSTAGRAM-348-JS-END]
 // ======================= INSTAGRAM CONNECT END ================================
 // ==============================================================================

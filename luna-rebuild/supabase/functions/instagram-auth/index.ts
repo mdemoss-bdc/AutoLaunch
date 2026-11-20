@@ -286,6 +286,28 @@ async function handleExchange(req: Request, userId: string): Promise<Response> {
     return json({ error: "connection_save_failed" }, 500);
   }
 
+  // [IG-MSG-355] Subscribe this IG account to the app's messaging
+  // webhooks (subscribed_apps, messages field) so Instagram DMs
+  // reach the instagram-webhook receiver and land in the in-app
+  // inbox. Best-effort: a failure here never fails the connect —
+  // the account simply won't stream messages until a reconnect
+  // (or a manual subscribe) lands it.
+  try {
+    const subRes = await fetch(
+      `${GRAPH}/${igUserId}/subscribed_apps?subscribed_fields=messages&access_token=${encodeURIComponent(accessToken)}`,
+      { method: "POST" },
+    );
+    const subBody = await subRes.json().catch(() => null);
+    if (!subRes.ok || subBody?.success !== true) {
+      console.error(
+        "instagram-auth: subscribed_apps failed: " +
+          (subBody?.error?.message ?? subRes.status),
+      );
+    }
+  } catch (e) {
+    console.error("instagram-auth: subscribed_apps fetch failed: " + e);
+  }
+
   // Never return the token — identity display fields + grant state.
   return json({
     ok: true,
