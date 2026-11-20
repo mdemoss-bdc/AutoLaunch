@@ -20430,6 +20430,24 @@ const INSTAGRAM_OAUTH_SCOPE = "instagram_basic,instagram_content_publish,pages_s
 // clickable and postToInstagram checks live before doing anything.
 let instagramConnState = null;
 
+// [INSTAGRAM-OWNER-UNLOCK-351] Matthew's account only (the app
+// owner — isOwnerGrantUser(), OWNER_USER_IDS[0]): Meta's
+// Standard Access already lets app-role users publish with
+// instagram_content_publish, proven 2026-11-19 when a backend
+// test post published to @autolaunchhq. The instagram-post
+// function never pre-blocks on publish_permission — it
+// attempts the publish and answers instagram_permission_pending
+// only when Meta actually refuses — so for the owner the
+// only gate left in this UI was the copy. This helper makes the
+// Settings note and the connect-return toast honest for his
+// account; every other account sees the pending copy
+// byte-for-byte as before, and no behavior changes for anyone:
+// disconnected still disables the button, and the post flow is
+// the same existing one for every account.
+function instagramOwnerUnlocked() {
+  return typeof isOwnerGrantUser === "function" && isOwnerGrantUser();
+}
+
 // Pure media choice for one car, in the channel's preference order:
 // a ready VIN Reel posts as a Reel; otherwise the car's photos post
 // as a single photo (1) or a carousel (2–10). Photos must be JPEG for
@@ -20498,8 +20516,9 @@ function renderInstagramStatus(state) {
     disconnectBtn.classList.remove("hidden");
     if (note) {
       if (state.publish_permission === "pending") {
-        note.textContent =
-          "Connected — publishing unlocks once Meta approves AutoLaunch's Instagram app review (instagram_content_publish). A post attempted before then will honestly report that the approval is still pending; nothing goes out.";
+        note.textContent = instagramOwnerUnlocked()
+          ? "Connected — publishing is enabled for your account ahead of Meta's app review: you own the app, so Meta's standard access covers your posts, and the Instagram button on any car posts it. Every other account unlocks when the review clears."
+          : "Connected — publishing unlocks once Meta approves AutoLaunch's Instagram app review (instagram_content_publish). A post attempted before then will honestly report that the approval is still pending; nothing goes out.";
         note.classList.remove("hidden");
       } else if (state.publish_permission === "granted") {
         note.textContent =
@@ -20683,7 +20702,9 @@ async function postToInstagram(vin) {
     setTimeout(
       () =>
         showTikTokToast(
-          "✅ Instagram connected. The Instagram button on any car posts it (publishing unlocks when Meta's review clears)."
+          instagramOwnerUnlocked()
+            ? "✅ Instagram connected. The Instagram button on any car posts it — posting is enabled for your account ahead of Meta's review."
+            : "✅ Instagram connected. The Instagram button on any car posts it (publishing unlocks when Meta's review clears)."
         ),
       800
     );
