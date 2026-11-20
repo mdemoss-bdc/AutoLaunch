@@ -14737,6 +14737,10 @@ async function refreshVinReels() {
     }
     renderDetailsReelSection();
   } catch (e) { /* reel state is decoration on the inventory view — a failed read must never break it */ }
+  // [IG-AUTO-REEL-353] The Instagram auto-post watcher rides this
+  // refresh — refreshVinReels is what the queue poller already
+  // calls, so the watcher needs no timer of its own.
+  instagramReelWatchTick();
 }
 
 async function vinReelAction(vin) {
@@ -20504,7 +20508,17 @@ function instagramPostBtnHtml(vinAttr, shrinkCls) {
           <i class="fa-brands fa-instagram text-xs"></i>
         </button>`;
   }
-  return `<button data-action="post-instagram" data-vin="${vinAttr}" title="Post to Instagram — this car's photos, carousel or VIN Reel" class="w-8 h-8${shrinkCls} rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
+  // [IG-AUTO-REEL-353] An auto-post intent is held for this car:
+  // its VIN Reel is rendering and the post fires on its own when
+  // the reel lands. The button stays live — a tap while rendering
+  // reports that state, and a tap once the reel is ready posts
+  // immediately.
+  if (instagramPendingByVin[vinAttr]) {
+    return `<button data-action="post-instagram" data-vin="${vinAttr}" title="Reel rendering — this car will post to Instagram automatically when its VIN Reel is ready" class="w-8 h-8${shrinkCls} rounded-xl border border-amber-200 bg-amber-50 text-amber-600 flex items-center justify-center cursor-pointer transition">
+          <i class="fa-solid fa-spinner fa-spin text-xs"></i>
+        </button>`;
+  }
+  return `<button data-action="post-instagram" data-vin="${vinAttr}" title="Post to Instagram — posts this car's VIN Reel (renders it first if needed)" class="w-8 h-8${shrinkCls} rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition">
           <i class="fa-brands fa-instagram text-xs"></i>
         </button>`;
 }
@@ -20616,62 +20630,159 @@ async function disconnectInstagram() {
   }
 }
 
-async function postToInstagram(vin) {
-  const car = rawInventory.find((c) => c.vin === vin);
-  if (!car || !currentUser) return;
-  // Connection first: never attempt a post we know cannot run — say
-  // why, and take the user to the connect panel.
-  let state = instagramConnState;
-  if (!state) {
-    await refreshInstagramStatus();
-    state = instagramConnState;
+// [IG-AUTO-REEL-353] Auto-render + auto-post (Matthew, 2026-11-20):
+// tapping Instagram on a car with no ready VIN Reel used to fall
+// back to a photo post, which Meta rejects (error 9007 "Media ID
+// is not available" — instagram_posts rows for HA4220 + HA4236,
+// 2026-11-20). The Reel path is the proven one, so the button is
+// now Reel-only: no ready reel → queue the render (the exact
+// vin_reels insert vinReelAction makes), record the post intent
+// server-side (an instagram_posts row at status "awaiting_reel",
+// written by the instagram-post function — that table is
+// service-role-write only, so the browser cannot record it
+// itself), and let the watcher riding refreshVinReels complete
+// the post the moment the reel is ready. The intent row survives
+// a closed tab: on the next load the watcher reloads it and
+// finishes the post with no second tap.
+let instagramPendingByVin = {};
+let instagramPendingLoaded = false;
+const instagramCompletingByVin = {};
+
+function instagramPendingFor(vin) {
+  return instagramPendingByVin[vin] || null;
+}
+
+// Load this user's still-pending auto-post intents (own rows are
+// client-readable). Once per session; a failed read simply leaves
+// the flag unset so a later tick retries — taps keep working
+// either way.
+async function instagramLoadPendingIntents() {
+  if (instagramPendingLoaded || !currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("instagram_posts")
+      .select("id, vin, status, created_at")
+      .eq("user_id", currentUser.id)
+      .eq("status", "awaiting_reel")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    (data || []).forEach((r) => {
+      if (r.vin && !instagramPendingByVin[r.vin]) {
+        instagramPendingByVin[r.vin] = { intentId: r.id };
+      }
+    });
+    instagramPendingLoaded = true;
+    if (data && data.length && typeof applyFilters === "function") applyFilters();
+  } catch (e) { /* decoration-level: a failed read must never break the inventory view */ }
+}
+
+// Queue a VIN Reel render for this car — the exact insert
+// vinReelAction makes, minus its details-modal side effects.
+// True when a live reel row exists for the VIN afterwards.
+async function instagramQueueReel(car) {
+  try {
+    const { data, error } = await supabaseClient
+      .from("vin_reels")
+      .insert({ user_id: currentUser.id, vin: car.vin, stock_number: car.stock_num || car.stock_number || null, status: "queued" })
+      .select()
+      .single();
+    if (error) throw error;
+    vinReelsByVin[car.vin] = data;
+    if (typeof applyFilters === "function") applyFilters();
+    return true;
+  } catch (err) {
+    // 23505 = a live reel already exists for this VIN (a second
+    // tap or device beat us to it) — the state we wanted, read
+    // exactly as vinReelAction reads it.
+    if (err && (err.code === "23505" || /duplicate/i.test(err.message || ""))) {
+      refreshVinReels();
+      return true;
+    }
+    console.error("[Instagram] reel queue failed:", err);
+    return false;
   }
-  if (!state || !state.connected) {
-    showTikTokToast(
-      "Connect Instagram first — Settings → Instagram → Connect Instagram. Then this button posts the car's photos or Reel."
-    );
-    openSettingsModal();
-    switchSettingsTab("instagram");
-    return;
-  }
-  const reel = vinReelFor(car);
-  const reelUrl = reel && reel.status === "ready" ? reel.video_url || "" : "";
-  const plan = instagramMediaPlan(vehiclePhotoList(car), reelUrl);
-  if (plan.kind === "none") {
-    showTikTokToast(
-      "No usable photos for this car yet — Instagram needs at least one photo or a ready VIN Reel."
-    );
-    return;
-  }
+}
+
+// Record the auto-post intent server-side via the instagram-post
+// function's intent mode (it dedupes per VIN). True when an intent
+// row is held for this car afterwards.
+async function instagramRecordIntent(car) {
+  const headers = await tiktokFunctionHeaders();
+  if (!headers) return false;
+  try {
+    const res = await fetch(SUPABASE_URL + "/functions/v1/instagram-post", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        intent: true,
+        vin: car.vin,
+        stock_number: car.stock_number || car.stock_num || null,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok && data.intent_id) {
+      instagramPendingByVin[car.vin] = { intentId: data.intent_id };
+      if (typeof applyFilters === "function") applyFilters();
+      return true;
+    }
+  } catch (e) { /* fall through — the tap path degrades honestly */ }
+  return false;
+}
+
+// Close a pending intent whose post will never run (the render
+// failed). Best-effort: the server marks the row failed so it
+// stops re-arming on future loads.
+async function instagramCloseIntent(intentId, reason) {
+  if (!intentId) return;
+  const headers = await tiktokFunctionHeaders();
+  if (!headers) return;
+  try {
+    await fetch(SUPABASE_URL + "/functions/v1/instagram-post", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ intent_id: intentId, intent_close: reason }),
+    });
+  } catch (e) { /* best-effort */ }
+}
+
+// The one publish call, shared by the tap path and the watcher:
+// posts the car's ready Reel through instagram-post and reports
+// the outcome with the channel's existing honesty. When intentId
+// is set, the function resolves that awaiting_reel row to the
+// outcome instead of writing a second row, so any server answer
+// retires the intent here too. A network-level failure keeps the
+// intent — the post may not have happened, and the watcher will
+// retry while the tab is open.
+async function instagramPublish(car, videoUrl, intentId) {
   const headers = await tiktokFunctionHeaders();
   if (!headers) {
     showTikTokToast("Sign in to AutoLaunch first.");
-    return;
+    return false;
   }
-  showTikTokToast(
-    plan.kind === "reel"
-      ? "Posting this car's Reel to Instagram…"
-      : "Posting this car to Instagram…"
-  );
+  showTikTokToast("Posting this car's Reel to Instagram…");
   try {
     const body = {
       caption: instagramCaptionFor(car),
       vin: car.vin,
       stock_number: car.stock_number || car.stock_num || null,
+      video_url: videoUrl,
     };
-    if (plan.kind === "reel") body.video_url = plan.video_url;
-    else if (plan.kind === "carousel") body.image_urls = plan.image_urls;
-    else body.image_url = plan.image_url;
+    if (intentId) body.intent_id = intentId;
     const res = await fetch(SUPABASE_URL + "/functions/v1/instagram-post", {
       method: "POST",
       headers,
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
+    if (intentId) {
+      delete instagramPendingByVin[car.vin];
+      if (typeof applyFilters === "function") applyFilters();
+    }
     if (res.ok && data.ok) {
       showTikTokToast(
         "✅ Posted to Instagram" + (data.kind ? " (" + data.kind + ")" : "") + "."
       );
+      return true;
     } else if (data.error === "instagram_permission_pending") {
       showTikTokToast(
         "Instagram is connected, but posting is still awaiting Meta's app approval — nothing was published. Meta said: " +
@@ -20693,6 +20804,124 @@ async function postToInstagram(vin) {
   } catch (e) {
     showTikTokToast("Instagram post failed: " + (e.message || e));
   }
+  return false;
+}
+
+// The watcher: rides refreshVinReels (which the queue poller
+// already calls — no new timers). For every pending intent whose
+// car is in the working set: a ready reel completes the post, a
+// failed render closes the intent, a vanished render row is
+// re-queued, and queued/generating keeps waiting. Fully
+// self-guarded — it must never break the poller.
+async function instagramReelWatchTick() {
+  try {
+    if (!currentUser) return;
+    await instagramLoadPendingIntents();
+    const vins = Object.keys(instagramPendingByVin);
+    if (!vins.length) return;
+    for (const vin of vins) {
+      const entry = instagramPendingByVin[vin];
+      if (!entry || instagramCompletingByVin[vin]) continue;
+      const car = rawInventory.find((c) => c.vin === vin);
+      if (!car) continue; // not in the working set — the intent stays recorded
+      const reel = vinReelFor(car);
+      if (reel && reel.status === "ready" && reel.video_url) {
+        instagramCompletingByVin[vin] = true;
+        try {
+          await instagramPublish(car, reel.video_url, entry.intentId);
+        } finally {
+          delete instagramCompletingByVin[vin];
+        }
+      } else if (reel && reel.status === "failed") {
+        delete instagramPendingByVin[vin];
+        if (typeof applyFilters === "function") applyFilters();
+        await instagramCloseIntent(entry.intentId, "reel_render_failed");
+        showTikTokToast(
+          "The VIN Reel render failed, so the Instagram post didn't go out. Tap the car's Reel button to retry the render, then tap Instagram again."
+        );
+      } else if (!reel) {
+        // The render row vanished (or never landed) while an
+        // intent is held — re-queue it silently if the car can
+        // still render. tierAllows, never requireTier: a background
+        // tick must not pop an upsell.
+        if (hasRealPhoto(car) && typeof tierAllows === "function" && tierAllows("vin_reels")) {
+          await instagramQueueReel(car);
+        }
+      }
+      // queued / generating → keep waiting for the next tick.
+    }
+  } catch (e) { /* the watcher must never break the poller */ }
+}
+
+async function postToInstagram(vin) {
+  const car = rawInventory.find((c) => c.vin === vin);
+  if (!car || !currentUser) return;
+  // Connection first: never attempt a post we know cannot run — say
+  // why, and take the user to the connect panel.
+  let state = instagramConnState;
+  if (!state) {
+    await refreshInstagramStatus();
+    state = instagramConnState;
+  }
+  if (!state || !state.connected) {
+    showTikTokToast(
+      "Connect Instagram first — Settings → Instagram → Connect Instagram. Then this button posts the car's Reel."
+    );
+    openSettingsModal();
+    switchSettingsTab("instagram");
+    return;
+  }
+  await instagramLoadPendingIntents();
+  const pending = instagramPendingFor(car.vin);
+  const reel = vinReelFor(car);
+  // Ready Reel → post it now, exactly as before (resolving a held
+  // intent row when there is one).
+  if (reel && reel.status === "ready" && reel.video_url) {
+    if (instagramCompletingByVin[car.vin]) {
+      showTikTokToast("This car's Reel is posting to Instagram right now…");
+      return;
+    }
+    instagramCompletingByVin[car.vin] = true;
+    try {
+      await instagramPublish(car, reel.video_url, pending ? pending.intentId : null);
+    } finally {
+      delete instagramCompletingByVin[car.vin];
+    }
+    return;
+  }
+  // [IG-AUTO-REEL-353] No ready Reel: the photo fallback is GONE —
+  // Meta rejects photo posts from this flow (error 9007), so a car
+  // renders first and posts as a Reel, always. A car with no
+  // photos cannot render at all — the app's no-photo guard.
+  if (!hasRealPhoto(car)) {
+    showTikTokToast(
+      "No photo — can't post. This car has no photos yet, so there's nothing to render its VIN Reel from."
+    );
+    return;
+  }
+  if (pending) {
+    showTikTokToast(
+      "This car's Reel is already rendering — it will post to Instagram automatically when it's ready."
+    );
+    return;
+  }
+  // Queue the render when none is in flight (a failed render is
+  // re-queued, exactly as vinReelAction treats it). Creating a
+  // reel carries the same tier gate as the Reel button.
+  if (!reel || reel.status === "failed") {
+    if (!requireTier("vin_reels")) return;
+    const queued = await instagramQueueReel(car);
+    if (!queued) {
+      showTikTokToast("Couldn't queue this car's VIN Reel — try again in a moment.");
+      return;
+    }
+  }
+  const recorded = await instagramRecordIntent(car);
+  showTikTokToast(
+    recorded
+      ? "Rendering this car's VIN Reel — it will post to Instagram automatically when it's ready. You can leave this tab open, or it'll finish next time you open AutoLaunch."
+      : "Rendering this car's VIN Reel — once it shows Reel ready, tap Instagram again and it posts right away."
+  );
 }
 
 // Returning from instagram-callback.html: ?instagram=connected —

@@ -18,6 +18,20 @@
 // plus optional bookkeeping fields the app passes for the outcome
 // record: { vin?: string, stock_number?: string }.
 //
+// [IG-AUTO-REEL-353] Intent modes (no media shape — the app sends
+// these when a car's owner taps Instagram before its VIN Reel
+// exists; the app queues the render and this function holds the
+// post intent, because instagram_posts is service-role-write
+// only):
+//   { intent: true, vin, stock_number? }     -> insert (or return
+//     the existing) instagram_posts row at status "awaiting_reel".
+//   { intent_id, intent_close: "<reason>" }  -> close a held
+//     intent whose post will never run (the render failed): the
+//     row is marked failed with the reason as its error_code.
+// A publish call may also carry intent_id: recordOutcome then
+// resolves that awaiting_reel row to the outcome instead of
+// inserting a second row, so one row carries the whole lifecycle.
+//
 // Flow: verify the caller's Supabase JWT -> load their
 // instagram_connections row -> create the media container(s)
 // (POST /{ig-user-id}/media) -> poll the container's status_code
@@ -137,8 +151,33 @@ async function recordOutcome(
     error_code: string | null;
     error_message: string | null;
   },
+  intentId?: string | null,
 ): Promise<void> {
   try {
+    if (intentId) {
+      // [IG-AUTO-REEL-353] A held auto-post intent is resolving:
+      // update its awaiting_reel row in place so one row carries
+      // the whole lifecycle (awaiting_reel -> outcome). If the row
+      // was already resolved, fall back to a fresh outcome row —
+      // the result is never lost.
+      const { data: updated, error: updErr } = await db
+        .from("instagram_posts")
+        .update({
+          vin: row.vin,
+          stock_number: row.stock_number,
+          kind: row.kind,
+          media_id: row.media_id,
+          container_id: row.container_id,
+          status: row.status,
+          error_code: row.error_code,
+          error_message: row.error_message,
+        })
+        .eq("id", intentId)
+        .eq("user_id", row.user_id)
+        .eq("status", "awaiting_reel")
+        .select("id");
+      if (!updErr && updated && updated.length === 1) return;
+    }
     const { error } = await db.from("instagram_posts").insert(row);
     if (error) console.error("instagram-post: outcome record failed: " + error.message);
   } catch (e) {
@@ -208,8 +247,17 @@ Deno.serve(async (req: Request) => {
   let caption = "";
   let vin: string | null = null;
   let stockNumber: string | null = null;
+  let intentCreate = false;
+  let intentId: string | null = null;
+  let intentClose = "";
   try {
     const body = await req.json();
+    intentCreate = body?.intent === true;
+    intentId =
+      typeof body?.intent_id === "string" && body.intent_id
+        ? body.intent_id
+        : null;
+    intentClose = typeof body?.intent_close === "string" ? body.intent_close : "";
     imageUrl = typeof body?.image_url === "string" ? body.image_url : "";
     imageUrls = Array.isArray(body?.image_urls)
       ? body.image_urls.filter((u: unknown) => typeof u === "string" && u)
@@ -224,6 +272,90 @@ Deno.serve(async (req: Request) => {
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
+
+  const db = serviceClient();
+
+  // [IG-AUTO-REEL-353] Intent modes: no media attached, so they
+  // are handled before the media-shape validation. Both are keyed
+  // by the JWT-verified caller, never by anything in the body.
+  if (intentClose) {
+    if (!intentId) return json({ error: "intent_id_required" }, 400);
+    const reason = intentClose.slice(0, 80);
+    const { data: closed, error: closeErr } = await db
+      .from("instagram_posts")
+      .update({
+        status: "failed",
+        error_code: reason,
+        error_message: "Auto-post intent closed before publishing: " + reason,
+      })
+      .eq("id", intentId)
+      .eq("user_id", userId)
+      .eq("status", "awaiting_reel")
+      .select("id");
+    if (closeErr) {
+      console.error("instagram-post: intent close failed: " + closeErr.message);
+      return json({ error: "intent_close_failed" }, 500);
+    }
+    return json({ ok: true, closed: !!(closed && closed.length) });
+  }
+  if (intentCreate) {
+    if (!vin) return json({ error: "vin_required" }, 400);
+    // The connection must be real before an intent is held — the
+    // same checks the publish path makes, with the same answers.
+    const { data: intentConnData, error: intentConnErr } = await db
+      .from("instagram_connections")
+      .select("user_id, ig_user_id, access_token, token_expires_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (intentConnErr) {
+      console.error("instagram-post: intent connection lookup failed: " + intentConnErr.message);
+      return json({ error: "connection_lookup_failed" }, 500);
+    }
+    const intentConn = intentConnData as ConnectionRow | null;
+    if (!intentConn || !intentConn.access_token || !intentConn.ig_user_id) {
+      return json(
+        { error: "instagram_not_connected", message: "Connect Instagram in Settings first." },
+        409,
+      );
+    }
+    if (intentConn.token_expires_at && Date.parse(intentConn.token_expires_at) < Date.now()) {
+      return json(
+        {
+          error: "instagram_token_expired",
+          message: "Instagram login expired — reconnect Instagram in Settings.",
+        },
+        409,
+      );
+    }
+    // One live intent per car: an existing awaiting_reel row for
+    // this VIN already is the intent — return it, never duplicate.
+    const { data: existing } = await db
+      .from("instagram_posts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("vin", vin)
+      .eq("status", "awaiting_reel")
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (existing && existing.length) {
+      return json({ ok: true, intent_id: existing[0].id, status: "awaiting_reel", deduped: true });
+    }
+    const { data: inserted, error: insErr } = await db
+      .from("instagram_posts")
+      .insert({
+        user_id: userId, vin, stock_number: stockNumber, kind: "reel",
+        media_id: null, container_id: null, status: "awaiting_reel",
+        error_code: null, error_message: null,
+      })
+      .select("id")
+      .single();
+    if (insErr || !inserted) {
+      console.error("instagram-post: intent record failed: " + (insErr?.message ?? "no row returned"));
+      return json({ error: "intent_record_failed" }, 500);
+    }
+    return json({ ok: true, intent_id: inserted.id, status: "awaiting_reel" });
+  }
+
   const shapes = [imageUrl ? 1 : 0, imageUrls.length ? 1 : 0, videoUrl ? 1 : 0]
     .reduce((a, b) => a + b, 0);
   if (shapes !== 1) {
@@ -248,7 +380,6 @@ Deno.serve(async (req: Request) => {
   const kind = videoUrl ? "reel" : imageUrls.length ? "carousel" : "photo";
 
   // Load the caller's Instagram connection.
-  const db = serviceClient();
   const { data: connData, error: connErr } = await db
     .from("instagram_connections")
     .select("user_id, ig_user_id, access_token, token_expires_at")
@@ -265,7 +396,7 @@ Deno.serve(async (req: Request) => {
       media_id: null, container_id: null, status: "failed",
       error_code: "instagram_not_connected",
       error_message: "Connect Instagram in Settings first.",
-    });
+    }, intentId);
     return json(
       { error: "instagram_not_connected", message: "Connect Instagram in Settings first." },
       409,
@@ -277,7 +408,7 @@ Deno.serve(async (req: Request) => {
       media_id: null, container_id: null, status: "failed",
       error_code: "instagram_token_expired",
       error_message: "Instagram login expired — reconnect Instagram in Settings.",
-    });
+    }, intentId);
     return json(
       {
         error: "instagram_token_expired",
@@ -305,7 +436,7 @@ Deno.serve(async (req: Request) => {
         user_id: userId, vin, stock_number: stockNumber, kind,
         media_id: null, container_id: containerId, status: "permission_pending",
         error_code: "instagram_permission_pending", error_message: message,
-      });
+      }, intentId);
       return json(
         {
           ok: false,
@@ -325,7 +456,7 @@ Deno.serve(async (req: Request) => {
       media_id: null, container_id: containerId, status: "failed",
       error_code: code !== null ? String(code) : "meta_error",
       error_message: message,
-    });
+    }, intentId);
     return json({ error: "meta_error", step, code, message }, 502);
   }
 
@@ -389,7 +520,7 @@ Deno.serve(async (req: Request) => {
         media_id: null, container_id: creationId, status: "failed",
         error_code: "media_processing_timeout",
         error_message: "Instagram is still processing the media — retry the post shortly.",
-      });
+      }, intentId);
       return json(
         {
           ok: false,
@@ -416,6 +547,6 @@ Deno.serve(async (req: Request) => {
     user_id: userId, vin, stock_number: stockNumber, kind,
     media_id: mediaId, container_id: creationId, status: "published",
     error_code: null, error_message: null,
-  });
+  }, intentId);
   return json({ ok: true, media_id: mediaId, kind });
 });
