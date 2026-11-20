@@ -11450,12 +11450,16 @@ function isSold(car) {
   return !!car && (car.status || "").toLowerCase() === "sold";
 }
 
-// POSTED-BUT-EXITED (Matthew, 2026-10-28): the scraper marks a car
-// is_active=false when it leaves the dealer feed, but a car whose
-// Marketplace listing is still live (marketplace_posted_at set) stays
-// visible (see fetchLiveInventory) and is badged "Exited feed" in the
-// row status chips, so a sold-and-gone car never masquerades as a
-// normal live listing. Display only — the database row is untouched.
+// POSTED-BUT-EXITED (Matthew, 2026-10-28; superseded 2026-11-20): the
+// scraper marks a car is_active=false when it leaves the dealer feed.
+// Until 2026-11-20 a car whose Marketplace listing was still live
+// (marketplace_posted_at set) stayed visible, badged "Exited feed" in
+// the row status chips. Matthew directed on 2026-11-20 that the
+// dashboard show ONLY active vehicles, so exited cars no longer enter
+// the working set at all (see fetchLiveInventory / pollInventoryDelta)
+// and that badge is unreachable in practice; this predicate is kept
+// because the chip chain still consults it. Display only — the
+// database row is untouched either way.
 function isExitedPosted(car) {
   return !!car && car.is_active === false && !!car.marketplace_posted_at;
 }
@@ -11578,7 +11582,11 @@ async function fetchLiveInventory(isManual, prefetchedRows) {
   try {
     const allCars = prefetchedRows ? await prefetchedRows : await fetchInventoryRows();
 
-    rawInventory = allCars.filter(c => c.is_active !== false || !!c.marketplace_posted_at);
+    // ACTIVE ONLY (Matthew, 2026-11-20): the dashboard working set is
+    // active vehicles only — a car that left the feed (is_active=false)
+    // never enters rawInventory, even if its Marketplace listing is
+    // still live. The delta poll applies the same predicate (visible).
+    rawInventory = allCars.filter(c => c.is_active !== false);
     inventoryLoadedOnce = true;
     inventoryLoadFailed = false;
     applyInventoryRefreshUI();
@@ -11640,9 +11648,9 @@ function updateInventoryCounts() {
 //                            post or delete lands; this poller's whole
 //                            reason to exist
 //   is_active              — feed membership: a car leaving the feed drops
-//                            off screen, or stays badged "Exited feed" when
-//                            its listing is still live; exits cannot be
-//                            detected without it
+//                            off screen (ACTIVE ONLY, Matthew 2026-11-20:
+//                            exited cars are never in the working set);
+//                            exits cannot be detected without it
 // (~95 B/row instead of ~3 KB/row.) Any other field of a car changes only
 // through a scrape sync, whose results still arrive via the full loads
 // (sign-in, Sync) and through the arrivals path below. A VIN that is new
@@ -11675,8 +11683,9 @@ async function pollInventoryDelta() {
       }
     }
 
-    // The same visibility predicate the full load filters by.
-    const visible = (r) => r.is_active !== false || !!r.marketplace_posted_at;
+    // The same visibility predicate the full load filters by:
+    // active vehicles only (Matthew, 2026-11-20).
+    const visible = (r) => r.is_active !== false;
     const tuple = (r) => [(r.status || ""), (r.marketplace_posted_at || ""), r.is_active === false].join("|");
 
     const lightByVin = new Map();
