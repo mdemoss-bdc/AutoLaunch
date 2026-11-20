@@ -9785,9 +9785,240 @@ function lunaAssistantRunInvQuery(intent) {
     lunaInvQueryCoverage(intent.filters, rawInventory), new Date());
   lunaSupportHistory.push({ role: "assistant", body: reply });
   lunaSupportRender("assistant", reply);
+  // [LUNA-INVCARDS-348] The same matches as clickable cards under
+  // the text (the reply itself is unchanged).
+  lunaInvCardsRender(intent, matches);
   if (typeof showInventoryPage === "function") showInventoryPage();
 }
 // [LUNA-INVQUERY-347-JS-END]
+
+// [LUNA-INVCARDS-348-JS-BEGIN]
+// Clickable results for inventory-query answers (Matthew,
+// 2026-11-19, from his screenshot of the under-$20,000 answer):
+// the text reply named cars the rep could not click, and the
+// filtered table hid behind the modal. Under the SAME text reply
+// (wording untouched), the answer now renders up to 10 match
+// cards: the highlight cars first (tagged Cheapest / Lowest
+// miles / Longest on the lot, in the reply's own order), then the
+// remaining matches in the table's current sort order, deduped.
+// A card carries the app's own data-action="details" + data-vin,
+// so the app's existing delegated handler opens the vehicle's
+// detail card — no parallel opener. This block only adds the
+// close-the-panel / land-on-Inventory / scroll-to-the-row half,
+// plus a "See all N in Inventory" row. Zero-match answers render
+// no cards, exactly as before; nothing here filters, parses, or
+// changes the reply text.
+
+// The highlight cars, computed with the exact semantics of
+// lunaInvQueryReply (same usable-price rule, same strict
+// comparisons, first-found wins ties, the asked-for highlight
+// first) so the cards always name the same cars the text does.
+// Returns [{ car, tags }] with same-car roles merged.
+function lunaInvQueryHighlights(matches, highlightKey, now) {
+  let cheapest = null, lowMiles = null, longest = null;
+  for (const c of matches || []) {
+    if (lunaInvUsablePrice(c)) {
+      const p = Number(c.price);
+      if (!cheapest || p < cheapest.p) cheapest = { c: c, p: p };
+    }
+    const m = c.mileage == null ? null : Number(c.mileage);
+    if (m != null && !isNaN(m) && (!lowMiles || m < lowMiles.m)) lowMiles = { c: c, m: m };
+    const fs = c.first_seen ? new Date(c.first_seen).getTime() : NaN;
+    if (!isNaN(fs)) {
+      const d = Math.max(0, Math.floor((now.getTime() - fs) / 86400000));
+      if (!longest || d > longest.d) longest = { c: c, d: d };
+    }
+  }
+  const hl = [];
+  if (cheapest) hl.push({ k: "cheapest", car: cheapest.c, tag: "Cheapest" });
+  if (lowMiles) hl.push({ k: "lowest_miles", car: lowMiles.c, tag: "Lowest miles" });
+  if (longest) hl.push({ k: "longest_lot", car: longest.c, tag: "Longest on the lot" });
+  hl.sort(function (a, b) {
+    const ka = a.k === highlightKey ? 0 : 1;
+    const kb = b.k === highlightKey ? 0 : 1;
+    return ka - kb;
+  });
+  const merged = [];
+  for (const h of hl) {
+    let found = null;
+    for (const e of merged) if (e.car === h.car) { found = e; break; }
+    if (found) found.tags.push(h.tag);
+    else merged.push({ car: h.car, tags: [h.tag] });
+  }
+  return merged;
+}
+
+// Up to 10 cards: highlights first, then the remaining matches in
+// the order given (the filtered table's current sort order),
+// deduped by VIN (object identity for a VIN-less row).
+function lunaInvQueryCardList(intent, matches, now) {
+  const out = lunaInvQueryHighlights(matches,
+    intent ? intent.highlight : null, now);
+  const seen = new Set();
+  for (const e of out) seen.add(e.car.vin || e.car);
+  for (const c of matches || []) {
+    if (out.length >= 10) break;
+    const key = c.vin || c;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ car: c, tags: [] });
+  }
+  return out.slice(0, 10);
+}
+
+// The table's own photo rule (tableRowHtml): the car's image_url,
+// protocol-relative fixed, placeholder/static paths rejected.
+// "" means the car has no usable photo and the card shows none.
+function lunaInvCardPhotoUrl(car) {
+  let photoUrl = car ? car.image_url : "";
+  if (photoUrl && typeof photoUrl === "string" && photoUrl.startsWith("//")) {
+    photoUrl = "https:" + photoUrl;
+  }
+  if (!photoUrl || typeof photoUrl !== "string" ||
+      photoUrl.includes("/static/")) {
+    return "";
+  }
+  const lp = photoUrl.slice(0, 8).toLowerCase();
+  if (lp.indexOf("http://") !== 0 && lp.indexOf("https://") !== 0) return "";
+  return photoUrl;
+}
+
+function lunaInvCardEl(entry) {
+  const car = entry.car;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "flex items-center gap-3 w-full text-left bg-white border border-slate-200 rounded-xl p-2 cursor-pointer hover:bg-slate-50 transition shadow-sm";
+  const vin = String(car.vin || "");
+  if (vin) {
+    // The app's delegated [data-action] handler opens this car's
+    // detail card; data-luna-inv-card marks it for the close +
+    // scroll half below.
+    btn.setAttribute("data-action", "details");
+    btn.setAttribute("data-vin", vin);
+    btn.setAttribute("data-luna-inv-card", "1");
+  }
+  const photoUrl = lunaInvCardPhotoUrl(car);
+  if (photoUrl) {
+    const img = document.createElement("img");
+    img.src = photoUrl;
+    img.alt = "";
+    img.loading = "lazy";
+    img.className = "w-16 h-12 rounded-xl object-cover border border-slate-200 shrink-0 shadow-sm";
+    img.onerror = function () { img.remove(); };
+    btn.appendChild(img);
+  }
+  const mid = document.createElement("div");
+  const title = document.createElement("strong");
+  title.className = "text-xs font-bold text-slate-950 block leading-tight";
+  title.textContent = lunaInvCarLabel(car) || "Vehicle";
+  mid.appendChild(title);
+  const meta = document.createElement("span");
+  meta.className = "text-[10px] text-slate-500 block mt-1";
+  const priceText = car.price && car.price > 0
+    ? "$" + Number(car.price).toLocaleString("en-US") : "Call for Price";
+  meta.textContent = priceText + " · " +
+    (car.mileage || 0).toLocaleString("en-US") + " mi · Stock: " +
+    (car.stock_num || car.stock_number || "N/A");
+  mid.appendChild(meta);
+  if (entry.tags && entry.tags.length) {
+    const tagRow = document.createElement("div");
+    tagRow.className = "mt-1 flex gap-2";
+    for (const t of entry.tags) {
+      const pill = document.createElement("span");
+      pill.className = "text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 inline-block";
+      pill.textContent = t;
+      tagRow.appendChild(pill);
+    }
+    mid.appendChild(tagRow);
+  }
+  btn.appendChild(mid);
+  return btn;
+}
+
+// Append the card list under the text reply in the Ask Luna panel.
+// No matches -> nothing appended (the zero-match answer renders
+// exactly as it always has).
+function lunaInvCardsRender(intent, matches) {
+  const box = document.getElementById("lunaSupportMessages");
+  if (!box || !matches || !matches.length) return;
+  const cards = lunaInvQueryCardList(intent, matches, new Date());
+  if (!cards.length) return;
+  const row = document.createElement("div");
+  row.className = "flex justify-start";
+  const stack = document.createElement("div");
+  stack.className = "flex flex-col gap-2 w-full max-w-[85%]";
+  for (const entry of cards) stack.appendChild(lunaInvCardEl(entry));
+  const seeAll = document.createElement("button");
+  seeAll.type = "button";
+  seeAll.setAttribute("data-luna-inv-seeall", "1");
+  seeAll.className = "w-full text-center text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-xl py-2 px-2 cursor-pointer hover:bg-slate-50 transition";
+  seeAll.textContent = "See all " + matches.length + " in Inventory";
+  stack.appendChild(seeAll);
+  row.appendChild(stack);
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+// Find the car's row in the rendered inventory (table or grid),
+// expanding the app's own chunked rendering until the row exists
+// or nothing more can be shown. Scoped to the inventory
+// containers so a chat card itself never matches.
+function lunaInvCardsFindRow(vin) {
+  const containers = [document.getElementById("inventoryTableBody"),
+    document.getElementById("inventoryGridView")].filter(Boolean);
+  function find() {
+    for (const c of containers) {
+      const els = c.querySelectorAll('[data-action="details"]');
+      for (const el of els) {
+        if (el.dataset && el.dataset.vin === vin) return el;
+      }
+    }
+    return null;
+  }
+  function renderedCount() {
+    let n = 0;
+    for (const c of containers) {
+      n += c.querySelectorAll('[data-action="details"]').length;
+    }
+    return n;
+  }
+  let el = find();
+  let guard = 0;
+  let lastCount = -1;
+  while (!el && guard++ < 50) {
+    const count = renderedCount();
+    if (count === lastCount) break;
+    lastCount = count;
+    if (typeof showMoreTableRows === "function") showMoreTableRows();
+    if (typeof showMoreGridCars === "function") showMoreGridCars();
+    el = find();
+  }
+  return el;
+}
+
+// The close + land + scroll half of a card click. Opening the
+// detail card itself is NOT done here: the card carries
+// data-action="details", and the app's delegated handler
+// (registered earlier in this same script) opens it via
+// openVehicleDetailsModal — the existing mechanism, reused.
+document.addEventListener("click", function (e) {
+  const t = e.target && e.target.closest ? e.target : null;
+  if (!t) return;
+  if (t.closest("[data-luna-inv-seeall]")) {
+    if (typeof closeModal === "function") closeModal("lunaSupportModal");
+    if (typeof showInventoryPage === "function") showInventoryPage();
+    return;
+  }
+  const card = t.closest("[data-luna-inv-card]");
+  if (!card) return;
+  const vin = card.getAttribute("data-vin") || "";
+  if (typeof closeModal === "function") closeModal("lunaSupportModal");
+  if (typeof showInventoryPage === "function") showInventoryPage();
+  if (!vin) return;
+  const el = lunaInvCardsFindRow(vin);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+});
+// [LUNA-INVCARDS-348-JS-END]
 
 // ---- Luna reminder watcher (Phase 3 surface pass, 2026-11-18) ------
 // [LUNA-WATCH-344-JS-BEGIN]
