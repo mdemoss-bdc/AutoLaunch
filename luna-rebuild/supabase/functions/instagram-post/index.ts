@@ -59,6 +59,32 @@
 //     in place the way TikTok's are — an expired token means the rep
 //     reconnects Instagram in Settings (instagram-auth /exchange).
 //
+// [IG-UVID-357] A car's own uploaded video (Your Video —
+// user_vehicle_videos, normalized into the PRIVATE user-videos
+// bucket) outranks the rendered VIN Reel on Instagram too, the
+// same precedence Marketplace has had since .166: when a Reel
+// container is created for a car whose latest user video is
+// ready, the container carries the user's video. Because Meta
+// fetches media from a public URL and the bucket is private,
+// the function stages a copy in the PUBLIC vin-reels bucket at
+// <user_id>/<vin>-ig-<user_video_row_id>.mp4 — at intent-hold
+// time and again at publish time — so a Marketplace consume
+// (which deletes the private object and nulls the row's paths)
+// can never strand a pending Instagram post. Resolution is
+// fail-open: any miss falls back to the rendered reel, exactly
+// as before. See ensureInstagramUserVideo.
+//
+// [IG-RACE-358] Duplicate-post race (proven live 2026-11-20 on
+// the Sierra: one intent, two published posts — the client
+// watcher and this finisher published the same intent seconds
+// apart). The handler publish path now CLAIMS an intent
+// atomically (awaiting_reel -> finishing) before any container
+// work, so exactly one publisher ever proceeds; the loser gets
+// the existing 409 intent_already_resolved. A direct publish
+// (no intent) for a car that already has a published row is
+// refused with the intent mode's already_posted answer — the
+// re-tap-after-success duplicate class dies here too.
+//
 // Meta tokens are never returned to the browser or logged.
 // =====================================================================
 
@@ -173,10 +199,18 @@ async function recordOutcome(
   try {
     if (intentId) {
       // [IG-AUTO-REEL-353] A held auto-post intent is resolving:
-      // update its awaiting_reel row in place so one row carries
-      // the whole lifecycle (awaiting_reel -> outcome). If the row
-      // was already resolved, fall back to a fresh outcome row —
+      // update its row in place so one row carries the whole
+      // lifecycle (awaiting_reel -> outcome). If the row was
+      // already resolved, fall back to a fresh outcome row —
       // the result is never lost.
+      // [IG-RACE-358] The match now also accepts "finishing":
+      // the handler publish path CLAIMS its intent
+      // (awaiting_reel -> finishing) before creating anything,
+      // and the outcome must resolve from that claimed state.
+      // recordOutcome is handler-only — the finisher resolves
+      // through resolveIntentRow (its own finishing guard,
+      // unchanged) and intent_close keeps its awaiting_reel
+      // guard, so neither path's semantics move.
       const { data: updated, error: updErr } = await db
         .from("instagram_posts")
         .update({
@@ -191,7 +225,7 @@ async function recordOutcome(
         })
         .eq("id", intentId)
         .eq("user_id", row.user_id)
-        .eq("status", "awaiting_reel")
+        .in("status", ["awaiting_reel", "finishing"])
         .select("id");
       if (!updErr && updated && updated.length === 1) return;
     }
@@ -347,6 +381,13 @@ async function holdIntent(
     .order("created_at", { ascending: true })
     .limit(1);
   if (existing && existing.length) {
+    // [IG-UVID-357] An intent is live for this car: stage the
+    // public copy of its user video NOW, while the private
+    // object certainly exists — a Marketplace consume can
+    // delete it long before this intent publishes. Best-effort
+    // by design (the resolver never throws and its result is
+    // not needed to hold the intent).
+    await ensureInstagramUserVideo(db, userId, vin);
     return { kind: "held", intentId: existing[0].id, deduped: true };
   }
   const { data: inserted, error: insErr } = await db
@@ -369,12 +410,14 @@ async function holdIntent(
         .order("created_at", { ascending: true })
         .limit(1);
       if (raced && raced.length) {
+        await ensureInstagramUserVideo(db, userId, vin);
         return { kind: "held", intentId: raced[0].id, deduped: true };
       }
     }
     console.error("instagram-post: intent record failed: " + (insErr?.message ?? "no row returned"));
     return { kind: "record_failed" };
   }
+  await ensureInstagramUserVideo(db, userId, vin);
   return { kind: "held", intentId: inserted.id, deduped: false };
 }
 
@@ -463,6 +506,128 @@ function rowHasPhoto(car: Record<string, unknown> | null): boolean {
   return false;
 }
 
+// =====================================================================
+// [IG-UVID-357] The user's own uploaded video on Instagram
+// (Matthew, 2026-11-20): "make sure insta will use their
+// uploaded videos too." Same precedence as Marketplace: a READY
+// user video beats the rendered VIN Reel.
+//
+// The normalized file lives in the PRIVATE user-videos bucket
+// (storage_path = <user_id>/<vin>.mp4 on the ready row), but
+// Meta can only fetch public URLs — so the video is staged into
+// the PUBLIC vin-reels bucket (the same bucket every rendered
+// reel already publishes from) at the deterministic path
+//   <user_id>/<vin>-ig-<user_vehicle_videos row id>.mp4
+// The row id in the path pins the copy to one exact video: a
+// re-record is a new row with a new path, so a stale copy can
+// never be served for a newer video, and no clock comparison
+// is needed to tell versions apart.
+//
+// THE CONSUME INTERACTION: the helper deletes the private
+// object and nulls the row's paths once a Marketplace post is
+// confirmed with the video attached. An Instagram intent can
+// still be pending at that moment — so the copy is staged
+// EARLY, when the intent is held (holdIntent below), not only
+// when the publish finally runs. After a consume, the row
+// survives (status "consumed", id intact), the publish-time
+// resolver recomputes the same deterministic path from that
+// row, finds the staged copy, and Meta fetches the copy. No
+// helper change is needed: the consume only ever touches the
+// private bucket and the row, never the staged public copy.
+// If nothing was ever staged and the private object is gone,
+// resolution returns null and the post falls back to the
+// rendered reel — fail-open, like the rest of the user-video
+// system. Staged copies are one small file per (user, car,
+// video version); they are left in place deliberately (a
+// failed post's retry may still need one) — cleanup is a
+// possible follow-up, never a correctness need.
+// =====================================================================
+
+const USER_VIDEO_BUCKET = "user-videos";
+const REEL_BUCKET = "vin-reels";
+
+function igUserVideoDestPath(userId: string, vin: string, rowId: string): string {
+  return `${userId}/${vin}-ig-${rowId}.mp4`;
+}
+
+function publicStorageUrl(bucket: string, path: string): string {
+  const base = Deno.env.get("SUPABASE_URL") ?? "";
+  return `${base}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+async function latestUserVideo(db: Db, userId: string, vin: string) {
+  const { data } = await db
+    .from("user_vehicle_videos")
+    .select("id, status, storage_path")
+    .eq("user_id", userId)
+    .eq("vin", vin)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  return data && data.length ? data[0] : null;
+}
+
+async function igCopyExists(db: Db, destPath: string): Promise<boolean> {
+  const slash = destPath.lastIndexOf("/");
+  const folder = destPath.slice(0, slash);
+  const name = destPath.slice(slash + 1);
+  const { data, error } = await db.storage
+    .from(REEL_BUCKET)
+    .list(folder, { search: name });
+  if (error || !data) return false;
+  return data.some((o: { name?: string }) => o?.name === name);
+}
+
+// Ensure the staged public copy of the car's current user
+// video exists and return its public URL — or null when this
+// car has no usable user video for Instagram (none recorded,
+// still processing, failed, or consumed before any copy was
+// staged). NEVER throws: every failure is a null, and every
+// caller falls back to the rendered reel. With stage=false
+// (the finisher's dry run) nothing is written: the URL is
+// returned when the copy exists or the private object is
+// verifiably there for a real run to stage.
+async function ensureInstagramUserVideo(
+  db: Db,
+  userId: string,
+  vin: string,
+  stage = true,
+): Promise<string | null> {
+  try {
+    const row = await latestUserVideo(db, userId, vin);
+    if (!row || !row.id) return null;
+    const dest = igUserVideoDestPath(userId, vin, row.id as string);
+    const url = publicStorageUrl(REEL_BUCKET, dest);
+    if (row.status === "ready" && row.storage_path) {
+      if (await igCopyExists(db, dest)) return url;
+      const { data: blob, error: dlErr } = await db.storage
+        .from(USER_VIDEO_BUCKET)
+        .download(row.storage_path as string);
+      if (dlErr || !blob) {
+        console.error("instagram-post: user video download failed: " + (dlErr?.message ?? "no data"));
+        return (await igCopyExists(db, dest)) ? url : null;
+      }
+      if (!stage) return url;
+      const { error: upErr } = await db.storage
+        .from(REEL_BUCKET)
+        .upload(dest, blob, { contentType: "video/mp4", upsert: true });
+      if (upErr) {
+        console.error("instagram-post: user video staging failed: " + upErr.message);
+        return null;
+      }
+      return url;
+    }
+    if (row.status === "consumed") {
+      // The private object is gone (Marketplace consumed it);
+      // only a copy staged while the video was ready can serve.
+      return (await igCopyExists(db, dest)) ? url : null;
+    }
+    return null;
+  } catch (e) {
+    console.error("instagram-post: user video resolve threw: " + e);
+    return null;
+  }
+}
+
 // The app's exact vin_reels queue insert (instagramQueueReel's
 // shape). A 23505 means a live reel already exists for the VIN —
 // the state we wanted.
@@ -512,6 +677,12 @@ async function finishOneIntent(
   const car = vin ? await inventoryRow(db, userId, vin) : null;
   const caption = buildCaption(car ?? (intent.stock_number ? { stock_number: intent.stock_number } : null));
   const stockNumber = intent.stock_number ?? ((car?.stock_number as string) ?? null);
+  // [IG-UVID-357] The user's own video outranks the reel URL
+  // this publish was handed — resolve here, at the one place
+  // the finisher creates its container, so the precedence
+  // holds whatever the caller passed.
+  const userVideoUrl = vin ? await ensureInstagramUserVideo(db, userId, vin) : null;
+  const effectiveVideoUrl = userVideoUrl ?? videoUrl;
 
   const failInPlace = async (body: GraphBody, containerId: string | null) => {
     const err = body?.error;
@@ -534,7 +705,7 @@ async function finishOneIntent(
 
   const created = await graphPost(`/${igUserId}/media`, accessToken, {
     media_type: "REELS",
-    video_url: videoUrl,
+    video_url: effectiveVideoUrl,
     thumb_offset: REEL_THUMB_OFFSET,
     caption,
   });
@@ -694,6 +865,20 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
     }
   }
 
+  // Claim one parked intent atomically (awaiting_reel ->
+  // finishing): exactly one publisher may ever proceed with it,
+  // and the claim turns the client watcher away (its own claim
+  // in the handler matches nothing once the row has moved).
+  const claimIntent = async (intentId: string): Promise<boolean> => {
+    const { data: claimed, error: claimErr } = await db
+      .from("instagram_posts")
+      .update({ status: "finishing" })
+      .eq("id", intentId)
+      .eq("status", "awaiting_reel")
+      .select("id");
+    return !claimErr && !!claimed && claimed.length > 0;
+  };
+
   // B) FINISH PASS — every parked intent (manual or auto), oldest
   //    first: claim it atomically, then let its reel's state decide.
   const { data: intents } = await db
@@ -707,6 +892,28 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
     const vin = intent.vin as string | null;
     if (!vin) {
       summary.skipped++;
+      continue;
+    }
+    // [IG-UVID-357] A usable user video finishes the intent on
+    // its own — the reel's state is irrelevant (it may still be
+    // rendering, or have failed outright): the user's video IS
+    // this post's video, the same precedence as Marketplace.
+    const userVideoUrl = await ensureInstagramUserVideo(db, userId, vin, !dryRun);
+    if (userVideoUrl) {
+      if (dryRun) {
+        summary.published.push(vin);
+        continue;
+      }
+      if (!(await claimIntent(intent.id))) {
+        summary.skipped++;
+        continue;
+      }
+      await finishOneIntent(
+        db,
+        { id: intent.id, user_id: userId, vin, stock_number: intent.stock_number ?? null },
+        userVideoUrl,
+        summary,
+      );
       continue;
     }
     const reel = await latestReel(db, userId, vin);
@@ -749,16 +956,7 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
       summary.published.push(vin);
       continue;
     }
-    // Claim the intent atomically: exactly one finisher may
-    // publish it, and the publish-path guard turns the client
-    // watcher away once the row leaves awaiting_reel.
-    const { data: claimed, error: claimErr } = await db
-      .from("instagram_posts")
-      .update({ status: "finishing" })
-      .eq("id", intent.id)
-      .eq("status", "awaiting_reel")
-      .select("id");
-    if (claimErr || !claimed || !claimed.length) {
+    if (!(await claimIntent(intent.id))) {
       summary.skipped++;
       continue;
     }
@@ -957,6 +1155,66 @@ Deno.serve(async (req: Request) => {
   }
   const kind = videoUrl ? "reel" : imageUrls.length ? "carousel" : "photo";
 
+  // [IG-RACE-358] Already-posted guard (direct publishes only):
+  // one post per car, ever — the rule holdIntent has always
+  // enforced for held intents, now enforced on the tap path
+  // too. A re-tap after a successful post (the Terrain
+  // triple-post pattern: grid lag hid the success and the rep
+  // tapped again) gets the intent mode's already_posted
+  // answer, which the app already reads as
+  // success-without-posting. Checked before the connection
+  // load and before any container work: nothing is created,
+  // recorded, or sent to Meta.
+  if (!intentId && vin) {
+    const { data: postedRows } = await db
+      .from("instagram_posts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("vin", vin)
+      .eq("status", "published")
+      .limit(1);
+    if (postedRows && postedRows.length) {
+      return json({ ok: true, already_posted: true, status: "published" });
+    }
+  }
+
+  // [IG-RACE-358] Atomic claim: a publish carrying an intent
+  // must OWN the intent before any container work. The update
+  // lands only while the row is still awaiting_reel; the
+  // finisher claims the same way, so exactly one publisher can
+  // ever hold the row — the loser creates nothing and gets the
+  // existing intent_already_resolved answer. (The read-only
+  // guard above still answers first for intents resolved long
+  // ago; this claim closes the window between that check and
+  // the container calls — the window the Sierra duplicate
+  // went through.) Outcomes resolve the claimed row in place
+  // via recordOutcome, which matches "finishing" now too.
+  if (intentId) {
+    const { data: claimedRows, error: claimErr } = await db
+      .from("instagram_posts")
+      .update({ status: "finishing" })
+      .eq("id", intentId)
+      .eq("user_id", userId)
+      .eq("status", "awaiting_reel")
+      .select("id");
+    if (claimErr || !claimedRows || !claimedRows.length) {
+      const { data: current } = await db
+        .from("instagram_posts")
+        .select("status")
+        .eq("id", intentId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      return json(
+        {
+          ok: false,
+          error: "intent_already_resolved",
+          status: (current?.status as string) ?? "unknown",
+        },
+        409,
+      );
+    }
+  }
+
   // Load the caller's Instagram connection.
   const { data: connData, error: connErr } = await db
     .from("instagram_connections")
@@ -1036,6 +1294,16 @@ Deno.serve(async (req: Request) => {
       error_message: message,
     }, intentId);
     return json({ error: "meta_error", step, code, message }, 502);
+  }
+
+  // [IG-UVID-357] Reel publishes: the car's own uploaded video,
+  // when one is ready, replaces the reel URL the client passed
+  // — resolution is server-side (the client cannot see into
+  // the private bucket), keyed by the JWT-verified caller and
+  // the request's VIN, and fail-open to the reel.
+  if (kind === "reel" && vin) {
+    const userVideoUrl = await ensureInstagramUserVideo(db, userId, vin);
+    if (userVideoUrl) videoUrl = userVideoUrl;
   }
 
   // 1) Create the media container(s). A Reel posts as media_type
