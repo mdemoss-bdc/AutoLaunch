@@ -834,6 +834,14 @@ body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > .bg-amber-50 { b
 body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > .bg-white\/95 { background-color: rgba(226, 232, 240, 0.95); color: #0F172A; }
 /* List/table view rides the same tokens; prices take the bright link. */
 body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright); }
+/* [PROSPECTS-COLLAPSE-356-CSS-BEGIN] Prospects card collapse (Matthew,
+   2026-11-20): the card header is a summary row that toggles the body
+   (plain .hidden display toggle — no height animation); the chevron
+   rotates through this class. */
+.prospect-card-head { cursor: pointer; }
+.prospect-card-chevron { display: inline-block; transition: transform 0.15s ease; }
+.prospect-card-chevron.open { transform: rotate(180deg); }
+/* [PROSPECTS-COLLAPSE-356-CSS-END] */
 </style>
 </head>
 <!-- ============================================================================== -->
@@ -1743,6 +1751,16 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
     <div id="prospectsStagePills" class="flex items-center gap-2 flex-wrap"></div>
 
     <p id="prospectsPipelineStats" class="hidden text-xs font-semibold text-slate-600"></p>
+
+    <!-- [PROSPECTS-COLLAPSE-356-MARKUP-BEGIN] Expand / collapse every
+         prospect card at once. renderProspects owns this row's
+         visibility; the buttons ride the same delegated
+         data-prospect-action click handler as the cards. -->
+    <div id="prospectsCardToggles" class="hidden items-center gap-2">
+      <button data-prospect-action="expand-all-cards" class="px-3 py-1.5 rounded-full text-[11px] font-bold border cursor-pointer transition bg-white text-slate-600 border-slate-200 hover:bg-slate-50">Expand all</button>
+      <button data-prospect-action="collapse-all-cards" class="px-3 py-1.5 rounded-full text-[11px] font-bold border cursor-pointer transition bg-white text-slate-600 border-slate-200 hover:bg-slate-50">Collapse all</button>
+    </div>
+    <!-- [PROSPECTS-COLLAPSE-356-MARKUP-END] -->
 
     <div id="prospectsNudgeStrip" class="hidden"></div>
 
@@ -18832,6 +18850,81 @@ let prospectChats = {}; // prospect_id -> {count, latest, direction} from closer
 let prospectOutbound = {}; // prospect_id -> latest outbound reply {status, body, created_at}
 let prospectMessages = {}; // prospect_id -> chronological captured messages (conversation view)
 const expandedThreadIds = new Set(); // prospect ids whose conversation panel is open
+// [PROSPECTS-COLLAPSE-356-JS-BEGIN]
+// PROSPECTS CARD COLLAPSE (Matthew, 2026-11-20): every card fully
+// expanded made the Prospects list endless, so the card header (name,
+// stage, asking-about, last activity) is now a summary row that
+// toggles the body. State lives HERE, never only in the DOM —
+// renderProspects() rebuilds the list wholesale, so this store
+// decides each card's state on every render: a manual choice
+// (persisted per user in localStorage, same key shape as
+// igQueueDismissed) beats the default, and the default is open only
+// for follow-up-due cards. A card whose reply box has focus or unsent
+// text can never be collapsed by any path (header toggle,
+// collapse-all, or a re-render landing on a stored/default closed).
+const prospectCardState = {}; // prospect id -> bool, manual choices only
+let prospectCardStateFor = null; // user id the state was loaded for
+function prospectCardStateKey() { return "prospectCardOpen:" + (currentUser ? currentUser.id : "anon"); }
+function prospectCardStateLoad() {
+  const uid = currentUser ? currentUser.id : "anon";
+  if (prospectCardStateFor === uid) return;
+  prospectCardStateFor = uid;
+  Object.keys(prospectCardState).forEach(k => delete prospectCardState[k]);
+  try {
+    const raw = localStorage.getItem(prospectCardStateKey());
+    const obj = raw ? JSON.parse(raw) : null;
+    if (obj && typeof obj === "object") Object.keys(obj).forEach(k => { prospectCardState[k] = !!obj[k]; });
+  } catch (e) { /* storage unavailable — collapse still works for the session */ }
+}
+function prospectCardStateSave() {
+  try { localStorage.setItem(prospectCardStateKey(), JSON.stringify(prospectCardState)); } catch (e) { /* session-only */ }
+}
+function prospectCardIsOpen(p, followDue) {
+  prospectCardStateLoad();
+  const id = String(p.id);
+  if (Object.prototype.hasOwnProperty.call(prospectCardState, id)) return prospectCardState[id];
+  return !!followDue;
+}
+function prospectCardReplyBusy(id) {
+  const ta = document.getElementById("lucaReplyText-" + id);
+  if (!ta) return false;
+  return document.activeElement === ta || String(ta.value || "").trim() !== "";
+}
+function prospectCardApplyDom(id, open) {
+  const body = document.querySelector(`[data-prospect-body="${id}"]`);
+  if (body) body.classList.toggle("hidden", !open);
+  const chev = document.querySelector(`[data-prospect-chevron="${id}"]`);
+  if (chev) chev.classList.toggle("open", !!open);
+  const head = document.querySelector(`[data-prospect-card-head="${id}"]`);
+  if (head) head.setAttribute("aria-expanded", open ? "true" : "false");
+}
+function setProspectCardOpen(id, open) {
+  id = String(id);
+  if (!open && prospectCardReplyBusy(id)) return false;
+  prospectCardStateLoad();
+  prospectCardState[id] = !!open;
+  prospectCardStateSave();
+  prospectCardApplyDom(id, !!open);
+  return true;
+}
+function toggleProspectCard(id) {
+  const body = document.querySelector(`[data-prospect-body="${id}"]`);
+  if (!body) return;
+  setProspectCardOpen(id, body.classList.contains("hidden"));
+}
+function setAllProspectCards(open) {
+  prospectCardStateLoad();
+  prospects.forEach(p => {
+    const id = String(p.id);
+    // Mid-reply cards stay open under collapse-all — and are
+    // remembered open, so the next render agrees.
+    prospectCardState[id] = (!open && prospectCardReplyBusy(id)) ? true : !!open;
+    prospectCardApplyDom(id, prospectCardState[id]);
+  });
+  prospectCardStateSave();
+}
+// [PROSPECTS-COLLAPSE-356-JS-END]
+
 let prospectsStorageMode = "server"; // flips to "local" if the table is missing
 let editingProspectId = null;
 let prospectsStageFilter = "all";
@@ -19479,6 +19572,7 @@ function setProspectsTeaserMode(on) {
   hide("prospectsStorageNotice", on);
   hide("prospectsStagePills", on);
   hide("prospectsPipelineStats", on);
+  hide("prospectsCardToggles", on);
   hide("prospectsList", on);
   if (on) showDemoVideo("prospectsTeaserVideoSlot", "prospects");
   else clearDemoVideo("prospectsTeaserVideoSlot");
@@ -19684,6 +19778,14 @@ function renderProspects() {
   }
 
 
+  // [PROSPECTS-COLLAPSE-356] The Expand/Collapse-all row shows
+  // whenever there is at least one prospect to toggle.
+  const cardToggles = document.getElementById("prospectsCardToggles");
+  if (cardToggles) {
+    cardToggles.classList.toggle("hidden", !prospects.length);
+    cardToggles.classList.toggle("flex", !!prospects.length);
+  }
+
   const visible = prospectsStageFilter === "all"
     ? prospects
     : prospects.filter(p => (p.stage || "new") === prospectsStageFilter);
@@ -19713,7 +19815,9 @@ function renderProspects() {
     const lastAct = prospectLastActivity(p, chat);
     const lastActRel = lastAct ? prospectsRelTime(lastAct, Date.now()) : null;
     const soldWhen = p.sold_at ? new Date(p.sold_at).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "";
+    const cardOpen = prospectCardIsOpen(p, followDue) || prospectCardReplyBusy(p.id);
     return `<div data-prospect-card="${escapeHtml(String(p.id))}" class="glass-card rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
+      <div class="prospect-card-head" data-prospect-action="toggle-card" data-prospect-id="${escapeHtml(String(p.id))}" data-prospect-card-head="${escapeHtml(String(p.id))}" role="button" aria-expanded="${cardOpen ? "true" : "false"}" title="Show or hide details">
       <div class="flex items-start justify-between gap-3 flex-wrap">
         <div class="min-w-0">
           <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
@@ -19721,20 +19825,25 @@ function renderProspects() {
             <span class="px-2 py-0.5 rounded-full ${stage.pill} border text-[10px] font-bold">${stage.label}</span>
             ${followDue ? `<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold">⏰ Follow-up due</span>` : ""}
           </h3>
-          ${contact ? `<p class="text-xs text-slate-500 mt-0.5">${contact}</p>` : ""}
           ${p.vehicle_label ? `<p class="text-xs text-slate-600 mt-1"><span class="font-semibold text-slate-900">${(p.stage || "new") === "sold" ? "Bought" : "Asking about"}:</span> ${escapeHtml(p.vehicle_label)}</p>` : ""}
-          ${p.notes ? `<p class="text-xs text-slate-500 mt-0.5 italic">"${escapeHtml(p.notes)}"</p>` : ""}
-          ${(p.stage || "new") === "sold" ? `<p class="text-xs text-emerald-700 font-semibold mt-0.5">🏆 Sold${soldWhen ? " on " + escapeHtml(soldWhen) : ""}</p>` : ""}
           ${lastActRel ? `<p class="text-[11px] text-slate-400 mt-0.5">Last activity ${escapeHtml(lastActRel)}</p>` : ""}
           ${prospectChats[p.id] ? `<p id="lucaChatLine-${escapeHtml(String(p.id))}" class="text-xs text-slate-500 mt-0.5">💬 ${prospectChats[p.id].count} captured · last: “${escapeHtml(String(prospectChats[p.id].latest || "").slice(0, 90))}”</p>` : ""}
         </div>
-        <div class="flex items-center gap-1.5 shrink-0">
-          <select data-prospect-stage="${escapeHtml(String(p.id))}" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-600">${options}</select>
-          <button data-prospect-action="edit" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer">Edit</button>
-          <button data-prospect-action="delete" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold cursor-pointer">Delete</button>
-          <button data-prospect-action="crm" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold cursor-pointer">Send to CRM</button>
-        </div>
+        <span class="shrink-0 pt-1"><i data-prospect-chevron="${escapeHtml(String(p.id))}" class="fa-solid fa-chevron-down prospect-card-chevron${cardOpen ? " open" : ""} text-slate-400 text-xs"></i></span>
       </div>
+      </div>
+      <div data-prospect-body="${escapeHtml(String(p.id))}"${cardOpen ? "" : ` class="hidden"`}>
+        <div class="mt-3 pt-3 border-t border-slate-100">
+          ${contact ? `<p class="text-xs text-slate-500 mt-0.5">${contact}</p>` : ""}
+          ${p.notes ? `<p class="text-xs text-slate-500 mt-0.5 italic">"${escapeHtml(p.notes)}"</p>` : ""}
+          ${(p.stage || "new") === "sold" ? `<p class="text-xs text-emerald-700 font-semibold mt-0.5">🏆 Sold${soldWhen ? " on " + escapeHtml(soldWhen) : ""}</p>` : ""}
+          <div class="flex items-center gap-1.5 flex-wrap mt-2">
+            <select data-prospect-stage="${escapeHtml(String(p.id))}" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-600">${options}</select>
+            <button data-prospect-action="edit" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer">Edit</button>
+            <button data-prospect-action="delete" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold cursor-pointer">Delete</button>
+            <button data-prospect-action="crm" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold cursor-pointer">Send to CRM</button>
+          </div>
+        </div>
       ${prospectChats[p.id] ? `<div class="mt-3 pt-3 border-t border-slate-100">
         <button data-prospect-action="draft" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl btn-gradient text-white text-[11px] font-bold cursor-pointer shadow-sm">🌙 Draft reply with Luca</button>
         ${followDue ? `<button data-prospect-action="draft" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold cursor-pointer shadow-sm">⏰ Draft follow-up with Luca</button>` : ""}
@@ -19766,6 +19875,7 @@ function renderProspects() {
       ${!prospectChats[p.id] && !p.thread_ref ? `<div class="mt-3 pt-3 border-t border-slate-100">
         <button data-prospect-action="trade-link" data-prospect-id="${escapeHtml(String(p.id))}" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer shadow-sm">🔗 Trade appraisal</button>
       </div>` : ""}
+      </div>
     </div>`;
   }).join("");
   // Reopen conversation panels that were expanded before this render
@@ -19808,6 +19918,9 @@ document.addEventListener("click", function (e) {
   else if (act === "intel-apply-all") applyAllProspectIntel(id, el);
   else if (act === "intel-stage") applyProspectIntelStage(id, el);
   else if (act === "intel-dismiss") dismissProspectIntel(id, el);
+  else if (act === "toggle-card") toggleProspectCard(id);
+  else if (act === "expand-all-cards") setAllProspectCards(true);
+  else if (act === "collapse-all-cards") setAllProspectCards(false);
 });
 
 // REAL-MESSAGE RULE (Matthew's ask, 2026-10-26): Luca's drafts are
