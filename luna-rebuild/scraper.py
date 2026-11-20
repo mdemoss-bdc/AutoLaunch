@@ -3718,6 +3718,26 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
         # stale (the failure policy: posts never starve behind a
         # video). An absent/false flag changes nothing, anywhere.
         reel_before_post = s.get("vin_reel_before_post") is True
+        # USER VEHICLE VIDEOS (Matthew, 2026-11-20): a car with a
+        # READY user-recorded video already has the video this flag
+        # waits for — its marketplace row below is NOT held for a
+        # render and no reel job is queued for it (the helper
+        # attaches the user's video at claim time). Fail-open: a
+        # failed read leaves the set empty and every hold behaves
+        # exactly as before this feature existed.
+        user_video_vins = set()
+        if reel_before_post:
+            try:
+                _uv_rows = (
+                    db.table("user_vehicle_videos")
+                    .select("vin")
+                    .eq("user_id", uid)
+                    .eq("status", "ready")
+                    .execute()
+                ).data or []
+                user_video_vins = {r.get("vin") for r in _uv_rows if r.get("vin")}
+            except Exception:
+                user_video_vins = set()
         conditions = s.get("auto_post_conditions")
         if not isinstance(conditions, list):
             conditions = []
@@ -3950,7 +3970,7 @@ def _auto_post_filtered(uid: str, only_vins=None) -> int:
                 })
                 live_keys.add((vin, ch))
             if new_rows:
-                if reel_before_post:
+                if reel_before_post and vin not in user_video_vins:
                     for _r in new_rows:
                         if _r.get("target_channel") == "marketplace":
                             _r["awaiting_reel"] = True

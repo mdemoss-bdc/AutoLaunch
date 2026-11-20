@@ -13393,6 +13393,7 @@ function gridCardHtml(car) {
         ${carColorsHtml(car)}
         ${car.location_name ? `<div class="mt-1.5"><span class="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">${escapeHtml(displayLocation(car.location_name))}</span></div>` : ''}
         ${vinReelChipHtml(car)}
+        ${userVideoChipHtml(car)}
         <div class="flex items-baseline gap-2.5 pt-2">
           ${hasPrice(car)
             ? `<span class="text-sm font-bold text-blue-600">${priceText}</span>`
@@ -13610,6 +13611,7 @@ ${car.location_name ? `
       `
   }
   ${vinReelChipHtml(car)}
+  ${userVideoChipHtml(car)}
 </td>
       <td class="py-4 px-4 text-right">
         <div class="flex items-center justify-end gap-2 relative">
@@ -15105,6 +15107,350 @@ function vinReelSectionInnerHtml(car) {
   </div>`;
 }
 
+
+// =====================================================================
+// USER VEHICLE VIDEOS (Matthew, 2026-11-20): a user can record their
+// own video of a car on their phone and attach it to the car's card;
+// when the car posts, that video rides INSTEAD of the AI-rendered
+// VIN Reel. The flow: record/choose here -> the raw file uploads to
+// the PRIVATE user-videos bucket (<userId>/<VIN>-raw.<ext>) -> the
+// VIN Reels worker stack normalizes it (720p H.264 MP4) and the row
+// flips to 'ready' -> the helper downloads the normalized file at
+// claim time and attaches it through the existing post-with-video
+// flow -> once the post is confirmed, the helper deletes BOTH
+// server copies and marks the row 'consumed' (the row stays as the
+// audit trail). State lives in public.user_vehicle_videos, one row
+// per (user, car). A failed normalization keeps the raw and the
+// posting flow falls back to the reel exactly as before.
+// Client gate (before a single byte uploads): <= 90 seconds,
+// <= 1080p, <= 100 MB — an over-spec clip is rejected here with the
+// specifics, so it never burns storage or egress.
+// =====================================================================
+const USER_VIDEO_BUCKET = "user-videos";
+const USER_VIDEO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB hard cap (the bucket enforces it too)
+const USER_VIDEO_MAX_SECONDS = 90;
+let userVideosByVin = {};
+let userVideosSig = "";
+let userVideoUploadPct = {}; // vin -> 0..100 while an upload is in flight
+let detailsUserVideoRenderedSig = "";
+
+function userVideoFor(car) {
+  return (car && userVideosByVin[car.vin]) || null;
+}
+
+function userVideoChipHtml(car) {
+  const uv = userVideoFor(car);
+  if (!uv) return "";
+  if (userVideoUploadPct[car.vin] != null) {
+    return `<div class="mt-1.5"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>Uploading your video… ${userVideoUploadPct[car.vin]}%</span></div>`;
+  }
+  if (uv.status === "ready") {
+    return `<div class="mt-1.5"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200"><i class="fa-solid fa-video mr-1"></i>Your video ✓ — posts instead of the reel</span></div>`;
+  }
+  if (uv.status === "failed") {
+    return `<div class="mt-1.5"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-200"><i class="fa-solid fa-video-slash mr-1"></i>Your video couldn't be processed</span></div>`;
+  }
+  return `<div class="mt-1.5"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200"><i class="fa-solid fa-hourglass-half mr-1"></i>Processing your video…</span></div>`;
+}
+
+async function refreshUserVideos() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("user_vehicle_videos")
+      .select("id, vin, stock_number, status, raw_path, storage_path, size_bytes, raw_size_bytes, duration_seconds, error, uploaded_at")
+      .eq("user_id", currentUser.id)
+      .neq("status", "consumed")
+      .limit(1000);
+    if (error) throw error;
+    const byVin = {};
+    (data || []).forEach(r => { byVin[r.vin] = r; });
+    userVideosByVin = byVin;
+    const sig = Object.keys(byVin).sort().map(v => {
+      const r = byVin[v];
+      return v + ":" + r.status + ":" + (r.storage_path || r.raw_path || "");
+    }).join(";");
+    if (sig !== userVideosSig) {
+      userVideosSig = sig;
+      if (typeof applyFilters === "function") applyFilters();
+    }
+    renderDetailsUserVideoSection();
+  } catch (e) { /* decoration on the inventory view — a failed read must never break it */ }
+}
+
+// Read a picked file's duration + dimensions in the browser, before
+// any upload. A probe that can't read the file resolves zeros and
+// the size cap + the worker's own duration check still protect us.
+function probeUserVideoFile(file) {
+  return new Promise(resolve => {
+    let url = null;
+    try {
+      url = URL.createObjectURL(file);
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      v.onloadedmetadata = () => {
+        const out = { duration: v.duration || 0, width: v.videoWidth || 0, height: v.videoHeight || 0 };
+        try { URL.revokeObjectURL(url); } catch (e) {}
+        resolve(out);
+      };
+      v.onerror = () => { try { URL.revokeObjectURL(url); } catch (e) {} resolve({ duration: 0, width: 0, height: 0 }); };
+      v.src = url;
+    } catch (e) {
+      if (url) { try { URL.revokeObjectURL(url); } catch (e2) {} }
+      resolve({ duration: 0, width: 0, height: 0 });
+    }
+  });
+}
+
+function formatUserVideoDuration(sec) {
+  const s = Math.max(0, Math.round(sec || 0));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+// XHR upload so the phone shows real progress — supabase-js upload
+// has no progress callback and these files are big.
+async function uploadUserVideoFile(path, file, onProgress) {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) throw new Error("You are signed out — sign in and try again.");
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", SUPABASE_URL + "/storage/v1/object/" + USER_VIDEO_BUCKET + "/" + path);
+    xhr.setRequestHeader("Authorization", "Bearer " + session.access_token);
+    xhr.setRequestHeader("apikey", SUPABASE_KEY);
+    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    xhr.setRequestHeader("x-upsert", "true");
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error("the upload was refused (" + xhr.status + ")"));
+    };
+    xhr.onerror = () => reject(new Error("the upload failed — check your connection and try again"));
+    xhr.send(file);
+  });
+}
+
+function updateUserVideoProgressEl(vin, pct) {
+  const bar = document.getElementById("userVideoProgressBar");
+  const txt = document.getElementById("userVideoProgressText");
+  if (bar) bar.style.width = pct + "%";
+  if (txt) txt.innerText = "Uploading your video… " + pct + "%";
+}
+
+async function onUserVideoChosen(input, vin) {
+  const file = input && input.files && input.files[0];
+  if (input) input.value = "";
+  if (!file || !currentUser) return;
+  if (!requireTier("vin_reels")) return;
+  const car = rawInventory.find(c => c.vin === vin);
+  // ---- client gate: reject over-spec files BEFORE upload ----
+  if (file.size > USER_VIDEO_MAX_BYTES) {
+    alert("That video is " + Math.round(file.size / (1024 * 1024)) + " MB — the limit is 100 MB. Please record a shorter clip.");
+    return;
+  }
+  const meta = await probeUserVideoFile(file);
+  if (meta.duration > USER_VIDEO_MAX_SECONDS) {
+    alert("That video is " + formatUserVideoDuration(meta.duration) + " — please keep it under 90 seconds.");
+    return;
+  }
+  if (meta.width && meta.height && Math.min(meta.width, meta.height) > 1080) {
+    alert("That video is " + meta.width + "×" + meta.height + " — please record at 1080p or lower (check your camera settings), then try again.");
+    return;
+  }
+  const extMatch = (file.name || "").match(/\.([a-z0-9]+)$/i);
+  let ext = extMatch ? extMatch[1].toLowerCase() : "";
+  if (!ext || ext.length > 5) ext = (file.type && file.type.indexOf("quicktime") >= 0) ? "mov" : "mp4";
+  const rawPath = currentUser.id + "/" + vin + "-raw." + ext;
+  // Replace semantics: the previous server copies go first, so a
+  // car never carries two videos or orphans the old file.
+  const existing = car ? userVideoFor(car) : null;
+  if (existing) {
+    const olds = [existing.raw_path, existing.storage_path].filter(Boolean);
+    if (olds.length) {
+      try { await supabaseClient.storage.from(USER_VIDEO_BUCKET).remove(olds); } catch (e) { /* the upsert below still lands the new state */ }
+    }
+  }
+  userVideoUploadPct[vin] = 0;
+  renderDetailsUserVideoSection(true);
+  if (typeof applyFilters === "function") applyFilters();
+  try {
+    await uploadUserVideoFile(rawPath, file, pct => {
+      userVideoUploadPct[vin] = pct;
+      updateUserVideoProgressEl(vin, pct);
+    });
+    const { error } = await supabaseClient.from("user_vehicle_videos").upsert({
+      user_id: currentUser.id,
+      vin: vin,
+      stock_number: car ? queueStockNum(car) : null,
+      status: "uploaded",
+      raw_path: rawPath,
+      storage_path: null,
+      raw_size_bytes: file.size,
+      size_bytes: null,
+      content_type: file.type || null,
+      duration_seconds: meta.duration || null,
+      width: meta.width || null,
+      height: meta.height || null,
+      error: null,
+      uploaded_at: new Date().toISOString(),
+      normalized_at: null,
+      consumed_at: null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id,vin" });
+    if (error) throw error;
+  } catch (err) {
+    try { await supabaseClient.storage.from(USER_VIDEO_BUCKET).remove([rawPath]); } catch (e) {}
+    alert("Couldn't save your video: " + (err.message || "please try again"));
+  }
+  delete userVideoUploadPct[vin];
+  await refreshUserVideos();
+  if (typeof applyFilters === "function") applyFilters();
+}
+
+async function removeUserVideo(vin) {
+  if (!currentUser) return;
+  const car = rawInventory.find(c => c.vin === vin);
+  const uv = car ? userVideoFor(car) : null;
+  if (!uv) return;
+  if (!confirm("Remove your video for this vehicle? The server copy is deleted — this can't be undone.")) return;
+  try {
+    const paths = [uv.raw_path, uv.storage_path].filter(Boolean);
+    if (paths.length) {
+      const { error: rmErr } = await supabaseClient.storage.from(USER_VIDEO_BUCKET).remove(paths);
+      if (rmErr) console.warn("[UserVideos] storage cleanup failed:", rmErr.message);
+    }
+    const { error } = await supabaseClient.from("user_vehicle_videos")
+      .delete().eq("id", uv.id).eq("user_id", currentUser.id);
+    if (error) throw error;
+  } catch (err) {
+    alert("Couldn't remove your video: " + (err.message || "please try again"));
+  }
+  await refreshUserVideos();
+  if (typeof applyFilters === "function") applyFilters();
+}
+
+// The inventory-removal hook: a car leaving inventory deletes its
+// server video copies and state row. Best-effort by design — it
+// must never block the removal itself.
+async function deleteUserVideoServerCopy(vin) {
+  try {
+    if (!currentUser) return;
+    const { data } = await supabaseClient.from("user_vehicle_videos")
+      .select("id, raw_path, storage_path")
+      .eq("user_id", currentUser.id).eq("vin", vin).neq("status", "consumed")
+      .maybeSingle();
+    if (!data) return;
+    const paths = [data.raw_path, data.storage_path].filter(Boolean);
+    if (paths.length) {
+      try { await supabaseClient.storage.from(USER_VIDEO_BUCKET).remove(paths); } catch (e) {}
+    }
+    await supabaseClient.from("user_vehicle_videos")
+      .delete().eq("id", data.id).eq("user_id", currentUser.id);
+    if (userVideosByVin[vin]) { delete userVideosByVin[vin]; userVideosSig = ""; }
+  } catch (e) { /* best-effort cleanup only */ }
+}
+
+function userVideoSectionHtml(car) {
+  return `<div id="detailsUserVideoSection">${userVideoSectionInnerHtml(car)}</div>`;
+}
+
+function renderDetailsUserVideoSection(force) {
+  const el = document.getElementById("detailsUserVideoSection");
+  if (!el || !detailsReelVin) return;
+  const car = rawInventory.find(c => c.vin === detailsReelVin);
+  if (!car) return;
+  const uv = userVideoFor(car);
+  const sig = detailsReelVin + ":" + (uv ? uv.status + ":" + (uv.storage_path || uv.raw_path || "") : "none")
+    + ":" + (userVideoUploadPct[detailsReelVin] != null ? "uploading" : "");
+  if (!force && sig === detailsUserVideoRenderedSig) return; // never restart a playing preview on a poll tick
+  detailsUserVideoRenderedSig = sig;
+  el.innerHTML = userVideoSectionInnerHtml(car);
+  fillUserVideoPreview(detailsReelVin);
+}
+
+async function fillUserVideoPreview(vin) {
+  const uv = userVideosByVin[vin];
+  if (!uv || uv.status !== "ready" || !uv.storage_path) return;
+  try {
+    const { data, error } = await supabaseClient.storage.from(USER_VIDEO_BUCKET)
+      .createSignedUrl(uv.storage_path, 3600);
+    if (error || !data || !data.signedUrl) return;
+    const el = document.getElementById("userVideoPreview");
+    if (el && detailsReelVin === vin) el.src = data.signedUrl;
+  } catch (e) { /* the preview is decoration */ }
+}
+
+function userVideoSectionInnerHtml(car) {
+  const vinAttr = escapeHtml(car.vin);
+  const head = `<div class="flex items-center gap-2 pt-3">
+      <i class="fa-solid fa-video text-slate-400 text-xs"></i>
+      <span class="text-[10px] uppercase font-bold text-slate-500">Your Video</span>
+    </div>`;
+  const inputs = `
+    <input type="file" id="userVideoRecordInput" accept="video/*" capture="environment" class="hidden" onchange="onUserVideoChosen(this, '${vinAttr}')">
+    <input type="file" id="userVideoFileInput" accept="video/*" class="hidden" onchange="onUserVideoChosen(this, '${vinAttr}')">`;
+  const pickButtons = (verb) => `
+    <div class="pt-2 flex items-center justify-end gap-2">
+      <label for="userVideoFileInput" class="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-folder-open text-[10px]"></i><span>Choose existing</span>
+      </label>
+      <label for="userVideoRecordInput" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-camera text-[10px]"></i><span>${verb}</span>
+      </label>
+    </div>`;
+  if (userVideoUploadPct[car.vin] != null) {
+    return `${head}${inputs}
+    <div class="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-200">
+      <div id="userVideoProgressText" class="text-xs text-amber-800 font-semibold">Uploading your video… ${userVideoUploadPct[car.vin]}%</div>
+      <div class="mt-2 h-2 rounded-full bg-amber-100 overflow-hidden"><div id="userVideoProgressBar" class="h-full bg-amber-500 rounded-full" style="width:${userVideoUploadPct[car.vin]}%"></div></div>
+    </div>`;
+  }
+  const uv = userVideoFor(car);
+  if (!uv) {
+    return `${head}${inputs}
+    <p class="text-xs text-slate-500 pt-1.5">Record your own walkaround of this car and it will post <strong>instead of the AI reel</strong>. Keep it under 90 seconds, 1080p or lower. It's deleted from our server as soon as the post is confirmed.</p>
+    ${pickButtons("Record video")}`;
+  }
+  if (uv.status === "ready") {
+    return `${head}${inputs}
+    <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-900 mt-2">
+      <video id="userVideoPreview" controls playsinline preload="metadata" class="w-full max-h-96"></video>
+    </div>
+    <div class="pt-2 flex items-center justify-between gap-2">
+      <span class="text-xs font-semibold text-emerald-700"><i class="fa-solid fa-circle-check mr-1"></i>Your video is ready — it posts with this car instead of the AI reel, and the server copy is deleted once the post is confirmed.</span>
+    </div>
+    <div class="pt-2 flex items-center justify-end gap-2">
+      <button type="button" onclick="removeUserVideo('${vinAttr}')" class="px-4 py-2 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-trash-can text-[10px]"></i><span>Remove</span>
+      </button>
+      <label for="userVideoRecordInput" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-rotate text-[10px]"></i><span>Replace</span>
+      </label>
+    </div>`;
+  }
+  if (uv.status === "failed") {
+    return `${head}${inputs}
+    <div class="mt-2 p-3 bg-rose-50 rounded-xl border border-rose-200 text-xs text-rose-700">We couldn't process that video${uv.error ? " (" + escapeHtml(uv.error) + ")" : ""}. The car will post the usual way — or record a fresh clip under 90 seconds and try again.</div>
+    <div class="pt-2 flex items-center justify-end gap-2">
+      <button type="button" onclick="removeUserVideo('${vinAttr}')" class="px-4 py-2 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+        <i class="fa-solid fa-trash-can text-[10px]"></i><span>Remove</span>
+      </button>
+    </div>
+    ${pickButtons("Record a new video")}`;
+  }
+  return `${head}${inputs}
+  <div class="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 font-semibold flex items-center gap-2">
+    <i class="fa-solid fa-hourglass-half"></i><span>Processing your video — it will be ready to post in a moment. If this car posts before it's ready, the post uses the usual flow.</span>
+  </div>
+  <div class="pt-2 flex items-center justify-end gap-2">
+    <button type="button" onclick="removeUserVideo('${vinAttr}')" class="px-4 py-2 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer">
+      <i class="fa-solid fa-trash-can text-[10px]"></i><span>Remove</span>
+    </button>
+  </div>`;
+}
+
 async function openVehicleDetailsModal(car) {
   car = await ensureFullCar(car);
   document.getElementById("detailsModalTitle").innerText = `${car.year || ''} ${displayMakeText(car.make) || ''} ${displayModelText(car.model) || 'Vehicle'} ${car.trim || ''}`;
@@ -15168,10 +15514,12 @@ async function openVehicleDetailsModal(car) {
       </a>
     </div>
     ${vinReelSectionHtml(car)}
+    ${userVideoSectionHtml(car)}
   `;
 
   document.getElementById("vehicleDetailsModal").classList.remove("hidden");
   refreshVinReels();
+  refreshUserVideos();
 }
 
 async function removeVehicleFromInventory(vin) {
@@ -15196,6 +15544,11 @@ async function removeVehicleFromInventory(vin) {
       .eq("vin", vin)
       .eq("user_id", currentUser.id);
     if (error) throw error;
+
+    // USER VEHICLE VIDEOS (2026-11-20): a car leaving inventory
+    // takes its uploaded video with it — server copies + state
+    // row deleted, best-effort, never blocking the removal.
+    await deleteUserVideoServerCopy(vin);
 
     // Auto-delete on exit (app side): a posted car leaving inventory
     // takes its listing down with it. Same producer + dedupe as the
@@ -15742,6 +16095,7 @@ async function pollQueueTick() {
         if (modalOpen) await loadPostingQueue();       // list + sidebar badge
         if (invVisible) await pollInventoryDelta(); // rows + Posted pills (delta — full reload stays on sign-in/Sync)
         await refreshVinReels(); // VIN Reel chips + details-modal player ride this poller — no new timers
+        await refreshUserVideos(); // User-video chips + details section ride the same poller
 
         if (card) card.scrollTop = cardScroll;
         if (window.scrollY !== winScroll) window.scrollTo(0, winScroll);
