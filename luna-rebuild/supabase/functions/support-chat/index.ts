@@ -252,16 +252,128 @@ function stagedTrialPhase(
   return nowMs < started + 48 * 3600000 ? 1 : 2;
 }
 
+// Instagram diagnosis (2026-11-20): the failure classes are shared
+// verbatim with luna-repairs' classifier, so the chat answer and
+// the repair card call the same failure by the same name. Glosses
+// are plain and honest — what happened, whose side it sits on, and
+// the user's next step — never a root cause the row doesn't prove.
+function igFailureClass(row: any): string {
+  const code = typeof row?.error_code === "string" ? row.error_code : "";
+  const msg = typeof row?.error_message === "string" ? row.error_message : "";
+  if (code === "9007" || msg.includes("Media ID is not available")) {
+    return "media_unavailable";
+  }
+  if (code === "reel_render_failed") return "render_failed";
+  if (code === "instagram_not_connected" || code === "instagram_token_expired") {
+    return "not_connected";
+  }
+  if (code === "finisher_interrupted") return "interrupted";
+  if (code === "media_processing_timeout") return "processing_timeout";
+  return "meta_failed";
+}
+
+function igDiagnose(
+  row: any, reel: any, nowMs: number,
+): { cls: string; gloss: string } {
+  if (row.status === "permission_pending") {
+    return {
+      cls: "permission_pending",
+      gloss: "Meta is holding this account's Instagram publishing until AutoLaunch's app review clears. That is Meta's gate — not a defect and not something the user did wrong. Nothing to fix; publishing unlocks when Meta approves.",
+    };
+  }
+  if (row.status === "finishing") {
+    return {
+      cls: "finishing",
+      gloss: "The post is being published right now — give it a minute, then check Instagram.",
+    };
+  }
+  if (row.status === "awaiting_reel") {
+    const ageMs = nowMs - new Date(row.created_at).getTime();
+    if (reel && reel.status === "ready" && reel.video_url) {
+      return ageMs > 20 * 60 * 1000
+        ? {
+          cls: "stuck_ready",
+          gloss: "The car's video is ready but the post is still parked — it should have gone out on the automatic pass or when the app loaded. Luna has a repair card in this panel that can re-arm it; otherwise it completes on the next automatic pass or when the app is open on the car.",
+        }
+        : {
+          cls: "cooking",
+          gloss: "The car's video is ready and the post is in line — it completes on the next automatic pass (a few minutes) or as soon as the app is open on the car. Nothing is wrong.",
+        };
+    }
+    if (reel && reel.status === "consumed") {
+      return {
+        cls: "reel_used",
+        gloss: "The Marketplace post used this car's video first, so Instagram is waiting on a fresh copy — the app queues a new render the next time it loads with this car in view, then the Instagram post follows on its own.",
+      };
+    }
+    if (reel && reel.status === "failed") {
+      return {
+        cls: "render_failed",
+        gloss: "The car's video render failed, so there is nothing to post yet. Tapping the car's Reel button retries the render; once the video is ready the Instagram post follows.",
+      };
+    }
+    if (reel) {
+      return {
+        cls: "cooking",
+        gloss: "The car's video is still rendering — normal. Once it is ready the post completes on the next automatic pass or when the app is open on the car.",
+      };
+    }
+    return {
+      cls: "awaiting_render",
+      gloss: "No video exists for this car yet — the app queues the render the next time it loads with this car in view (or when the user taps the car's Reel button), and the Instagram post follows once the video is ready.",
+    };
+  }
+  // failed
+  const cls = igFailureClass(row);
+  switch (cls) {
+    case "media_unavailable":
+      return {
+        cls,
+        gloss: reel && reel.status === "ready" && reel.video_url
+          ? "That attempt was rejected by Meta because no usable video was attached ('Media ID is not available'). The car's video is ready NOW, so tapping the car's Instagram button again should post it. Luna can also clear the dead failure record from this panel so the retry starts clean."
+          : "That attempt was rejected by Meta because the car had no video ready ('Media ID is not available'). The flow is fixed now: tapping the car's Instagram button renders the video first, then posts. Luna can clear the dead failure record from this panel.",
+      };
+    case "render_failed":
+      return {
+        cls,
+        gloss: "The car's video render failed before Instagram ever saw the post. Tapping the car's Reel button retries the render; Luna can clear the dead failure record from this panel.",
+      };
+    case "not_connected":
+      return {
+        cls,
+        gloss: "The Instagram connection wasn't live when this tried to post. If Instagram is not connected now, reconnect it in Settings; then tap the car's Instagram button. Luna can clear the dead failure record from this panel.",
+      };
+    case "interrupted":
+      return {
+        cls,
+        gloss: "This post was interrupted mid-flight and left marked failed. Check Instagram first — if the car never appeared, a fresh tap on its Instagram button posts it, and Luna can clear the dead record from this panel.",
+      };
+    case "processing_timeout":
+      return {
+        cls,
+        gloss: "Instagram took too long processing the video and the attempt was marked failed. A fresh tap on the car's Instagram button retries it; Luna can clear the dead record from this panel.",
+      };
+    default:
+      return {
+        cls: "meta_failed",
+        gloss: "Meta refused this post with the message quoted on the line above. It is usually Meta-side or a one-off; a fresh tap on the car's Instagram button retries it, and Luna can clear the dead record from this panel. Treat it as a product defect only if the same message repeats across several cars.",
+      };
+  }
+}
+
 async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
   const now = new Date();
   const todayStart = new Date(Date.UTC(
     now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
   )).toISOString();
+  const sevenDaysAgoIso = new Date(now.getTime() - 7 * 86400000)
+    .toISOString();
 
   const [
     settingsRes, jobsRes, queueRes, activeRes, postedRes, memberRes,
     qTotalRes, qPostedRes, qPendingRes, qProcessingRes, qFailedRes,
     failedRes, invFreshRes, invNewRes, trialUsageRes,
+    igConnRes, igPostsRes,
   ] = await Promise.all([
       supabase.from("user_settings").select(SETTINGS_COLUMNS)
         .eq("user_id", userId).maybeSingle(),
@@ -303,6 +415,16 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
         .eq("user_id", userId).order("first_seen", { ascending: false }).limit(1),
       supabase.from("trial_usage").select("auto_used, manual_used")
         .eq("user_id", userId).maybeSingle(),
+      // Instagram (2026-11-20): the connection row WITHOUT the
+      // access token (never selected, never snapshotted) + the
+      // user's IG post records from the last 7 days.
+      supabase.from("instagram_connections")
+        .select("username, publish_permission, token_expires_at")
+        .eq("user_id", userId).maybeSingle(),
+      supabase.from("instagram_posts")
+        .select("id, vin, stock_number, kind, status, error_code, error_message, created_at")
+        .eq("user_id", userId).gte("created_at", sevenDaysAgoIso)
+        .order("created_at", { ascending: false }).limit(25),
     ]);
 
   const s = settingsRes.data || null;
@@ -505,6 +627,81 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     }
   }
 
+  // --- Instagram (2026-11-20): Luna sees IG outcomes ----------------
+  // instagram_posts is the IG source of truth (awaiting_reel /
+  // finishing / published / failed / permission_pending). The
+  // diagnosis lines are computed HERE, deterministically, from the
+  // row + the car's latest reel — the model explains them, it does
+  // not invent them.
+  const igConn = igConnRes.data || null;
+  const igPosts = igPostsRes.data || [];
+  let igPublished7d = 0, igFailed7d = 0, igPending7d = 0, igStuck = 0;
+  if (igConn || igPosts.length) {
+    lines.push("- Instagram:");
+    if (igConn) {
+      lines.push(
+        `  * Connected as @${igConn.username || "?"} — publishing permission: ` +
+        `${igConn.publish_permission || "unknown"}` +
+        (igConn.token_expires_at
+          ? `; connection expires ${igConn.token_expires_at}`
+          : ""),
+      );
+    } else {
+      lines.push(
+        "  * No Instagram connection on file, but Instagram post records exist (below).",
+      );
+    }
+    const igVins = [
+      ...new Set(igPosts.map((r: any) => r.vin).filter(Boolean)),
+    ];
+    const igReelByVin = new Map<string, any>();
+    const igCarByVin = new Map<string, any>();
+    if (igVins.length) {
+      const [igReelsRes, igInvRes] = await Promise.all([
+        supabase.from("vin_reels")
+          .select("vin, status, video_url, created_at")
+          .eq("user_id", userId).in("vin", igVins)
+          .order("created_at", { ascending: false }),
+        supabase.from("scraped_inventory")
+          .select("vin, year, make, model")
+          .eq("user_id", userId).in("vin", igVins),
+      ]);
+      for (const r of igReelsRes.data || []) {
+        if (!igReelByVin.has(r.vin)) igReelByVin.set(r.vin, r);
+      }
+      for (const r of igInvRes.data || []) igCarByVin.set(r.vin, r);
+    }
+    let shown = 0;
+    for (const p of igPosts) {
+      if (p.status === "published") { igPublished7d++; continue; }
+      if (p.status === "failed") igFailed7d++;
+      if (p.status === "permission_pending") igPending7d++;
+      const reel = p.vin ? igReelByVin.get(p.vin) : null;
+      const d = igDiagnose(p, reel, now.getTime());
+      if (d.cls === "stuck_ready") igStuck++;
+      if (shown >= 8) continue;
+      shown++;
+      const inv = p.vin ? igCarByVin.get(p.vin) : null;
+      const car = inv
+        ? [inv.year, inv.make, inv.model].filter(Boolean).join(" ")
+        : (p.stock_number || p.vin || "car");
+      lines.push(
+        `  * ${p.created_at} — Instagram ${p.kind || "post"} ${car} ` +
+        `(stock ${p.stock_number || "?"}): ${p.status}` +
+        ` — diagnosis [${d.cls}]: ${d.gloss}` +
+        (p.status === "failed" && p.error_message
+          ? ` Meta's words: "${String(p.error_message).slice(0, 200)}"` +
+            (p.error_code ? ` (code ${p.error_code})` : "") + "."
+          : ""),
+      );
+    }
+    if (igPublished7d) {
+      lines.push(
+        `  * ${igPublished7d} Instagram post(s) published in the last 7 days.`,
+      );
+    }
+  }
+
   const summary =
     `billing=${billingState} tier=${tier}` +
     (trialDaysLeft !== null ? ` trialDaysLeft=${trialDaysLeft}` : "") +
@@ -515,7 +712,8 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
     ` queueToday=posted:${qToday.posted},pending:${qToday.pending},processing:${qToday.processing},failed:${qToday.failed}` +
     ` invUpdated=${invUpdatedAt || "none"}` +
     ` helperInstalled=${s?.helper_version || "unreported"}` +
-    ` priority=${priority}`;
+    ` priority=${priority}` +
+    ` ig7d=pub:${igPublished7d},failed:${igFailed7d},pending:${igPending7d},stuck:${igStuck}`;
 
   return {
     text: lines.join("\n"),
@@ -2341,6 +2539,12 @@ When — and only when — you judge a likely product defect:
 3. End your reply with a final line in exactly this format (it is stripped before display and becomes the internal report): [[DEFECT: <1-3 lines: what is broken; the evidence from the snapshot/conversation; what likely needs fixing>]]
 Never mention the marker format, tickets' internals, or this rule to the user.
 ${conversion}
+
+INSTAGRAM (the snapshot's Instagram section is computed from the user's own instagram_posts rows — trust its per-row diagnosis lines and explain them in plain words):
+- Instagram posting is LIVE for connected accounts: AutoLaunch posts a reel of the car. The knowledge base below still calls Instagram "coming soon" in places — that wording predates the launch; where the snapshot shows an Instagram connection or posts, the snapshot wins.
+- Each Instagram line carries a diagnosis class in [brackets]. media_unavailable = that attempt had no video ready and Meta rejected it; the flow now renders first, so a fresh tap on the car's Instagram button posts it. permission_pending = Meta's app-review gate — NOT a defect, not the user's fault, nothing to fix. stuck_ready = video ready, post parked — Luna's repair card in this panel can re-arm it. cooking = video still rendering, normal. reel_used = the Marketplace post consumed the video first; a fresh render is queued when the app next loads with the car in view. render_failed / not_connected / interrupted / processing_timeout / meta_failed = explain using the line's own gloss; for meta_failed quote Meta's words from the line.
+- A single Instagram failure is usually Meta-side or a stale record — do NOT call it a product defect unless the same failure repeats across several cars or attempts.
+- When Luna has a repair card for an Instagram failure (clear the dead record / re-arm the stuck post), it appears in this same panel — point the user to it instead of describing steps they cannot take.
 
 KNOWLEDGE BASE:
 ${KB}

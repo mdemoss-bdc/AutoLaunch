@@ -68,6 +68,31 @@
 // queue_row_id, which is null here): an open proposal for the same
 // signature is updated in place as the cluster grows.
 //
+// Instagram failures (2026-11-20, Matthew's direction: "make sure
+// Ask Luna can help with failed insta posts too"): IG outcomes live
+// in public.instagram_posts, not the queue, so two IG classes ride
+// the same propose -> tap -> apply -> log shape with the IG row's
+// id carried in queue_row_id (a plain uuid column — no FK — so the
+// open-proposal dedupe index covers them unchanged):
+//   clear_failed_ig_intent   — delete a dead FAILED instagram_posts
+//     record so a fresh tap starts clean. Execute re-verifies: the
+//     record is still failed AND no published post exists for the
+//     VIN. Undo re-inserts the snapshotted row.
+//   release_stuck_ig_intent  — an awaiting_reel intent whose reel
+//     is VERIFIABLY ready (latest vin_reels row ready + video_url)
+//     and which has sat parked past the finisher's cadence is
+//     re-armed by moving it to the front of the finisher's
+//     oldest-first line (the created_at stamp this codebase already
+//     uses to front-run Luna's verify rows). Luna never publishes:
+//     the EXISTING paths (the instagram-post finisher's finish
+//     pass, which completes manual intents too, and the app's
+//     reel watcher) do the posting, exactly as the blast-radius
+//     fence requires. Undo restores the original created_at.
+// Both classes are ASK-only forever: neither is in
+// AUTO_APPLY_ACTIONS and neither gets a config row. The diagnosis
+// half (what each failure class MEANS) lives in support-chat's
+// snapshot, computed from the same classifier below.
+//
 // Auto-retry (2026-11-18, Matthew's approval — a graduated
 // capability under the teach-back rule): ONE bounded re-queue for
 // an isolated failed post whose signature is on a tiny allowlist
@@ -95,6 +120,19 @@ const BUMP_MIN_AGE_MS = 30 * 60 * 1000;
 const UNDO_WINDOW_MS = 7 * 24 * 3600 * 1000;
 const CLUSTER_WINDOW_MS = 24 * 3600 * 1000;
 const CLUSTER_MIN_ROWS = 3;
+
+// Instagram classes: a failed IG record earns a clear proposal
+// inside 24h (the same freshness window as the cluster detector);
+// an awaiting_reel intent is "stuck" once it has sat parked with a
+// ready reel well past the finisher's 3-minute cadence (20 min =
+// several missed passes); the release re-arm stamps created_at
+// this far back so the intent leads the finisher's oldest-first
+// pass — and the detector's 30-day sanity bound keeps a re-armed
+// intent (age ~1 year) from ever being proposed twice.
+const IG_FAILED_WINDOW_MS = 24 * 3600 * 1000;
+const IG_STUCK_MS = 20 * 60 * 1000;
+const IG_STUCK_MAX_AGE_MS = 30 * 24 * 3600 * 1000;
+const IG_FRONT_MS = 365 * 24 * 3600 * 1000;
 
 // Bounded auto-retry: the allowlist is deliberately tiny — a
 // retry must never be able to do the wrong thing twice, so
@@ -293,6 +331,53 @@ function clusterSummaryText(sig: string, count: number): string {
     ? `failed at the video gate (${sig.split(":").pop()})`
     : `failed the same way (${sig})`;
   return `${count} posts ${what} in the last 24 hours \u2014 every one stopped safely before publishing, so nothing went out wrong. This usually points to a Facebook-side or helper-side problem, not your cars. Luna has escalated it for investigation.`;
+}
+
+// ---------------------------------------------------------------------
+// Instagram failure classification + proposal summaries. Pure given
+// their inputs; the class keys are shared verbatim with
+// support-chat's snapshot diagnosis, so the card and the chat answer
+// always call the same failure by the same name.
+// ---------------------------------------------------------------------
+
+function igFailureClass(row: any): string {
+  const code = typeof row?.error_code === "string" ? row.error_code : "";
+  const msg = typeof row?.error_message === "string" ? row.error_message : "";
+  if (code === "9007" || msg.includes("Media ID is not available")) {
+    return "media_unavailable";
+  }
+  if (code === "reel_render_failed") return "render_failed";
+  if (code === "instagram_not_connected" || code === "instagram_token_expired") {
+    return "not_connected";
+  }
+  if (code === "finisher_interrupted") return "interrupted";
+  if (code === "media_processing_timeout") return "processing_timeout";
+  return "meta_failed";
+}
+
+function igClearSummary(
+  label: string, cls: string, failure: string, reelReadyNow: boolean,
+): string {
+  switch (cls) {
+    case "media_unavailable":
+      return reelReadyNow
+        ? `The Instagram post for your ${label} failed — Meta rejected the media on that attempt ("Media ID is not available"). The car's video is ready now, so a fresh tap on its Instagram button should post it. Luna can clear the dead failure record so that tap starts clean.`
+        : `The Instagram post for your ${label} failed — Meta rejected it because the car had no video ready ("Media ID is not available"). That flow is fixed now: tapping Instagram renders the video first, then posts. Luna can clear the dead failure record so a fresh tap starts clean.`;
+    case "render_failed":
+      return `The Instagram post for your ${label} never went out — the car's video render failed first. Luna can clear the dead record; tapping the car's Reel button retries the render, and then Instagram can post it.`;
+    case "not_connected":
+      return `The Instagram post for your ${label} failed because the Instagram connection wasn't live at that moment. Luna can clear the dead record — if Instagram isn't connected now, reconnect it in Settings, then tap the car's Instagram button to post.`;
+    case "interrupted":
+      return `The Instagram post for your ${label} was interrupted mid-flight, so it sits marked failed. Check Instagram first: if the car never appeared, Luna can clear this record so a fresh tap starts clean.`;
+    case "processing_timeout":
+      return `The Instagram post for your ${label} timed out while Instagram was still processing the video, so it sits marked failed. Luna can clear the dead record so a fresh tap starts clean.`;
+    default:
+      return `The Instagram post for your ${label} failed — Meta said: "${failure.slice(0, 200)}". Luna can clear the dead record so a fresh tap on the car's Instagram button starts clean.`;
+  }
+}
+
+function igReleaseSummary(label: string): string {
+  return `Your ${label}'s Instagram post is stuck: its video has been ready for a while, but the post is still parked. Luna can re-arm it — the post then goes out on the next automatic pass (a few minutes) or as soon as the app is open on the car.`;
 }
 
 async function runDetection(svc: any, userId: string): Promise<number> {
@@ -558,6 +643,9 @@ async function runDetection(svc: any, userId: string): Promise<number> {
     if (ok) created++;
   }
 
+  // --- Instagram: failed records + stuck intents -------------------
+  created += await runIgDetection(svc, userId, now);
+
   // --- Verify enqueueing for needs_verify proposals ------------------
   if (versionGte(helperVersion, VERIFY_MIN_HELPER)) {
     const { data: waiting } = await svc.from("luna_repairs")
@@ -609,6 +697,122 @@ async function runDetection(svc: any, userId: string): Promise<number> {
     }
   }
 
+  return created;
+}
+
+// Instagram detection: reads the user's own instagram_posts rows
+// (service role; the caller scopes by userId). Failed records get a
+// clear proposal inside 24h unless the VIN already has a published
+// post (then the failure is stale noise next to a success — nothing
+// to clear). Awaiting intents get a release proposal only when the
+// latest reel is verifiably ready AND the intent has been parked
+// past the finisher's cadence; a still-rendering reel is "cooking",
+// never stuck. A proposal the user dismissed (or undid) for the
+// same IG row is never re-proposed; an applied release moves
+// created_at ~1 year back, outside the detector's age bound, so it
+// cannot re-propose either. ASK-only: nothing here auto-applies.
+async function runIgDetection(
+  svc: any, userId: string, now: number,
+): Promise<number> {
+  let created = 0;
+  const { data: igRows } = await svc.from("instagram_posts")
+    .select("*")
+    .eq("user_id", userId)
+    .in("status", ["failed", "awaiting_reel"])
+    .order("created_at", { ascending: true })
+    .limit(100);
+  const rows = (igRows ?? []) as any[];
+  if (!rows.length) return 0;
+
+  const { data: published } = await svc.from("instagram_posts")
+    .select("vin")
+    .eq("user_id", userId)
+    .eq("status", "published")
+    .limit(500);
+  const publishedVins = new Set(
+    (published ?? []).map((r: any) => r.vin).filter(Boolean),
+  );
+
+  const igIds = rows.map((r) => r.id);
+  const { data: closedProps } = await svc.from("luna_repairs")
+    .select("action, queue_row_id")
+    .eq("user_id", userId)
+    .in("action", ["clear_failed_ig_intent", "release_stuck_ig_intent"])
+    .in("status", ["dismissed", "undone"])
+    .in("queue_row_id", igIds);
+  const suppressed = new Set(
+    (closedProps ?? []).map((r: any) => `${r.action}:${r.queue_row_id}`),
+  );
+
+  const vins = [...new Set(rows.map((r) => r.vin).filter(Boolean))];
+  const { data: invRows } = await svc.from("scraped_inventory")
+    .select("vin, year, make, model")
+    .eq("user_id", userId)
+    .in("vin", vins);
+  const invByVin = new Map((invRows ?? []).map((r: any) => [r.vin, r]));
+  const reelMap = await latestReelByVin(svc, userId, vins);
+
+  const labelFor = (row: any): string => {
+    const inv = row.vin ? invByVin.get(row.vin) : null;
+    return inv ? carLabel(inv) : (row.stock_number ?? row.vin ?? "car");
+  };
+
+  for (const row of rows) {
+    const age = now - new Date(row.created_at).getTime();
+    if (row.status === "failed") {
+      if (age > IG_FAILED_WINDOW_MS) continue;
+      if (row.vin && publishedVins.has(row.vin)) continue;
+      if (suppressed.has(`clear_failed_ig_intent:${row.id}`)) continue;
+      const cls = igFailureClass(row);
+      const reel = row.vin ? reelMap.get(row.vin) : null;
+      const reelReadyNow = !!(
+        reel && reel.status === "ready" && reel.video_url
+      );
+      const label = labelFor(row);
+      const ok = await insertProposal(svc, {
+        user_id: userId,
+        queue_row_id: row.id,
+        vin: row.vin,
+        action: "clear_failed_ig_intent",
+        summary: igClearSummary(
+          label, cls, row.error_message ?? "", reelReadyNow,
+        ),
+        evidence: {
+          source: "instagram_posts",
+          ig_post_id: row.id,
+          failure_class: cls,
+          error_code: row.error_code ?? null,
+          failure: (row.error_message ?? "").slice(0, 400),
+          kind: row.kind ?? null,
+          car_label: label,
+          reel_status_now: reel ? reel.status : null,
+        },
+      });
+      if (ok) created++;
+    } else if (row.status === "awaiting_reel") {
+      if (age < IG_STUCK_MS || age > IG_STUCK_MAX_AGE_MS) continue;
+      if (suppressed.has(`release_stuck_ig_intent:${row.id}`)) continue;
+      const reel = row.vin ? reelMap.get(row.vin) : null;
+      if (!reel || reel.status !== "ready" || !reel.video_url) continue;
+      const label = labelFor(row);
+      const ok = await insertProposal(svc, {
+        user_id: userId,
+        queue_row_id: row.id,
+        vin: row.vin,
+        action: "release_stuck_ig_intent",
+        summary: igReleaseSummary(label),
+        evidence: {
+          source: "instagram_posts",
+          ig_post_id: row.id,
+          reel_id: reel.id ?? null,
+          reel_status: "ready",
+          intent_created_at: row.created_at,
+          car_label: label,
+        },
+      });
+      if (ok) created++;
+    }
+  }
   return created;
 }
 
@@ -760,6 +964,15 @@ async function markExpired(svc: any, prop: any, note: string) {
 async function executeRepair(
   svc: any, userId: string, prop: any, actor: string = "user_tap",
 ) {
+  // Instagram classes act on instagram_posts, not the queue — they
+  // branch before the queue-row load (their queue_row_id carries
+  // the IG row's id, which has no queue row behind it).
+  if (
+    prop.action === "clear_failed_ig_intent" ||
+    prop.action === "release_stuck_ig_intent"
+  ) {
+    return executeIgRepair(svc, userId, prop, actor);
+  }
   const { data: row } = await svc.from("auto_posting_queue")
     .select("*").eq("id", prop.queue_row_id).eq("user_id", userId).maybeSingle();
 
@@ -924,6 +1137,111 @@ async function executeRepair(
     default:
       return json({ ok: false, message: "Unknown repair action." }, 200);
   }
+}
+
+// The IG executor: every claim re-verified at tap time against the
+// live row, because the world moves between proposal and tap (the
+// finisher may have published the car, the user may have retried).
+// Luna never calls instagram-post and never publishes here: clear
+// deletes a dead record; release re-arms the user's own intent for
+// the existing completion paths.
+async function executeIgRepair(
+  svc: any, userId: string, prop: any, actor: string,
+) {
+  const igId = prop.evidence?.ig_post_id ?? prop.queue_row_id;
+  const { data: intent } = await svc.from("instagram_posts")
+    .select("*")
+    .eq("id", igId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (prop.action === "clear_failed_ig_intent") {
+    if (!intent) {
+      return markExpired(
+        svc, prop,
+        "That failed Instagram record is already gone.",
+      );
+    }
+    if (intent.status !== "failed") {
+      return markExpired(
+        svc, prop,
+        "That Instagram post is no longer in a failed state, so there's nothing to clear.",
+      );
+    }
+    if (intent.vin) {
+      const { data: pub } = await svc.from("instagram_posts")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("vin", intent.vin)
+        .eq("status", "published")
+        .limit(1);
+      if (pub && pub.length) {
+        return markExpired(
+          svc, prop,
+          "That car is already posted on Instagram, so Luna left the record alone.",
+        );
+      }
+    }
+    const before = { ig_row: intent };
+    const { error } = await svc.from("instagram_posts")
+      .delete()
+      .eq("id", intent.id)
+      .eq("status", "failed");
+    if (error) {
+      return json(
+        { ok: false, message: "The clear didn't go through — nothing was changed." },
+        200,
+      );
+    }
+    await markApplied(svc, prop, before, { deleted: true }, actor);
+    return json({
+      ok: true,
+      message:
+        "Cleared — tap the car's Instagram button any time to post it fresh.",
+    });
+  }
+
+  // release_stuck_ig_intent
+  if (!intent) {
+    return markExpired(svc, prop, "That Instagram post is already gone.");
+  }
+  if (intent.status !== "awaiting_reel" || !intent.vin) {
+    return markExpired(
+      svc, prop,
+      "That Instagram post is no longer waiting, so there's nothing to re-arm.",
+    );
+  }
+  const { data: reel } = await svc.from("vin_reels")
+    .select("status, video_url")
+    .eq("user_id", userId)
+    .eq("vin", intent.vin)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!reel || reel.status !== "ready" || !reel.video_url) {
+    return markExpired(
+      svc, prop,
+      "The car's video isn't ready anymore, so Luna left the parked post alone.",
+    );
+  }
+  const front = new Date(Date.now() - IG_FRONT_MS).toISOString();
+  const before = { created_at: intent.created_at };
+  const { error } = await svc.from("instagram_posts")
+    .update({ created_at: front })
+    .eq("id", intent.id)
+    .eq("status", "awaiting_reel");
+  if (error) {
+    return json(
+      { ok: false, message: "The re-arm didn't go through — nothing was changed." },
+      200,
+    );
+  }
+  await markApplied(svc, prop, before, { created_at: front }, actor);
+  return json({
+    ok: true,
+    message:
+      "Re-armed — the post goes out on the next automatic pass, or as soon as the app is open on the car.",
+  });
 }
 
 // ---------------------------------------------------------------------
@@ -1211,6 +1529,21 @@ async function undoRepair(svc: any, userId: string, prop: any) {
       const r = { ...before.row };
       await svc.from("auto_posting_queue").insert(r);
     }
+  } else if (prop.action === "clear_failed_ig_intent") {
+    // Re-insert the snapshotted instagram_posts row exactly as it
+    // was (same id, same failure, same timestamps).
+    if (before.ig_row) {
+      await svc.from("instagram_posts").insert({ ...before.ig_row });
+    }
+  } else if (prop.action === "release_stuck_ig_intent") {
+    // Restore the intent's original created_at (drop it back out of
+    // the front of the finisher's line). If the post already went
+    // out, the row's status has moved on and this only restores a
+    // timestamp on a published record — harmless.
+    await svc.from("instagram_posts")
+      .update({ created_at: before.created_at })
+      .eq("id", prop.queue_row_id)
+      .eq("user_id", userId);
   }
 
   await svc.from("luna_repairs").update({
