@@ -3199,6 +3199,16 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
 
         </div>
 
+        <!-- AUTO-INSTAGRAM (Matthew, 2026-11-20) -->
+        <div style="margin-top:14px;padding:14px 16px;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+            <input type="checkbox" id="chkInstagramAutoPost" onchange="toggleInstagramAutoPostSetting(this)" style="margin-top:3px;width:16px;height:16px;accent-color:var(--accent);">
+            <span>
+              <span style="display:block;font-weight:700;">Also post to Instagram</span>
+              <span style="display:block;font-size:0.82rem;color:var(--muted);margin-top:2px;">On: every car Auto-Post queues for Marketplace also posts to your connected Instagram as its VIN Reel — rendered first if it doesn't have one yet, then finished automatically by AutoLaunch's server, so no tab has to stay open and a locked PC can't stall it. One post per car, ever. Publishing still runs through Meta's approval for your account, exactly like the per-car Instagram button. Off: Instagram stays tap-per-car.</span>
+            </span>
+          </label>
+        </div>
         <!-- POST WITHOUT COLORS (Matthew, 2026-11-05) -->
 
         <div class="glass-card rounded-2xl p-6">
@@ -4815,6 +4825,7 @@ let autoSyncEnabled = true;
 // time; the per-car "Share to my feed" button queues a share job
 // regardless of this switch.
 let shareToFeedEnabled = false;
+let instagramAutoPostEnabled = false;
 let userDailyPostLimit = 10;
 // The account's stored time-between-posts (user_settings.post_delay_minutes),
 // kept RAW here — the tier clamp lives in postDelayState, never in this value.
@@ -10962,6 +10973,12 @@ updateLastSyncDisplay();
         shareToFeedEnabled = !!data.share_to_feed;
         const chkShareFeed = document.getElementById("chkShareToFeed");
         if (chkShareFeed) chkShareFeed.checked = shareToFeedEnabled;
+      }
+      // Auto-Instagram: absent column leaves the default (OFF — opt-in).
+      if (data.instagram_auto_post_enabled !== undefined && data.instagram_auto_post_enabled !== null) {
+        instagramAutoPostEnabled = !!data.instagram_auto_post_enabled;
+        const chkIgAuto = document.getElementById("chkInstagramAutoPost");
+        if (chkIgAuto) chkIgAuto.checked = instagramAutoPostEnabled;
       }
       // Post without colors: absent column leaves the default (OFF — opt-in).
       if (data.allow_post_without_colors !== undefined && data.allow_post_without_colors !== null) {
@@ -20513,6 +20530,13 @@ function instagramPostBtnHtml(vinAttr, shrinkCls) {
   // the reel lands. The button stays live — a tap while rendering
   // reports that state, and a tap once the reel is ready posts
   // immediately.
+  if (instagramPostedByVin[vinAttr]) {
+    return (
+      '<button type="button" class="inv-ig-btn" data-ig-vin="' +
+      vinAttr +
+      '" title="Posted to Instagram — this car is already on Instagram (one post per car)" aria-label="Posted to Instagram" disabled style="background:rgba(16,185,129,0.16);color:#34d399;cursor:default"><i class="fa-solid fa-check"></i></button>'
+    );
+  }
   if (instagramPendingByVin[vinAttr]) {
     return `<button data-action="post-instagram" data-vin="${vinAttr}" title="Reel rendering — this car will post to Instagram automatically when its VIN Reel is ready" class="w-8 h-8${shrinkCls} rounded-xl border border-amber-200 bg-amber-50 text-amber-600 flex items-center justify-center cursor-pointer transition">
           <i class="fa-solid fa-spinner fa-spin text-xs"></i>
@@ -20645,6 +20669,7 @@ async function disconnectInstagram() {
 // a closed tab: on the next load the watcher reloads it and
 // finishes the post with no second tap.
 let instagramPendingByVin = {};
+let instagramPostedByVin = {};
 let instagramPendingLoaded = false;
 const instagramCompletingByVin = {};
 
@@ -20663,11 +20688,17 @@ async function instagramLoadPendingIntents() {
       .from("instagram_posts")
       .select("id, vin, status, created_at")
       .eq("user_id", currentUser.id)
-      .eq("status", "awaiting_reel")
+      .in("status", ["awaiting_reel", "published"])
       .order("created_at", { ascending: true });
     if (error) throw error;
     (data || []).forEach((r) => {
-      if (r.vin && !instagramPendingByVin[r.vin]) {
+      if (!r.vin) return;
+      if (r.status === "published") {
+        // One post per car: a published row locks the button to
+        // its posted state for good (see instagramPostBtnHtml).
+        instagramPostedByVin[r.vin] = true;
+        delete instagramPendingByVin[r.vin];
+      } else if (!instagramPendingByVin[r.vin]) {
         instagramPendingByVin[r.vin] = { intentId: r.id };
       }
     });
@@ -20720,6 +20751,15 @@ async function instagramRecordIntent(car) {
       }),
     });
     const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok && data.already_posted) {
+      // [IG-AUTO-354] The function found a published row for this
+      // car — one post per car, so this is a done state, not a
+      // new intent.
+      instagramPostedByVin[car.vin] = true;
+      delete instagramPendingByVin[car.vin];
+      if (typeof applyFilters === "function") applyFilters();
+      return "already";
+    }
     if (res.ok && data.ok && data.intent_id) {
       instagramPendingByVin[car.vin] = { intentId: data.intent_id };
       if (typeof applyFilters === "function") applyFilters();
@@ -20779,9 +20819,22 @@ async function instagramPublish(car, videoUrl, intentId) {
       if (typeof applyFilters === "function") applyFilters();
     }
     if (res.ok && data.ok) {
+      // [IG-AUTO-354] The car is posted now — remember it so the
+      // button locks to its posted state and can't fire again.
+      instagramPostedByVin[car.vin] = true;
+      delete instagramPendingByVin[car.vin];
+      if (typeof applyFilters === "function") applyFilters();
       showTikTokToast(
         "✅ Posted to Instagram" + (data.kind ? " (" + data.kind + ")" : "") + "."
       );
+      return true;
+    } else if (data.error === "intent_already_resolved") {
+      // [IG-AUTO-354] The parked intent is already claimed or
+      // resolved — the server-side finisher owns it now (or it
+      // already posted). Nothing for this tap to do, and above
+      // all: never fire a second publish.
+      showTikTokToast("That Instagram post is already being finished for you — no need to tap again.");
+      instagramLoadPendingIntents();
       return true;
     } else if (data.error === "instagram_permission_pending") {
       showTikTokToast(
@@ -20872,6 +20925,12 @@ async function postToInstagram(vin) {
     return;
   }
   await instagramLoadPendingIntents();
+  // [IG-AUTO-354] One post per car: already posted means nothing
+  // fires again — not a publish, not an intent, not a render.
+  if (instagramPostedByVin[car.vin]) {
+    showTikTokToast("This car is already posted to Instagram — one post per car, so it won't go twice.");
+    return;
+  }
   const pending = instagramPendingFor(car.vin);
   const reel = vinReelFor(car);
   // Ready Reel → post it now, exactly as before (resolving a held
@@ -20917,9 +20976,13 @@ async function postToInstagram(vin) {
     }
   }
   const recorded = await instagramRecordIntent(car);
+  if (recorded === "already") {
+    showTikTokToast("This car is already posted to Instagram — one post per car, so it won't go twice.");
+    return;
+  }
   showTikTokToast(
     recorded
-      ? "Rendering this car's VIN Reel — it will post to Instagram automatically when it's ready. You can leave this tab open, or it'll finish next time you open AutoLaunch."
+      ? "Rendering this car's VIN Reel — it will post to Instagram automatically when it's ready. AutoLaunch's server finishes it on its own — no need to keep this tab open."
       : "Rendering this car's VIN Reel — once it shows Reel ready, tap Instagram again and it posts right away."
   );
 }
@@ -21858,6 +21921,35 @@ async function toggleShareToFeedSetting(el) {
   } catch (err) {
     el.checked = !value;
     alert("Could not save the share-to-feed setting: " + (err.message || "Unknown error"));
+  }
+}
+
+// [IG-AUTO-354] "Also post to Instagram" (Matthew, 2026-11-20):
+// writes user_settings.instagram_auto_post_enabled immediately,
+// like Share to feed. Opt-in — the default is off. The server-side
+// finisher reads the same column: for opted-in accounts it parks
+// an Instagram intent through the shared instagram-post path for
+// every car Auto-Post queues for Marketplace, then completes it
+// when the VIN Reel is ready — no app tab involved, so a locked
+// PC can't stall it. Turning it ON rides on Auto-Post, so it
+// carries the same plan gate; turning it off is always allowed.
+async function toggleInstagramAutoPostSetting(el) {
+  if (!currentUser) { if (el) el.checked = !el.checked; return; }
+  const value = el.checked;
+  if (value && !requireTier("autopost")) { el.checked = false; return; }
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        instagram_auto_post_enabled: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    instagramAutoPostEnabled = value;
+  } catch (err) {
+    el.checked = !value;
+    alert("Could not save the auto-Instagram setting: " + (err.message || "Unknown error"));
   }
 }
 
