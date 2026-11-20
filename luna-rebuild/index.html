@@ -4368,6 +4368,30 @@ body.dark-shell :is(#checkoutConfirmModal, #authOverlay, #settingsModal, #queueM
         <span class="text-sm">🌙</span>
         <p class="text-xs font-extrabold text-slate-900 uppercase tracking-wide">Your personal assistant</p>
       </div>
+      <!-- [LUNA-VOICE-349-MARKUP-BEGIN] Voice I/O bar (spec 2026-11-19): push-to-talk,
+           spoken replies with a visible mute, one-time Chrome/Google disclosure.
+           Buttons wire up in the LUNA-VOICE-349 JS block; no inline handlers. -->
+      <div class="mt-2 flex items-center gap-2 flex-wrap" id="lunaVoiceBar">
+        <button type="button" id="lunaVoiceMicBtn" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm flex items-center gap-2">
+          <i class="fa-solid fa-microphone"></i><span id="lunaVoiceMicLabel">Talk to Luna</span>
+        </button>
+        <button type="button" id="lunaVoiceStopBtn" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer items-center gap-2" style="display:none">
+          <i class="fa-solid fa-stop"></i> Stop
+        </button>
+        <button type="button" id="lunaVoiceMuteBtn" class="px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer flex items-center gap-2">
+          <i class="fa-solid fa-volume-high" id="lunaVoiceMuteIcon"></i><span id="lunaVoiceMuteLabel">Sound on</span>
+        </button>
+        <button type="button" id="lunaVoiceBriefBtn" class="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer flex items-center gap-2">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Brief me
+        </button>
+      </div>
+      <div id="lunaVoiceDisclosure" class="mt-2 rounded-xl border border-indigo-200 bg-white px-3.5 py-2 flex items-start gap-2">
+        <i class="fa-solid fa-microphone-lines text-indigo-400 mt-0.5"></i>
+        <p class="flex-1 text-[11px] text-slate-600 leading-relaxed">Talking to Luna uses Chrome&rsquo;s built-in voice typing: Chrome sends your voice audio to Google&rsquo;s servers to transcribe it. AutoLaunch doesn&rsquo;t record or store any audio.</p>
+        <button type="button" id="lunaVoiceDisclosureBtn" class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-semibold cursor-pointer">Got it</button>
+      </div>
+      <p id="lunaVoiceHint" class="mt-2 text-[11px] text-amber-600 font-semibold" style="display:none"></p>
+      <!-- [LUNA-VOICE-349-MARKUP-END] -->
       <!-- [LUNA-ASSISTANT-343-MARKUP-BEGIN] Luna Phase 3 (assistant):
            briefing + reminders + commands, rendered by
            lunaAssistantRender from luna_reminders + the luna-repairs
@@ -8559,6 +8583,7 @@ function lunaRepairsRender() {
       // the user to fix) — summary, the failure in plain terms,
       // the escalation note, and a dismiss only.
       const card = document.createElement("div");
+      card.setAttribute("data-repair-card", "1");
       card.className = "rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 space-y-2";
       const h = document.createElement("p");
       h.className = "text-[11px] font-bold text-amber-700 uppercase tracking-wide";
@@ -8566,6 +8591,7 @@ function lunaRepairsRender() {
       card.appendChild(h);
       const t = document.createElement("p");
       t.className = "text-xs text-slate-800 leading-relaxed";
+      t.setAttribute("data-repair-summary", "1");
       t.textContent = p.summary || "Several posts hit the same failure.";
       card.appendChild(t);
       const d = document.createElement("p");
@@ -8587,14 +8613,23 @@ function lunaRepairsRender() {
       no.setAttribute("data-repair-action", "dismiss");
       no.setAttribute("data-repair-id", p.id);
       row.appendChild(no);
+      const cspeakBtn = document.createElement("button");
+      cspeakBtn.type = "button";
+      cspeakBtn.className = "px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800 text-[11px] font-semibold cursor-pointer";
+      cspeakBtn.setAttribute("data-repair-speak", "1");
+      cspeakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+      cspeakBtn.title = "Hear it";
+      row.appendChild(cspeakBtn);
       card.appendChild(row);
       sec.appendChild(card);
       continue;
     }
     const card = document.createElement("div");
+    card.setAttribute("data-repair-card", "1");
     card.className = "rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 space-y-2";
     const t = document.createElement("p");
     t.className = "text-xs text-slate-800 leading-relaxed";
+    t.setAttribute("data-repair-summary", "1");
     t.textContent = p.summary || "Luna found a bookkeeping problem she can fix.";
     card.appendChild(t);
     const row = document.createElement("div");
@@ -8620,6 +8655,13 @@ function lunaRepairsRender() {
     no.setAttribute("data-repair-action", "dismiss");
     no.setAttribute("data-repair-id", p.id);
     row.appendChild(no);
+    const speakBtn = document.createElement("button");
+    speakBtn.type = "button";
+    speakBtn.className = "px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 text-[11px] font-semibold cursor-pointer";
+    speakBtn.setAttribute("data-repair-speak", "1");
+    speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+    speakBtn.title = "Hear it";
+    row.appendChild(speakBtn);
     card.appendChild(row);
     sec.appendChild(card);
   }
@@ -10019,6 +10061,312 @@ document.addEventListener("click", function (e) {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 });
 // [LUNA-INVCARDS-348-JS-END]
+
+// [LUNA-VOICE-349-JS-BEGIN]
+// Voice I/O layer over the Ask Luna assistant panel (spec:
+// luna-voice-in-app-spec-2026-11-19.md; hold lifted by Matthew
+// 2026-11-19 ~19:31 ET). Push-to-talk dictation via Chrome's
+// built-in webkitSpeechRecognition fills the existing assistant
+// input and runs the existing pipeline (lunaAssistantRun) —
+// voice changes NOTHING about what Luna can do: the same
+// parser, the same echo-back confirm, the same refusals.
+// Spoken replies via speechSynthesis, wrapped around the exact
+// points where the assistant already writes its text, so
+// everything spoken also appears as text (parity by
+// construction). Speech is source-tagged: only assistant-
+// originated replies speak — inventory answers, what's-wrong
+// reports, the briefing, reminder echo-backs, and assistant
+// notices. Support-chat AI replies, the greeting, and timeout
+// lines never speak. Repair cards gain a speaker button that
+// reads the summary aloud; decisions stay TAPS — this layer
+// never confirms, applies, sends, posts, or changes anything.
+// Where a browser lacks either API the buttons disable with an
+// honest hint; nothing else changes. No backend calls.
+
+let lunaVoiceRec = null;
+let lunaVoiceListening = false;
+let lunaVoiceSpeaking = false;
+let lunaVoicePendingSig = null;
+const LUNA_VOICE_MUTE_KEY = "lunaVoiceMuted";
+const LUNA_VOICE_SEEN_KEY = "lunaVoiceSeen";
+
+// Spoken replies default ON (spec open question, Matthew-
+// directed brief): the mute is a persisted per-browser choice.
+function lunaVoiceMuted() {
+  try { return localStorage.getItem(LUNA_VOICE_MUTE_KEY) === "1"; }
+  catch (e) { return false; }
+}
+function lunaVoiceSetMuted(m) {
+  try { localStorage.setItem(LUNA_VOICE_MUTE_KEY, m ? "1" : "0"); } catch (e) {}
+  if (m) lunaVoiceStopSpeak();
+  lunaVoiceSyncBar();
+}
+function lunaVoiceSeen() {
+  try { return localStorage.getItem(LUNA_VOICE_SEEN_KEY) === "1"; }
+  catch (e) { return true; }
+}
+function lunaVoiceMarkSeen() {
+  try { localStorage.setItem(LUNA_VOICE_SEEN_KEY, "1"); } catch (e) {}
+  lunaVoiceSyncBar();
+}
+
+function lunaVoiceSttCtor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+function lunaVoiceTtsOk() {
+  return ("speechSynthesis" in window) && (typeof SpeechSynthesisUtterance !== "undefined");
+}
+
+// Voice choice (spec open question): a warm, clear en-US
+// default. Prefers the named natural voices Chrome ships,
+// then any en-US voice, then the system default. Pure given a
+// voice list, so the harness can pin the order.
+function lunaVoicePickVoice(voices) {
+  const list = Array.isArray(voices) ? voices : [];
+  if (!list.length) return null;
+  const enUS = list.filter(function (v) { return v && v.lang === "en-US"; });
+  const pool = enUS.length ? enUS : list.filter(function (v) {
+    return v && /^en([-_]|$)/i.test(v.lang || "");
+  });
+  const prefs = ["google us english", "samantha", "jenny", "aria", "zira", "natural", "neural"];
+  for (const p of prefs) {
+    for (const v of pool) {
+      if (v && v.name && v.name.toLowerCase().indexOf(p) !== -1) return v;
+    }
+  }
+  if (pool.length) return pool[0];
+  return list[0] || null;
+}
+
+// SpeechSynthesis chokes on very long utterances in some
+// Chrome builds; split into sentence-sized chunks (~200 chars)
+// and queue them. Pure.
+function lunaVoiceChunks(text) {
+  const t = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+  if (!t) return [];
+  const sentences = t.match(/[^.!?]+[.!?]+["\u201d']?\s*|[^.!?]+$/g) || [t];
+  const chunks = [];
+  let cur = "";
+  for (const s of sentences) {
+    const part = s.trim();
+    if (!part) continue;
+    if (cur && (cur.length + 1 + part.length) > 200) { chunks.push(cur); cur = part; }
+    else cur = cur ? cur + " " + part : part;
+    while (cur.length > 220) { chunks.push(cur.slice(0, 220)); cur = cur.slice(220); }
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
+}
+
+function lunaVoiceSpeak(text) {
+  if (lunaVoiceMuted() || !lunaVoiceTtsOk()) return;
+  const chunks = lunaVoiceChunks(text);
+  if (!chunks.length) return;
+  try {
+    window.speechSynthesis.cancel();
+    const voice = lunaVoicePickVoice(window.speechSynthesis.getVoices() || []);
+    let i = 0;
+    const next = function () {
+      if (i >= chunks.length) { lunaVoiceSpeaking = false; lunaVoiceSyncBar(); return; }
+      const u = new SpeechSynthesisUtterance(chunks[i]);
+      if (voice) u.voice = voice;
+      u.rate = 1.02;
+      u.onend = function () { i += 1; next(); };
+      u.onerror = function () { lunaVoiceSpeaking = false; lunaVoiceSyncBar(); };
+      window.speechSynthesis.speak(u);
+    };
+    lunaVoiceSpeaking = true;
+    lunaVoiceSyncBar();
+    next();
+  } catch (e) { lunaVoiceSpeaking = false; }
+}
+
+function lunaVoiceStopSpeak() {
+  if (!lunaVoiceTtsOk()) { lunaVoiceSpeaking = false; return; }
+  try { window.speechSynthesis.cancel(); } catch (e) {}
+  lunaVoiceSpeaking = false;
+  lunaVoiceSyncBar();
+}
+
+function lunaVoiceIsSpeaking() {
+  if (!lunaVoiceTtsOk()) return false;
+  try { return lunaVoiceSpeaking || window.speechSynthesis.speaking || window.speechSynthesis.pending; }
+  catch (e) { return lunaVoiceSpeaking; }
+}
+
+// Reflect state on the bar: mic turns red while listening, the
+// speak control shows while she talks, the mute icon mirrors
+// the persisted choice, and the one-time disclosure shows
+// until dismissed. Pure DOM sync; safe with any element
+// missing (the support surface has no bar).
+function lunaVoiceSyncBar() {
+  const mic = document.getElementById("lunaVoiceMicBtn");
+  const micLabel = document.getElementById("lunaVoiceMicLabel");
+  if (mic) {
+    if (lunaVoiceListening) {
+      mic.className = "px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold cursor-pointer shadow-sm flex items-center gap-2";
+      if (micLabel) micLabel.textContent = "Listening\u2026 tap to stop";
+    } else {
+      mic.className = "px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm flex items-center gap-2";
+      if (micLabel) micLabel.textContent = "Talk to Luna";
+    }
+  }
+  const stop = document.getElementById("lunaVoiceStopBtn");
+  if (stop) stop.style.display = lunaVoiceIsSpeaking() ? "" : "none";
+  const muteIcon = document.getElementById("lunaVoiceMuteIcon");
+  if (muteIcon) muteIcon.className = lunaVoiceMuted() ? "fa-solid fa-volume-xmark" : "fa-solid fa-volume-high";
+  const muteLabel = document.getElementById("lunaVoiceMuteLabel");
+  if (muteLabel) muteLabel.textContent = lunaVoiceMuted() ? "Muted" : "Sound on";
+  const disc = document.getElementById("lunaVoiceDisclosure");
+  if (disc) disc.style.display = lunaVoiceSeen() ? "none" : "";
+  const hint = document.getElementById("lunaVoiceHint");
+  if (hint) {
+    if (!lunaVoiceSttCtor()) {
+      hint.textContent = "Voice input needs Chrome \u2014 typing works as always.";
+      hint.style.display = "";
+    } else if (!lunaVoiceTtsOk()) {
+      hint.textContent = "This browser can\u2019t speak replies aloud \u2014 everything still shows as text.";
+      hint.style.display = "";
+    } else {
+      hint.style.display = "none";
+    }
+  }
+}
+
+// Push-to-talk. One tap starts one utterance (continuous off,
+// interim off — Chrome's defaults) and the final transcript
+// runs through the existing typed pipeline untouched. Tapping
+// while she speaks is barge-in: speech stops first, no listen.
+function lunaVoiceToggleMic() {
+  if (lunaVoiceIsSpeaking()) { lunaVoiceStopSpeak(); return; }
+  if (lunaVoiceListening) {
+    try { if (lunaVoiceRec) lunaVoiceRec.stop(); } catch (e) {}
+    return;
+  }
+  const Ctor = lunaVoiceSttCtor();
+  const input = document.getElementById("lunaAssistantInput");
+  if (!Ctor || !input) { lunaVoiceSyncBar(); return; }
+  lunaVoiceMarkSeen();
+  let rec = null;
+  try { rec = new Ctor(); } catch (e) { rec = null; }
+  if (!rec) { lunaVoiceSyncBar(); return; }
+  lunaVoiceRec = rec;
+  rec.lang = "en-US";
+  rec.continuous = false;
+  rec.interimResults = false;
+  rec.onresult = function (ev) {
+    let finalText = "";
+    for (let i = ev.resultIndex || 0; i < ev.results.length; i++) {
+      const r = ev.results[i];
+      if (r && r.isFinal && r[0]) finalText += r[0].transcript;
+    }
+    finalText = finalText.trim();
+    if (finalText) input.value = finalText;
+  };
+  rec.onerror = function () {
+    lunaVoiceListening = false;
+    lunaVoiceSyncBar();
+  };
+  rec.onend = function () {
+    lunaVoiceListening = false;
+    lunaVoiceRec = null;
+    lunaVoiceSyncBar();
+    if (String(input.value || "").trim()) lunaAssistantRun();
+  };
+  try {
+    rec.start();
+    lunaVoiceListening = true;
+  } catch (e) {
+    lunaVoiceListening = false;
+    lunaVoiceRec = null;
+  }
+  lunaVoiceSyncBar();
+}
+
+// ---- Spoken replies: wraps, not rewrites --------------------
+// The assistant's own bubble renderer is the single seam where
+// every assistant-originated reply already flows as text
+// (inventory answers, what's-wrong reports). Speech hooks
+// there — assistant role only, greeting excluded — so the
+// support chat's AI replies and system lines stay silent.
+const lunaVoiceOrigSupportRender = lunaSupportRender;
+lunaSupportRender = function (role, body) {
+  lunaVoiceOrigSupportRender(role, body);
+  if (role !== "assistant") return;
+  if (typeof LUNA_SUPPORT_GREETING !== "undefined" && body === LUNA_SUPPORT_GREETING) return;
+  lunaVoiceSpeak(body);
+};
+
+// The briefing and reminder echo-back render inside the
+// assistant panel: re-rendering the panel when a NEW pending
+// echo-back appears speaks it (shown AND spoken before
+// saving, exactly like the typed path); "Brief me" speaks the
+// briefing lines it just rendered, once per click.
+const lunaVoiceOrigAssistantRender = lunaAssistantRender;
+lunaAssistantRender = function () {
+  lunaVoiceOrigAssistantRender();
+  const p = (typeof lunaAssistantPending !== "undefined") ? lunaAssistantPending : null;
+  const sig = p ? String(p.text || "") + "|" + String(p.dueAt || "") : null;
+  if (sig && sig !== lunaVoicePendingSig) {
+    lunaVoicePendingSig = sig;
+    lunaVoiceSpeak("Set this reminder? \u201c" + p.text + "\u201d \u00b7 " +
+      lunaAssistantFmtDue(new Date(p.dueAt)));
+  } else if (!sig) {
+    lunaVoicePendingSig = null;
+  }
+};
+
+function lunaVoiceBriefMe() {
+  const lines = lunaAssistantBriefingLines(new Date());
+  lunaVoiceSpeak(lines.join(" "));
+}
+
+// Read a repair card aloud from its button. Speech only —
+// applying, dismissing, and undoing stay taps (v1 rule).
+function lunaVoiceReadRepair(btn) {
+  const card = btn && btn.closest ? btn.closest("[data-repair-card]") : null;
+  const sum = card ? card.querySelector("[data-repair-summary]") : null;
+  if (sum) lunaVoiceSpeak(sum.textContent || "");
+}
+
+// Closing the panel always stops speech (spec: leaving Ask
+// Luna mid-sentence cuts her off).
+const lunaVoiceOrigCloseModal = closeModal;
+closeModal = function (id) {
+  if (id === "lunaSupportModal") lunaVoiceStopSpeak();
+  return lunaVoiceOrigCloseModal(id);
+};
+
+(function lunaVoiceWire() {
+  const mic = document.getElementById("lunaVoiceMicBtn");
+  if (mic) mic.addEventListener("click", lunaVoiceToggleMic);
+  const stop = document.getElementById("lunaVoiceStopBtn");
+  if (stop) stop.addEventListener("click", lunaVoiceStopSpeak);
+  const mute = document.getElementById("lunaVoiceMuteBtn");
+  if (mute) mute.addEventListener("click", function () { lunaVoiceSetMuted(!lunaVoiceMuted()); });
+  const brief = document.getElementById("lunaVoiceBriefBtn");
+  if (brief) brief.addEventListener("click", lunaVoiceBriefMe);
+  const got = document.getElementById("lunaVoiceDisclosureBtn");
+  if (got) got.addEventListener("click", lunaVoiceMarkSeen);
+  const repairsBox = document.getElementById("lunaRepairsSection");
+  if (repairsBox) {
+    repairsBox.addEventListener("click", function (ev) {
+      const t = ev.target && ev.target.closest ? ev.target.closest("[data-repair-speak]") : null;
+      if (t) lunaVoiceReadRepair(t);
+    });
+  }
+  if (lunaVoiceTtsOk()) {
+    try {
+      const warm = function () { lunaVoicePickVoice(window.speechSynthesis.getVoices() || []); };
+      warm();
+      if (window.speechSynthesis.addEventListener) {
+        window.speechSynthesis.addEventListener("voiceschanged", warm);
+      }
+    } catch (e) {}
+  }
+  lunaVoiceSyncBar();
+})();
+// [LUNA-VOICE-349-JS-END]
 
 // ---- Luna reminder watcher (Phase 3 surface pass, 2026-11-18) ------
 // [LUNA-WATCH-344-JS-BEGIN]
