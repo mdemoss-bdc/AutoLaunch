@@ -4009,7 +4009,7 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
   <div class="glass-card w-full max-w-2xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 bg-white text-slate-900">
     <div class="flex items-center justify-between border-b border-slate-200 pb-3">
       <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-        <i class="fa-solid fa-list-check text-blue-600"></i> Active Post Queue
+        <i class="fa-solid fa-list-check text-blue-600"></i> Active Post Queue <span id="queueModalCount" class="text-slate-500"></span>
         <span class="text-[11px] text-blue-600 font-semibold cursor-pointer ml-1" onclick="openGuide('queue')">How it works</span>
       </h3>
       <button onclick="closeModal('queueModal')" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -4846,6 +4846,8 @@ document.addEventListener("click", function (e) {
     removeQueueItem(el.dataset.id);
   } else if (action === "queue-retry") {
     retryQueueItem(el.dataset.id);
+  } else if (action === "ig-queue-dismiss") {
+    dismissInstagramQueueItem(el.dataset.id);
   } else if (action === "queue-select") {
     const qid = el.dataset.id;
     if (selectedQueueIds.has(qid)) selectedQueueIds.delete(qid);
@@ -15831,86 +15833,175 @@ function queueFailReason(item) {
     }
 }
 
-async function loadPostingQueue() {
+// =====================================================================
+// [IG-QUEUE-357] INSTAGRAM JOBS IN THE POST QUEUE (Matthew, 2026-11-20)
+// ---------------------------------------------------------------------
+// Instagram posts live in instagram_posts, never in auto_posting_queue,
+// so this list used to be blind to them: an in-flight IG post looked
+// like nothing was happening and invited a second tap (the Terrain
+// triple-post, 2026-11-20). loadPostingQueue now also fetches the
+// user's IG intents and merges them into the same rendered list —
+// display only: nothing is mirrored into auto_posting_queue, so the
+// helper can never see an IG row. Display scope: every non-published
+// intent (it stays until it resolves) plus published intents from the
+// last 24 hours (a just-finished post reads as done, then ages out).
+// =====================================================================
+let instagramQueueRows = [];
+const IG_QUEUE_PUBLISHED_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-    if (!currentUser) return;
+function igQueueDismissedKey() {
+    return "igQueueDismissed:" + (currentUser ? currentUser.id : "anon");
+}
 
+// Dismissals persist per device: instagram_posts is service-role-write
+// only (owner SELECT policy) and the instagram-post function's one
+// management mode (intent_close) is scoped to awaiting_reel rows, so
+// no client path can delete an intent row. A dismissal therefore only
+// stops the row rendering here — the server record, the finisher, the
+// one-live-intent dedupe and the car's Instagram button state are all
+// untouched.
+function igQueueDismissedIds() {
     try {
+        const raw = localStorage.getItem(igQueueDismissedKey());
+        const arr = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch (e) { return new Set(); }
+}
 
-        const { data, error } = await supabaseClient
-            .from("auto_posting_queue")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("created_at", { ascending: true });
+function igQueueStatusLabel(status) {
+    switch (status) {
+        case "awaiting_reel": return "🟡 Waiting on reel";
+        case "finishing": return "🔵 Posting to Instagram";
+        case "published": return "🟢 Posted to Instagram";
+        case "failed": return "🔴 Failed";
+        case "permission_pending": return "🟡 Waiting on Meta approval";
+        default: return escapeHtml(String(status || ""));
+    }
+}
 
-        if (error) throw error;
+function igQueueRowInScope(row, nowMs) {
+    if (!row) return false;
+    if (row.status !== "published") return true;
+    const t = new Date(row.created_at).getTime();
+    return isFinite(t) && (nowMs - t) < IG_QUEUE_PUBLISHED_WINDOW_MS;
+}
 
-        // QUEUE HYGIENE (Matthew, 2026-10-23): the queue is for work still
-        // to do — finished rows (posted / completed) are deleted on sight.
-        // The car's Posted state lives on the inventory row itself
-        // (marketplace_posted_at drives the Posted pill), so nothing is
-        // lost. Failed rows stay: they carry the error diagnostics.
-        const allRows = data || [];
-        // VIN REELS PHASE 2: remember today's reel-flagged posts
-        // (posted rows carrying reel_failed) BEFORE the hygiene
-        // sweep below deletes the finished rows — the health
-        // bar's "posted without video" chip counts from this.
-        try {
-          const todayKey = localDayKey(new Date());
-          if (reelFlaggedToday.day !== todayKey) reelFlaggedToday = { day: todayKey, vins: new Set() };
-          allRows.forEach(i => {
-            if (i && i.reel_failed === true && i.status === "posted" && i.vin && i.created_at
-                && localDayKey(new Date(i.created_at)) === todayKey) {
-              reelFlaggedToday.vins.add(i.vin);
-            }
-          });
-        } catch (e) { /* the chip is informational; never break the queue load */ }
-        const doneRows = allRows.filter(i => i.status === "posted" || i.status === "completed");
-        postingQueue = allRows.filter(i => i.status !== "posted" && i.status !== "completed");
-        syncQueueBulkBar();
-        if (doneRows.length) {
-            supabaseClient
-                .from("auto_posting_queue")
-                .delete()
-                .in("id", doneRows.map(i => i.id))
-                .then(() => {}, () => {});
-        }
+// Only terminal, unresolved intents may be dismissed — an in-flight
+// intent (awaiting_reel / finishing) gets no destructive control, so
+// a post can never be pulled back mid-flight from this list.
+function igQueueDismissible(row) {
+    return !!row && (row.status === "failed" || row.status === "permission_pending");
+}
 
-        const pendingCount = postingQueue.filter(
-            i => i.status === "pending"
-        ).length;
+// A failed IG row shows Meta's stored error the way failed FB rows
+// show theirs — plain words, whitespace-collapsed, capped.
+function igQueueErrorText(row) {
+    try {
+        const raw = row && row.error_message ? String(row.error_message) : "";
+        const clean = raw.replace(/\s+/g, " ").trim();
+        if (!clean) return "";
+        return clean.length > 180 ? clean.slice(0, 177).trim() + "…" : clean;
+    } catch (e) { return ""; }
+}
 
-        const badge =
-            document.getElementById("navQueueBadge");
+function queueRowTimeText(iso) {
+    const t = new Date(iso);
+    if (!isFinite(t.getTime())) return "";
+    return t.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
 
-        if (badge) {
+// One list, newest first: FB jobs and IG intents interleaved by
+// created_at (desc). postingQueue itself keeps its fetched order —
+// every other consumer (bulk bar, inventory pills, retry) is
+// untouched; only this display merge sorts.
+function mergeQueueDisplayRows(fbRows, igRows) {
+    const merged = [];
+    (fbRows || []).forEach(r => merged.push({ src: "fb", at: new Date(r.created_at).getTime() || 0, row: r }));
+    (igRows || []).forEach(r => merged.push({ src: "ig", at: new Date(r.created_at).getTime() || 0, row: r }));
+    merged.sort((a, b) => b.at - a.at);
+    return merged;
+}
 
-            badge.innerText = pendingCount;
+function renderInstagramQueueRow(item) {
+    const car = rawInventory.find(c => c.vin === item.vin) || null;
+    const title = car
+        ? escapeHtml(`${car.year || ''} ${car.make || ''} ${car.model || ''}`.trim())
+        : escapeHtml(item.stock_number ? `Stock ${item.stock_number}` : 'Vehicle');
+    const stock = escapeHtml(item.stock_number || (car ? (queueStockNum(car) || '') : '') || 'N/A');
+    const errText = item.status === 'failed' ? igQueueErrorText(item) : "";
+    const whenText = queueRowTimeText(item.created_at);
+    return `
 
-            badge.classList.toggle(
-                "hidden",
-                pendingCount === 0
-            );
+        <div class="p-3 rounded-xl border border-slate-200 bg-slate-50" data-queue-row="${escapeHtml(item.id)}">
 
-        }
+            <div class="flex items-start justify-between">
 
-        const queueList =
-            document.getElementById("queueItemsList");
+                <div>
 
-        if (!queueList) return;
+                    <div class="text-sm font-bold text-slate-900">
+                        ${title}
+                    </div>
 
-        if (!postingQueue.length) {
+                    <div class="text-xs text-slate-500 mt-1">
+                        Stock: ${stock}
+                    </div>
 
-            queueList.innerHTML = `
-                <p class="text-xs text-slate-400 text-center py-8">
-                    Nothing queued yet. Pick a car in Inventory and press Post To Facebook — it lines up here, ready to launch.
-                </p>
-            `;
+                    <div class="text-xs text-slate-500">
+                        VIN: ${escapeHtml(item.vin || '')}
+                    </div>
 
-            return;
-        }
+                    <div class="text-xs text-slate-500">
+                        Channel: Instagram
+                    </div>
 
-        queueList.innerHTML = postingQueue.map(item => {
+                    <div class="text-xs font-semibold text-rose-600">
+                        Action: Post this car's Reel to Instagram
+                    </div>
+                    ${errText ? `
+                    <div class="text-xs font-semibold text-rose-600">
+                        Why: ${escapeHtml(errText)}
+                    </div>` : ''}
+                    ${whenText ? `
+                    <div class="text-xs text-slate-500">
+                        Queued: ${escapeHtml(whenText)}
+                    </div>` : ''}
+
+                </div>
+
+                <div class="flex flex-col items-end gap-2">
+
+                    <span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${igQueueStatusLabel(item.status)}</span>
+
+                    ${igQueueDismissible(item) ? `<button
+                        data-action="ig-queue-dismiss" data-id="${escapeHtml(item.id)}"
+                        class="text-xs text-red-600 hover:text-red-700 font-semibold px-3 py-2 -my-1">
+
+                        Dismiss
+
+                    </button>` : ``}
+
+                </div>
+
+            </div>
+
+        </div>
+
+    `;
+}
+
+async function dismissInstagramQueueItem(id) {
+    if (!id || !currentUser) return;
+    const row = instagramQueueRows.find(r => String(r.id) === String(id));
+    if (!row || !igQueueDismissible(row)) return;
+    try {
+        const dismissed = igQueueDismissedIds();
+        dismissed.add(String(id));
+        localStorage.setItem(igQueueDismissedKey(), JSON.stringify(Array.from(dismissed)));
+    } catch (e) { /* storage unavailable: the reload below re-reads the set; if it could not be saved the row simply stays */ }
+    await loadPostingQueue();
+}
+
+function renderFacebookQueueRow(item) {
 
 const car = rawInventory.find(c => c.vin === item.vin) || null;
 
@@ -16013,7 +16104,134 @@ const statusChip = blockedNoPhoto
 
     `;
 
-}).join("");
+}
+
+async function loadPostingQueue() {
+
+    if (!currentUser) return;
+
+    try {
+
+        const { data, error } = await supabaseClient
+            .from("auto_posting_queue")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("created_at", { ascending: true });
+
+        if (error) throw error;
+
+        // QUEUE HYGIENE (Matthew, 2026-10-23): the queue is for work still
+        // to do — finished rows (posted / completed) are deleted on sight.
+        // The car's Posted state lives on the inventory row itself
+        // (marketplace_posted_at drives the Posted pill), so nothing is
+        // lost. Failed rows stay: they carry the error diagnostics.
+        const allRows = data || [];
+        // VIN REELS PHASE 2: remember today's reel-flagged posts
+        // (posted rows carrying reel_failed) BEFORE the hygiene
+        // sweep below deletes the finished rows — the health
+        // bar's "posted without video" chip counts from this.
+        try {
+          const todayKey = localDayKey(new Date());
+          if (reelFlaggedToday.day !== todayKey) reelFlaggedToday = { day: todayKey, vins: new Set() };
+          allRows.forEach(i => {
+            if (i && i.reel_failed === true && i.status === "posted" && i.vin && i.created_at
+                && localDayKey(new Date(i.created_at)) === todayKey) {
+              reelFlaggedToday.vins.add(i.vin);
+            }
+          });
+        } catch (e) { /* the chip is informational; never break the queue load */ }
+        const doneRows = allRows.filter(i => i.status === "posted" || i.status === "completed");
+        postingQueue = allRows.filter(i => i.status !== "posted" && i.status !== "completed");
+        syncQueueBulkBar();
+        if (doneRows.length) {
+            supabaseClient
+                .from("auto_posting_queue")
+                .delete()
+                .in("id", doneRows.map(i => i.id))
+                .then(() => {}, () => {});
+        }
+
+        // [IG-QUEUE-357] Fetch this user's Instagram intents in
+        // display scope (see the IG-QUEUE-357 block above): every
+        // non-published intent, plus published intents created in
+        // the last 24 hours. Fail-soft — an IG read error must never
+        // break the Facebook queue; the list renders without IG rows.
+        try {
+            const igSinceIso = new Date(Date.now() - IG_QUEUE_PUBLISHED_WINDOW_MS).toISOString();
+            const igCols = "id, vin, stock_number, status, error_message, created_at";
+            const igLiveResP = supabaseClient
+                .from("instagram_posts")
+                .select(igCols)
+                .eq("user_id", currentUser.id)
+                .neq("status", "published")
+                .order("created_at", { ascending: false })
+                .limit(200);
+            const igRecentResP = supabaseClient
+                .from("instagram_posts")
+                .select(igCols)
+                .eq("user_id", currentUser.id)
+                .eq("status", "published")
+                .gte("created_at", igSinceIso)
+                .order("created_at", { ascending: false })
+                .limit(200);
+            const igLiveRes = await igLiveResP;
+            const igRecentRes = await igRecentResP;
+            const igDismissed = igQueueDismissedIds();
+            const igFetched = []
+                .concat(igLiveRes && !igLiveRes.error ? (igLiveRes.data || []) : [])
+                .concat(igRecentRes && !igRecentRes.error ? (igRecentRes.data || []) : []);
+            const igNowMs = Date.now();
+            instagramQueueRows = igFetched.filter(r => r && igQueueRowInScope(r, igNowMs) && !igDismissed.has(String(r.id)));
+        } catch (igErr) {
+            instagramQueueRows = [];
+        }
+
+        const displayRows = mergeQueueDisplayRows(postingQueue, instagramQueueRows);
+
+        const pendingCount = postingQueue.filter(
+            i => i.status === "pending"
+        ).length;
+
+        const badge =
+            document.getElementById("navQueueBadge");
+
+        if (badge) {
+
+            badge.innerText = pendingCount;
+
+            badge.classList.toggle(
+                "hidden",
+                pendingCount === 0
+            );
+
+        }
+
+        const queueModalCount =
+            document.getElementById("queueModalCount");
+
+        if (queueModalCount) {
+
+            queueModalCount.innerText = "(" + displayRows.length + ")";
+
+        }
+
+        const queueList =
+            document.getElementById("queueItemsList");
+
+        if (!queueList) return;
+
+        if (!displayRows.length) {
+
+            queueList.innerHTML = `
+                <p class="text-xs text-slate-400 text-center py-8">
+                    Nothing queued yet. Pick a car in Inventory and press Post To Facebook — it lines up here, ready to launch.
+                </p>
+            `;
+
+            return;
+        }
+
+        queueList.innerHTML = displayRows.map(disp => disp.src === "ig" ? renderInstagramQueueRow(disp.row) : renderFacebookQueueRow(disp.row)).join("");
 
     } catch (e) {
 
