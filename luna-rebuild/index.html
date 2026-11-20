@@ -8446,6 +8446,23 @@ async function sendLunaSupport() {
   lunaSupportHistory.push({ role: "user", body: text });
   lunaSupportRender("user", text);
   input.value = "";
+  // [LUNA-INVPLACE-350] A cleanly-parsed inventory question
+  // typed here is answered locally under Your Personal
+  // Assistant (the support-chat function cannot run local
+  // inventory queries), with a one-line pointer left in this
+  // thread. "Cleanly parsed" = every content word accounted
+  // for (no unknown residue): a support question that merely
+  // mentions a car keeps going to the support chat untouched.
+  const lunaIqIntent = (typeof lunaAssistantParseCommand === "function")
+    ? lunaAssistantParseCommand(text, new Date()) : null;
+  if (lunaIqIntent && lunaIqIntent.kind === "inv_query" &&
+      !(lunaIqIntent.unknown && lunaIqIntent.unknown.length)) {
+    lunaAssistantRunInvQuery(lunaIqIntent);
+    const lunaIqPointer = "Pulled that up under Your Personal Assistant \u2014 it\u2019s in the box on the left.";
+    lunaSupportHistory.push({ role: "assistant", body: lunaIqPointer });
+    lunaSupportRender("assistant", lunaIqPointer);
+    return;
+  }
   lunaSupportBusy = true;
   if (btn) { btn.disabled = true; btn.classList.add("opacity-60"); }
   lunaSupportShowThinking();
@@ -9094,6 +9111,31 @@ function lunaAssistantRender() {
     nCard.appendChild(np);
     sec.appendChild(nCard);
   }
+  // [LUNA-INVPLACE-350] The latest inventory answer (question,
+  // reply text, and the 348 match cards) lives here, under the
+  // assistant — drawn from state so re-renders keep it.
+  if (lunaAssistantInvAnswer) {
+    const aCard = document.createElement("div");
+    aCard.className = "rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 space-y-2";
+    if (lunaAssistantInvAnswer.question) {
+      const qq = document.createElement("p");
+      qq.className = "text-[11px] text-slate-400 leading-relaxed";
+      qq.textContent = "\u201C" + lunaAssistantInvAnswer.question + "\u201D";
+      aCard.appendChild(qq);
+    }
+    const ab = document.createElement("p");
+    ab.className = "text-xs text-slate-700 leading-relaxed whitespace-pre-wrap";
+    ab.textContent = lunaAssistantInvAnswer.reply;
+    aCard.appendChild(ab);
+    const aCards = document.createElement("div");
+    aCards.id = "lunaAssistantInvCards";
+    aCards.className = "space-y-2";
+    aCard.appendChild(aCards);
+    sec.appendChild(aCard);
+    lunaInvCardsRender(lunaAssistantInvAnswer.intent,
+      lunaAssistantInvAnswer.matches, aCards);
+    aCard.scrollIntoView({ block: "nearest" });
+  }
   const cmdRow = document.createElement("div");
   cmdRow.className = "flex items-center gap-2";
   const input = document.createElement("input");
@@ -9176,8 +9218,14 @@ function lunaAssistantRun() {
     lunaAssistantRender();
     return;
   }
-  lunaSupportHistory.push({ role: "user", body: raw });
-  lunaSupportRender("user", raw);
+  // [LUNA-INVPLACE-350] Inventory Q&A stays in this box (the
+  // executor stashes it as assistant state); every other
+  // command still echoes to the support thread exactly as
+  // before.
+  if (intent.kind !== "inv_query") {
+    lunaSupportHistory.push({ role: "user", body: raw });
+    lunaSupportRender("user", raw);
+  }
   if (input) input.value = "";
   if (intent.kind === "whats_wrong") {
     lunaAssistantWhatsWrong();
@@ -9825,11 +9873,18 @@ function lunaAssistantRunInvQuery(intent) {
   const matches = (window.currentFilteredInventory || []).slice();
   const reply = lunaInvQueryReply(intent, matches,
     lunaInvQueryCoverage(intent.filters, rawInventory), new Date());
-  lunaSupportHistory.push({ role: "assistant", body: reply });
-  lunaSupportRender("assistant", reply);
-  // [LUNA-INVCARDS-348] The same matches as clickable cards under
-  // the text (the reply itself is unchanged).
-  lunaInvCardsRender(intent, matches);
+  // [LUNA-INVPLACE-350] The answer (text + the 348 cards) lives
+  // under Your Personal Assistant now, not in the support
+  // thread: stash it as assistant state and let
+  // lunaAssistantRender draw it, so it survives the section's
+  // re-renders and both entry boxes land in the same place.
+  lunaAssistantInvAnswer = {
+    question: intent.raw || "",
+    reply: reply,
+    intent: intent,
+    matches: matches
+  };
+  lunaAssistantRender();
   if (typeof showInventoryPage === "function") showInventoryPage();
 }
 // [LUNA-INVQUERY-347-JS-END]
@@ -9845,11 +9900,19 @@ function lunaAssistantRunInvQuery(intent) {
 // remaining matches in the table's current sort order, deduped.
 // A card carries the app's own data-action="details" + data-vin,
 // so the app's existing delegated handler opens the vehicle's
-// detail card — no parallel opener. This block only adds the
-// close-the-panel / land-on-Inventory / scroll-to-the-row half,
-// plus a "See all N in Inventory" row. Zero-match answers render
+// detail card — no parallel opener. Zero-match answers render
 // no cards, exactly as before; nothing here filters, parses, or
 // changes the reply text.
+//
+// [LUNA-INVPLACE-350] Two refinements (Matthew, desk proof of
+// 348): (1) the cards render under Your Personal Assistant —
+// lunaAssistantRender draws them inside the assistant's answer
+// card from lunaAssistantInvAnswer state (the executor stashes
+// the answer there; the support thread no longer receives it);
+// (2) a card click no longer closes the panel or jumps to the
+// inventory table — the detail pop-up opens ON TOP of the Ask
+// Luna panel (see the overlay half at the end of this block),
+// and only the "See all N in Inventory" row still navigates.
 
 // The highlight cars, computed with the exact semantics of
 // lunaInvQueryReply (same usable-price rule, same strict
@@ -9933,8 +9996,8 @@ function lunaInvCardEl(entry) {
   const vin = String(car.vin || "");
   if (vin) {
     // The app's delegated [data-action] handler opens this car's
-    // detail card; data-luna-inv-card marks it for the close +
-    // scroll half below.
+    // detail card; data-luna-inv-card marks it for the overlay
+    // half below.
     btn.setAttribute("data-action", "details");
     btn.setAttribute("data-vin", vin);
     btn.setAttribute("data-luna-inv-card", "1");
@@ -9977,18 +10040,17 @@ function lunaInvCardEl(entry) {
   return btn;
 }
 
-// Append the card list under the text reply in the Ask Luna panel.
-// No matches -> nothing appended (the zero-match answer renders
-// exactly as it always has).
-function lunaInvCardsRender(intent, matches) {
-  const box = document.getElementById("lunaSupportMessages");
+// Append the card list into the assistant's answer card
+// (lunaAssistantRender supplies the container; the id lookup
+// is the fallback). No matches -> nothing appended (the
+// zero-match answer renders exactly as it always has).
+function lunaInvCardsRender(intent, matches, container) {
+  const box = container || document.getElementById("lunaAssistantInvCards");
   if (!box || !matches || !matches.length) return;
   const cards = lunaInvQueryCardList(intent, matches, new Date());
   if (!cards.length) return;
-  const row = document.createElement("div");
-  row.className = "flex justify-start";
   const stack = document.createElement("div");
-  stack.className = "flex flex-col gap-2 w-full max-w-[85%]";
+  stack.className = "flex flex-col gap-2 w-full";
   for (const entry of cards) stack.appendChild(lunaInvCardEl(entry));
   const seeAll = document.createElement("button");
   seeAll.type = "button";
@@ -9996,53 +10058,62 @@ function lunaInvCardsRender(intent, matches) {
   seeAll.className = "w-full text-center text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-xl py-2 px-2 cursor-pointer hover:bg-slate-50 transition";
   seeAll.textContent = "See all " + matches.length + " in Inventory";
   stack.appendChild(seeAll);
-  row.appendChild(stack);
-  box.appendChild(row);
-  box.scrollTop = box.scrollHeight;
+  box.appendChild(stack);
 }
 
-// Find the car's row in the rendered inventory (table or grid),
-// expanding the app's own chunked rendering until the row exists
-// or nothing more can be shown. Scoped to the inventory
-// containers so a chat card itself never matches.
-function lunaInvCardsFindRow(vin) {
-  const containers = [document.getElementById("inventoryTableBody"),
-    document.getElementById("inventoryGridView")].filter(Boolean);
-  function find() {
-    for (const c of containers) {
-      const els = c.querySelectorAll('[data-action="details"]');
-      for (const el of els) {
-        if (el.dataset && el.dataset.vin === vin) return el;
-      }
-    }
-    return null;
+// [LUNA-INVPLACE-350] The overlay half of a card click. Both
+// modals are fixed inset-0 z-50, and #vehicleDetailsModal sits
+// EARLIER in the DOM than #lunaSupportModal, so at equal
+// z-index the panel would paint over the detail pop-up — that
+// is why 348 closed the panel and jumped to the table. Now the
+// click raises the detail modal above the panel for exactly as
+// long as it is open: the inline z-index is set on click (the
+// app's delegated handler, registered earlier in this script,
+// does the opening via openVehicleDetailsModal) and an
+// observer restores it the moment the modal hides again. The
+// panel never closes, the page never switches, nothing
+// scrolls; closing the pop-up returns to the intact results.
+let lunaInvOverlayWatch = null;
+function lunaInvLowerDetails() {
+  const m = document.getElementById("vehicleDetailsModal");
+  if (m) m.style.zIndex = "";
+  if (lunaInvOverlayWatch) {
+    lunaInvOverlayWatch.disconnect();
+    lunaInvOverlayWatch = null;
   }
-  function renderedCount() {
-    let n = 0;
-    for (const c of containers) {
-      n += c.querySelectorAll('[data-action="details"]').length;
-    }
-    return n;
-  }
-  let el = find();
-  let guard = 0;
-  let lastCount = -1;
-  while (!el && guard++ < 50) {
-    const count = renderedCount();
-    if (count === lastCount) break;
-    lastCount = count;
-    if (typeof showMoreTableRows === "function") showMoreTableRows();
-    if (typeof showMoreGridCars === "function") showMoreGridCars();
-    el = find();
-  }
-  return el;
+}
+function lunaInvRaiseDetails() {
+  const m = document.getElementById("vehicleDetailsModal");
+  if (!m) return;
+  m.style.zIndex = "60";
+  if (lunaInvOverlayWatch) return;
+  lunaInvOverlayWatch = new MutationObserver(function () {
+    if (m.classList.contains("hidden")) lunaInvLowerDetails();
+  });
+  lunaInvOverlayWatch.observe(m, { attributes: true, attributeFilter: ["class"] });
+  // If the pop-up never actually opens (car not found), do not
+  // leave the raise armed behind a hidden modal.
+  setTimeout(function () {
+    if (m.classList.contains("hidden")) lunaInvLowerDetails();
+  }, 15000);
 }
 
-// The close + land + scroll half of a card click. Opening the
-// detail card itself is NOT done here: the card carries
-// data-action="details", and the app's delegated handler
-// (registered earlier in this same script) opens it via
-// openVehicleDetailsModal — the existing mechanism, reused.
+// Escape must close the pop-up, not the panel: the app's own
+// Escape handler picks the topmost open modal by DOM order,
+// which names the panel while the pop-up is raised above it.
+// While (and only while) the raise is ours, intercept Escape
+// in the capture phase and close the pop-up through the app's
+// own closeModal, exactly like its x button.
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "Escape") return;
+  const m = document.getElementById("vehicleDetailsModal");
+  if (!m || m.classList.contains("hidden")) return;
+  if (m.style.zIndex !== "60") return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (typeof closeModal === "function") closeModal("vehicleDetailsModal");
+}, true);
+
 document.addEventListener("click", function (e) {
   const t = e.target && e.target.closest ? e.target : null;
   if (!t) return;
@@ -10053,14 +10124,29 @@ document.addEventListener("click", function (e) {
   }
   const card = t.closest("[data-luna-inv-card]");
   if (!card) return;
-  const vin = card.getAttribute("data-vin") || "";
-  if (typeof closeModal === "function") closeModal("lunaSupportModal");
-  if (typeof showInventoryPage === "function") showInventoryPage();
-  if (!vin) return;
-  const el = lunaInvCardsFindRow(vin);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  // Opening the detail pop-up itself is NOT done here: the
+  // app's delegated handler (registered earlier in this
+  // script) opens it via openVehicleDetailsModal. This half
+  // only raises it above the panel.
+  lunaInvRaiseDetails();
 });
 // [LUNA-INVCARDS-348-JS-END]
+
+// [LUNA-INVPLACE-350-JS-BEGIN]
+// Inventory answers live under Your Personal Assistant
+// (Matthew, 2026-11-19, desk proof of the 348 cards): the
+// latest inventory answer — question, reply text, and the
+// match list the 348 cards draw from — is kept here as
+// assistant state. lunaAssistantRunInvQuery (347) stashes it;
+// lunaAssistantRender (343) draws it inside the assistant box,
+// so it survives the section's re-renders and both entry
+// points (the Tell Luna box, and a cleanly-parsed question in
+// the support box — see sendLunaSupport) land in one place.
+// The wiring edits are marked [LUNA-INVPLACE-350] where they
+// sit; the overlay click half lives at the end of the 348
+// block above.
+let lunaAssistantInvAnswer = null;
+// [LUNA-INVPLACE-350-JS-END]
 
 // [LUNA-VOICE-349-JS-BEGIN]
 // Voice I/O layer over the Ask Luna assistant panel (spec:
