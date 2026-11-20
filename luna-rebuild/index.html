@@ -686,6 +686,154 @@ body.dark-shell .btn-gradient {
 body.dark-shell main h1 {
   text-shadow: 0 0 26px rgba(var(--glow-rgb), 0.35);
 }
+
+/* =============================================================================
+   REDESIGN V2 LAYER (2026-11-20 — Matthew, on seeing v1 live under his
+   saved light-mint custom theme: "It looks nothing like this [the
+   mockup]. Can we make it look like that… because this is fire"). Where
+   v1 tinted, v2 commits to the mockup literally: a gradient header band,
+   the big glowing A in the sidebar, and the ribbon as big MULTICOLOR
+   gradient tiles. Tile stops come from the theme engine's --tile-*
+   tokens — the flagship pins the mockup's exact stops, every other
+   colorway derives its own rotation from its accent — so the whole
+   roster wears the same design language. Painted over the v1 layer;
+   delete this block and v1's rendering returns.
+   ========================================================================== */
+/* Sidebar: deeper navy with an electric wash, big glowing A + wordmark. */
+body.dark-shell aside {
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.20), rgba(var(--accent-rgb), 0) 320px),
+    linear-gradient(180deg, var(--d-sidebar), var(--d-page));
+}
+body.dark-shell aside .sidebar-brand {
+  position: relative;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 20px 12px 16px;
+  margin: -6px -6px 4px;
+  border-radius: 0 0 20px 20px;
+  background: linear-gradient(140deg, rgba(var(--accent-rgb), 0.30), rgba(var(--accent-rgb), 0) 72%);
+}
+body.dark-shell aside .sidebar-brand-inner {
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  text-align: center;
+}
+body.dark-shell aside .sidebar-brand-logo {
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
+  box-shadow: 0 0 34px rgba(var(--glow-rgb), 0.65), 0 10px 22px rgba(2, 6, 17, 0.45);
+}
+body.dark-shell aside .sidebar-brand .brand-title {
+  font-size: 21px;
+  color: var(--d-h);
+}
+body.dark-shell aside .sidebar-brand-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: var(--d-soft);
+}
+body.dark-shell aside .nav-selected {
+  background: linear-gradient(90deg, rgb(var(--accent-rgb)), rgb(var(--accent-strong-rgb))) !important;
+  box-shadow: 0 8px 24px rgba(var(--glow-rgb), 0.55) !important;
+  color: #FFFFFF;
+}
+body.dark-shell aside > div:last-child {
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12), rgba(var(--accent-rgb), 0.02));
+}
+body.dark-shell aside > div:last-child .rounded-full {
+  background: linear-gradient(135deg, rgb(var(--accent-rgb)), var(--d-electric-deep));
+}
+/* Gradient header band (the mockup's top bar): blue → cyan → violet,
+   carrying the page title, sync status and header actions in white. */
+body.dark-shell #dashHeaderBar {
+  background: linear-gradient(92deg, #1D4ED8 0%, #008FFE 30%, #06B6D4 63%, #8B5CF6 100%);
+  border-radius: 20px;
+  padding: 18px 22px;
+  box-shadow: 0 16px 36px rgba(14, 96, 178, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  color: #FFFFFF;
+}
+body.dark-shell #dashHeaderBar h1 {
+  color: #FFFFFF;
+  text-shadow: 0 2px 14px rgba(2, 6, 23, 0.25);
+}
+body.dark-shell #dashHeaderBar .text-slate-500,
+body.dark-shell #dashHeaderBar .text-slate-900 { color: rgba(255, 255, 255, 0.88); }
+body.dark-shell #dashHeaderBar .text-blue-600 { color: #EAF6FF; }
+body.dark-shell #dashHeaderBar .text-emerald-600 { color: #A7F3D0; }
+body.dark-shell #dashHeaderBar button {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #FFFFFF;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+body.dark-shell #dashHeaderBar button i { color: #FFFFFF; }
+body.dark-shell #dashHeaderBar label > div {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.50);
+}
+/* Ribbon: big bold multicolor gradient tiles (the mockup's stat row). */
+body.dark-shell main .ribbon-card {
+  border-radius: 18px;
+  padding: 18px;
+  min-height: 118px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #FFFFFF;
+}
+body.dark-shell main .ribbon-card:nth-child(1) {
+  background-image: linear-gradient(135deg, var(--tile-1a, #F0569B), var(--tile-1b, #F5A55C));
+  box-shadow: 0 14px 30px rgba(240, 86, 155, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+body.dark-shell main .ribbon-card:nth-child(2) {
+  background-image: linear-gradient(135deg, var(--tile-2a, #2B6CF5), var(--tile-2b, #0BB7E8));
+  box-shadow: 0 14px 30px rgba(11, 183, 232, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+body.dark-shell main .ribbon-card:nth-child(3) {
+  background-image: linear-gradient(135deg, var(--tile-3a, #22C55E), var(--tile-3b, #2DD4BF));
+  box-shadow: 0 14px 30px rgba(34, 197, 94, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+body.dark-shell main .ribbon-card:nth-child(4) {
+  background-image: linear-gradient(135deg, var(--tile-4a, #8B5CF6), var(--tile-4b, #22B8E6));
+  box-shadow: 0 14px 30px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+body.dark-shell main .ribbon-card:nth-child(5) {
+  background-image: linear-gradient(135deg, var(--tile-5a, #008FFE), var(--tile-5b, #8B5CF6));
+  box-shadow: 0 14px 30px rgba(0, 143, 254, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+body.dark-shell main .ribbon-card .text-slate-900 { color: #FFFFFF; font-size: 13px; }
+body.dark-shell main .ribbon-card label > div {
+  background-color: rgba(255, 255, 255, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+body.dark-shell main .ribbon-card div.w-full.bg-slate-200 {
+  background-color: rgba(255, 255, 255, 0.32);
+}
+/* Vehicle grid cards: darker glass, bright cyan prices, solid mockup
+   status chips (the chip is the only element in the photo's corner). */
+body.dark-shell #inventoryGridView .glass-card {
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0) 42%), var(--d-card);
+}
+body.dark-shell #inventoryGridView .glass-card span.text-blue-600 {
+  color: #2EC5F8;
+  font-size: 15px;
+}
+body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > span {
+  border-color: transparent;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: 0 6px 16px rgba(2, 6, 23, 0.35);
+}
+body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > .bg-emerald-50 { background-color: #1FCE6E; color: #04150A; }
+body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > .bg-violet-50 { background-color: #A78BFA; color: #1E1040; }
+body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > .bg-rose-50 { background-color: #FB7185; color: #2A0812; }
+body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > .bg-orange-50 { background-color: #FB923C; color: #2A1503; }
+body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > .bg-amber-50 { background-color: #FBBF24; color: #2A1B02; }
+body.dark-shell #inventoryGridView .glass-card .top-2.right-2 > .bg-white\/95 { background-color: rgba(226, 232, 240, 0.95); color: #0F172A; }
+/* List/table view rides the same tokens; prices take the bright link. */
+body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright); }
 </style>
 </head>
 <!-- ============================================================================== -->
@@ -1094,15 +1242,15 @@ body.dark-shell main h1 {
 <!-- ============================================================================== -->
 <aside class="w-60 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 h-screen sticky top-0 z-30 select-none shadow-sm">
   <div class="p-4 space-y-4 overflow-y-auto">
-    <div class="flex items-center justify-between px-2 pt-1 pb-1">
-      <div class="flex items-center gap-2.5">
-        <img src="icons/logo-mark-512.png" alt="AutoLaunch" class="w-7 h-7 rounded-lg shadow-md shadow-blue-500/20 object-cover">
+    <div class="sidebar-brand flex items-center justify-between px-2 pt-1 pb-1">
+      <div class="sidebar-brand-inner flex items-center gap-2.5">
+        <img src="icons/logo-mark-512.png" alt="AutoLaunch" class="sidebar-brand-logo w-7 h-7 rounded-lg shadow-md shadow-blue-500/20 object-cover">
         <div>
           <span class="brand-title font-black text-xl text-slate-900 tracking-tight block leading-none">AutoLaunch</span>
           <span class="text-[9px] font-bold tracking-widest text-blue-600 uppercase block mt-1">0 TO POSTED</span>
         </div>
       </div>
-      <button onclick="toggleMobileNav()" aria-label="Toggle menu" class="text-slate-400 hover:text-slate-700 text-xs p-1 cursor-pointer">
+      <button onclick="toggleMobileNav()" aria-label="Toggle menu" class="sidebar-brand-toggle text-slate-400 hover:text-slate-700 text-xs p-1 cursor-pointer">
         <i class="fa-solid fa-bars-staggered"></i>
       </button>
     </div>
@@ -2019,7 +2167,7 @@ body.dark-shell main h1 {
 
   <!-- Header Bar -->
 
-<div class="mobile-collapsible-header flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+<div id="dashHeaderBar" class="mobile-collapsible-header flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
 
   <button type="button" onclick="toggleMobileNav()" aria-label="Open menu" class="flex md:hidden shrink-0 mr-3 w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 items-center justify-center shadow-sm cursor-pointer">
     <i class="fa-solid fa-bars"></i>
@@ -11127,19 +11275,20 @@ updateLastSyncDisplay();
       locationGroups = Array.isArray(data.location_groups) ? data.location_groups : [];
       renderLocationGroupsSettings();
 
-      // Color theme: restore the saved selection and apply it. Absent
-      // columns / no saved theme leave the Electric Energy default exactly
-      // as the stylesheet defines it.
-      if (data.theme_custom && data.theme_custom.base && data.theme_custom.accent) {
-        themeState.custom = { base: data.theme_custom.base, accent: data.theme_custom.accent };
-      }
-      if (data.theme_preset === "custom" && themeState.custom) {
+      // Color theme (redesign v2): restore the saved selection ONLY if
+      // it still exists in the current roster — a preset id present in
+      // THEMES, or a custom pair stamped by the current picker
+      // (theme_custom.v === 2). Anything else (a retired preset id, a
+      // pre-v2 unstamped custom pair) falls back to the flagship
+      // Electric Energy default; the flagship is applied unconditionally
+      // below, so no account can be stranded on a retired look.
+      if (data.theme_preset === "custom" && data.theme_custom && data.theme_custom.v === 2 && data.theme_custom.base && data.theme_custom.accent) {
+        themeState.custom = { base: data.theme_custom.base, accent: data.theme_custom.accent, v: 2 };
         themeState.preset = "custom";
-        applyCommittedTheme();
-      } else if (data.theme_preset && THEMES.some(t => t.id === data.theme_preset)) {
+      } else if (data.theme_preset && data.theme_preset !== "custom" && THEMES.some(t => t.id === data.theme_preset)) {
         themeState.preset = data.theme_preset;
-        applyCommittedTheme();
       }
+      applyCommittedTheme();
       renderThemePicker();
 
       // Branding frame restore. (The retired background feature also saved
@@ -21598,12 +21747,21 @@ async function deleteIntroVideo(id, storagePath) {
 // just { base, accent, mode }: deriveThemeTokens() expands those two colors
 // into the full --d-* token set the shell CSS consumes, and applyTheme()
 // writes the tokens inline on <body>, overriding the stylesheet defaults
-// (which are the Electric Energy values — the 2026-11-20 redesign default —
-// so no saved theme = the new brand look). Presets may carry literal token
-// overrides; Midnight Blue carries the full original template values so
-// selecting it reproduces the pre-redesign render byte-for-byte.
-// Persisted on user_settings as theme_preset (id, or "custom") and
-// theme_custom ({base, accent}); see loadUserStoreSettings / saveAllSettings.
+// (which are the Electric Energy values — the flagship of the 2026-11-20
+// redesign v2 roster — so no saved theme = the flagship look). Presets may
+// carry literal token overrides; Midnight Blue carries the full original
+// template values so selecting it reproduces the pre-redesign render
+// byte-for-byte. The derivation also emits the --tile-* stops the
+// dashboard ribbon's multicolor gradient tiles paint from.
+// REDESIGN V2 ROSTER RULES: the boot restore honors a saved selection
+// only if it still exists in the current roster — a preset id present in
+// THEMES, or a custom pair stamped by the current picker
+// (theme_custom.v === 2, stamped in applyCustomTheme). Retired preset
+// ids and pre-v2 unstamped custom pairs fall back to the flagship
+// Electric Energy default instead of stranding an account on a retired
+// look. Persisted on user_settings as theme_preset (id, or "custom") and
+// theme_custom ({base, accent, v}); see loadUserStoreSettings /
+// saveAllSettings.
 // THEME ENGINE START
 function hexToRgb(hex) {
   const m = String(hex || "").trim().match(/^#?([0-9a-f]{6})$/i) || String(hex || "").trim().match(/^#?([0-9a-f]{3})$/i);
@@ -21728,6 +21886,22 @@ function deriveThemeTokens(spec) {
   const electricRgb = hexToRgb(t["--d-electric"]);
   t["--glow-rgb"] = rgbString(electricRgb);
   t["--btn-rgb"] = rgbString(hslToRgb(ah.h, ah.s * 0.92, dark ? 0.53 : 0.45));
+  // Redesign v2 (2026-11-20): the dashboard ribbon's multicolor gradient
+  // family — five tile pairs rotated around the accent hue, so every
+  // colorway (presets + custom) gets the mockup's multicolor stat-tile
+  // row anchored on its own accent. The flagship's literal token map
+  // pins the exact mockup stops over these derivations.
+  const tileSat = Math.min(Math.max(ah.s, 0.72), 0.92);
+  t["--tile-1a"] = hslHex(ah.h + 125, tileSat, 0.60);
+  t["--tile-1b"] = hslHex(ah.h + 182, tileSat, 0.55);
+  t["--tile-2a"] = hslHex(ah.h + 8, tileSat, 0.56);
+  t["--tile-2b"] = hslHex(ah.h - 18, tileSat, 0.52);
+  t["--tile-3a"] = hslHex(ah.h - 68, tileSat, 0.52);
+  t["--tile-3b"] = hslHex(ah.h - 33, tileSat, 0.55);
+  t["--tile-4a"] = hslHex(ah.h + 58, tileSat, 0.60);
+  t["--tile-4b"] = hslHex(ah.h - 12, tileSat, 0.52);
+  t["--tile-5a"] = hslHex(ah.h + 185, tileSat, 0.55);
+  t["--tile-5b"] = hslHex(ah.h + 125, tileSat, 0.58);
   // Readability guarantees: heading, body and link text must clear WCAG
   // contrast against every surface they sit on (card AND the page canvas)
   // whatever colors were picked; the primary-button fill must stay
@@ -21810,8 +21984,11 @@ const MIDNIGHT_TOKENS = {
 // same derivation every preset uses (the values below are exactly
 // deriveThemeTokens({ base: "#101847", accent: "#008FFE", mode: "dark" }),
 // pinned literally like Midnight's so the render is deterministic). The
-// stylesheet defaults in body.dark-shell carry these same values, so a
-// user with no saved theme sees this look before and after boot.
+// stylesheet defaults in body.dark-shell carry these same core values,
+// so a user with no saved theme sees this look before and after boot.
+// The --tile-* stops pin the approved mockup's exact ribbon gradients
+// (pink/orange, blue/cyan, green/teal, violet/cyan, blue/violet) over
+// the hue-rotation derivation in deriveThemeTokens.
 const ELECTRIC_TOKENS = {
   "--accent-rgb": "0, 143, 254",
   "--accent-strong-rgb": "92, 184, 255",
@@ -21839,18 +22016,32 @@ const ELECTRIC_TOKENS = {
   "--d-link-bright": "#8FCEFF",
   "--d-electric": "#1598FF",
   "--d-electric-deep": "#0E60B2",
-  "--d-veil": "rgba(20, 30, 90, 0.92)"
+  "--d-veil": "rgba(20, 30, 90, 0.92)",
+  "--tile-1a": "#F0569B",
+  "--tile-1b": "#F5A55C",
+  "--tile-2a": "#2B6CF5",
+  "--tile-2b": "#0BB7E8",
+  "--tile-3a": "#22C55E",
+  "--tile-3b": "#2DD4BF",
+  "--tile-4a": "#8B5CF6",
+  "--tile-4b": "#22B8E6",
+  "--tile-5a": "#008FFE",
+  "--tile-5b": "#8B5CF6"
 };
+// Redesign v2 roster (2026-11-20): all-dark, vibrant, mockup-family
+// colorways — no light presets remain. Kept ids (electric, midnight,
+// deepsea) keep their saved users' choices, with deepsea refreshed to a
+// cyan-forward palette; retired ids (carbon, blackred, violet, arctic,
+// paperred) no longer resolve and their saved users fall back to the
+// flagship at boot (see the restore rules in loadUserStoreSettings).
 const THEMES = [
   { id: "electric", name: "Electric Energy", base: "#101847", accent: "#008FFE", mode: "dark", tokens: ELECTRIC_TOKENS },
   { id: "midnight", name: "Midnight Blue", base: "#070D1A", accent: "#3B82F6", mode: "dark", tokens: MIDNIGHT_TOKENS },
-  { id: "carbon", name: "Carbon Black / Blue", base: "#08090C", accent: "#3B82F6", mode: "dark" },
-  { id: "blackred", name: "Black / Red", base: "#0A0809", accent: "#EF4444", mode: "dark" },
-  { id: "deepsea", name: "Deep Sea", base: "#06222B", accent: "#22C55E", mode: "dark" },
-  { id: "emerald", name: "Emerald Night", base: "#071A10", accent: "#10B981", mode: "dark" },
-  { id: "violet", name: "Royal Violet", base: "#120A26", accent: "#8B5CF6", mode: "dark" },
-  { id: "arctic", name: "Arctic", base: "#EFF4FA", accent: "#2563EB", mode: "light" },
-  { id: "paperred", name: "Paper Red", base: "#FAF5F2", accent: "#DC2626", mode: "light" }
+  { id: "deepsea", name: "Deep Sea", base: "#04222E", accent: "#06B6D4", mode: "dark" },
+  { id: "ultraviolet", name: "Ultra Violet", base: "#170A36", accent: "#8B5CF6", mode: "dark" },
+  { id: "emerald", name: "Emerald Surge", base: "#04170E", accent: "#10B981", mode: "dark" },
+  { id: "crimson", name: "Crimson Pulse", base: "#1E0713", accent: "#F43F5E", mode: "dark" },
+  { id: "solar", name: "Solar Flare", base: "#1B0E03", accent: "#F59E0B", mode: "dark" }
 ];
 // Committed selection (what Save persists and load restores). Preview-only
 // changes apply visually without touching this until the user commits by
@@ -21892,7 +22083,7 @@ function applyCustomTheme() {
   const baseEl = document.getElementById("themeCustomBase");
   const accentEl = document.getElementById("themeCustomAccent");
   if (!baseEl || !accentEl) return;
-  themeState.custom = { base: baseEl.value, accent: accentEl.value };
+  themeState.custom = { base: baseEl.value, accent: accentEl.value, v: 2 };
   themeState.preset = "custom";
   applyCommittedTheme();
   renderThemePicker();
