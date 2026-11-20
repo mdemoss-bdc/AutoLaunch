@@ -52,6 +52,9 @@
 //   - Publishing is capped by Meta (25 published posts per IG account
 //     per 24h at build time); the app's daily pacing stays the
 //     rep-facing control, this function executes one post per call.
+//   - Reel containers carry thumb_offset (see REEL_THUMB_OFFSET
+//     below): the grid cover comes from inside the title card,
+//     never the black frame 0.
 //   - User tokens are long-lived (~60 days) and are NOT refreshable
 //     in place the way TikTok's are — an expired token means the rep
 //     reconnects Instagram in Settings (instagram-auth /exchange).
@@ -70,6 +73,20 @@ const cors = {
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v21.0";
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
 const MAX_CAROUSEL_ITEMS = 10;
+
+// [IG-COVER-356] Reel grid cover (Matthew, 2026-11-20): a VIN
+// Reel's frame 0 is pure black — the render fades in from
+// black over 0.4s and the title card reaches full strength at
+// ~0.9s, holding until 3.3s (generator.py: TITLE_DUR 3.3,
+// title_alpha, head gain) — and Instagram takes frame 0 as
+// the grid cover when no offset is given, so the Reels grid
+// showed black tiles until a reel was tapped. thumb_offset
+// (milliseconds) moves the cover to 1.5s in: past the fade,
+// comfortably inside the title card. It rides BOTH REELS
+// container-creation sites below — the handler's publish
+// path and the finisher's finishOneIntent — via this one
+// constant, so the two paths can never drift apart.
+const REEL_THUMB_OFFSET = "1500";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -518,6 +535,7 @@ async function finishOneIntent(
   const created = await graphPost(`/${igUserId}/media`, accessToken, {
     media_type: "REELS",
     video_url: videoUrl,
+    thumb_offset: REEL_THUMB_OFFSET,
     caption,
   });
   if (!created.res.ok || !created.body?.id) {
@@ -1028,6 +1046,7 @@ Deno.serve(async (req: Request) => {
     const created = await graphPost(`/${igUserId}/media`, accessToken, {
       media_type: "REELS",
       video_url: videoUrl,
+      thumb_offset: REEL_THUMB_OFFSET,
       caption,
     });
     if (!created.res.ok || !created.body?.id) {
