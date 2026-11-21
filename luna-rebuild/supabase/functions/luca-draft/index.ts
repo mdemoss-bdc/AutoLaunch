@@ -101,6 +101,17 @@
 // NEVER mention CARFAX for a car whose fact line has no link; never
 // construct or guess a link. Purely additive grounding — every
 // other behavior is the previous version's.
+//
+// BUYER LANGUAGE (2026-11-21, the Luca two-fix package —
+// Matthew's go): drafts are written in the language of the
+// buyer's latest messages. Detection is deterministic
+// (stopword/diacritic scoring over the buyer's last three
+// inbound messages — detectBuyerLang below; no extra model
+// call, free-tier rule intact). A Spanish thread adds one
+// LANGUAGE instruction to the system prompt and yields a
+// Spanish draft; English threads produce the byte-identical
+// prompt they did before. The response gains a lang field
+// for observability. Drafts remain drafts — Luca never sends.
 // =====================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -400,6 +411,37 @@ function baitCategory(latest: string): { cat: string; label: string; reason: str
   if (/\bcrook|\bscam|rip ?off|lawsuit|attorney|better business bureau|report you/.test(t))
     return { cat: "upset", label: "an upset buyer", reason: "buyer is upset/threatening — the salesperson should take over" };
   return null;
+}
+
+// ---- Buyer language detection (2026-11-21, the Luca two-fix
+// package): deterministic, no network — the same stopword /
+// diacritic scoring the helper's Spanish availability
+// auto-reply uses, applied to the buyer's latest messages.
+// A Spanish thread gets a Spanish draft (the system prompt
+// gains a LANGUAGE instruction); anything uncertain stays
+// English, which is the pre-existing behavior. Drafts remain
+// drafts either way — Luca never sends.
+const LUCA_ES_STOPWORDS = new Set([
+  "hola", "buenas", "gracias", "disponible", "sigue", "todavia",
+  "esta", "este", "esto", "cuando", "donde", "cuanto", "cuesta",
+  "precio", "quiero", "puedo", "tiene", "tienen", "vende", "venta",
+  "para", "pero", "porque", "tambien", "manana", "hoy", "favor",
+  "usted", "coche", "carro", "auto", "interesado", "interesa",
+  "gustaria", "venir", "verlo", "verla", "probarlo", "comprarlo",
+  "dias", "tardes", "noches", "senor", "senora",
+]);
+function detectBuyerLang(texts: string[]): "es" | "en" {
+  const raw = (texts || []).join(" ");
+  let score = 0;
+  if (/[áéíóúñü¡¿]/i.test(raw)) score += 2;
+  const norm = raw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s']/g, " ").replace(/\s+/g, " ");
+  const hits = new Set<string>();
+  for (const w of norm.split(" ")) {
+    if (w && LUCA_ES_STOPWORDS.has(w)) hits.add(w);
+  }
+  score += hits.size;
+  return score >= 2 ? "es" : "en";
 }
 
 Deno.serve(async (req) => {
@@ -705,6 +747,7 @@ Deno.serve(async (req) => {
   const buyerMsgs = thread.filter((m: any) => m.direction === "in").slice(-3)
     .map((m: any) => String(m.body || ""));
   const latestBuyer = buyerMsgs.length ? buyerMsgs[buyerMsgs.length - 1] : "";
+  const buyerLang = detectBuyerLang(buyerMsgs);
   const buyerText = buyerMsgs.join(" ").toLowerCase();
   const tokensOf = (text: string) => (text.toLowerCase().match(/[a-z0-9]+(?:-[a-z0-9]+)?/g) || [])
     .filter(t => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
@@ -911,6 +954,9 @@ Deno.serve(async (req) => {
       "- A vehicle at a SISTER lot is not here, but the group can bring it to the salesperson's lot for the buyer. Present it warmly and be upfront: it's at a sister location, and we can have it brought over for them.",
       "- Moving a vehicle is a commitment, so BEFORE promising any transfer, get the buyer comfortable with the PRICE as it stands: the move makes sense once they agree the price works for them, assuming they like how it drives and it checks out when it's here. Ask for that confirmation naturally. Never promise the transfer itself, an arrival day/time, or any transfer fee — those are the salesperson's call.",
       "- If the buyer asks for a sister-lot car to be brought over (or demands it by a day/time), do NOT punt to a manager and do NOT promise the move or a time: use the price-confirmation reply above — it's at a sister lot, and if the price works for them as it stands, you'll ask to have it brought over.",
+    ] : []),
+    ...(buyerLang === "es" ? [
+      "LANGUAGE — the buyer is writing in Spanish. Write the draft ENTIRELY in Spanish, in the salesperson's voice: their real past replies in this request are in English — keep their tone, brevity and habits, but write in Spanish. State every fact exactly as written in the blocks (vehicle names, stock numbers, links and prices do not translate). Every HARD RULE below applies unchanged.",
     ] : []),
     "",
     "HARD RULES — never break these:",
@@ -1122,5 +1168,5 @@ Deno.serve(async (req) => {
     body: draft,
   });
 
-  return json({ ok: true, draft, needs_human: needsHuman, reason, provider: PROVIDER });
+  return json({ ok: true, draft, needs_human: needsHuman, reason, provider: PROVIDER, lang: buyerLang });
 });
