@@ -3057,10 +3057,6 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
             Instagram
           </button>
 
-          <button data-settings-tab="automation" onclick="switchSettingsTab('automation')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
-            Automation
-          </button>
-
           <button data-settings-tab="ai" onclick="switchSettingsTab('ai')" class="w-full text-left px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-semibold cursor-pointer">
             AI Settings
           </button>
@@ -3338,9 +3334,22 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
 
       </div><!-- /settingsPanelDealership -->
 
-      <div id="settingsPanelAutomation" class="space-y-6 hidden">
+      
+      <div id="settingsPanelFacebook" class="space-y-6 hidden">
 
-        <div class="grid gap-6 xl:grid-cols-2 items-start">
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="font-bold text-lg">Facebook Marketplace</h3>
+          <p class="text-sm text-slate-500">
+            Marketplace posting runs through the AutoLaunch Chrome extension, inside your own
+            signed-in Facebook session — there is no token or key to paste here, by design.
+            Cars you queue are picked up by the extension and posted within your daily posting limit.
+          </p>
+          <div class="flex flex-wrap gap-3">
+            <button onclick="closeModal('settingsModal'); openQueueModal()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
+              Open Post Queue
+            </button>
+          </div>
+        </div>
 
         <!-- AUTOMATION CARD -->
 
@@ -3380,7 +3389,6 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
           <p id="settingsAutoPostFilterSummary" class="text-[11px] text-slate-500 mt-2"></p>
 
         </div>
-
         <!-- FULL AUTO POSTING (extension v2.1.4) -->
 
         <div class="glass-card rounded-2xl p-6">
@@ -3414,7 +3422,6 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
           </div>
 
         </div>
-
         <!-- AUTO-DELETE ON EXIT (sold / leaves inventory) -->
 
         <div class="glass-card rounded-2xl p-6">
@@ -3448,27 +3455,9 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
 
           </div>
 
-          <!-- [IG-SOLDMARK-360] Instagram sold mode: only relevant
-               while the switch above is on. The finisher reads
-               user_settings.ig_sold_mode when a car sells. -->
-          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
-
-            <p class="text-sm font-semibold text-slate-700">On Instagram, when a car sells</p>
-
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;">
-              <input type="radio" name="igSoldMode" value="delete" checked onchange="setIgSoldModeSetting(this)" style="width:16px;height:16px;accent-color:var(--accent);">
-              <span class="text-sm text-slate-600">Take posts down</span>
-            </label>
-
-            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-top:6px;">
-              <input type="radio" name="igSoldMode" value="mark" onchange="setIgSoldModeSetting(this)" style="width:16px;height:16px;accent-color:var(--accent);margin-top:2px;">
-              <span class="text-sm text-slate-600">Lock the comments — the post stays up; locked comments mean sold (explained in every caption)</span>
-            </label>
-
-          </div>
+          
 
         </div>
-
         <!-- SHARE TO FEED (helper v2.1.55) -->
 
         <div class="glass-card rounded-2xl p-6">
@@ -3502,16 +3491,38 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
           </div>
 
         </div>
+        <!-- VIN REEL BEFORE POST (Matthew, 2026-11-05) -->
 
-        <!-- AUTO-INSTAGRAM (Matthew, 2026-11-20) -->
-        <div style="margin-top:14px;padding:14px 16px;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;">
-          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
-            <input type="checkbox" id="chkInstagramAutoPost" onchange="toggleInstagramAutoPostSetting(this)" style="margin-top:3px;width:16px;height:16px;accent-color:var(--accent);">
-            <span>
-              <span style="display:block;font-weight:700;">Also post to Instagram</span>
-              <span style="display:block;font-size:0.82rem;color:var(--muted);margin-top:2px;">On: every car Auto-Post queues for Marketplace also posts to your connected Instagram as its VIN Reel — rendered first if it doesn't have one yet, then finished automatically by AutoLaunch's server, so no tab has to stay open and a locked PC can't stall it. One post per car, ever. Publishing still runs through Meta's approval for your account, exactly like the per-car Instagram button. Off: Instagram stays tap-per-car.</span>
-            </span>
-          </label>
+        <div class="glass-card rounded-2xl p-6">
+
+          <div class="flex items-center justify-between">
+
+            <div>
+
+              <h3 class="font-bold text-lg">
+                Make a video before posting
+              </h3>
+
+              <p class="text-sm text-slate-500">
+                Auto-posts wait for the car's generated VIN Reel video, which is attached to the Marketplace post. A car never posts without its video: if the video can't be made, the car stays held; if it can't be attached after posting, the bare listing is taken down and the post is retried — after 3 failed attempts the car is flagged for your attention in the health bar. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('vinreels')">How VIN Reels work →</span>
+              </p>
+
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+
+              <input
+                type="checkbox"
+                id="chkVinReelBeforePost"
+                onchange="toggleVinReelBeforePostSetting(this)"
+                class="sr-only peer">
+
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+
+            </label>
+
+          </div>
+
         </div>
         <!-- POST WITHOUT COLORS (Matthew, 2026-11-05) -->
 
@@ -3546,75 +3557,13 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
           </div>
 
         </div>
-
-        <!-- VIN REEL BEFORE POST (Matthew, 2026-11-05) -->
-
-        <div class="glass-card rounded-2xl p-6">
-
-          <div class="flex items-center justify-between">
-
-            <div>
-
-              <h3 class="font-bold text-lg">
-                Make a video before posting
-              </h3>
-
-              <p class="text-sm text-slate-500">
-                Auto-posts wait for the car's generated VIN Reel video, which is attached to the Marketplace post. A car never posts without its video: if the video can't be made, the car stays held; if it can't be attached after posting, the bare listing is taken down and the post is retried — after 3 failed attempts the car is flagged for your attention in the health bar. <span class="text-blue-600 font-semibold cursor-pointer" onclick="openGuide('vinreels')">How VIN Reels work →</span>
-              </p>
-
-            </div>
-
-            <label class="relative inline-flex items-center cursor-pointer">
-
-              <input
-                type="checkbox"
-                id="chkVinReelBeforePost"
-                onchange="toggleVinReelBeforePostSetting(this)"
-                class="sr-only peer">
-
-              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
-
-            </label>
-
-          </div>
-
-        </div>
-
-        <!-- SYNDICATION CHANNELS (Phase 6) -->
-
-        <div class="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
-
-          <div>
-            <h3 class="font-bold text-lg">Syndication Channels</h3>
-            <p class="text-sm text-slate-500">
-              One car, posted everywhere. Marketplace is always on (via the Chrome extension).
-              Switch on more channels and every queued car fans out to each of them.
-            </p>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-semibold text-slate-800">Instagram</p>
-              <p class="text-xs text-slate-500">Posts this car's photos or VIN Reel to your connected Instagram account.</p>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="chkChannelInstagram" onchange="toggleChannelSetting('instagram', this)" class="sr-only peer">
-              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
-            </label>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-semibold text-slate-800">TikTok <span class="ml-1.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">Coming soon</span></p>
-              <p class="text-xs text-slate-500">Generated vehicle videos via the official API. Coming soon — in review with TikTok; public posting unlocks after their client audit.</p>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="chkChannelTiktok" onchange="toggleChannelSetting('tiktok', this)" class="sr-only peer">
-              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
-            </label>
-          </div>
-
+        <div class="glass-card rounded-2xl p-6 space-y-3">
+          <h3 class="font-bold text-lg">Facebook Page</h3>
+          <p class="text-sm text-slate-500">
+            Posting to a dealership Facebook Page uses Meta's official API from the same
+            connection as Instagram. Turn the Page channel on right here — it posts from
+            the connected account, the same one Instagram uses.
+          </p>
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm font-semibold text-slate-800">Facebook Page</p>
@@ -3625,41 +3574,6 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
               <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
             </label>
           </div>
-
-        </div>
-
-        </div>
-
-      </div><!-- /settingsPanelAutomation -->
-
-      <div id="settingsPanelFacebook" class="space-y-6 hidden">
-
-        <div class="glass-card rounded-2xl p-6 space-y-4">
-          <h3 class="font-bold text-lg">Facebook Marketplace</h3>
-          <p class="text-sm text-slate-500">
-            Marketplace posting runs through the AutoLaunch Chrome extension, inside your own
-            signed-in Facebook session — there is no token or key to paste here, by design.
-            Cars you queue are picked up by the extension and posted within your daily posting limit.
-          </p>
-          <div class="flex flex-wrap gap-3">
-            <button onclick="closeModal('settingsModal'); openQueueModal()" class="px-5 py-2.5 rounded-xl btn-gradient text-white text-sm font-bold cursor-pointer">
-              Open Post Queue
-            </button>
-            <button onclick="switchSettingsTab('automation')" class="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold cursor-pointer">
-              Posting &amp; Channel Settings
-            </button>
-          </div>
-        </div>
-
-        <div class="glass-card rounded-2xl p-6 space-y-3">
-          <h3 class="font-bold text-lg">Facebook Page</h3>
-          <p class="text-sm text-slate-500">
-            Posting to a dealership Facebook Page uses Meta's official API from the same
-            connection as Instagram. Turn the Page channel on under
-            <button onclick="switchSettingsTab('automation')" class="text-blue-600 font-semibold underline cursor-pointer">Automation → Syndication Channels</button>;
-            account connection arrives with the Phase 6 channel setup, so Page posts stay
-            off until that connection exists — nothing posts silently in the meantime.
-          </p>
         </div>
 
       </div><!-- /settingsPanelFacebook -->
@@ -3691,6 +3605,19 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
           <p id="tiktokTestResult" class="text-xs text-slate-500"></p>
         </div>
 
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="font-bold text-lg">Posting to TikTok</h3>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-slate-800">TikTok <span class="ml-1.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">Coming soon</span></p>
+              <p class="text-xs text-slate-500">Generated vehicle videos via the official API. Coming soon — in review with TikTok; public posting unlocks after their client audit.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkChannelTiktok" onchange="toggleChannelSetting('tiktok', this)" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+            </label>
+          </div>
+        </div>
       </div><!-- /settingsPanelTiktok -->
 
       <div id="settingsPanelInstagram" class="space-y-6 hidden">
@@ -3720,6 +3647,53 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
           <p id="instagramTestResult" class="text-xs text-slate-500"></p>
         </div>
 
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="font-bold text-lg">Posting to Instagram</h3>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-slate-800">Instagram</p>
+              <p class="text-xs text-slate-500">Posts this car's photos or VIN Reel to your connected Instagram account.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkChannelInstagram" onchange="toggleChannelSetting('instagram', this)" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+            </label>
+          </div>
+          <!-- AUTO-INSTAGRAM (Matthew, 2026-11-20) -->
+        <div style="margin-top:14px;padding:14px 16px;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+            <input type="checkbox" id="chkInstagramAutoPost" onchange="toggleInstagramAutoPostSetting(this)" style="margin-top:3px;width:16px;height:16px;accent-color:var(--accent);">
+            <span>
+              <span style="display:block;font-weight:700;">Also post to Instagram</span>
+              <span style="display:block;font-size:0.82rem;color:var(--muted);margin-top:2px;">On: every car Auto-Post queues for Marketplace also posts to your connected Instagram as its VIN Reel — rendered first if it doesn't have one yet, then finished automatically by AutoLaunch's server, so no tab has to stay open and a locked PC can't stall it. One post per car, ever. Publishing still runs through Meta's approval for your account, exactly like the per-car Instagram button. Off: Instagram stays tap-per-car.</span>
+            </span>
+          </label>
+        </div>
+        </div>
+        <div class="glass-card rounded-2xl p-6">
+          <h3 class="font-bold text-lg">When a car sells</h3>
+          <p class="text-sm text-slate-500" style="margin-top:4px;">
+            What happens to the car's Instagram post when it sells. This runs under the
+            Auto-remove sold &amp; exited cars switch (Settings → Facebook) — with that
+            switch off, a sold car's posts stay up either way.
+          </p>
+          <!-- [IG-SOLDMARK-360] Instagram sold mode: only relevant
+               while the switch above is on. The finisher reads
+               user_settings.ig_sold_mode when a car sells. -->
+          
+
+            
+
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;">
+              <input type="radio" name="igSoldMode" value="delete" checked onchange="setIgSoldModeSetting(this)" style="width:16px;height:16px;accent-color:var(--accent);">
+              <span class="text-sm text-slate-600">Take posts down</span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-top:6px;">
+              <input type="radio" name="igSoldMode" value="mark" onchange="setIgSoldModeSetting(this)" style="width:16px;height:16px;accent-color:var(--accent);margin-top:2px;">
+              <span class="text-sm text-slate-600">Lock the comments — the post stays up; locked comments mean sold (explained in every caption)</span>
+            </label>
+        </div>
       </div><!-- /settingsPanelInstagram -->
 
       <div id="settingsPanelAi" class="space-y-6 hidden">
@@ -21220,7 +21194,7 @@ async function copyUserId() {
 }
 // Luna: Settings left-menu tabs (Dealership / Facebook / Automation / AI Settings)
 function switchSettingsTab(tab) {
-  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", tiktok: "settingsPanelTiktok", instagram: "settingsPanelInstagram", automation: "settingsPanelAutomation", ai: "settingsPanelAi", appearance: "settingsPanelAppearance", plan: "settingsPanelPlan", owner: "settingsPanelOwner" };
+  const panels = { dealership: "settingsPanelDealership", facebook: "settingsPanelFacebook", tiktok: "settingsPanelTiktok", instagram: "settingsPanelInstagram", ai: "settingsPanelAi", appearance: "settingsPanelAppearance", plan: "settingsPanelPlan", owner: "settingsPanelOwner" };
   Object.entries(panels).forEach(([key, id]) => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("hidden", key !== tab);
@@ -23428,7 +23402,7 @@ const GUIDES = {
       "Flip the Automations switch on — both automation cards beside it turn on with it.",
       "Set each one up on its own card (frequency, limits). The master switch never changes their settings.",
       "Turn a single card off anytime without touching the others.",
-      "The same Auto Posting switch also lives in Settings, under the Automation tab."
+      "The same Auto Posting switch also lives in Settings, under the Facebook tab."
     ],
     notes: [
       "The master switch shows on whenever at least one automation is on — it is only off when both are off. The status line on this card always says exactly what is running.",
@@ -23447,7 +23421,7 @@ const GUIDES = {
       "Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.",
       "Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.",
       "Set how many may post per day under Safe posting limits — that limit covers everything that goes out in a day, and the auto poster fills the room that is left, newest cars first.",
-      "Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels."
+      "Want more than Marketplace? Each channel's switch lives in Settings under its own tab — Facebook, Instagram or TikTok."
     ],
     notes: [
       "Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.",
@@ -23699,11 +23673,11 @@ const GUIDES = {
     icon: "fa-solid fa-share-nodes",
     iconClasses: "bg-cyan-50 text-cyan-600 border-cyan-200",
     modal: null,
-    what: "Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. Instagram is live too: connect your business account and your cars post there as reels — and when a car sells, its Instagram post comes down automatically (or has its comments locked instead, your choice in Settings). TikTok is still in review with TikTok and lights up the moment it clears. Instagram and TikTok are Automate-plan channels.",
+    what: "Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. Instagram is live too: connect your business account and your cars post there as reels — and when a car sells, its Instagram post comes down automatically (or has its comments locked instead, your choice in Settings → Instagram). TikTok is still in review with TikTok and lights up the moment it clears. Instagram and TikTok are Automate-plan channels.",
     steps: [
-      "Open Settings → Automation → Syndication Channels.",
+      "Open Settings and pick the channel's own tab — Facebook, Instagram or TikTok.",
       "Connect the account you actually sell from — posting runs in that account's name.",
-      "Connect Instagram and turn on the Facebook Page channel there — TikTok lights up there when it launches.",
+      "Connect Instagram in the Instagram tab and turn on the Facebook Page channel in the Facebook tab — TikTok lights up in its own tab when it launches.",
       "Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel."
     ],
     notes: [
