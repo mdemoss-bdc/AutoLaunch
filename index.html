@@ -3595,11 +3595,11 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
 
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-semibold text-slate-800">Instagram <span class="ml-1.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">Coming soon</span></p>
-              <p class="text-xs text-slate-500">Instagram posting isn't live yet — it follows once business verification clears with Meta.</p>
+              <p class="text-sm font-semibold text-slate-800">Instagram</p>
+              <p class="text-xs text-slate-500">Posts this car's photos or VIN Reel to your connected Instagram account.</p>
             </div>
-            <label class="relative inline-flex items-center opacity-50 cursor-not-allowed">
-              <input type="checkbox" id="chkChannelInstagram" onchange="toggleChannelSetting('instagram', this)" class="sr-only peer" disabled>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chkChannelInstagram" onchange="toggleChannelSetting('instagram', this)" class="sr-only peer">
               <div class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-5 after:w-5 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
             </label>
           </div>
@@ -21659,6 +21659,15 @@ async function disconnectInstagram() {
 // the post the moment the reel is ready. The intent row survives
 // a closed tab: on the next load the watcher reloads it and
 // finishes the post with no second tap.
+//
+// [IG-PHOTO-365] (2026-11-21) The 9007 root cause turned out to
+// be on the function side, not the media kind: image containers
+// ingest asynchronously too, and the function published photo
+// containers without waiting for FINISHED. With that fixed,
+// intents carry a media kind (reel / photo / carousel): the tap
+// records a picture intent when the car has photos but no ready
+// reel, the finisher publishes it server-side from the car's
+// photos, and the watcher below completes REEL intents only.
 let instagramPendingByVin = {};
 let instagramPostedByVin = {};
 let instagramPendingLoaded = false;
@@ -21677,7 +21686,7 @@ async function instagramLoadPendingIntents() {
   try {
     const { data, error } = await supabaseClient
       .from("instagram_posts")
-      .select("id, vin, status, created_at")
+      .select("id, vin, status, kind, created_at")
       .eq("user_id", currentUser.id)
       .in("status", ["awaiting_reel", "published"])
       .order("created_at", { ascending: true });
@@ -21690,7 +21699,7 @@ async function instagramLoadPendingIntents() {
         instagramPostedByVin[r.vin] = true;
         delete instagramPendingByVin[r.vin];
       } else if (!instagramPendingByVin[r.vin]) {
-        instagramPendingByVin[r.vin] = { intentId: r.id };
+        instagramPendingByVin[r.vin] = { intentId: r.id, kind: r.kind || "reel" };
       }
     });
     instagramPendingLoaded = true;
@@ -21727,8 +21736,11 @@ async function instagramQueueReel(car) {
 
 // Record the auto-post intent server-side via the instagram-post
 // function's intent mode (it dedupes per VIN). True when an intent
-// row is held for this car afterwards.
-async function instagramRecordIntent(car) {
+// row is held for this car afterwards. [IG-PHOTO-365] Pass
+// mediaKind "photo"/"carousel" for a picture intent; the call
+// then resolves to the kind actually held (the function's
+// dedupe can hand back an existing intent of another kind).
+async function instagramRecordIntent(car, mediaKind) {
   const headers = await tiktokFunctionHeaders();
   if (!headers) return false;
   try {
@@ -21739,6 +21751,9 @@ async function instagramRecordIntent(car) {
         intent: true,
         vin: car.vin,
         stock_number: car.stock_number || car.stock_num || null,
+        ...(mediaKind === "photo" || mediaKind === "carousel"
+          ? { kind: mediaKind }
+          : {}),
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -21752,9 +21767,10 @@ async function instagramRecordIntent(car) {
       return "already";
     }
     if (res.ok && data.ok && data.intent_id) {
-      instagramPendingByVin[car.vin] = { intentId: data.intent_id };
+      const heldKind = data.kind || mediaKind || "reel";
+      instagramPendingByVin[car.vin] = { intentId: data.intent_id, kind: heldKind };
       if (typeof applyFilters === "function") applyFilters();
-      return true;
+      return mediaKind ? heldKind : true;
     }
   } catch (e) { /* fall through — the tap path degrades honestly */ }
   return false;
@@ -21866,6 +21882,11 @@ async function instagramReelWatchTick() {
     for (const vin of vins) {
       const entry = instagramPendingByVin[vin];
       if (!entry || instagramCompletingByVin[vin]) continue;
+      // [IG-PHOTO-365] Picture intents belong to the finisher —
+      // it publishes them server-side from the car's photos.
+      // The watcher completes reel intents only; touching a
+      // picture intent here could publish a Reel over it.
+      if (entry.kind === "photo" || entry.kind === "carousel") continue;
       const car = rawInventory.find((c) => c.vin === vin);
       if (!car) continue; // not in the working set — the intent stays recorded
       const reel = vinReelFor(car);
@@ -21939,20 +21960,43 @@ async function postToInstagram(vin) {
     }
     return;
   }
-  // [IG-AUTO-REEL-353] No ready Reel: the photo fallback is GONE —
-  // Meta rejects photo posts from this flow (error 9007), so a car
-  // renders first and posts as a Reel, always. A car with no
-  // photos cannot render at all — the app's no-photo guard.
+  // No ready Reel. A car with no photos has nothing to post in
+  // any form — the app's no-photo guard.
   if (!hasRealPhoto(car)) {
     showTikTokToast(
-      "No photo — can't post. This car has no photos yet, so there's nothing to render its VIN Reel from."
+      "No photo — can't post. This car has no photos yet, so there's nothing to post to Instagram."
     );
     return;
   }
   if (pending) {
     showTikTokToast(
-      "This car's Reel is already rendering — it will post to Instagram automatically when it's ready."
+      pending.kind === "photo" || pending.kind === "carousel"
+        ? "This car's photo post is already queued — it will post to Instagram on its own in the next few minutes."
+        : "This car's Reel is already rendering — it will post to Instagram automatically when it's ready."
     );
+    return;
+  }
+  // [IG-PHOTO-365] Pictures over a render wait: when the car
+  // has usable photos, the tap posts them — a single photo or
+  // a carousel, per the media plan — instead of queueing a
+  // Reel render first. The intent is recorded server-side with
+  // its kind and the finisher publishes it within a few
+  // minutes; no tab needs to stay open. (The render path below
+  // now serves only the edge where a car is flagged as having
+  // photos but none resolve to a usable URL.)
+  await ensureFullCar(car);
+  const photoPlan = instagramMediaPlan(vehiclePhotoList(car), null);
+  if (photoPlan.kind === "photo" || photoPlan.kind === "carousel") {
+    const held = await instagramRecordIntent(car, photoPlan.kind);
+    if (held === "already") {
+      showTikTokToast("This car is already posted to Instagram — one post per car, so it won't go twice.");
+    } else if (held === "photo" || held === "carousel") {
+      showTikTokToast("Photo post queued — this car's pictures will post to Instagram on their own in the next few minutes. No need to keep this tab open.");
+    } else if (held) {
+      showTikTokToast("This car's Instagram post is already queued — it will go out on its own in the next few minutes.");
+    } else {
+      showTikTokToast("Couldn't queue the Instagram photo post — check the connection in Settings and try again.");
+    }
     return;
   }
   // Queue the render when none is in flight (a failed render is
