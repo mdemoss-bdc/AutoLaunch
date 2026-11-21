@@ -23,8 +23,11 @@
 // exists; the app queues the render and this function holds the
 // post intent, because instagram_posts is service-role-write
 // only):
-//   { intent: true, vin, stock_number? }     -> insert (or return
-//     the existing) instagram_posts row at status "awaiting_reel".
+//   { intent: true, vin, stock_number?, kind? } -> insert (or
+//     return the existing) instagram_posts row at status
+//     "awaiting_reel". kind is "reel" (the default), "photo" or
+//     "carousel" ([IG-PHOTO-365]); the finisher completes each
+//     intent with its own kind of media.
 //   { intent_id, intent_close: "<reason>" }  -> close a held
 //     intent whose post will never run (the render failed): the
 //     row is marked failed with the reason as its error_code.
@@ -35,8 +38,9 @@
 // Flow: verify the caller's Supabase JWT -> load their
 // instagram_connections row -> create the media container(s)
 // (POST /{ig-user-id}/media) -> poll the container's status_code
-// until FINISHED (video + carousel; photo containers are ready
-// immediately) -> publish (POST /{ig-user-id}/media_publish) ->
+// until FINISHED (every kind — image containers ingest
+// asynchronously too; see [IG-PHOTO-365] below) -> publish
+// (POST /{ig-user-id}/media_publish) ->
 // record the outcome in public.instagram_posts (the caller's own
 // rows only — the row is always keyed by the JWT-verified user id,
 // never by anything in the request body).
@@ -44,6 +48,22 @@
 // Supported subset, deliberately: single JPEG photo, photo carousel
 // (2–10 images), and one mp4 Reel. Stories, albums mixed with video,
 // and multi-video carousels are not supported by this endpoint.
+//
+// [IG-PHOTO-365] Photo posts fixed (2026-11-21). The photo path
+// used to skip the processing poll on the assumption that image
+// containers are ready the moment they are created. They are
+// not: Meta ingests image URLs asynchronously (seconds, up to
+// ~25s), and media_publish against a container that has not
+// reached FINISHED fails with error 9007 / subcode 2207027
+// ("Media ID is not available") — the failure that killed the
+// 2026-11-20 photo posts. Every container kind now polls to
+// FINISHED before publish, in the handler and in the finisher,
+// and carousel children are each polled to FINISHED before the
+// parent container is created. Intents carry their media kind:
+// { intent: true, kind: "photo" | "carousel" } holds a picture
+// intent the finisher completes from the car's inventory
+// photos (no reel involved); the finish pass dispatches on the
+// row's kind, ahead of the reel state machine.
 //
 // Instagram specifics that differ from TikTok:
 //   - Media must be hosted at a PUBLIC https URL Meta's servers can
@@ -428,6 +448,128 @@ async function publishReel(
   return { ok: true, mediaId, containerId: creationId };
 }
 
+// [IG-PHOTO-365] Poll one container to FINISHED, then publish
+// it — the shared tail of every photo publish. A processing
+// timeout is resumable: the container id comes back so the
+// caller can persist it for the resume pass.
+async function pollAndPublish(
+  accessToken: string,
+  igUserId: string,
+  creationId: string,
+): Promise<ReelPublishResult> {
+  const statusCode = await pollContainer(accessToken, creationId);
+  if (statusCode === "ERROR") {
+    return {
+      ok: false,
+      containerId: creationId,
+      body: { error: { message: "Meta reported the media container in ERROR state while processing." } },
+    };
+  }
+  if (statusCode !== "FINISHED") {
+    return {
+      ok: false,
+      timeout: true,
+      containerId: creationId,
+      body: { error: { message: "Instagram is still processing the media — retry the post shortly." } },
+    };
+  }
+  const published = await graphPost(`/${igUserId}/media_publish`, accessToken, {
+    creation_id: creationId,
+  });
+  const mediaId = published.body?.id as string | undefined;
+  if (!published.res.ok || !mediaId) {
+    return { ok: false, body: published.body, containerId: creationId };
+  }
+  return { ok: true, mediaId, containerId: creationId };
+}
+
+// [IG-PHOTO-365] The photo counterpart of publishReel: create,
+// process and publish one photo post (a single image, or a
+// carousel of 2–10). Every container — each carousel child, the
+// carousel parent, the single photo — is polled to FINISHED
+// before anything downstream touches it; publishing earlier is
+// exactly Meta's 9007 "Media ID is not available". A timeout on
+// the single/parent container is resumable (see pollAndPublish);
+// a child timeout is terminal — no parent exists to resume.
+async function publishPhoto(
+  accessToken: string,
+  igUserId: string,
+  imageUrls: string[],
+  caption: string,
+): Promise<ReelPublishResult> {
+  if (imageUrls.length > 1) {
+    const childIds: string[] = [];
+    for (const url of imageUrls) {
+      const child = await graphPost(`/${igUserId}/media`, accessToken, {
+        image_url: url,
+        is_carousel_item: "true",
+      });
+      if (!child.res.ok || !child.body?.id) {
+        return { ok: false, body: child.body, containerId: null };
+      }
+      const childId = child.body.id;
+      const childStatus = await pollContainer(accessToken, childId);
+      if (childStatus === "ERROR") {
+        return {
+          ok: false,
+          containerId: childId,
+          body: { error: { message: "Meta reported the media container in ERROR state while processing." } },
+        };
+      }
+      if (childStatus !== "FINISHED") {
+        return {
+          ok: false,
+          containerId: childId,
+          body: { error: { message: "Instagram took too long processing one of the carousel photos — the post was not published." } },
+        };
+      }
+      childIds.push(childId);
+    }
+    const parent = await graphPost(`/${igUserId}/media`, accessToken, {
+      media_type: "CAROUSEL",
+      children: childIds.join(","),
+      caption,
+    });
+    if (!parent.res.ok || !parent.body?.id) {
+      return { ok: false, body: parent.body, containerId: null };
+    }
+    return pollAndPublish(accessToken, igUserId, parent.body.id);
+  }
+  const created = await graphPost(`/${igUserId}/media`, accessToken, {
+    image_url: imageUrls[0],
+    caption,
+  });
+  if (!created.res.ok || !created.body?.id) {
+    return { ok: false, body: created.body, containerId: null };
+  }
+  return pollAndPublish(accessToken, igUserId, created.body.id);
+}
+
+// [IG-PHOTO-365] The photo set a picture intent publishes,
+// derived from the car's inventory row with the app's
+// instagramMediaPlan preference: image_url first, then photos,
+// then custom_photo_urls, exact-duplicate URLs dropped, and
+// JPEGs preferred whenever any are on offer (Meta requires
+// JPEG). "photo" publishes the first; "carousel" up to ten.
+function photoUrlsForIntent(
+  car: Record<string, unknown> | null,
+  intentKind: string,
+): string[] {
+  if (!car) return [];
+  const raw: string[] = [];
+  const push = (u: unknown) => {
+    if (typeof u === "string" && u && !raw.includes(u)) raw.push(u);
+  };
+  push(car.image_url);
+  if (Array.isArray(car.photos)) for (const u of car.photos) push(u);
+  if (Array.isArray(car.custom_photo_urls)) {
+    for (const u of car.custom_photo_urls) push(u);
+  }
+  const jpegs = raw.filter((u) => /\.jpe?g($|[?#])/i.test(u));
+  const pool = jpegs.length ? jpegs : raw;
+  return intentKind === "carousel" ? pool.slice(0, 10) : pool.slice(0, 1);
+}
+
 // Resolve the video a Reel publish for this car must use: the
 // user's own ready/staged video first, then an explicit fallback
 // supplied by the caller, then the latest ready rendered reel.
@@ -501,7 +643,7 @@ async function checkConnection(db: Db, userId: string): Promise<ConnCheck> {
 }
 
 type HoldResult =
-  | { kind: "held"; intentId: string; deduped: boolean }
+  | { kind: "held"; intentId: string; deduped: boolean; intentKind: string }
   | { kind: "already_posted" }
   | { kind: "not_connected" }
   | { kind: "token_expired" }
@@ -517,6 +659,7 @@ async function holdIntent(
   userId: string,
   vin: string,
   stockNumber: string | null,
+  intentKind = "reel",
 ): Promise<HoldResult> {
   const chk = await checkConnection(db, userId);
   if (chk.err === "lookup_failed") return { kind: "lookup_failed" };
@@ -535,7 +678,7 @@ async function holdIntent(
   // this VIN already is the intent — return it, never duplicate.
   const { data: existing } = await db
     .from("instagram_posts")
-    .select("id")
+    .select("id, kind")
     .eq("user_id", userId)
     .eq("vin", vin)
     .eq("status", "awaiting_reel")
@@ -549,12 +692,15 @@ async function holdIntent(
     // by design (the resolver never throws and its result is
     // not needed to hold the intent).
     await ensureInstagramUserVideo(db, userId, vin);
-    return { kind: "held", intentId: existing[0].id, deduped: true };
+    return {
+      kind: "held", intentId: existing[0].id, deduped: true,
+      intentKind: (existing[0].kind as string) ?? "reel",
+    };
   }
   const { data: inserted, error: insErr } = await db
     .from("instagram_posts")
     .insert({
-      user_id: userId, vin, stock_number: stockNumber, kind: "reel",
+      user_id: userId, vin, stock_number: stockNumber, kind: intentKind,
       media_id: null, container_id: null, status: "awaiting_reel",
       error_code: null, error_message: null,
     })
@@ -564,7 +710,7 @@ async function holdIntent(
     if ((insErr as { code?: string } | null)?.code === "23505") {
       const { data: raced } = await db
         .from("instagram_posts")
-        .select("id")
+        .select("id, kind")
         .eq("user_id", userId)
         .eq("vin", vin)
         .eq("status", "awaiting_reel")
@@ -572,14 +718,17 @@ async function holdIntent(
         .limit(1);
       if (raced && raced.length) {
         await ensureInstagramUserVideo(db, userId, vin);
-        return { kind: "held", intentId: raced[0].id, deduped: true };
+        return {
+          kind: "held", intentId: raced[0].id, deduped: true,
+          intentKind: (raced[0].kind as string) ?? "reel",
+        };
       }
     }
     console.error("instagram-post: intent record failed: " + (insErr?.message ?? "no row returned"));
     return { kind: "record_failed" };
   }
   await ensureInstagramUserVideo(db, userId, vin);
-  return { kind: "held", intentId: inserted.id, deduped: false };
+  return { kind: "held", intentId: inserted.id, deduped: false, intentKind };
 }
 
 // The finisher's caption: instagramCaptionFor's exact recipe, built
@@ -1321,6 +1470,95 @@ async function finishOneIntent(
   summary.published.push(vin ?? "");
 }
 
+// [IG-PHOTO-365] Publish one claimed picture intent (kind
+// "photo" or "carousel") from the car's inventory photos — no
+// reel is involved, so the finish pass dispatches here ahead of
+// the reel state machine. Mirrors finishOneIntent's outcome
+// vocabulary exactly (published / permission_pending / failed /
+// the resumable finishing timeout).
+async function finishPhotoIntent(
+  db: Db,
+  intent: { id: string; user_id: string; vin: string | null; stock_number: string | null; kind: string },
+  summary: FinishSummary,
+): Promise<void> {
+  const userId = intent.user_id;
+  const vin = intent.vin;
+  const chk = await checkConnection(db, userId);
+  if (chk.err || !chk.conn) {
+    await resolveIntentRow(db, intent.id, {
+      status: "failed",
+      error_code: chk.err === "token_expired" ? "instagram_token_expired" : "instagram_not_connected",
+      error_message: chk.err === "token_expired"
+        ? "Instagram login expired — reconnect Instagram in Settings."
+        : "Connect Instagram in Settings first.",
+    });
+    summary.resolved_failed.push(vin ?? "");
+    return;
+  }
+  const accessToken = chk.conn.access_token as string;
+  const igUserId = chk.conn.ig_user_id as string;
+  const car = vin ? await inventoryRow(db, userId, vin) : null;
+  const { mode: soldMode } = await soldSweepSettings(db, userId);
+  const caption = applySoldLegend(
+    buildCaption(car ?? (intent.stock_number ? { stock_number: intent.stock_number } : null)),
+    soldMode === "mark",
+  );
+  const stockNumber = intent.stock_number ?? ((car?.stock_number as string) ?? null);
+
+  const failInPlace = async (body: GraphBody, containerId: string | null) => {
+    const err = body?.error;
+    const message = err?.message ?? "Meta returned an error.";
+    const code = err?.code ?? null;
+    console.error(`instagram-post: finisher photo publish failed: ${code ?? "?"} ${message}`);
+    if (isPermissionError(body)) {
+      await resolveIntentRow(db, intent.id, {
+        status: "permission_pending", container_id: containerId,
+        error_code: "instagram_permission_pending", error_message: message,
+      });
+    } else {
+      await resolveIntentRow(db, intent.id, {
+        status: "failed", container_id: containerId,
+        error_code: code !== null ? String(code) : "meta_error", error_message: message,
+      });
+    }
+    summary.resolved_failed.push(vin ?? "");
+  };
+
+  const urls = photoUrlsForIntent(car, intent.kind);
+  if (!urls.length) {
+    await resolveIntentRow(db, intent.id, {
+      status: "failed",
+      error_code: "no_photos",
+      error_message: "This vehicle has no photos available to post.",
+    });
+    summary.resolved_failed.push(vin ?? "");
+    return;
+  }
+  const result = await publishPhoto(accessToken, igUserId, urls, caption);
+  if (!result.ok) {
+    if (result.timeout) {
+      // Same resumable rule as reels ([IG-RESUME-363]): the row
+      // stays "finishing" with its container persisted; the
+      // resume pass publishes the same container when Meta
+      // finishes processing it.
+      await resolveIntentRow(db, intent.id, {
+        status: "finishing", container_id: result.containerId ?? null,
+        error_code: "media_processing_timeout",
+        error_message: "Instagram is still processing the media — retry the post shortly.",
+      });
+      summary.resume_pending.push(vin ?? "");
+      return;
+    }
+    await failInPlace(result.body ?? {}, result.containerId ?? null);
+    return;
+  }
+  await resolveIntentRow(db, intent.id, {
+    status: "published", media_id: result.mediaId, container_id: result.containerId,
+    stock_number: stockNumber, error_code: null, error_message: null,
+  });
+  summary.published.push(vin ?? "");
+}
+
 
 // =====================================================================
 // [IG-RESUME-363] The resume pass (Matthew, 2026-11-21: "yes do
@@ -1647,7 +1885,7 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
   //    intent stays queued, untouched, for the next run.
   const { data: intents } = await db
     .from("instagram_posts")
-    .select("id, user_id, vin, stock_number, created_at")
+    .select("id, user_id, vin, stock_number, kind, created_at")
     .eq("status", "awaiting_reel")
     .order("created_at", { ascending: true })
     .limit(FINISH_PASS_SCAN_LIMIT);
@@ -1657,6 +1895,30 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
     const vin = intent.vin as string | null;
     if (!vin) {
       summary.skipped++;
+      continue;
+    }
+    // [IG-PHOTO-365] A picture intent publishes the car's
+    // photos — no reel, no user video, no render wait. It is
+    // claimed and finished here, ahead of the reel state
+    // machine, under the same fresh-start pacing.
+    const intentKind = (intent.kind as string) ?? "reel";
+    if (intentKind === "photo" || intentKind === "carousel") {
+      if (freshStarts >= FINISH_PUBLISH_LIMIT) break;
+      if (dryRun) {
+        freshStarts++;
+        summary.published.push(vin);
+        continue;
+      }
+      if (!(await claimIntent(intent.id))) {
+        summary.skipped++;
+        continue;
+      }
+      freshStarts++;
+      await finishPhotoIntent(
+        db,
+        { id: intent.id, user_id: userId, vin, stock_number: intent.stock_number ?? null, kind: intentKind },
+        summary,
+      );
       continue;
     }
     // [IG-UVID-357] A usable user video finishes the intent on
@@ -1790,6 +2052,7 @@ Deno.serve(async (req: Request) => {
   let vin: string | null = null;
   let stockNumber: string | null = null;
   let intentCreate = false;
+  let intentKind = "reel";
   let intentId: string | null = null;
   let intentClose = "";
   try {
@@ -1812,6 +2075,10 @@ Deno.serve(async (req: Request) => {
       typeof body?.stock_number === "string" && body.stock_number
         ? body.stock_number
         : null;
+    intentKind =
+      body?.kind === "photo" || body?.kind === "carousel"
+        ? (body.kind as string)
+        : "reel";
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
@@ -1849,7 +2116,7 @@ Deno.serve(async (req: Request) => {
     // whichever path parks it. The answers are the ones this mode
     // has always given, plus one: a car that already published
     // reports already_posted instead of holding a second intent.
-    const held = await holdIntent(db, userId, vin, stockNumber);
+    const held = await holdIntent(db, userId, vin, stockNumber, intentKind);
     if (held.kind === "lookup_failed") {
       return json({ error: "connection_lookup_failed" }, 500);
     }
@@ -1876,8 +2143,8 @@ Deno.serve(async (req: Request) => {
     }
     return json(
       held.deduped
-        ? { ok: true, intent_id: held.intentId, status: "awaiting_reel", deduped: true }
-        : { ok: true, intent_id: held.intentId, status: "awaiting_reel" },
+        ? { ok: true, intent_id: held.intentId, status: "awaiting_reel", deduped: true, kind: held.intentKind }
+        : { ok: true, intent_id: held.intentId, status: "awaiting_reel", kind: held.intentKind },
     );
   }
 
@@ -2113,6 +2380,34 @@ Deno.serve(async (req: Request) => {
         return failWith("media_create_child", child.body, null);
       }
       childIds.push(child.body.id);
+      // [IG-PHOTO-365] A carousel child must be FINISHED before
+      // the parent container is created — Meta rejects a parent
+      // whose children are still ingesting, with the same 9007
+      // "Media ID is not available" the photo path hit. A child
+      // timeout is terminal: there is no parent container for
+      // the resume pass to publish later.
+      const childStatus = await pollContainer(accessToken, child.body.id);
+      if (childStatus === "ERROR") {
+        return failWith("media_processing", { error: { message: "Meta reported the media container in ERROR state while processing." } }, child.body.id);
+      }
+      if (childStatus !== "FINISHED") {
+        await recordOutcome(db, {
+          user_id: userId, vin, stock_number: stockNumber, kind,
+          media_id: null, container_id: child.body.id, status: "failed",
+          error_code: "media_processing_timeout",
+          error_message: "Instagram took too long processing one of the carousel photos — the post was not published.",
+        }, intentId);
+        return json(
+          {
+            ok: false,
+            creation_id: child.body.id,
+            status: childStatus || "IN_PROGRESS",
+            error: "media_processing_timeout",
+            message: "Instagram took too long processing one of the carousel photos — the post was not published.",
+          },
+          502,
+        );
+      }
     }
     const parent = await graphPost(`/${igUserId}/media`, accessToken, {
       media_type: "CAROUSEL",
@@ -2134,10 +2429,12 @@ Deno.serve(async (req: Request) => {
     creationId = created.body.id;
   }
 
-  // 2) Video and carousel containers are processed asynchronously:
-  //    poll until FINISHED. Photo containers are ready immediately;
-  //    skip the poll for them.
-  if (kind !== "photo") {
+  // 2) EVERY container kind is processed asynchronously — image
+  //    containers included. Poll until FINISHED before publish:
+  //    skipping this poll for photos is what produced error 9007
+  //    ("Media ID is not available") on the 2026-11-20 photo
+  //    posts ([IG-PHOTO-365]).
+  {
     const statusCode = await pollContainer(accessToken, creationId);
     if (statusCode === "ERROR") {
       return failWith("media_processing", { error: { message: "Meta reported the media container in ERROR state while processing." } }, creationId);
