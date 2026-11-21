@@ -24007,25 +24007,33 @@ function renderRibbonStatuses() {
 }
 
 // ---- Daily posting limit (Safe posting limits) -----------------------------
-// Usage today = queue rows created today that are not failed, plus cars
-// whose marketplace_posted_at is today and were not already counted above.
+// Usage today = the distinct VINs that have posted or are about to post
+// today: cars whose marketplace_posted_at is today, plus the VINs on
+// post rows still pending or processing in the queue — whenever those
+// rows were created. A row queued on an earlier day but still waiting
+// is a post that will go out today, so it counts against today's cap
+// (the pre-2026-11-21 read filtered queue rows to created-today, which
+// made a carried-over backlog invisible to both this gate and the
+// counter label). Failed rows never count. Delete rows are removals,
+// never posts, and are excluded.
 async function getDailyPostUsage() {
   if (!currentUser) return 0;
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const startISO = start.toISOString();
   const countedVins = new Set();
-  let used = 0;
   try {
     const { data: qRows, error: qErr } = await supabaseClient
       .from("auto_posting_queue")
-      .select("vin, status, created_at")
+      .select("vin, status, action")
       .eq("user_id", currentUser.id)
       .eq("target_channel", "marketplace")
-      .gte("created_at", startISO);
+      .neq("action", "delete");
     if (qErr) throw qErr;
     (qRows || []).forEach(r => {
-      if (r.status !== "failed") { used++; if (r.vin) countedVins.add(r.vin); }
+      if ((r.status === "pending" || r.status === "processing") && r.vin) {
+        countedVins.add(r.vin);
+      }
     });
     const { data: posted, error: pErr } = await supabaseClient
       .from("scraped_inventory")
@@ -24033,41 +24041,44 @@ async function getDailyPostUsage() {
       .eq("user_id", currentUser.id)
       .gte("marketplace_posted_at", startISO);
     if (pErr) throw pErr;
-    (posted || []).forEach(r => { if (r.vin && !countedVins.has(r.vin)) used++; });
+    (posted || []).forEach(r => { if (r.vin) countedVins.add(r.vin); });
   } catch (err) {
     console.error("Daily limit usage check failed:", err);
   }
-  return used;
+  return countedVins.size;
 }
 
 // Status split behind the SAME two reads getDailyPostUsage makes, so the
 // counter label can say what the one number is made of: posted = cars
-// marked posted today (inventory) whose VIN is not on any of today's
-// queue rows; queued = today's pending + processing queue rows; failed =
-// today's failed queue rows. Delete rows are removals, never posts, and
-// are skipped. The aggregate `used` above (the bar and the limit gate)
-// is unchanged — this only explains it.
+// marked posted today (inventory) whose VIN is not on a post row still
+// pending or processing; queued = post rows pending or processing right
+// now, whenever they were created (a carried-over backlog is still
+// today's outflow); failed = post rows that failed today. Delete rows
+// are removals, never posts, and are excluded. The aggregate `used`
+// above (the bar and the limit gate) is the union of the posted and
+// queued VIN sets — this only explains it.
 async function getDailyPostUsageSplit() {
   const split = { posted: 0, queued: 0, failed: 0 };
   if (!currentUser) return split;
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const startISO = start.toISOString();
-  const queueVins = new Set();
+  const liveQueueVins = new Set();
   try {
     const { data: qRows, error: qErr } = await supabaseClient
       .from("auto_posting_queue")
       .select("vin, status, action, created_at")
       .eq("user_id", currentUser.id)
       .eq("target_channel", "marketplace")
-      .gte("created_at", startISO);
+      .neq("action", "delete");
     if (qErr) throw qErr;
     (qRows || []).forEach(r => {
-      if (r.action === "delete") return;
-      if (r.vin) queueVins.add(r.vin);
-      if (r.status === "failed") split.failed++;
-      else if (r.status === "pending" || r.status === "processing") split.queued++;
-      else split.posted++;
+      if (r.status === "pending" || r.status === "processing") {
+        split.queued++;
+        if (r.vin) liveQueueVins.add(r.vin);
+      } else if (r.status === "failed" && new Date(r.created_at) >= start) {
+        split.failed++;
+      }
     });
     const { data: posted, error: pErr } = await supabaseClient
       .from("scraped_inventory")
@@ -24075,7 +24086,7 @@ async function getDailyPostUsageSplit() {
       .eq("user_id", currentUser.id)
       .gte("marketplace_posted_at", startISO);
     if (pErr) throw pErr;
-    (posted || []).forEach(r => { if (r.vin && !queueVins.has(r.vin)) split.posted++; });
+    (posted || []).forEach(r => { if (r.vin && !liveQueueVins.has(r.vin)) split.posted++; });
   } catch (err) {
     console.error("Daily limit usage split failed:", err);
   }
