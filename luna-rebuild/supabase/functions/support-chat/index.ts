@@ -834,7 +834,7 @@ REFUNDS (Matthew's policy — state it plainly, never soften it):
   cancelling, charged in error) are reviewed personally. Filing the
   ticket is the whole offer: do not predict or promise its outcome.
 - Every account also has its OWN daily posting safety limit and pacing
-  settings (Settings -> Automation). The stricter of the plan cap and
+  settings (Safe posting limits, on the dashboard). The stricter of the plan cap and
   the personal limit is the one that applies.
 - The FIRST sync on a brand-new account never counts against the sync
   cadence — the cadence clock starts from the second sync onward.
@@ -880,7 +880,7 @@ POSTING — HOW IT WORKS AND WHY CARS FAIL:
   time, roughly once a minute, and deletes the queue row when done —
   an empty queue usually means the work finished, not a bug.
 - Pacing: after a post, the next post waits the user's post delay
-  (Settings -> Automation, post_delay_minutes) since the last post.
+  (Safe posting limits, post_delay_minutes) since the last post.
 - The daily counter the app shows ("X posted · Y queued · Z failed of
   N today") counts the cars posted today plus every post still
   waiting in the queue (pending or processing) — whenever it was
@@ -941,7 +941,7 @@ VIN REELS (Automate tier and up):
   or table row, or the car's menu -> Create reel) or the VIN Reel
   section in the car's details. The car's chip shows the state:
   Reel queued, Rendering reel, Reel ready, or Reel failed.
-- Settings -> "Make a video before posting": when ON, auto-posts
+- Settings -> Facebook -> "Make a video before posting": when ON, auto-posts
   hold each car until its reel is ready, then the video is
   attached to the Marketplace post right after it goes up. A car
   NEVER posts without its video — no ready video, no post.
@@ -967,13 +967,13 @@ INSTAGRAM (Automate tier and up):
 - Instagram jobs appear in the Post Queue as display-only rows
   so the rep can watch them publish; a finished Instagram post
   leaves the queue list (its record stays with the car).
-- Auto-posting to Instagram is its own Settings toggle (off by
+- Auto-posting to Instagram is its own toggle in Settings -> Instagram (off by
   default). A server finisher publishes queued Instagram posts
   every few minutes, so a locked PC does not stall them; if
   Meta takes too long processing a video, the post resumes
   itself instead of failing.
 - When a car sells, its Instagram post follows the account's
-  sold mode (Settings): "delete" takes the post down; "mark"
+  sold mode (Settings -> Instagram): "delete" takes the post down; "mark"
   leaves the post up but locks its comments — and every new
   caption carries a line explaining that locked comments mean
   the car is sold. Sold handling runs under the same
@@ -1150,7 +1150,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "Automations: This is the master switch for the two automations next to it: auto-posting new arrivals and auto delete & repost. Flip it and both flip with it.\nSteps:\n1. Flip the Automations switch on — both automation cards beside it turn on with it.\n2. Set each one up on its own card (frequency, limits). The master switch never changes their settings.\n3. Turn a single card off anytime without touching the others.\n4. The same Auto Posting switch also lives in Settings, under the Automation tab.\nGood to know:\n- The master switch shows on whenever at least one automation is on — it is only off when both are off. The status line on this card always says exactly what is running.\n- Automations work through the Post Queue and the Chrome extension, and every post counts against your daily posting limit."
+  "text": "Automations: This is the master switch for the two automations next to it: auto-posting new arrivals and auto delete & repost. Flip it and both flip with it.\nSteps:\n1. Flip the Automations switch on — both automation cards beside it turn on with it.\n2. Set each one up on its own card (frequency, limits). The master switch never changes their settings.\n3. Turn a single card off anytime without touching the others.\n4. The same Auto Posting switch also lives in Settings, under the Facebook tab.\nGood to know:\n- The master switch shows on whenever at least one automation is on — it is only off when both are off. The status line on this card always says exactly what is running.\n- Automations work through the Post Queue and the Chrome extension, and every post counts against your daily posting limit."
  },
  {
   "id": "guide:autopost",
@@ -1217,7 +1217,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "Auto-post new arrivals: Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus your Facebook Page if you have switched that channel on. (Instagram posting is live, and TikTok is on its way — Automate-plan channels.)\nSteps:\n1. Flip the switch on this card — or open the card and press Done, because saving turns it on.\n2. Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.\n3. Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.\n4. Set how many may post per day under Safe posting limits — that limit covers everything that goes out in a day, and the auto poster fills the room that is left, newest cars first.\n5. Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels.\nGood to know:\n- Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.\n- Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.\n- Every auto-posted car counts against your daily posting limit, same as cars you queue by hand. …"
+  "text": "Auto-post new arrivals: Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus your Facebook Page if you have switched that channel on. (Instagram posting is live, and TikTok is on its way — Automate-plan channels.)\nSteps:\n1. Flip the switch on this card — or open the card and press Done, because saving turns it on.\n2. Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.\n3. Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.\n4. Set how many may post per day under Safe posting limits — that limit covers everything that goes out in a day, and the auto poster fills the room that is left, newest cars first.\n5. Want more than Marketplace? Each channel's switch lives in Settings under its own tab — Facebook, Instagram or TikTok.\nGood to know:\n- Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.\n- Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.\n- Every auto-posted car counts against your daily posting limit, same as cars you queue by hand. …"
  },
  {
   "id": "guide:repost",
@@ -2088,7 +2088,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "Syndication channels (TikTok, Instagram, Facebook Pages): Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. Instagram is live too: connect your business account and your cars post there as reels — and when a car sells, its Instagram post comes down automatically (or has its comments locked instead, your choice in Settings). TikTok is still in review with TikTok and lights up the moment it clears. Instagram and TikTok are Automate-plan channels.\nSteps:\n1. Open Settings → Automation → Syndication Channels.\n2. Connect the account you actually sell from — posting runs in that account's name.\n3. Connect Instagram and turn on the Facebook Page channel there — TikTok lights up there when it launches.\n4. Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel.\nGood to know:\n- Channel rules differ (video-first on TikTok, a business or creator account on Instagram). AutoLaunch formats per channel — you write nothing per platform.\n- If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
+  "text": "Syndication channels (TikTok, Instagram, Facebook Pages): Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. Instagram is live too: connect your business account and your cars post there as reels — and when a car sells, its Instagram post comes down automatically (or has its comments locked instead, your choice in Settings → Instagram). TikTok is still in review with TikTok and lights up the moment it clears. Instagram and TikTok are Automate-plan channels.\nSteps:\n1. Open Settings and pick the channel's own tab — Facebook, Instagram or TikTok.\n2. Connect the account you actually sell from — posting runs in that account's name.\n3. Connect Instagram in the Instagram tab and turn on the Facebook Page channel in the Facebook tab — TikTok lights up in its own tab when it launches.\n4. Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel.\nGood to know:\n- Channel rules differ (video-first on TikTok, a business or creator account on Instagram). AutoLaunch formats per channel — you write nothing per platform.\n- If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
  },
  {
   "id": "guide:introvideos",
@@ -2443,7 +2443,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "From the AutoLaunch Terms of Service (version 2026-10-26):\nREFUNDS: All sales are final. We do not offer refunds on any plan, including multi-year prepaid terms and the Support Plan. That includes partial periods: if you cancel mid-cycle, no amount is returned for the unused part of the period — your access simply continues until the paid period ends, as described above. Before you pay, the app shows this policy and asks you to confirm that you understand it, and checkout asks you to accept these Terms. If you are not willing to buy on a final-sale basis, please use the free trial first.\nCANCELLING: Monthly plans renew on the same day of the month the subscription started, charged automatically until cancelled. Cancel anytime in Settings -> Plans (\"Manage or cancel subscription\") — cancelling stops future charges and access continues until the end of the period already paid for.\nFREE TRIAL: New accounts may start one 4-day free trial: no card is required. The trial runs in two stages — on days 1–2 you get the Self Post features, with up to 5 queued posts per day and an inventory sync once every 18 hours; on days 3–4 the full Automate plan unlocks, including Luca and Prospects, with no plan cap on queued posts and an inventory sync once every 6 hours. Trials are limited to one per person and per network, and to one per dealership: if a free trial has already been used for your dealership's inventory source, another trial for that dealership is not eligible. Additional accounts from the same person or network are not eligible for another trial. When the trial ends, a paid plan is required to keep using AutoLaunch.\nPREPAID TERMS: Solo plans can also be bought as prepaid terms: 1 year (5% off the monthly price), 2 years (10% off), or 3 years (15% off), paid in a single one-time payment. A prepaid term is not a subscription: it does not renew automatically. Your access runs until the term's end date, which is shown in Settings → Plans before and after you buy; buying another …"
+  "text": "From the AutoLaunch Terms of Service (version 2026-11-21):\nREFUNDS: All sales are final. We do not offer refunds on any plan, including multi-year prepaid terms and the Support Plan. That includes partial periods: if you cancel mid-cycle, no amount is returned for the unused part of the period — your access simply continues until the paid period ends, as described above. Before you pay, the app shows this policy and asks you to confirm that you understand it, and checkout asks you to accept these Terms. If you are not willing to buy on a final-sale basis, please use the free trial first.\nCANCELLING: Monthly plans renew on the same day of the month the subscription started, charged automatically until cancelled. Cancel anytime in Settings -> Plans (\"Manage or cancel subscription\") — cancelling stops future charges and access continues until the end of the period already paid for.\nFREE TRIAL: New solo accounts may start one free 5-day trial: no card is required. The full Automate plan runs from day 1, with 5 automatic posts and 10 manual posts included. The trial ends when both allowances are used up or 5 days pass, whichever comes first. When the trial ends, a paid plan is required to keep using AutoLaunch. Trials are limited to one per person, per inbox, and per install: additional accounts from the same person are not eligible for another trial. Dealership accounts start with a free 4-day dealership trial instead. Dealership trials are limited to one per dealership: if a free trial has already been used for your dealership's inventory source, another trial for that dealership is not eligible.\nPREPAID TERMS: Solo plans can also be bought as prepaid terms: 1 year (5% off the monthly price), 2 years (10% off), or 3 years (15% off), paid in a single one-time payment. A prepaid term is not a subscription: it does not renew automatically. Your access runs until the term's end date, which is shown in Settings → Plans before and after you buy; buying another …"
  },
  {
   "id": "referrals",
