@@ -656,6 +656,10 @@ interface FinishSummary {
   published: string[];
   closed: string[];
   resolved_failed: string[];
+  // [IG-RESUME-363] Resumed publishes (the post landed on a
+  // later run) and posts still waiting on Meta's processing.
+  resumed: string[];
+  resume_pending: string[];
   reclaimed: number;
   skipped: number;
   // [IG-SOLD-359] The sold sweep's outcomes, by VIN.
@@ -675,6 +679,22 @@ interface FinishSummary {
 // pass stays small and the cron's cadence does the volume.
 const FINISH_PUBLISH_LIMIT = 3;
 const FINISH_PARK_LIMIT = 25;
+// [IG-PACE-364] Pacing (Matthew, 2026-11-21: "instagram fails a
+// lot maybe we need to space them out more?" — today's 17-intent
+// burst produced 6 processing timeouts; Meta's per-account
+// processing contends under bursts). A finish_pending run may
+// START at most FINISH_PUBLISH_LIMIT brand-new publishes
+// (container creation + poll). The finish pass therefore scans a
+// wider window of parked intents, oldest first, and counts only
+// actual starts: an intent whose reel is not ready does not
+// consume the cap, and intents past the cap stay queued untouched
+// for the next run (the finisher runs every 3 minutes, so a
+// 17-car burst drains in ~18 minutes instead of all at once).
+// The [IG-RESUME-363] resume pass is EXEMPT from this cap — it is
+// the recovery path: one status check plus one publish call on
+// an already-processed container, and throttling recovery would
+// strand the very posts pacing is meant to protect.
+const FINISH_PASS_SCAN_LIMIT = 50;
 
 // =====================================================================
 // [IG-SOLD-359] The sold sweep — two phases inside finish_pending,
@@ -1277,12 +1297,18 @@ async function finishOneIntent(
   const result = await publishReel(accessToken, igUserId, effectiveVideoUrl, caption);
   if (!result.ok) {
     if (result.timeout) {
+      // [IG-RESUME-363] Slow processing is not a failure: the
+      // container is already persisted on the row, so leave the
+      // row at "finishing" (the app renders that as "Posting to
+      // Instagram") with the timeout code as a NON-terminal
+      // marker. The resume pass re-checks the same container on
+      // later runs and publishes it when Meta finishes.
       await resolveIntentRow(db, intent.id, {
-        status: "failed", container_id: result.containerId ?? null,
+        status: "finishing", container_id: result.containerId ?? null,
         error_code: "media_processing_timeout",
         error_message: "Instagram is still processing the media — retry the post shortly.",
       });
-      summary.resolved_failed.push(vin ?? "");
+      summary.resume_pending.push(vin ?? "");
       return;
     }
     await failInPlace(result.body ?? {}, result.containerId ?? null);
@@ -1295,12 +1321,178 @@ async function finishOneIntent(
   summary.published.push(vin ?? "");
 }
 
+
+// =====================================================================
+// [IG-RESUME-363] The resume pass (Matthew, 2026-11-21: "yes do
+// this" — after four of his posts "failed" on processing timeouts
+// and every container was later found FINISHED and published by
+// hand). A media-processing timeout is no longer a failure on
+// either publish path: the row stays at "finishing" with its
+// container_id persisted and error_code "media_processing_timeout"
+// as a NON-terminal marker (the app keys its pill off status, so
+// the user sees "Posting to Instagram", never "Failed"). Meta
+// containers routinely finish minutes later and stay publishable
+// for ~24h, so each finisher run re-checks the SAME container —
+// never a second one — and publishes it when Meta says FINISHED.
+// The pass runs AFTER the finish pass, so brand-new posts always
+// go first; a resume check is one cheap status GET per row.
+// =====================================================================
+const RESUME_CHECK_LIMIT = 10;
+const RESUME_CONTAINER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+async function resumeTimedOutPublishes(
+  db: Db,
+  summary: FinishSummary,
+  dryRun: boolean,
+): Promise<void> {
+  const { data: rows } = await db
+    .from("instagram_posts")
+    .select("id, user_id, vin, container_id, media_id, error_code, created_at")
+    .eq("status", "finishing")
+    .order("created_at", { ascending: true })
+    .limit(50);
+  const resumable = (rows ?? []).filter((row) =>
+    row.container_id && !row.media_id &&
+    row.error_code === "media_processing_timeout"
+  ).slice(0, RESUME_CHECK_LIMIT);
+  const connCache = new Map<string, ConnCheck>();
+  for (const row of resumable) {
+    const vin = (row.vin as string) ?? "";
+    if (dryRun) {
+      // Dry-run honesty: report the would-resume, write nothing,
+      // call nothing (the container's real state is unknowable
+      // without the GET a dry run must not make).
+      summary.resumed.push(vin);
+      continue;
+    }
+    let chk = connCache.get(row.user_id as string);
+    if (!chk) {
+      chk = await checkConnection(db, row.user_id as string);
+      connCache.set(row.user_id as string, chk);
+    }
+    if (chk.err || !chk.conn) continue; // no live connection — the row waits, unwedged
+    const accessToken = chk.conn.access_token as string;
+    const igUserId = chk.conn.ig_user_id as string;
+    // Atomic claim: flip the marker timeout -> resuming. Exactly
+    // one overlapping run can win the flip; the loser matches
+    // nothing and moves on, so a resumed row can never be
+    // double-published. A claim whose run dies is reclaimed by
+    // step 0 like any other dead claim (its marker no longer
+    // reads as a resumable timeout).
+    const { data: claimed, error: claimErr } = await db
+      .from("instagram_posts")
+      .update({ error_code: "media_processing_resuming" })
+      .eq("id", row.id)
+      .eq("status", "finishing")
+      .eq("error_code", "media_processing_timeout")
+      .select("id");
+    if (claimErr || !claimed || claimed.length === 0) continue;
+    const resolveClaimed = async (fields: Record<string, unknown>) => {
+      const { error } = await db
+        .from("instagram_posts")
+        .update(fields)
+        .eq("id", row.id)
+        .eq("status", "finishing")
+        .eq("error_code", "media_processing_resuming");
+      if (error) console.error("instagram-post: resume resolve failed: " + error.message);
+    };
+    let st: { res: Response; body: GraphBody };
+    try {
+      st = await graphGet(`/${row.container_id}?fields=status_code,status`, accessToken);
+    } catch {
+      await resolveClaimed({ error_code: "media_processing_timeout" });
+      continue;
+    }
+    if (st.body?.error) {
+      const code = st.body.error.code ?? null;
+      if (code === 190) {
+        // The token died between the connection check and the
+        // GET: hand the claim back so a later run can resume it.
+        await resolveClaimed({ error_code: "media_processing_timeout" });
+        continue;
+      }
+      await resolveClaimed({
+        status: "failed",
+        error_code: code !== null ? String(code) : "meta_error",
+        error_message: st.body.error.message ?? "Meta returned an error.",
+      });
+      summary.resolved_failed.push(vin);
+      continue;
+    }
+    const statusCode = (st.body?.status_code as string) ?? "";
+    if (statusCode === "FINISHED") {
+      let published: { res: Response; body: GraphBody } | null = null;
+      try {
+        published = await graphPost(`/${igUserId}/media_publish`, accessToken, {
+          creation_id: row.container_id as string,
+        });
+      } catch {
+        published = null;
+      }
+      if (!published) {
+        await resolveClaimed({ error_code: "media_processing_timeout" });
+        continue;
+      }
+      const mediaId = published.body?.id as string | undefined;
+      if (published.res.ok && mediaId) {
+        await resolveClaimed({
+          status: "published", media_id: mediaId,
+          error_code: null, error_message: null,
+        });
+        summary.resumed.push(vin);
+      } else if (isPermissionError(published.body ?? {})) {
+        await resolveClaimed({
+          status: "permission_pending",
+          error_code: "instagram_permission_pending",
+          error_message: published.body?.error?.message ?? "Meta returned an error.",
+        });
+        summary.resolved_failed.push(vin);
+      } else {
+        const err = published.body?.error;
+        await resolveClaimed({
+          status: "failed",
+          error_code: err?.code != null ? String(err.code) : "meta_error",
+          error_message: err?.message ?? "Meta returned an error.",
+        });
+        summary.resolved_failed.push(vin);
+      }
+      continue;
+    }
+    if (statusCode === "ERROR" || statusCode === "EXPIRED") {
+      await resolveClaimed({
+        status: "failed",
+        error_code: "media_processing_error",
+        error_message: (st.body?.status as string) ?? statusCode,
+      });
+      summary.resolved_failed.push(vin);
+      continue;
+    }
+    // Still processing (IN_PROGRESS, or a transient empty read):
+    // the container gets 24h from the row's creation, then the
+    // post fails honestly as expired.
+    const createdMs = Date.parse(row.created_at as string);
+    if (Number.isFinite(createdMs) && Date.now() - createdMs > RESUME_CONTAINER_MAX_AGE_MS) {
+      await resolveClaimed({
+        status: "failed",
+        error_code: "media_processing_expired",
+        error_message: "Instagram took too long processing the video — the post was not published.",
+      });
+      summary.resolved_failed.push(vin);
+      continue;
+    }
+    // Hand the claim back untouched: still resumable next run.
+    await resolveClaimed({ error_code: "media_processing_timeout" });
+    summary.resume_pending.push(vin);
+  }
+}
+
 // The finisher itself. dryRun reports the same decisions with no
 // writes and no Meta calls.
 async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
   const summary: FinishSummary = {
     parked: [], reels_queued: [], published: [], closed: [],
-    resolved_failed: [], reclaimed: 0, skipped: 0,
+    resolved_failed: [], resumed: [], resume_pending: [],
+    reclaimed: 0, skipped: 0,
     sold_closed: [], sold_marked: [], sold_unmarked: [],
     sold_deleted: [], sold_delete_pending: [], sold_delete_failed: [],
     marked: [], mark_pending: [], mark_failed: [],
@@ -1313,12 +1505,20 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
   //    one outcome this build exists to prevent. The owner re-taps
   //    if the car truly never appeared.
   const staleBefore = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-  const { data: stale } = await db
+  const { data: staleRaw } = await db
     .from("instagram_posts")
-    .select("id")
+    .select("id, container_id, media_id, error_code")
     .eq("status", "finishing")
     .lt("created_at", staleBefore);
-  if (stale && stale.length) {
+  // [IG-RESUME-363] A media-processing-timeout row (container
+  // persisted, no media yet, timeout marker) is resumable, not
+  // abandoned — the resume pass below owns it for 24h, so the
+  // reclaim must never fail it as interrupted.
+  const stale = (staleRaw ?? []).filter((row) => !(
+    row.container_id && !row.media_id &&
+    row.error_code === "media_processing_timeout"
+  ));
+  if (stale.length) {
     summary.reclaimed = stale.length;
     if (!dryRun) {
       for (const row of stale) {
@@ -1441,12 +1641,17 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
 
   // B) FINISH PASS — every parked intent (manual or auto), oldest
   //    first: claim it atomically, then let its reel's state decide.
+  //    [IG-PACE-364] The scan window is wider than the publish cap:
+  //    only actual publish starts count toward FINISH_PUBLISH_LIMIT,
+  //    and once the cap is hit the loop stops — every remaining
+  //    intent stays queued, untouched, for the next run.
   const { data: intents } = await db
     .from("instagram_posts")
     .select("id, user_id, vin, stock_number, created_at")
     .eq("status", "awaiting_reel")
     .order("created_at", { ascending: true })
-    .limit(FINISH_PUBLISH_LIMIT);
+    .limit(FINISH_PASS_SCAN_LIMIT);
+  let freshStarts = 0;
   for (const intent of intents ?? []) {
     const userId = intent.user_id as string;
     const vin = intent.vin as string | null;
@@ -1460,7 +1665,9 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
     // this post's video, the same precedence as Marketplace.
     const userVideoUrl = await ensureInstagramUserVideo(db, userId, vin, !dryRun);
     if (userVideoUrl) {
+      if (freshStarts >= FINISH_PUBLISH_LIMIT) break;
       if (dryRun) {
+        freshStarts++;
         summary.published.push(vin);
         continue;
       }
@@ -1468,6 +1675,7 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
         summary.skipped++;
         continue;
       }
+      freshStarts++;
       await finishOneIntent(
         db,
         { id: intent.id, user_id: userId, vin, stock_number: intent.stock_number ?? null },
@@ -1512,7 +1720,9 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
       summary.skipped++;
       continue;
     }
+    if (freshStarts >= FINISH_PUBLISH_LIMIT) break;
     if (dryRun) {
+      freshStarts++;
       summary.published.push(vin);
       continue;
     }
@@ -1520,6 +1730,7 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
       summary.skipped++;
       continue;
     }
+    freshStarts++;
     await finishOneIntent(
       db,
       { id: intent.id, user_id: userId, vin, stock_number: intent.stock_number ?? null },
@@ -1527,6 +1738,11 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
       summary,
     );
   }
+
+  // [IG-RESUME-363] Resume pass, after the finish pass so
+  // brand-new posts go first: publish the timed-out containers
+  // Meta has since finished processing.
+  await resumeTimedOutPublishes(db, summary, dryRun);
 
   // [IG-SOLD-359] The delete sweep proper: two-sweep-confirmed
   // takedowns of published posts for sold/exited cars, gated on
@@ -1927,9 +2143,16 @@ Deno.serve(async (req: Request) => {
       return failWith("media_processing", { error: { message: "Meta reported the media container in ERROR state while processing." } }, creationId);
     }
     if (statusCode !== "FINISHED") {
+      // [IG-RESUME-363] Same rule as the finisher: a processing
+      // timeout is resumable, not failed. The row stays at
+      // "finishing" with its container persisted and the timeout
+      // code as a non-terminal marker; the finisher's resume
+      // pass publishes the same container when Meta finishes.
+      // The HTTP answer stays the honest non-success it has
+      // always been — the post has NOT published yet.
       await recordOutcome(db, {
         user_id: userId, vin, stock_number: stockNumber, kind,
-        media_id: null, container_id: creationId, status: "failed",
+        media_id: null, container_id: creationId, status: "finishing",
         error_code: "media_processing_timeout",
         error_message: "Instagram is still processing the media — retry the post shortly.",
       }, intentId);
