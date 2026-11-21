@@ -85,6 +85,22 @@
 // refused with the intent mode's already_posted answer — the
 // re-tap-after-success duplicate class dies here too.
 //
+// [IG-SOLD-359] Sold = ads down everywhere (Matthew, 2026-11-21):
+// when a vehicle sells or exits the feed, its Instagram post comes
+// down too — the same rule Marketplace has always had, gated by
+// the SAME user_settings.auto_delete_on_exit_enabled switch (no
+// new setting, no per-platform toggle). The finisher's sold sweep
+// (inside finish_pending, so no new cron) closes awaiting_reel
+// intents for sold/exited cars before they can publish, and
+// deletes published posts via DELETE /{media-id}. Deletion is
+// two-sweep confirmed (a candidate mark on one pass, the delete
+// on a later pass where the car still reads sold/exited) so a
+// feed glitch can never wipe a grid. Meta gates DELETE behind
+// instagram_manage_contents — NOT in the submitted App Review
+// draft; until that round passes, deletes land only for app-role
+// accounts (the owner unlock), and everyone else's rows park at
+// delete_permission_pending instead of retrying every run.
+//
 // Meta tokens are never returned to the browser or logged.
 // =====================================================================
 
@@ -269,6 +285,43 @@ async function graphGet(
     body = {};
   }
   return { res, body };
+}
+
+// [IG-SOLD-359] DELETE on a Graph object — the sold sweep's one
+// call (DELETE /{ig-media-id}). Same version handling as every
+// other Graph call in this function (GRAPH_VERSION, v21.0 by
+// default); the version is deliberately NOT bumped for delete
+// alone — whether v21 serves DELETE is what the first live
+// proof answers.
+async function graphDelete(
+  path: string,
+  accessToken: string,
+): Promise<{ res: Response; body: GraphBody }> {
+  const url = `${GRAPH}${path}${path.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(accessToken)}`;
+  const res = await fetch(url, { method: "DELETE" });
+  let body: GraphBody = {};
+  try {
+    body = await res.json();
+  } catch {
+    body = {};
+  }
+  return { res, body };
+}
+
+// [IG-SOLD-359] A DELETE failure is the not-yet-approved
+// permission state when Meta says the app lacks the contents
+// permission: the delete sibling of isPermissionError, naming
+// instagram_manage_contents instead of instagram_content_publish.
+// Token failures (code 190) are NOT this.
+function isDeletePermissionError(body: GraphBody): boolean {
+  const err = body?.error;
+  if (!err) return false;
+  if (err.code === 190) return false;
+  const msg = `${err.message ?? ""}`;
+  if (/instagram_manage_contents/i.test(msg)) return true;
+  if ((err.code === 10 || err.code === 200) && err.type === "OAuthException") return true;
+  if ((err.code === 10 || err.code === 200) && /permission/i.test(msg)) return true;
+  return false;
 }
 
 // Poll a container until Meta finishes processing it (up to ~10
@@ -470,12 +523,277 @@ interface FinishSummary {
   resolved_failed: string[];
   reclaimed: number;
   skipped: number;
+  // [IG-SOLD-359] The sold sweep's outcomes, by VIN.
+  sold_closed: string[];
+  sold_marked: string[];
+  sold_unmarked: string[];
+  sold_deleted: string[];
+  sold_delete_pending: string[];
+  sold_delete_failed: string[];
 }
 
 // Per-run caps: a publish can poll Meta for ~30s, so the finish
 // pass stays small and the cron's cadence does the volume.
 const FINISH_PUBLISH_LIMIT = 3;
 const FINISH_PARK_LIMIT = 25;
+
+// =====================================================================
+// [IG-SOLD-359] The sold sweep — two phases inside finish_pending,
+// sharing one per-run action budget (SOLD_SWEEP_LIMIT, mirroring
+// the exit-delete cap on the Marketplace side):
+//
+//   soldSweepCloseIntents runs after the auto pass and BEFORE the
+//   finish pass: an awaiting_reel intent whose car is now Sold or
+//   inactive is closed with the intent_close vocabulary
+//   (failed / vehicle_sold), so the finish pass can never publish
+//   a car that already sold. This phase is NOT gated by the
+//   auto-delete setting — the setting governs takedown of live
+//   posts, not whether a sold car gets posted in the first place.
+//
+//   soldSweepPublished runs after the finish pass: every
+//   published row (duplicates included — never stop at the first
+//   row for a VIN) whose car reads Sold/inactive, on an account
+//   whose auto_delete_on_exit_enabled switch is on, is taken
+//   down in two passes. Pass one only MARKS the row
+//   (error_code "sold_delete_candidate"); a later pass where the
+//   car STILL reads sold/inactive executes the DELETE. A car
+//   that comes back (deal unwinds, trade returns) has its mark
+//   cleared instead. Outcomes: success -> status "deleted";
+//   Meta permission error -> status "delete_permission_pending"
+//   (out of the sweep's selection for good — no per-run retry
+//   while instagram_manage_contents awaits its review round);
+//   any other Meta error -> the row stays published with
+//   error_code "sold_delete_error" and is parked out of the
+//   sweep, surfaced in the finisher summary.
+// =====================================================================
+
+const SOLD_SWEEP_LIMIT = 25;
+const SOLD_DELETE_CANDIDATE = "sold_delete_candidate";
+
+// The canonical sold/exit read (the Marketplace contract): the
+// app writes status "Sold" on a manual mark-sold (comparisons
+// lowercase it) and is_active=false on a feed exit or manual
+// remove. known=false when the inventory row itself is gone —
+// no positive evidence either way, and the sweep never acts on
+// an unconfirmed state.
+async function inventoryState(
+  db: Db,
+  userId: string,
+  vin: string,
+): Promise<{ known: boolean; sold: boolean }> {
+  const { data } = await db
+    .from("scraped_inventory")
+    .select("status, is_active")
+    .eq("user_id", userId)
+    .eq("vin", vin)
+    .maybeSingle();
+  if (!data) return { known: false, sold: false };
+  const status = (data as { status?: unknown }).status;
+  const isActive = (data as { is_active?: unknown }).is_active;
+  const sold =
+    (typeof status === "string" && status.toLowerCase() === "sold") ||
+    isActive === false;
+  return { known: true, sold };
+}
+
+// The Marketplace takedown switch itself — the same
+// user_settings.auto_delete_on_exit_enabled the scraper's exit
+// pass reads. A missing settings row reads as the column's own
+// default (true).
+async function autoDeleteOnExitEnabled(db: Db, userId: string): Promise<boolean> {
+  const { data } = await db
+    .from("user_settings")
+    .select("auto_delete_on_exit_enabled")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!data) return true;
+  return (data as { auto_delete_on_exit_enabled?: unknown })
+    .auto_delete_on_exit_enabled !== false;
+}
+
+async function soldSweepCloseIntents(
+  db: Db,
+  summary: FinishSummary,
+  dryRun: boolean,
+  budget: { used: number },
+): Promise<void> {
+  const { data: intents } = await db
+    .from("instagram_posts")
+    .select("id, user_id, vin")
+    .eq("status", "awaiting_reel")
+    .order("created_at", { ascending: true })
+    .limit(SOLD_SWEEP_LIMIT);
+  for (const intent of intents ?? []) {
+    if (budget.used >= SOLD_SWEEP_LIMIT) break;
+    const vin = intent.vin as string | null;
+    if (!vin) continue;
+    const state = await inventoryState(db, intent.user_id as string, vin);
+    if (!state.known || !state.sold) continue;
+    budget.used++;
+    if (dryRun) {
+      summary.sold_closed.push(vin);
+      continue;
+    }
+    const { data: closed, error } = await db
+      .from("instagram_posts")
+      .update({
+        status: "failed",
+        error_code: "vehicle_sold",
+        error_message: "Auto-post intent closed before publishing: vehicle_sold",
+      })
+      .eq("id", intent.id)
+      .eq("status", "awaiting_reel")
+      .select("id");
+    if (error || !closed || !closed.length) {
+      summary.skipped++;
+      continue;
+    }
+    summary.sold_closed.push(vin);
+  }
+}
+
+async function soldSweepPublished(
+  db: Db,
+  summary: FinishSummary,
+  dryRun: boolean,
+  budget: { used: number },
+): Promise<void> {
+  const { data: rows } = await db
+    .from("instagram_posts")
+    .select("id, user_id, vin, media_id, error_code")
+    .eq("status", "published")
+    .order("created_at", { ascending: true })
+    .limit(100);
+  const settingCache = new Map<string, boolean>();
+  const stateCache = new Map<string, { known: boolean; sold: boolean }>();
+  for (const row of rows ?? []) {
+    if (budget.used >= SOLD_SWEEP_LIMIT) break;
+    const userId = row.user_id as string;
+    const vin = row.vin as string | null;
+    const mediaId = row.media_id as string | null;
+    if (!vin || !mediaId) continue;
+    const stateKey = userId + "|" + vin;
+    let state = stateCache.get(stateKey);
+    if (!state) {
+      state = await inventoryState(db, userId, vin);
+      stateCache.set(stateKey, state);
+    }
+    if (!state.known) continue;
+    const errorCode = (row.error_code as string | null) ?? null;
+    if (!state.sold) {
+      // The car came back: a stale candidate mark is cleared so
+      // a later genuine sale starts the two-sweep confirmation
+      // fresh. Nothing else about the row changes.
+      if (errorCode !== SOLD_DELETE_CANDIDATE) continue;
+      budget.used++;
+      if (!dryRun) {
+        const { error } = await db
+          .from("instagram_posts")
+          .update({ error_code: null, error_message: null })
+          .eq("id", row.id)
+          .eq("status", "published")
+          .eq("error_code", SOLD_DELETE_CANDIDATE);
+        if (error) {
+          summary.skipped++;
+          continue;
+        }
+      }
+      summary.sold_unmarked.push(vin);
+      continue;
+    }
+    let enabled = settingCache.get(userId);
+    if (enabled === undefined) {
+      enabled = await autoDeleteOnExitEnabled(db, userId);
+      settingCache.set(userId, enabled);
+    }
+    if (!enabled) continue;
+    if (errorCode === SOLD_DELETE_CANDIDATE) {
+      // Second consecutive sold read: the delete itself.
+      budget.used++;
+      if (dryRun) {
+        summary.sold_deleted.push(vin);
+        continue;
+      }
+      const chk = await checkConnection(db, userId);
+      if (chk.err || !chk.conn) {
+        // No usable token right now — leave the candidate mark
+        // in place; a later sweep retries once the connection
+        // is healthy. Never wedge the sweep on one account.
+        summary.skipped++;
+        continue;
+      }
+      const del = await graphDelete(`/${mediaId}`, chk.conn.access_token as string);
+      const err = del.body?.error;
+      if (!del.res.ok || err) {
+        const message = err?.message ?? "Meta returned an error.";
+        const code = err?.code ?? null;
+        console.error(`instagram-post: sold delete failed: ${code ?? "?"} ${message}`);
+        if (isDeletePermissionError(del.body)) {
+          const { error: updErr } = await db
+            .from("instagram_posts")
+            .update({
+              status: "delete_permission_pending",
+              error_code: "delete_permission_pending",
+              error_message: message,
+            })
+            .eq("id", row.id)
+            .eq("status", "published");
+          if (updErr) {
+            summary.skipped++;
+            continue;
+          }
+          summary.sold_delete_pending.push(vin);
+        } else {
+          const { error: updErr } = await db
+            .from("instagram_posts")
+            .update({
+              error_code: "sold_delete_error",
+              error_message: (code !== null ? String(code) + ": " : "") + message,
+            })
+            .eq("id", row.id)
+            .eq("status", "published");
+          if (updErr) {
+            summary.skipped++;
+            continue;
+          }
+          summary.sold_delete_failed.push(vin);
+        }
+        continue;
+      }
+      const { error: updErr } = await db
+        .from("instagram_posts")
+        .update({ status: "deleted", error_code: null, error_message: null })
+        .eq("id", row.id)
+        .eq("status", "published");
+      if (updErr) {
+        summary.skipped++;
+        continue;
+      }
+      summary.sold_deleted.push(vin);
+      continue;
+    }
+    if (errorCode === null) {
+      // First sold read: mark only. The delete waits for a
+      // later sweep where the car still reads sold.
+      budget.used++;
+      if (!dryRun) {
+        const { error } = await db
+          .from("instagram_posts")
+          .update({ error_code: SOLD_DELETE_CANDIDATE, error_message: null })
+          .eq("id", row.id)
+          .eq("status", "published");
+        if (error) {
+          summary.skipped++;
+          continue;
+        }
+      }
+      summary.sold_marked.push(vin);
+      continue;
+    }
+    // Any other error_code (a parked sold_delete_error, a stale
+    // note from an earlier flow) leaves the row out of the sweep.
+  }
+}
 
 async function latestReel(db: Db, userId: string, vin: string) {
   const { data } = await db
@@ -752,6 +1070,8 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
   const summary: FinishSummary = {
     parked: [], reels_queued: [], published: [], closed: [],
     resolved_failed: [], reclaimed: 0, skipped: 0,
+    sold_closed: [], sold_marked: [], sold_unmarked: [],
+    sold_deleted: [], sold_delete_pending: [], sold_delete_failed: [],
   };
 
   // 0) Reclaim abandoned claims: a finisher that died mid-publish
@@ -865,6 +1185,14 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
     }
   }
 
+  // [IG-SOLD-359] Close the front door BEFORE the finish pass:
+  // intents for cars that sold (or exited) while their reels
+  // were rendering are closed here, so the finish pass below can
+  // never publish one. The sweep shares its action budget with
+  // the delete phase after the finish pass.
+  const sweepBudget = { used: 0 };
+  await soldSweepCloseIntents(db, summary, dryRun, sweepBudget);
+
   // Claim one parked intent atomically (awaiting_reel ->
   // finishing): exactly one publisher may ever proceed with it,
   // and the claim turns the client watcher away (its own claim
@@ -967,6 +1295,11 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
       summary,
     );
   }
+
+  // [IG-SOLD-359] The delete sweep proper: two-sweep-confirmed
+  // takedowns of published posts for sold/exited cars, gated on
+  // the same auto-delete-on-exit switch as Marketplace.
+  await soldSweepPublished(db, summary, dryRun, sweepBudget);
   return summary;
 }
 
