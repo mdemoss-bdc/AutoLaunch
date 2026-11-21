@@ -101,6 +101,17 @@
 // accounts (the owner unlock), and everyone else's rows park at
 // delete_permission_pending instead of retrying every run.
 //
+// [IG-SOLDMARK-360] The same switch now carries a per-account
+// sold MODE (user_settings.ig_sold_mode, default "delete"):
+// accounts in "mark" mode keep the post as social proof — on the
+// confirming sweep the finisher posts the fixed comment
+// "💥 SOLD 💥" and then closes commenting on the media
+// (comment_enabled=false), resolving the row "sold_marked". Mark
+// mode rides instagram_manage_comments (same review-round story
+// as manage_contents); permission failures park at
+// mark_permission_pending. The candidate discipline, the shared
+// per-run budget and the close-out phase are mode-independent.
+//
 // Meta tokens are never returned to the browser or logged.
 // =====================================================================
 
@@ -324,6 +335,22 @@ function isDeletePermissionError(body: GraphBody): boolean {
   return false;
 }
 
+// [IG-SOLDMARK-360] The mark path's permission classifier: the
+// same shape as isDeletePermissionError, naming
+// instagram_manage_comments — the permission the SOLD comment and
+// the comment_enabled toggle ride on. Token failures (code 190)
+// are NOT this.
+function isMarkPermissionError(body: GraphBody): boolean {
+  const err = body?.error;
+  if (!err) return false;
+  if (err.code === 190) return false;
+  const msg = `${err.message ?? ""}`;
+  if (/instagram_manage_comments/i.test(msg)) return true;
+  if ((err.code === 10 || err.code === 200) && err.type === "OAuthException") return true;
+  if ((err.code === 10 || err.code === 200) && /permission/i.test(msg)) return true;
+  return false;
+}
+
 // Poll a container until Meta finishes processing it (up to ~10
 // checks, 3 seconds apart — same cadence as tiktok-post's publish
 // polling). Returns the final status_code.
@@ -530,6 +557,10 @@ interface FinishSummary {
   sold_deleted: string[];
   sold_delete_pending: string[];
   sold_delete_failed: string[];
+  // [IG-SOLDMARK-360] The mark mode's outcomes, by VIN.
+  marked: string[];
+  mark_pending: string[];
+  mark_failed: string[];
 }
 
 // Per-run caps: a publish can poll Meta for ~30s, so the finish
@@ -565,10 +596,28 @@ const FINISH_PARK_LIMIT = 25;
 //   any other Meta error -> the row stays published with
 //   error_code "sold_delete_error" and is parked out of the
 //   sweep, surfaced in the finisher summary.
+//
+//   [IG-SOLDMARK-360] In "mark" mode (user_settings.ig_sold_mode)
+//   the confirming pass marks instead of deleting: it posts the
+//   fixed SOLD comment FIRST, records that durably
+//   (error_code "sold_comment_posted"), then closes commenting
+//   (comment_enabled=false). Full success resolves the row
+//   "sold_marked", out of the sweep for good. A toggle failure
+//   leaves the "sold_comment_posted" record in place, so a later
+//   pass retries ONLY the toggle — the SOLD comment is never
+//   posted twice. Permission failures park the row at
+//   "mark_permission_pending"; other comment-step errors park it
+//   at "sold_mark_error", both with Meta's message verbatim.
 // =====================================================================
 
 const SOLD_SWEEP_LIMIT = 25;
 const SOLD_DELETE_CANDIDATE = "sold_delete_candidate";
+// [IG-SOLDMARK-360] The fixed SOLD comment text — exactly this,
+// no date, nothing else (Matthew, 2026-11-21).
+const SOLD_MARK_COMMENT = "💥 SOLD 💥";
+// Durable partial-progress record: the SOLD comment is on the
+// post; only the commenting toggle remains.
+const SOLD_COMMENT_POSTED = "sold_comment_posted";
 
 // The canonical sold/exit read (the Marketplace contract): the
 // app writes status "Sold" on a manual mark-sold (comparisons
@@ -598,17 +647,28 @@ async function inventoryState(
 
 // The Marketplace takedown switch itself — the same
 // user_settings.auto_delete_on_exit_enabled the scraper's exit
-// pass reads. A missing settings row reads as the column's own
-// default (true).
-async function autoDeleteOnExitEnabled(db: Db, userId: string): Promise<boolean> {
+// pass reads — plus [IG-SOLDMARK-360] the per-account sold mode
+// (user_settings.ig_sold_mode). A missing settings row reads as
+// the columns' own defaults (switch on, mode "delete"); any mode
+// value other than "mark" reads as "delete".
+async function soldSweepSettings(
+  db: Db,
+  userId: string,
+): Promise<{ enabled: boolean; mode: "delete" | "mark" }> {
   const { data } = await db
     .from("user_settings")
-    .select("auto_delete_on_exit_enabled")
+    .select("auto_delete_on_exit_enabled, ig_sold_mode")
     .eq("user_id", userId)
     .maybeSingle();
-  if (!data) return true;
-  return (data as { auto_delete_on_exit_enabled?: unknown })
-    .auto_delete_on_exit_enabled !== false;
+  if (!data) return { enabled: true, mode: "delete" };
+  const row = data as {
+    auto_delete_on_exit_enabled?: unknown;
+    ig_sold_mode?: unknown;
+  };
+  return {
+    enabled: row.auto_delete_on_exit_enabled !== false,
+    mode: row.ig_sold_mode === "mark" ? "mark" : "delete",
+  };
 }
 
 async function soldSweepCloseIntents(
@@ -664,7 +724,7 @@ async function soldSweepPublished(
     .eq("status", "published")
     .order("created_at", { ascending: true })
     .limit(100);
-  const settingCache = new Map<string, boolean>();
+  const settingCache = new Map<string, { enabled: boolean; mode: "delete" | "mark" }>();
   const stateCache = new Map<string, { known: boolean; sold: boolean }>();
   for (const row of rows ?? []) {
     if (budget.used >= SOLD_SWEEP_LIMIT) break;
@@ -701,17 +761,19 @@ async function soldSweepPublished(
       summary.sold_unmarked.push(vin);
       continue;
     }
-    let enabled = settingCache.get(userId);
-    if (enabled === undefined) {
-      enabled = await autoDeleteOnExitEnabled(db, userId);
-      settingCache.set(userId, enabled);
+    let settings = settingCache.get(userId);
+    if (settings === undefined) {
+      settings = await soldSweepSettings(db, userId);
+      settingCache.set(userId, settings);
     }
-    if (!enabled) continue;
-    if (errorCode === SOLD_DELETE_CANDIDATE) {
-      // Second consecutive sold read: the delete itself.
+    if (!settings.enabled) continue;
+    if (errorCode === SOLD_DELETE_CANDIDATE || errorCode === SOLD_COMMENT_POSTED) {
+      // Second consecutive sold read: the delete itself — or,
+      // in mark mode, the SOLD comment + commenting close.
       budget.used++;
       if (dryRun) {
-        summary.sold_deleted.push(vin);
+        if (settings.mode === "mark") summary.marked.push(vin);
+        else summary.sold_deleted.push(vin);
         continue;
       }
       const chk = await checkConnection(db, userId);
@@ -720,6 +782,104 @@ async function soldSweepPublished(
         // in place; a later sweep retries once the connection
         // is healthy. Never wedge the sweep on one account.
         summary.skipped++;
+        continue;
+      }
+      if (settings.mode === "mark") {
+        const token = chk.conn.access_token as string;
+        // [IG-SOLDMARK-360] A Meta failure on either mark step:
+        // a permission refusal parks the row for good at
+        // mark_permission_pending (out of the sweep — no retry
+        // loop while instagram_manage_comments awaits its
+        // review round); any other error parks it with Meta's
+        // message verbatim — except a toggle failure AFTER the
+        // comment landed, which keeps the durable
+        // sold_comment_posted record so the next pass retries
+        // only the toggle.
+        const parkMarkFailure = async (
+          body: GraphBody,
+          afterComment: boolean,
+        ): Promise<void> => {
+          const err = body?.error;
+          const message = err?.message ?? "Meta returned an error.";
+          const code = err?.code ?? null;
+          console.error(`instagram-post: sold mark failed: ${code ?? "?"} ${message}`);
+          if (isMarkPermissionError(body)) {
+            const { error: updErr } = await db
+              .from("instagram_posts")
+              .update({
+                status: "mark_permission_pending",
+                error_code: "mark_permission_pending",
+                error_message: message,
+              })
+              .eq("id", row.id)
+              .eq("status", "published");
+            if (updErr) {
+              summary.skipped++;
+              return;
+            }
+            summary.mark_pending.push(vin);
+            return;
+          }
+          const { error: updErr } = await db
+            .from("instagram_posts")
+            .update(afterComment
+              ? {
+                error_code: SOLD_COMMENT_POSTED,
+                error_message: (code !== null ? String(code) + ": " : "") + message,
+              }
+              : {
+                error_code: "sold_mark_error",
+                error_message: (code !== null ? String(code) + ": " : "") + message,
+              })
+            .eq("id", row.id)
+            .eq("status", "published");
+          if (updErr) {
+            summary.skipped++;
+            return;
+          }
+          summary.mark_failed.push(vin);
+        };
+        if (errorCode === SOLD_DELETE_CANDIDATE) {
+          // (a) The SOLD comment FIRST — closing commenting
+          // before it lands would leave the post unmarked.
+          const cmt = await graphPost(`/${mediaId}/comments`, token, {
+            message: SOLD_MARK_COMMENT,
+          });
+          if (!cmt.res.ok || cmt.body?.error) {
+            await parkMarkFailure(cmt.body, false);
+            continue;
+          }
+          // Record the partial progress BEFORE the toggle, so
+          // a failure from here on can never re-post the comment.
+          const { error: progErr } = await db
+            .from("instagram_posts")
+            .update({ error_code: SOLD_COMMENT_POSTED, error_message: null })
+            .eq("id", row.id)
+            .eq("status", "published")
+            .eq("error_code", SOLD_DELETE_CANDIDATE);
+          if (progErr) {
+            summary.skipped++;
+            continue;
+          }
+        }
+        // (b) Close commenting on the media.
+        const tog = await graphPost(`/${mediaId}`, token, {
+          comment_enabled: "false",
+        });
+        if (!tog.res.ok || tog.body?.error) {
+          await parkMarkFailure(tog.body, true);
+          continue;
+        }
+        const { error: updErr } = await db
+          .from("instagram_posts")
+          .update({ status: "sold_marked", error_code: null, error_message: null })
+          .eq("id", row.id)
+          .eq("status", "published");
+        if (updErr) {
+          summary.skipped++;
+          continue;
+        }
+        summary.marked.push(vin);
         continue;
       }
       const del = await graphDelete(`/${mediaId}`, chk.conn.access_token as string);
@@ -1072,6 +1232,7 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
     resolved_failed: [], reclaimed: 0, skipped: 0,
     sold_closed: [], sold_marked: [], sold_unmarked: [],
     sold_deleted: [], sold_delete_pending: [], sold_delete_failed: [],
+    marked: [], mark_pending: [], mark_failed: [],
   };
 
   // 0) Reclaim abandoned claims: a finisher that died mid-publish

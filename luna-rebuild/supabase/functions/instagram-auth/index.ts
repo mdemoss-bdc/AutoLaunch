@@ -29,7 +29,8 @@
 //
 // OAuth is Facebook Login requesting the Facebook-Login permission
 // set: instagram_basic, instagram_content_publish,
-// instagram_manage_contents, pages_show_list.
+// instagram_manage_contents, instagram_manage_comments,
+// pages_show_list.
 // Publishing runs through graph.facebook.com against the IG user id
 // resolved from the linked Page (Instagram Graph API).
 //
@@ -58,6 +59,7 @@ const REQUESTED_PERMISSIONS = [
   "instagram_basic",
   "instagram_content_publish",
   "instagram_manage_contents",
+  "instagram_manage_comments",
   "pages_show_list",
 ];
 

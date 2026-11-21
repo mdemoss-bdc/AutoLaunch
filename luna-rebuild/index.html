@@ -3444,6 +3444,25 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
 
           </div>
 
+          <!-- [IG-SOLDMARK-360] Instagram sold mode: only relevant
+               while the switch above is on. The finisher reads
+               user_settings.ig_sold_mode when a car sells. -->
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+
+            <p class="text-sm font-semibold text-slate-700">On Instagram, when a car sells</p>
+
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;">
+              <input type="radio" name="igSoldMode" value="delete" checked onchange="setIgSoldModeSetting(this)" style="width:16px;height:16px;accent-color:var(--accent);">
+              <span class="text-sm text-slate-600">Take posts down</span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-top:6px;">
+              <input type="radio" name="igSoldMode" value="mark" onchange="setIgSoldModeSetting(this)" style="width:16px;height:16px;accent-color:var(--accent);margin-top:2px;">
+              <span class="text-sm text-slate-600">Mark SOLD and close comments — the post stays up with a 💥 SOLD 💥 comment and commenting turned off</span>
+            </label>
+
+          </div>
+
         </div>
 
         <!-- SHARE TO FEED (helper v2.1.55) -->
@@ -5093,6 +5112,13 @@ let postingQueue = [];
 // additive migration not applied yet) means the feature is enabled;
 // only an explicit false turns it off.
 let autoDeleteOnExitEnabled = true;
+// [IG-SOLDMARK-360] Instagram sold mode (user_settings.ig_sold_mode):
+// "delete" takes a sold car's Instagram post down (the original
+// behavior); "mark" keeps it up with a 💥 SOLD 💥 comment and
+// commenting closed. DEFAULT "delete" — an absent column or any
+// other value reads as delete. The instagram-post finisher reads
+// the same column; this variable only drives the Settings radios.
+let igSoldMode = "delete";
 // Auto-sync switch (Dashboard header, beside Last Refresh):
 // user_settings.auto_sync_enabled. DEFAULT ON — an absent column
 // (the additive migration not applied yet) or an unreadable value
@@ -11244,6 +11270,14 @@ updateLastSyncDisplay();
         autoDeleteOnExitEnabled = !!data.auto_delete_on_exit_enabled;
         const chkExit = document.getElementById("chkAutoDeleteOnExit");
         if (chkExit) chkExit.checked = autoDeleteOnExitEnabled;
+      }
+      // [IG-SOLDMARK-360] Instagram sold mode: an absent column
+      // leaves the default ("delete" — the post comes down).
+      if (data.ig_sold_mode !== undefined && data.ig_sold_mode !== null) {
+        igSoldMode = data.ig_sold_mode === "mark" ? "mark" : "delete";
+        document.querySelectorAll('input[name="igSoldMode"]').forEach(function (radio) {
+          radio.checked = radio.value === igSoldMode;
+        });
       }
       // Auto-sync switch: absent column leaves the default (ON).
       if (data.auto_sync_enabled !== undefined && data.auto_sync_enabled !== null) {
@@ -21401,7 +21435,7 @@ async function sendTikTokTestPost() {
 // secret — the secret exists only as a Supabase function secret.
 const META_APP_ID = "1442518901327928";
 const INSTAGRAM_REDIRECT_URI = "https://autolaunch.org/instagram-callback.html";
-const INSTAGRAM_OAUTH_SCOPE = "instagram_basic,instagram_content_publish,instagram_manage_contents,pages_show_list";
+const INSTAGRAM_OAUTH_SCOPE = "instagram_basic,instagram_content_publish,instagram_manage_contents,instagram_manage_comments,pages_show_list";
 // ========================== /CONFIG — SET ME =================================
 
 // Last /instagram-auth/status answer; null = not checked yet this
@@ -23131,6 +23165,32 @@ async function toggleAutoDeleteOnExitSetting(el) {
   } catch (err) {
     el.checked = !value;
     alert("Could not save the auto-remove setting: " + (err.message || "Unknown error"));
+  }
+}
+
+// [IG-SOLDMARK-360] Instagram sold mode: the radios write
+// user_settings.ig_sold_mode immediately, like Auto-delete on
+// exit. The instagram-post finisher reads the same column when a
+// car sells: "delete" takes the Instagram post down; "mark"
+// leaves it up with a 💥 SOLD 💥 comment and commenting closed.
+async function setIgSoldModeSetting(el) {
+  if (!currentUser) { return; }
+  const value = el.value === "mark" ? "mark" : "delete";
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        ig_sold_mode: value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    igSoldMode = value;
+  } catch (err) {
+    document.querySelectorAll('input[name="igSoldMode"]').forEach(function (radio) {
+      radio.checked = radio.value === igSoldMode;
+    });
+    alert("Could not save the Instagram sold-post setting: " + (err.message || "Unknown error"));
   }
 }
 
