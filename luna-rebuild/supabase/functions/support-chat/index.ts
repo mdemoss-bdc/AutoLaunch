@@ -81,6 +81,32 @@
 // still quotes the 2026-10-26 Terms verbatim — the Terms
 // document itself has not been re-issued.
 //
+// PHASE 5 (2026-11-21, help-refresh): knowledge brought current
+// with the shipped app. (1) KB: Instagram is LIVE (channels line
+// in ABOUT + the Automate plan bullet; a new INSTAGRAM section
+// covers reel posting, the title card, sold delete/mark modes
+// and the queue display rows); the daily-counter rule now reads
+// posted-today UNION still-queued of any age, deletes never
+// count (the app counter fix cee5ad78 — Phase 3's "completed
+// deletes" wording is superseded); the $500 price-update gate;
+// the Automations master switch's OR semantics; sold/exit
+// deletes stated as their own switch, independent of repost;
+// VIN Reels title card (year/make/model/stock + miles, never a
+// price) and the Your Video rules; Luca capture walks the
+// Marketplace inbox itself; helper in-app manual download is
+// 2.1.167 (Phase 4's 2.1.129 superseded). (2) NEW KB SECTION —
+// LUNA REPAIRS: the four auto-applied classes on the nightly
+// sweep (config flipped 2026-11-21 at Matthew's direction),
+// report-after + 7-day undo + opt-out, phantom clears stay
+// ask-only, data-only never code. (3) DOC_CHUNKS regenerated
+// from HEAD 427b0918 (the Part A help-copy commit) — the
+// chunks for the nine edited guides change; the other nine
+// guide chunks byte-match the deployed spans (asserted in
+// the build); terms/referrals/suggestions
+// spans carried over byte-identical. (4) PROMPT: the INSTAGRAM
+// preamble no longer claims the KB calls Instagram "coming
+// soon". No behavior code changes.
+//
 // verify_jwt=false at the platform level; the caller's JWT is verified
 // manually (same pattern as listing-copy / luca-draft). The snapshot
 // NEVER reads token/secret columns — user_settings is selected by an
@@ -733,7 +759,7 @@ async function buildSnapshot(supabase: any, userId: string): Promise<Snapshot> {
 const KB = `
 ABOUT AUTOLAUNCH: a lightweight tool that takes a dealership's or rep's
 inventory from their website and posts it to Facebook Marketplace (plus
-optional channels — Facebook Page posting is live, and TikTok and Instagram are coming soon). It is NOT a CRM.
+optional channels — Facebook Page posting is live, and TikTok is coming soon — its app is in review with TikTok). It is NOT a CRM.
 
 PLANS AND PRICES:
 - Free trial (solo accounts): no card needed, and the FULL Automate
@@ -765,9 +791,8 @@ PLANS AND PRICES:
   Wishlist, Trade Appraisals, intro videos, plus team features.
   No plan cap on queued posts (the user's own daily safety limit
   applies). Sync every 6 hours. Channels are Automate-only:
-  Facebook Page posting is live; TikTok and Instagram are coming
-  soon (TikTok's app is in review with TikTok; Instagram follows
-  once Meta business verification clears). (Dealership accounts
+  Facebook Page posting and Instagram posting are live; TikTok
+  is coming soon (its app is in review with TikTok). (Dealership accounts
   buy this same top tier per seat as Dealership Group.)
 - Post + Automate — a legacy tier some older accounts still hold;
   it is not sold anymore and Settings -> Plans shows it as
@@ -846,7 +871,7 @@ THE HELPER (Chrome extension "AutoLaunch Vehicle Assistant"):
   so the tab is never discarded.
 - Helper versions: the Chrome Web Store install is 2.1.91 and
   Chrome updates it on its own; the manual download on the app's
-  Chrome Extension page is 2.1.129. The app expects helper 2.1.91
+  Chrome Extension page is 2.1.167. The app expects helper 2.1.91
   or newer; Luca's availability auto-reply needs 2.1.117 or newer.
 
 POSTING — HOW IT WORKS AND WHY CARS FAIL:
@@ -857,8 +882,11 @@ POSTING — HOW IT WORKS AND WHY CARS FAIL:
 - Pacing: after a post, the next post waits the user's post delay
   (Settings -> Automation, post_delay_minutes) since the last post.
 - The daily counter the app shows ("X posted · Y queued · Z failed of
-  N today") counts posted cars plus cars still queued (pending or
-  processing) plus completed deletes. FAILED rows are listed for
+  N today") counts the cars posted today plus every post still
+  waiting in the queue (pending or processing) — whenever it was
+  queued, so a backlog carried over from yesterday counts against
+  today because those posts go out today. Deletes never count.
+  FAILED rows are listed for
   information only — a failed post NEVER consumes a limit slot, so it
   can always be retried without using up the day's allowance.
 - A car with NO real photos can never post.
@@ -871,6 +899,11 @@ POSTING — HOW IT WORKS AND WHY CARS FAIL:
 - Price: listings use the advertised final price (retail minus savings
   plus doc fee). No price yet -> the car is blocked from posting until
   a price exists ("Price: call" cars can't auto-post).
+- Price changes: when the website price moves, the Marketplace
+  listing updates only once the difference from the posted price
+  reaches $500 — smaller changes wait until the drift adds up.
+  The update rows are queued by the sync's drift pass, never by
+  the manual Change-price button alone.
 - Read the exact error on a failed queue row: the helper writes field
   diagnostics into the row's error message. "publish_button_not_found"
   means Facebook's form didn't show a usable Publish button — usually
@@ -888,15 +921,23 @@ AUTOMATIONS (Automate tier and up):
   Guards: not sold, price > 0, both colors set (unless the account
   allows posting without colors), real-photo count at least the
   chosen minimum.
-- Auto delete & repost: refreshes listings on the chosen frequency;
-  sold/exited cars are removed automatically.
+- Auto delete & repost: refreshes listings on the chosen frequency.
+- The Automations master switch shows ON when at least one of the
+  two automations is on — it is off only when both are off.
+  Flipping the master drives both settings together; turning one
+  automation off never changes the other.
+- Sold/exit deletes are a separate switch (auto delete on exit):
+  when a car sells or leaves the feed, its listing is removed
+  automatically — this runs even when auto delete & repost is
+  OFF. Turning repost off never stops a sold car's removal.
 - Sync Inventory (left sidebar) pulls the inventory now, subject to
   the plan's sync cadence above.
 
 VIN REELS (Automate tier and up):
 - A short narrated showcase video made automatically from each
-  car's real photos; the year, make, model and stock number appear
-  on screen. Create one from the car's reel button (Dashboard grid
+  car's real photos; a title card at the start shows the year,
+  make, model, stock number and miles, big and centered. A reel
+  never shows a price — a baked-in price goes stale. Create one from the car's reel button (Dashboard grid
   or table row, or the car's menu -> Create reel) or the VIN Reel
   section in the car's details. The car's chip shows the state:
   Reel queued, Rendering reel, Reel ready, or Reel failed.
@@ -912,6 +953,34 @@ VIN REELS (Automate tier and up):
 - Renders run in the background from the car's real photos, so a
   car needs usable photos to get a reel. A failed render can be
   retried from the car's reel section.
+- Your own video: from a car's "Your Video" section the rep can
+  record a clip or attach one they already have (up to 90
+  seconds, 1080p, 100 MB). Once it is ready it posts INSTEAD of
+  the rendered reel — on Marketplace and on Instagram.
+
+INSTAGRAM (Automate tier and up):
+- Instagram posting is LIVE for connected business accounts:
+  AutoLaunch posts the car's reel — the rendered VIN Reel, or
+  the rep's own recorded video when one is ready (see VIN
+  REELS). The reel's title card shows year, make, model, stock
+  number and miles — never a price.
+- Instagram jobs appear in the Post Queue as display-only rows
+  so the rep can watch them publish; a finished Instagram post
+  leaves the queue list (its record stays with the car).
+- Auto-posting to Instagram is its own Settings toggle (off by
+  default). A server finisher publishes queued Instagram posts
+  every few minutes, so a locked PC does not stall them; if
+  Meta takes too long processing a video, the post resumes
+  itself instead of failing.
+- When a car sells, its Instagram post follows the account's
+  sold mode (Settings): "delete" takes the post down; "mark"
+  leaves the post up but locks its comments — and every new
+  caption carries a line explaining that locked comments mean
+  the car is sold. Sold handling runs under the same
+  auto-delete-on-exit switch as Marketplace.
+
+See the LUNA REPAIRS section below for what Luna fixes
+herself, including stuck Instagram posts.
 
 LUCA + PROSPECTS (Automate tier and up):
 - Luca drafts replies to Marketplace buyers; the rep sends — with
@@ -922,12 +991,37 @@ LUCA + PROSPECTS (Automate tier and up):
   really still in inventory. An extra question, a second message,
   or a car that can't be verified gets no auto-reply; everything
   else is always drafted for the rep to send.
-- Buyer chats flow in through the helper: full Messenger tab open,
-  and the "🌙 Capture chat for Luca" button (it appears ON Facebook,
-  added by the helper) captures a thread into Prospects. Plain
-  Messenger chats are never auto-captured — Marketplace only.
+- Buyer chats flow in through the helper: it walks the
+  Marketplace inbox list itself and captures new threads on its
+  own — the rep does not have to open them (the hub still needs
+  the full Messenger tab open). The "🌙 Capture chat for Luca"
+  button (it appears ON Facebook, added by the helper) captures
+  a thread into Prospects manually. Plain Messenger chats are
+  never auto-captured — Marketplace only.
 - Luca answers from live inventory and the car's real facts; it never
   invents price, payments, APR or financing terms.
+
+LUNA REPAIRS (what Luna fixes herself):
+- Every night Luna sweeps every account for known bookkeeping
+  problems and fixes the proven ones herself, without being
+  asked: releasing a post held for a video that is in fact
+  ready (including holds left after a failed posting attempt
+  and Instagram posts stuck waiting on a ready reel), clearing
+  an attach failure the live listing proves is false,
+  correcting a posted (stamp) price to the verify-proven live
+  price, and a bounded automatic retry of a failed post.
+- Every fix is logged, reported in this panel afterwards, and
+  undoable for 7 days. A user can opt out (Settings — Luna
+  asks before fixing), and the same fix never auto-applies
+  twice running for the same problem.
+- One class stays ask-first, always: clearing a "phantom"
+  stamp (a car marked posted whose listing can't be found).
+  That fix rests on something being ABSENT, which can't be
+  proven — so Luna proposes it and waits for the user's tap.
+- Luna only ever changes DATA in the user's own account
+  bookkeeping — queue rows, stamps, settings. She never
+  writes or changes code. Anything outside these classes is
+  a support ticket for a human, not a self-fix.
 
 OTHER FEATURES:
 - AI listing copy (the colorful ✨ button): writes a Marketplace
@@ -1020,15 +1114,19 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "both",
+    1
+   ],
+   [
+    "automation",
+    1
+   ],
+   [
     "card",
     1
    ],
    [
     "auto",
-    1
-   ],
-   [
-    "cards",
     1
    ],
    [
@@ -1050,13 +1148,9 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    [
     "next",
     1
-   ],
-   [
-    "auto-posting",
-    1
    ]
   ],
-  "text": "Automations: This is the master switch for the two automations next to it: auto-posting new arrivals and auto delete & repost. Flip it and both flip with it.\nSteps:\n1. Flip the Automations switch on — the three cards beside it turn on with it.\n2. Set each one up on its own card (frequency, limits). The master switch never changes their settings.\n3. Turn a single card off anytime without touching the others.\n4. The same Auto Posting switch also lives in Settings, under the Automation tab.\nGood to know:\n- The master switch only shows on when all three cards are on. If just some are on, this card says so instead of pretending.\n- Automations work through the Post Queue and the Chrome extension, and every post counts against your daily posting limit."
+  "text": "Automations: This is the master switch for the two automations next to it: auto-posting new arrivals and auto delete & repost. Flip it and both flip with it.\nSteps:\n1. Flip the Automations switch on — both automation cards beside it turn on with it.\n2. Set each one up on its own card (frequency, limits). The master switch never changes their settings.\n3. Turn a single card off anytime without touching the others.\n4. The same Auto Posting switch also lives in Settings, under the Automation tab.\nGood to know:\n- The master switch shows on whenever at least one automation is on — it is only off when both are off. The status line on this card always says exactly what is running.\n- Automations work through the Post Queue and the Chrome extension, and every post counts against your daily posting limit."
  },
  {
   "id": "guide:autopost",
@@ -1080,6 +1174,10 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    ],
    [
     "posting",
+    1
+   ],
+   [
+    "limit",
     1
    ],
    [
@@ -1111,10 +1209,6 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "queues",
-    1
-   ],
-   [
     "through",
     1
    ],
@@ -1123,7 +1217,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "Auto-post new arrivals: Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus your Facebook Page if you have switched that channel on. (TikTok and Instagram are coming soon — Automate-plan channels.)\nSteps:\n1. Flip the switch on this card — or open the card and press Done, because saving turns it on.\n2. Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.\n3. Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.\n4. Set how many it may post per day under Safe posting limits — the auto poster queues up to that many a day, newest cars first.\n5. Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels.\nGood to know:\n- Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.\n- Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.\n- Every auto-posted car counts against your daily posting limit, same as cars you queue by hand. …"
+  "text": "Auto-post new arrivals: Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus your Facebook Page if you have switched that channel on. (Instagram posting is live, and TikTok is on its way — Automate-plan channels.)\nSteps:\n1. Flip the switch on this card — or open the card and press Done, because saving turns it on.\n2. Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.\n3. Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.\n4. Set how many may post per day under Safe posting limits — that limit covers everything that goes out in a day, and the auto poster fills the room that is left, newest cars first.\n5. Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels.\nGood to know:\n- Cars are picked up when your inventory syncs from your website feed — the nightly sync, or whenever you tap Sync Inventory in the left panel.\n- Posting itself runs through the AutoLaunch Chrome extension in your signed-in Facebook session — Chrome open, extension signed in.\n- Every auto-posted car counts against your daily posting limit, same as cars you queue by hand. …"
  },
  {
   "id": "guide:repost",
@@ -1142,15 +1236,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     3
    ],
    [
-    "extension",
-    1
-   ],
-   [
     "listing",
-    1
-   ],
-   [
-    "posts",
     1
    ],
    [
@@ -1158,7 +1244,19 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "extension",
+    1
+   ],
+   [
+    "posts",
+    1
+   ],
+   [
     "pick",
+    1
+   ],
+   [
+    "switch",
     1
    ],
    [
@@ -1184,13 +1282,9 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    [
     "confirm",
     1
-   ],
-   [
-    "never",
-    1
    ]
   ],
-  "text": "Auto delete & repost: Listings that sit on Marketplace too long sink in search. This deletes the tired listing and posts the car again fresh, on the schedule you pick, so it ranks like a new arrival.\nSteps:\n1. Flip the switch on this card.\n2. Open the card and pick how often: every 1, 3, 7 or 14 days.\n3. Press Done — saving turns the schedule on.\n4. Keep Chrome open with the extension installed and signed in, and stay signed in to Facebook. Reposts run from your browser.\nGood to know:\n- Confirm mode is the extension default: it fills the listing in and waits for you to click Publish, so nothing posts without you seeing it first.\n- Reposts count against your daily posting limit.\n- Cars that sell or leave your website are never reposted.\n- If Facebook asks you to log in or confirm your identity, the job stops and is marked failed — the extension never types into those screens."
+  "text": "Auto delete & repost: Listings that sit on Marketplace too long sink in search. This deletes the tired listing and posts the car again fresh, on the schedule you pick, so it ranks like a new arrival.\nSteps:\n1. Flip the switch on this card.\n2. Open the card and pick how often: every 1, 3, 7 or 14 days.\n3. Press Done — saving turns the schedule on.\n4. Keep Chrome open with the extension installed and signed in, and stay signed in to Facebook. Reposts run from your browser.\nGood to know:\n- Confirm mode is the extension default: it fills the listing in and waits for you to click Publish, so nothing posts without you seeing it first.\n- Reposts count against your daily posting limit.\n- Cars that sell or leave your website are never reposted.\n- Selling is separate from reposting: when a car sells or leaves your site, its listing comes down on its own — even with this switch off. That removal runs on its own setting, not on this schedule.\n- If Facebook asks you to log in or confirm your identity, the job stops and is marked failed — the extension never types into those screens."
  },
  {
   "id": "guide:photoedits",
@@ -1288,11 +1382,15 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "post",
+    1
+   ],
+   [
     "spacing",
     1
    ],
    [
-    "post",
+    "today",
     1
    ],
    [
@@ -1305,10 +1403,6 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    ],
    [
     "plan",
-    1
-   ],
-   [
-    "today",
     1
    ],
    [
@@ -1332,7 +1426,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "Safe posting limits: A daily cap and human-like pacing for your posts. Facebook restricts accounts that post like robots — this keeps your posting looking like a person, and stops you at the number you set.\nSteps:\n1. Open this card.\n2. Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.\n3. Pick a posting speed: Standard, or Cautious for twice the spacing between posts.\n4. Set the time between posts — 5, 10 or 15 minutes. On the Post plan the spacing is fixed at 30 minutes; choosing your own spacing is part of the Automate plan. The free trial runs the full Automate plan from day 1, so you can pick your spacing during the trial too.\n5. Press Save. The counter on this card shows how much of today's limit you have used.\nGood to know:\n- The counter counts today's Marketplace queue items that did not fail, plus cars already marked posted today.\n- The Chrome extension checks the same limit before it posts. Hit the cap and queueing stops with a message — nothing is queued past it.\n- Unlimited means no cap at all. It is offered, but it is the fastest way to earn a Facebook restriction."
+  "text": "Safe posting limits: A daily cap and human-like pacing for your posts. Facebook restricts accounts that post like robots — this keeps your posting looking like a person, and stops you at the number you set.\nSteps:\n1. Open this card.\n2. Pick a daily post limit: 10 a day (recommended), your own number, or Unlimited.\n3. Pick a posting speed: Standard, or Cautious for twice the spacing between posts.\n4. Set the time between posts — 5, 10 or 15 minutes. On the Post plan the spacing is fixed at 30 minutes; choosing your own spacing is part of the Automate plan. The free trial runs the full Automate plan from day 1, so you can pick your spacing during the trial too.\n5. Press Save. The counter on this card shows how much of today's limit you have used.\nGood to know:\n- The counter counts cars already marked posted today plus everything currently waiting in your post queue — whenever it was queued. A backlog left over from yesterday counts against today, because those posts go out today. Deletes never count, and failed jobs don't count.\n- The Chrome extension checks the same limit before it posts. Hit the cap and queueing stops with a message — nothing is queued past it.\n- Unlimited means no cap at all. It is offered, but it is the fastest way to earn a Facebook restriction."
  },
  {
   "id": "guide:preferences",
@@ -1529,7 +1623,7 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ]
   ],
-  "text": "Dashboard: Every vehicle AutoLaunch knows about, synced from your dealership website. Sync runs automatically overnight, and Sync Inventory in the left panel pulls a fresh copy on demand. This list is the single source of truth for posting — and for Luca's answers.\nSteps:\n1. Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.\n2. Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.\n3. Fix flags before posting: a car with no price shows 'need attention' and can't post until it's resolved — click through and complete what's missing. A missing color flags the car the same way, unless your account is set to allow posting without colors.\n4. Select cars and use Post Selected, or post one car from its row. Everything goes through the Post Queue.\nGood to know:\n- Prices post at the advertised final price from your website. A car whose price can't be determined is never guessed — it's flagged instead, so a wrong price never reaches Marketplace.\n- A vehicle with no photos on your website is never posted. No exceptions.\n- Luca answers buyers ONLY from this inventory. If a car is missing or wrong here, fix it here — his answers follow within the next draft.\n- Cars that sell or leave your website drop off automatically on the next sync and are never reposted."
+  "text": "Dashboard: Every vehicle AutoLaunch knows about, synced from your dealership website. Sync runs automatically overnight, and Sync Inventory in the left panel pulls a fresh copy on demand. This list is the single source of truth for posting — and for Luca's answers.\nSteps:\n1. Connect your site on the Get Started page (used / new / certified inventory URLs), or update them later with Configure URLs.\n2. Filter by location, year, make, model, condition, color and price, or search by partial VIN, stock number, year, make or model.\n3. Fix flags before posting: a car with no price shows 'need attention' and can't post until it's resolved — click through and complete what's missing. A missing color flags the car the same way, unless your account is set to allow posting without colors.\n4. Select cars and use Post Selected, or post one car from its row. Everything goes through the Post Queue.\nGood to know:\n- Prices post at the advertised final price from your website. A car whose price can't be determined is never guessed — it's flagged instead, so a wrong price never reaches Marketplace.\n- A vehicle with no photos on your website is never posted. No exceptions.\n- Luca answers buyers ONLY from this inventory. If a car is missing or wrong here, fix it here — his answers follow within the next draft.\n- Cars that sell or leave your website drop off automatically on the next sync and are never reposted. …"
  },
  {
   "id": "guide:locations",
@@ -1623,15 +1717,15 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "helper",
-    1
-   ],
-   [
     "failed",
     1
    ],
    [
     "delete",
+    1
+   ],
+   [
+    "helper",
     1
    ],
    [
@@ -1655,19 +1749,19 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "retry",
+    "watch",
     1
    ],
    [
-    "yourself",
+    "don't",
     1
    ],
    [
-    "repost",
+    "instagram",
     1
    ]
   ],
-  "text": "Post Queue: Every post, repost and delete waits here for the helper to work through it, in order, at a human pace. The queue is also your receipt book: what posted, what's waiting, and what failed — with the reason.\nSteps:\n1. Queue cars from the Dashboard (Post Selected or a row's Post button), or let automations queue them for you.\n2. Watch statuses here: queued, working, posted, failed. A failed job says why — read it before retrying.\n3. Use a failed job's Retry button once you've fixed the cause (signed back in to Facebook, refreshed the tab, completed a missing field).\n4. Sold it? Take it down yourself any time: use Remove from Facebook on the car's Dashboard row — the delete waits here in the queue and the helper removes the listing on Facebook. The clip above shows that manual delete, start to finish.\n5. Deleting a listing can be verified on Facebook itself — the listing disappearing from your Facebook selling page is the proof, not just the queue row.\nGood to know:\n- Every queue item counts against your daily posting limit, including reposts.\n- Don't click inside the helper's tab while a job is running — it can knock the job off course.\n- If a job fails because Facebook wants a login or an identity check, the helper stops on purpose. Handle it in Facebook yourself, then retry."
+  "text": "Post Queue: Every post, repost and delete waits here for the helper to work through it, in order, at a human pace. The queue is also your receipt book: what posted, what's waiting, and what failed — with the reason.\nSteps:\n1. Queue cars from the Dashboard (Post Selected or a row's Post button), or let automations queue them for you.\n2. Watch statuses here: queued, working, posted, failed. A failed job says why — read it before retrying.\n3. Use a failed job's Retry button once you've fixed the cause (signed back in to Facebook, refreshed the tab, completed a missing field).\n4. Sold it? Take it down yourself any time: use Remove from Facebook on the car's Dashboard row — the delete waits here in the queue and the helper removes the listing on Facebook. The clip above shows that manual delete, start to finish.\n5. Deleting a listing can be verified on Facebook itself — the listing disappearing from your Facebook selling page is the proof, not just the queue row.\nGood to know:\n- Every post counts against your daily posting limit, including reposts. Deletes don't count.\n- Don't click inside the helper's tab while a job is running — it can knock the job off course.\n- Instagram posts appear here too, as display-only rows so you can watch them go out; once an Instagram post finishes it leaves this list (its record stays with the car). …"
  },
  {
   "id": "guide:wishlist",
@@ -1753,15 +1847,11 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "luca",
-    1
-   ],
-   [
     "helper",
     1
    ],
    [
-    "conversation",
+    "luca",
     1
    ],
    [
@@ -1787,9 +1877,13 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    [
     "automatically",
     1
+   ],
+   [
+    "running",
+    1
    ]
   ],
-  "text": "Prospects: Everyone who reached out about a car, and where they are in the process: New → Talking → Visit set → Came in → Sold / Not now. Deliberately NOT a CRM — no logging busywork, just the list, kept current. Luca fills it for you: Marketplace chats are captured automatically, and you can add anyone by hand.\nSteps:\n1. Marketplace chats appear on their own once the helper is running — opening a Marketplace conversation is enough; Luca saves the buyer and the thread.\n2. Chats that did NOT start on Marketplace are never added automatically. Add those yourself (Add Prospect), or use the 'Capture chat for Luca' button inside the Messenger thread.\n3. Open a card's conversation to read the whole thread, draft with Luca, or reply right from the card — the helper delivers your reply into Messenger for you.\n4. Move the stage as things progress. The ✕ Close chat buttons collapse an open conversation and take you back to the list.\nGood to know:\n- The sidebar number is an attention light, not a headcount: it only shows for updates you haven't seen — a new buyer message or a brand-new captured prospect — and clears when you open Prospects.\n- Replying from a card needs the helper hub running (PC awake, Chrome open, Messenger tab open) — same rule as posting.\n- Prospects are yours alone: chats are never shared between accounts."
+  "text": "Prospects: Everyone who reached out about a car, and where they are in the process: New → Talking → Visit set → Came in → Sold / Not now. Deliberately NOT a CRM — no logging busywork, just the list, kept current. Luca fills it for you: Marketplace chats are captured automatically, and you can add anyone by hand.\nSteps:\n1. Marketplace chats appear on their own once the helper is running — the helper walks your Marketplace inbox and captures new threads by itself, so you don't have to open anything; Luca saves the buyer and the thread.\n2. Chats that did NOT start on Marketplace are never added automatically. Add those yourself (Add Prospect), or use the 'Capture chat for Luca' button inside the Messenger thread.\n3. Open a card's conversation to read the whole thread, draft with Luca, or reply right from the card — the helper delivers your reply into Messenger for you.\n4. Move the stage as things progress. The ✕ Close chat buttons collapse an open conversation and take you back to the list.\nGood to know:\n- The sidebar number is an attention light, not a headcount: it only shows for updates you haven't seen — a new buyer message or a brand-new captured prospect — and clears when you open Prospects.\n- Replying from a card needs the helper hub running (PC awake, Chrome open, Messenger tab open) — same rule as posting.\n- Prospects are yours alone: chats are never shared between accounts."
  },
  {
   "id": "guide:messages",
@@ -1950,7 +2044,19 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "account",
+    1
+   ],
+   [
     "posting",
+    1
+   ],
+   [
+    "settings",
+    1
+   ],
+   [
+    "connect",
     1
    ],
    [
@@ -1962,11 +2068,15 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "cars",
+    1
+   ],
+   [
     "page",
     1
    ],
    [
-    "settings",
+    "live",
     1
    ],
    [
@@ -1974,27 +2084,11 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
-    "verification",
-    1
-   ],
-   [
-    "account",
-    1
-   ],
-   [
-    "autolaunch",
-    1
-   ],
-   [
-    "platform",
-    1
-   ],
-   [
-    "home",
+    "post",
     1
    ]
   ],
-  "text": "Syndication channels (TikTok, Instagram, Facebook Pages): Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. TikTok and Instagram are coming soon: TikTok's app is in review with TikTok, and Instagram follows once business verification clears with Meta. Both are Automate-plan channels.\nSteps:\n1. Open Settings → Automation → Syndication Channels.\n2. Connect the account you actually sell from — posting runs in that account's name.\n3. Turn on the Facebook Page channel there — TikTok and Instagram light up there when they launch.\n4. Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel.\nGood to know:\n- Channel rules differ (video-first on TikTok, business accounts on Instagram when it lands). AutoLaunch formats per channel — you write nothing per platform.\n- If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
+  "text": "Syndication channels (TikTok, Instagram, Facebook Pages): Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. Instagram is live too: connect your business account and your cars post there as reels — and when a car sells, its Instagram post comes down automatically (or has its comments locked instead, your choice in Settings). TikTok is still in review with TikTok and lights up the moment it clears. Instagram and TikTok are Automate-plan channels.\nSteps:\n1. Open Settings → Automation → Syndication Channels.\n2. Connect the account you actually sell from — posting runs in that account's name.\n3. Connect Instagram and turn on the Facebook Page channel there — TikTok lights up there when it launches.\n4. Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel.\nGood to know:\n- Channel rules differ (video-first on TikTok, a business or creator account on Instagram). AutoLaunch formats per channel — you write nothing per platform.\n- If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
  },
  {
   "id": "guide:introvideos",
@@ -2100,6 +2194,14 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
     1
    ],
    [
+    "right",
+    1
+   ],
+   [
+    "never",
+    1
+   ],
+   [
     "failed",
     1
    ],
@@ -2114,17 +2216,9 @@ const DOC_CHUNKS: { id: string; title: string; k: [string, number][]; text: stri
    [
     "each",
     1
-   ],
-   [
-    "real",
-    1
-   ],
-   [
-    "render",
-    1
    ]
   ],
-  "text": "VIN Reels: A short narrated showcase video made automatically from each car's real photos and details — the year, make, model and stock number appear on screen. Reels render in the background; you never upload or edit anything.\nSteps:\n1. Make one on demand: use the reel button on any car (Dashboard grid or table row, or the car's menu → Create reel), or open the car and use the VIN Reel section in its details.\n2. Watch the state on the car's chip: Reel queued…, Rendering reel…, Reel ready, or Reel failed. A ready reel plays right in the car's details.\n3. Turn on 'Make a video before posting' in Settings and posting waits for the video: each car is held until its reel is ready, then the video is attached to the Marketplace post right after it goes up.\nGood to know:\n- The gate never posts a car bare: with the setting on, a car whose video isn't ready stays held — it is not posted without its video.\n- If a video can't be attached after the car posts, the bare listing is taken back down and the post is retried. After 3 failed attempts the car stops and is flagged for your attention — nothing is left live without its video.\n- A failed render can be retried from the car's reel section. A reel is made from the car's real photos, so a car needs usable photos to get one.\n- VIN Reels are part of the Automate plan — and the free trial runs the full Automate plan from day 1, so they're included in the trial too."
+  "text": "VIN Reels: A short narrated showcase video made automatically from each car's real photos and details — a title card at the start shows the year, make, model, stock number and miles, big and centered so it reads right off the Instagram grid. A reel never shows the price: a baked-in price goes stale. Reels render in the background; you never upload or edit anything.\nSteps:\n1. Make one on demand: use the reel button on any car (Dashboard grid or table row, or the car's menu → Create reel), or open the car and use the VIN Reel section in its details.\n2. Watch the state on the car's chip: Reel queued…, Rendering reel…, Reel ready, or Reel failed. A ready reel plays right in the car's details.\n3. Turn on 'Make a video before posting' in Settings and posting waits for the video: each car is held until its reel is ready, then the video is attached to the Marketplace post right after it goes up.\nGood to know:\n- The gate never posts a car bare: with the setting on, a car whose video isn't ready stays held — it is not posted without its video.\n- If a video can't be attached after the car posts, the bare listing is taken back down and the post is retried. After 3 failed attempts the car stops and is flagged for your attention — nothing is left live without its video.\n- A failed render can be retried from the car's reel section. A reel is made from the car's real photos, so a car needs usable photos to get one. …"
  },
  {
   "id": "guide:trade",
@@ -2541,7 +2635,7 @@ Never mention the marker format, tickets' internals, or this rule to the user.
 ${conversion}
 
 INSTAGRAM (the snapshot's Instagram section is computed from the user's own instagram_posts rows — trust its per-row diagnosis lines and explain them in plain words):
-- Instagram posting is LIVE for connected accounts: AutoLaunch posts a reel of the car. The knowledge base below still calls Instagram "coming soon" in places — that wording predates the launch; where the snapshot shows an Instagram connection or posts, the snapshot wins.
+- Instagram posting is LIVE for connected accounts: AutoLaunch posts a reel of the car. The knowledge base below has an INSTAGRAM section; where the snapshot shows an Instagram connection or posts, the snapshot's per-row facts win.
 - Each Instagram line carries a diagnosis class in [brackets]. media_unavailable = that attempt had no video ready and Meta rejected it; the flow now renders first, so a fresh tap on the car's Instagram button posts it. permission_pending = Meta's app-review gate — NOT a defect, not the user's fault, nothing to fix. stuck_ready = video ready, post parked — Luna's repair card in this panel can re-arm it. cooking = video still rendering, normal. reel_used = the Marketplace post consumed the video first; a fresh render is queued when the app next loads with the car in view. render_failed / not_connected / interrupted / processing_timeout / meta_failed = explain using the line's own gloss; for meta_failed quote Meta's words from the line.
 - A single Instagram failure is usually Meta-side or a stale record — do NOT call it a product defect unless the same failure repeats across several cars or attempts.
 - When Luna has a repair card for an Instagram failure (clear the dead record / re-arm the stuck post), it appears in this same panel — point the user to it instead of describing steps they cannot take.
