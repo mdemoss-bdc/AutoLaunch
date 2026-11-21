@@ -101,16 +101,18 @@
 // accounts (the owner unlock), and everyone else's rows park at
 // delete_permission_pending instead of retrying every run.
 //
-// [IG-SOLDMARK-360] The same switch now carries a per-account
-// sold MODE (user_settings.ig_sold_mode, default "delete"):
-// accounts in "mark" mode keep the post as social proof — on the
-// confirming sweep the finisher posts the fixed comment
-// "💥 SOLD 💥" and then closes commenting on the media
-// (comment_enabled=false), resolving the row "sold_marked". Mark
-// mode rides instagram_manage_comments (same review-round story
-// as manage_contents); permission failures park at
-// mark_permission_pending. The candidate discipline, the shared
-// per-run budget and the close-out phase are mode-independent.
+// [IG-SOLDREPOST-361] The same switch carries a per-account
+// sold MODE (user_settings.ig_sold_mode, default "delete").
+// Accounts in "mark" mode keep a post as social proof, but the
+// SOLD marker now lives in the caption: on the confirming sweep
+// the finisher publishes a replacement Reel whose caption puts
+// 💥SOLD where the VIN was (or appends it to the title line),
+// then deletes the original and records the replacement as
+// "sold_reposted". This replaced the v11 comment design after
+// live proof that closing a post's replies hides every reply
+// already on it, including the SOLD reply itself. The candidate
+// discipline, the shared per-run budget and the close-out phase
+// are mode-independent.
 //
 // Meta tokens are never returned to the browser or logged.
 // =====================================================================
@@ -335,22 +337,6 @@ function isDeletePermissionError(body: GraphBody): boolean {
   return false;
 }
 
-// [IG-SOLDMARK-360] The mark path's permission classifier: the
-// same shape as isDeletePermissionError, naming
-// instagram_manage_comments — the permission the SOLD comment and
-// the comment_enabled toggle ride on. Token failures (code 190)
-// are NOT this.
-function isMarkPermissionError(body: GraphBody): boolean {
-  const err = body?.error;
-  if (!err) return false;
-  if (err.code === 190) return false;
-  const msg = `${err.message ?? ""}`;
-  if (/instagram_manage_comments/i.test(msg)) return true;
-  if ((err.code === 10 || err.code === 200) && err.type === "OAuthException") return true;
-  if ((err.code === 10 || err.code === 200) && /permission/i.test(msg)) return true;
-  return false;
-}
-
 // Poll a container until Meta finishes processing it (up to ~10
 // checks, 3 seconds apart — same cadence as tiktok-post's publish
 // polling). Returns the final status_code.
@@ -365,6 +351,79 @@ async function pollContainer(accessToken: string, creationId: string): Promise<s
   return statusCode;
 }
 
+
+interface ReelPublishResult {
+  ok: boolean;
+  mediaId?: string;
+  containerId?: string | null;
+  body?: GraphBody;
+  timeout?: boolean;
+}
+
+// Create, process and publish one Reel container. This is the
+// single container path shared by the finisher's ordinary intent
+// completion and the SOLD-caption repost, so media selection,
+// cover offset and Meta error shapes cannot drift apart.
+async function publishReel(
+  accessToken: string,
+  igUserId: string,
+  videoUrl: string,
+  caption: string,
+): Promise<ReelPublishResult> {
+  const created = await graphPost(`/${igUserId}/media`, accessToken, {
+    media_type: "REELS",
+    video_url: videoUrl,
+    thumb_offset: REEL_THUMB_OFFSET,
+    caption,
+  });
+  if (!created.res.ok || !created.body?.id) {
+    return { ok: false, body: created.body, containerId: null };
+  }
+  const creationId = created.body.id;
+  const statusCode = await pollContainer(accessToken, creationId);
+  if (statusCode === "ERROR") {
+    return {
+      ok: false,
+      containerId: creationId,
+      body: { error: { message: "Meta reported the media container in ERROR state while processing." } },
+    };
+  }
+  if (statusCode !== "FINISHED") {
+    return {
+      ok: false,
+      timeout: true,
+      containerId: creationId,
+      body: { error: { message: "Instagram is still processing the media — retry the post shortly." } },
+    };
+  }
+  const published = await graphPost(`/${igUserId}/media_publish`, accessToken, {
+    creation_id: creationId,
+  });
+  const mediaId = published.body?.id as string | undefined;
+  if (!published.res.ok || !mediaId) {
+    return { ok: false, body: published.body, containerId: creationId };
+  }
+  return { ok: true, mediaId, containerId: creationId };
+}
+
+// Resolve the video a Reel publish for this car must use: the
+// user's own ready/staged video first, then an explicit fallback
+// supplied by the caller, then the latest ready rendered reel.
+async function resolveReelVideoUrl(
+  db: Db,
+  userId: string,
+  vin: string,
+  fallbackUrl: string | null,
+): Promise<string | null> {
+  const userVideoUrl = await ensureInstagramUserVideo(db, userId, vin);
+  if (userVideoUrl) return userVideoUrl;
+  if (fallbackUrl) return fallbackUrl;
+  const reel = await latestReel(db, userId, vin);
+  if (reel && reel.status === "ready" && reel.video_url) {
+    return reel.video_url as string;
+  }
+  return null;
+}
 
 // =====================================================================
 // [IG-AUTO-354] Auto-Instagram (Matthew, 2026-11-20): "Also post to
@@ -597,27 +656,57 @@ const FINISH_PARK_LIMIT = 25;
 //   error_code "sold_delete_error" and is parked out of the
 //   sweep, surfaced in the finisher summary.
 //
-//   [IG-SOLDMARK-360] In "mark" mode (user_settings.ig_sold_mode)
-//   the confirming pass marks instead of deleting: it posts the
-//   fixed SOLD comment FIRST, records that durably
-//   (error_code "sold_comment_posted"), then closes commenting
-//   (comment_enabled=false). Full success resolves the row
-//   "sold_marked", out of the sweep for good. A toggle failure
-//   leaves the "sold_comment_posted" record in place, so a later
-//   pass retries ONLY the toggle — the SOLD comment is never
-//   posted twice. Permission failures park the row at
-//   "mark_permission_pending"; other comment-step errors park it
-//   at "sold_mark_error", both with Meta's message verbatim.
+//   [IG-SOLDREPOST-361] In "mark" mode the confirming pass
+//   performs a caption repost instead of a delete: fetch the
+//   original caption, transform it (the VIN becomes 💥SOLD;
+//   with no VIN in the caption, -💥SOLD is appended to the
+//   title line; #SOLD is added when absent), publish the
+//   replacement Reel through the shared publish path, record
+//   the replacement as "sold_reposted", and only then delete
+//   the original. The replacement media id is written to the
+//   original row ("sold_repost_delete_pending") BEFORE the
+//   delete is attempted, so a delete failure retries only the
+//   delete — never a second repost. A contents-permission
+//   refusal parks the original at "mark_permission_pending"
+//   while KEEPING the delete-pending code, and the sweep's
+//   selection includes that status for exactly those rows, so
+//   the retry stays reachable once permission exists. Caption
+//   or publish failures park the original at "sold_mark_error"
+//   with Meta's message verbatim, the original untouched.
 // =====================================================================
 
 const SOLD_SWEEP_LIMIT = 25;
 const SOLD_DELETE_CANDIDATE = "sold_delete_candidate";
-// [IG-SOLDMARK-360] The fixed SOLD comment text — exactly this,
-// no date, nothing else (Matthew, 2026-11-21).
-const SOLD_MARK_COMMENT = "💥 SOLD 💥";
-// Durable partial-progress record: the SOLD comment is on the
-// post; only the commenting toggle remains.
-const SOLD_COMMENT_POSTED = "sold_comment_posted";
+// [IG-SOLDREPOST-361] Durable partial-progress record: the
+// SOLD-caption replacement is published; only the original's
+// delete remains. The replacement media id (and container id)
+// ride in the original row's error_message as JSON.
+const SOLD_REPOST_DELETE_PENDING = "sold_repost_delete_pending";
+// Legacy v11 partial state (a SOLD reply landed but its
+// follow-up step failed). Rows carrying it are treated as
+// confirmed candidates and completed by the repost path.
+const LEGACY_SOLD_COMMENT_POSTED = "sold_comment_posted";
+
+// The SOLD caption transform (Matthew's Format 2, 2026-11-21):
+// the VIN's slot in the title line becomes 💥SOLD — one
+// explosion, before SOLD, none after. A caption with no VIN
+// gets -💥SOLD appended to its title line. #SOLD joins the
+// hashtags when it is not already there. Nothing else changes.
+function buildSoldCaption(caption: string, vin: string): string {
+  let out = caption;
+  const lines = out.split("\n");
+  if (vin && (lines[0] ?? "").includes(vin)) {
+    lines[0] = (lines[0] ?? "").split(vin).join("💥SOLD");
+    out = lines.join("\n");
+  } else {
+    lines[0] = (lines[0] ?? "") + "-💥SOLD";
+    out = lines.join("\n");
+  }
+  if (!/(^|\s)#SOLD(?=\s|$)/.test(out)) {
+    out = out ? out + " #SOLD" : "#SOLD";
+  }
+  return out;
+}
 
 // The canonical sold/exit read (the Marketplace contract): the
 // app writes status "Sold" on a manual mark-sold (comparisons
@@ -720,18 +809,205 @@ async function soldSweepPublished(
 ): Promise<void> {
   const { data: rows } = await db
     .from("instagram_posts")
-    .select("id, user_id, vin, media_id, error_code")
-    .eq("status", "published")
+    .select("id, user_id, vin, stock_number, media_id, error_code, error_message")
+    .in("status", ["published", "mark_permission_pending"])
     .order("created_at", { ascending: true })
     .limit(100);
   const settingCache = new Map<string, { enabled: boolean; mode: "delete" | "mark" }>();
   const stateCache = new Map<string, { known: boolean; sold: boolean }>();
+
+  // [IG-SOLDREPOST-361] Read the durable delete-pending pointer
+  // (the replacement's media + container ids, as JSON in the
+  // original row's error_message).
+  const readRepostPending = (
+    sourceRow: Record<string, unknown>,
+  ): { mediaId: string; containerId: string | null } | null => {
+    try {
+      const parsed = JSON.parse((sourceRow.error_message as string) ?? "") as {
+        new_media_id?: unknown;
+        container_id?: unknown;
+      };
+      if (typeof parsed.new_media_id === "string" && parsed.new_media_id) {
+        return {
+          mediaId: parsed.new_media_id,
+          containerId: typeof parsed.container_id === "string" ? parsed.container_id : null,
+        };
+      }
+    } catch {
+      // Not a JSON pointer — treated as malformed by the caller.
+    }
+    return null;
+  };
+  const repostPendingMessage = (
+    pending: { mediaId: string; containerId: string | null },
+    message: string,
+  ): string => JSON.stringify({
+    new_media_id: pending.mediaId,
+    container_id: pending.containerId,
+    message,
+  });
+
+  // The replacement row: status "sold_reposted" — terminal, out
+  // of every sweep selection and out of the already-posted
+  // guard's live set, so it is never re-marked, never deleted
+  // by the sweep, and never blocks a future post of the car.
+  const ensureSoldRepostedRow = async (
+    sourceRow: Record<string, unknown>,
+    pending: { mediaId: string; containerId: string | null },
+  ): Promise<boolean> => {
+    try {
+      const { data: existing, error: selErr } = await db
+        .from("instagram_posts")
+        .select("id")
+        .eq("user_id", sourceRow.user_id as string)
+        .eq("media_id", pending.mediaId)
+        .eq("status", "sold_reposted")
+        .limit(1);
+      if (selErr) {
+        console.error("instagram-post: sold repost row lookup failed: " + selErr.message);
+        return false;
+      }
+      if (existing && existing.length) return true;
+      const { error } = await db.from("instagram_posts").insert({
+        user_id: sourceRow.user_id, vin: sourceRow.vin,
+        stock_number: (sourceRow.stock_number as string) ?? null,
+        kind: "reel", media_id: pending.mediaId,
+        container_id: pending.containerId, status: "sold_reposted",
+        error_code: null, error_message: null,
+      });
+      if (error) {
+        if ((error as { code?: string }).code === "23505") return true;
+        console.error("instagram-post: sold repost row insert failed: " + error.message);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error("instagram-post: sold repost row insert threw: " + e);
+      return false;
+    }
+  };
+
+  // Attempt ONLY the original's delete for a published
+  // replacement — the one retryable step of the swap.
+  const attemptSoldRepostDelete = async (
+    sourceRow: Record<string, unknown>,
+    vin: string,
+    pending: { mediaId: string; containerId: string | null },
+    token: string,
+  ): Promise<void> => {
+    if (!(await ensureSoldRepostedRow(sourceRow, pending))) {
+      summary.mark_failed.push(vin);
+      return;
+    }
+    const del = await graphDelete(`/${sourceRow.media_id as string}`, token);
+    const err = del.body?.error;
+    if (!del.res.ok || err) {
+      const message = err?.message ?? "Meta returned an error.";
+      const code = err?.code ?? null;
+      console.error(`instagram-post: sold repost delete failed: ${code ?? "?"} ${message}`);
+      if (isDeletePermissionError(del.body)) {
+        // Parked, but the delete-pending code stays on the row
+        // and the sweep selects this status for exactly those
+        // rows — the delete retry remains reachable.
+        const { error: updErr } = await db
+          .from("instagram_posts")
+          .update({
+            status: "mark_permission_pending",
+            error_code: SOLD_REPOST_DELETE_PENDING,
+            error_message: repostPendingMessage(pending, message),
+          })
+          .eq("id", sourceRow.id as string)
+          .in("status", ["published", "mark_permission_pending"])
+          .eq("error_code", SOLD_REPOST_DELETE_PENDING);
+        if (updErr) {
+          summary.skipped++;
+          return;
+        }
+        summary.mark_pending.push(vin);
+        return;
+      }
+      const { error: updErr } = await db
+        .from("instagram_posts")
+        .update({
+          error_code: SOLD_REPOST_DELETE_PENDING,
+          error_message: repostPendingMessage(pending, message),
+        })
+        .eq("id", sourceRow.id as string)
+        .in("status", ["published", "mark_permission_pending"])
+        .eq("error_code", SOLD_REPOST_DELETE_PENDING);
+      if (updErr) {
+        summary.skipped++;
+        return;
+      }
+      summary.mark_failed.push(vin);
+      return;
+    }
+    const { error: updErr } = await db
+      .from("instagram_posts")
+      .update({ status: "deleted", error_code: null, error_message: null })
+      .eq("id", sourceRow.id as string)
+      .in("status", ["published", "mark_permission_pending"])
+      .eq("error_code", SOLD_REPOST_DELETE_PENDING);
+    if (updErr) {
+      summary.skipped++;
+      return;
+    }
+    summary.marked.push(vin);
+  };
+
   for (const row of rows ?? []) {
-    if (budget.used >= SOLD_SWEEP_LIMIT) break;
     const userId = row.user_id as string;
     const vin = row.vin as string | null;
     const mediaId = row.media_id as string | null;
     if (!vin || !mediaId) continue;
+    const errorCode = (row.error_code as string | null) ?? null;
+
+    // [IG-SOLDREPOST-361] A swap already in flight completes
+    // before any fresh state read: the replacement is live, so
+    // the original comes down even if the car has since come
+    // back or the account's switch has moved — leaving it up
+    // would run two ads for one car.
+    if (errorCode === SOLD_REPOST_DELETE_PENDING) {
+      if (budget.used >= SOLD_SWEEP_LIMIT) break;
+      const pending = readRepostPending(row as Record<string, unknown>);
+      if (!pending) {
+        if (!dryRun) {
+          const { error } = await db
+            .from("instagram_posts")
+            .update({
+              status: "published",
+              error_code: "sold_mark_error",
+              error_message: "SOLD repost delete is pending but the replacement media id is missing.",
+            })
+            .eq("id", row.id);
+          if (error) {
+            summary.skipped++;
+            continue;
+          }
+        }
+        summary.mark_failed.push(vin);
+        continue;
+      }
+      budget.used++;
+      if (dryRun) {
+        summary.marked.push(vin);
+        continue;
+      }
+      const chk = await checkConnection(db, userId);
+      if (chk.err || !chk.conn) {
+        summary.skipped++;
+        continue;
+      }
+      await attemptSoldRepostDelete(
+        row as Record<string, unknown>, vin, pending,
+        chk.conn.access_token as string,
+      );
+      continue;
+    }
+    // The v11 permission park (no repost in flight) is terminal
+    // until a human reconnect resolves it — never the sweep's.
+    if ((row.status as string) === "mark_permission_pending") continue;
+
     const stateKey = userId + "|" + vin;
     let state = stateCache.get(stateKey);
     if (!state) {
@@ -739,12 +1015,12 @@ async function soldSweepPublished(
       stateCache.set(stateKey, state);
     }
     if (!state.known) continue;
-    const errorCode = (row.error_code as string | null) ?? null;
     if (!state.sold) {
       // The car came back: a stale candidate mark is cleared so
       // a later genuine sale starts the two-sweep confirmation
       // fresh. Nothing else about the row changes.
       if (errorCode !== SOLD_DELETE_CANDIDATE) continue;
+      if (budget.used >= SOLD_SWEEP_LIMIT) break;
       budget.used++;
       if (!dryRun) {
         const { error } = await db
@@ -767,10 +1043,13 @@ async function soldSweepPublished(
       settingCache.set(userId, settings);
     }
     if (!settings.enabled) continue;
-    if (errorCode === SOLD_DELETE_CANDIDATE || errorCode === SOLD_COMMENT_POSTED) {
+    if (errorCode === SOLD_DELETE_CANDIDATE || errorCode === LEGACY_SOLD_COMMENT_POSTED) {
       // Second consecutive sold read: the delete itself — or,
-      // in mark mode, the SOLD comment + commenting close.
-      budget.used++;
+      // in mark mode, the caption repost (publish + delete = 2
+      // actions from the shared budget).
+      const actionCost = settings.mode === "mark" ? 2 : 1;
+      if (budget.used + actionCost > SOLD_SWEEP_LIMIT) continue;
+      budget.used += actionCost;
       if (dryRun) {
         if (settings.mode === "mark") summary.marked.push(vin);
         else summary.sold_deleted.push(vin);
@@ -786,100 +1065,83 @@ async function soldSweepPublished(
       }
       if (settings.mode === "mark") {
         const token = chk.conn.access_token as string;
-        // [IG-SOLDMARK-360] A Meta failure on either mark step:
-        // a permission refusal parks the row for good at
-        // mark_permission_pending (out of the sweep — no retry
-        // loop while instagram_manage_comments awaits its
-        // review round); any other error parks it with Meta's
-        // message verbatim — except a toggle failure AFTER the
-        // comment landed, which keeps the durable
-        // sold_comment_posted record so the next pass retries
-        // only the toggle.
-        const parkMarkFailure = async (
-          body: GraphBody,
-          afterComment: boolean,
-        ): Promise<void> => {
+        // [IG-SOLDREPOST-361] A caption-fetch or publish failure
+        // parks the row at sold_mark_error with Meta's message
+        // verbatim; the original post stays exactly as it was.
+        const parkMarkFailure = async (body: GraphBody): Promise<void> => {
           const err = body?.error;
           const message = err?.message ?? "Meta returned an error.";
           const code = err?.code ?? null;
-          console.error(`instagram-post: sold mark failed: ${code ?? "?"} ${message}`);
-          if (isMarkPermissionError(body)) {
-            const { error: updErr } = await db
-              .from("instagram_posts")
-              .update({
-                status: "mark_permission_pending",
-                error_code: "mark_permission_pending",
-                error_message: message,
-              })
-              .eq("id", row.id)
-              .eq("status", "published");
-            if (updErr) {
-              summary.skipped++;
-              return;
-            }
-            summary.mark_pending.push(vin);
-            return;
-          }
+          console.error(`instagram-post: sold repost failed: ${code ?? "?"} ${message}`);
           const { error: updErr } = await db
             .from("instagram_posts")
-            .update(afterComment
-              ? {
-                error_code: SOLD_COMMENT_POSTED,
-                error_message: (code !== null ? String(code) + ": " : "") + message,
-              }
-              : {
-                error_code: "sold_mark_error",
-                error_message: (code !== null ? String(code) + ": " : "") + message,
-              })
+            .update({
+              error_code: "sold_mark_error",
+              error_message: (code !== null ? String(code) + ": " : "") + message,
+            })
             .eq("id", row.id)
-            .eq("status", "published");
+            .eq("status", "published")
+            .in("error_code", [SOLD_DELETE_CANDIDATE, LEGACY_SOLD_COMMENT_POSTED]);
           if (updErr) {
             summary.skipped++;
             return;
           }
           summary.mark_failed.push(vin);
         };
-        if (errorCode === SOLD_DELETE_CANDIDATE) {
-          // (a) The SOLD comment FIRST — closing commenting
-          // before it lands would leave the post unmarked.
-          const cmt = await graphPost(`/${mediaId}/comments`, token, {
-            message: SOLD_MARK_COMMENT,
-          });
-          if (!cmt.res.ok || cmt.body?.error) {
-            await parkMarkFailure(cmt.body, false);
-            continue;
-          }
-          // Record the partial progress BEFORE the toggle, so
-          // a failure from here on can never re-post the comment.
-          const { error: progErr } = await db
-            .from("instagram_posts")
-            .update({ error_code: SOLD_COMMENT_POSTED, error_message: null })
-            .eq("id", row.id)
-            .eq("status", "published")
-            .eq("error_code", SOLD_DELETE_CANDIDATE);
-          if (progErr) {
-            summary.skipped++;
-            continue;
-          }
-        }
-        // (b) Close commenting on the media.
-        const tog = await graphPost(`/${mediaId}`, token, {
-          comment_enabled: "false",
-        });
-        if (!tog.res.ok || tog.body?.error) {
-          await parkMarkFailure(tog.body, true);
+        // (a) The original caption, from Meta itself — the
+        // transform works on the caption that actually ran.
+        const cap = await graphGet(`/${mediaId}?fields=caption`, token);
+        const captionText = cap.body?.caption as string | undefined;
+        if (!cap.res.ok || cap.body?.error || typeof captionText !== "string" || !captionText) {
+          await parkMarkFailure(
+            cap.body?.error
+              ? cap.body
+              : { error: { message: "Meta returned no caption for the original post." } },
+          );
           continue;
         }
-        const { error: updErr } = await db
+        const soldCaption = buildSoldCaption(captionText, vin);
+        // (b) Publish the replacement through the shared Reel
+        // path (user video first, then the ready rendered reel).
+        const videoUrl = await resolveReelVideoUrl(db, userId, vin, null);
+        const result = videoUrl
+          ? await publishReel(token, chk.conn.ig_user_id as string, videoUrl, soldCaption)
+          : {
+            ok: false as const,
+            body: { error: { message: "No ready reel or user video is available for the SOLD repost." } },
+            containerId: null,
+          };
+        if (!result.ok || !result.mediaId) {
+          await parkMarkFailure(result.body ?? {});
+          continue;
+        }
+        const pending = {
+          mediaId: result.mediaId,
+          containerId: result.containerId ?? null,
+        };
+        // (c) The durable pointer BEFORE the delete attempt:
+        // from here on, every later pass retries only the
+        // delete — a second repost can never be published.
+        const { error: ptrErr } = await db
           .from("instagram_posts")
-          .update({ status: "sold_marked", error_code: null, error_message: null })
+          .update({
+            error_code: SOLD_REPOST_DELETE_PENDING,
+            error_message: repostPendingMessage(pending, "SOLD repost published; original delete pending."),
+          })
           .eq("id", row.id)
-          .eq("status", "published");
-        if (updErr) {
+          .eq("status", "published")
+          .in("error_code", [SOLD_DELETE_CANDIDATE, LEGACY_SOLD_COMMENT_POSTED]);
+        if (ptrErr) {
+          console.error(
+            `instagram-post: sold repost pointer write failed for ${mediaId}: ${ptrErr.message}; replacement media is ${pending.mediaId}`,
+          );
           summary.skipped++;
           continue;
         }
-        summary.marked.push(vin);
+        // (d) Record the replacement and delete the original.
+        await attemptSoldRepostDelete(
+          row as Record<string, unknown>, vin, pending, token,
+        );
         continue;
       }
       const del = await graphDelete(`/${mediaId}`, chk.conn.access_token as string);
@@ -935,6 +1197,7 @@ async function soldSweepPublished(
     if (errorCode === null) {
       // First sold read: mark only. The delete waits for a
       // later sweep where the car still reads sold.
+      if (budget.used >= SOLD_SWEEP_LIMIT) break;
       budget.used++;
       if (!dryRun) {
         const { error } = await db
@@ -954,7 +1217,6 @@ async function soldSweepPublished(
     // note from an earlier flow) leaves the row out of the sweep.
   }
 }
-
 async function latestReel(db: Db, userId: string, vin: string) {
   const { data } = await db
     .from("vin_reels")
@@ -1159,8 +1421,9 @@ async function finishOneIntent(
   // this publish was handed — resolve here, at the one place
   // the finisher creates its container, so the precedence
   // holds whatever the caller passed.
-  const userVideoUrl = vin ? await ensureInstagramUserVideo(db, userId, vin) : null;
-  const effectiveVideoUrl = userVideoUrl ?? videoUrl;
+  const effectiveVideoUrl = vin
+    ? await resolveReelVideoUrl(db, userId, vin, videoUrl)
+    : videoUrl;
 
   const failInPlace = async (body: GraphBody, containerId: string | null) => {
     const err = body?.error;
@@ -1181,44 +1444,29 @@ async function finishOneIntent(
     summary.resolved_failed.push(vin ?? "");
   };
 
-  const created = await graphPost(`/${igUserId}/media`, accessToken, {
-    media_type: "REELS",
-    video_url: effectiveVideoUrl,
-    thumb_offset: REEL_THUMB_OFFSET,
-    caption,
-  });
-  if (!created.res.ok || !created.body?.id) {
-    await failInPlace(created.body, null);
-    return;
-  }
-  const creationId = created.body.id;
-  const statusCode = await pollContainer(accessToken, creationId);
-  if (statusCode === "ERROR") {
+  if (!effectiveVideoUrl) {
     await failInPlace(
-      { error: { message: "Meta reported the media container in ERROR state while processing." } },
-      creationId,
+      { error: { message: "No ready reel or user video is available for this post." } },
+      null,
     );
     return;
   }
-  if (statusCode !== "FINISHED") {
-    await resolveIntentRow(db, intent.id, {
-      status: "failed", container_id: creationId,
-      error_code: "media_processing_timeout",
-      error_message: "Instagram is still processing the media — retry the post shortly.",
-    });
-    summary.resolved_failed.push(vin ?? "");
-    return;
-  }
-  const published = await graphPost(`/${igUserId}/media_publish`, accessToken, {
-    creation_id: creationId,
-  });
-  const mediaId = published.body?.id as string | undefined;
-  if (!published.res.ok || !mediaId) {
-    await failInPlace(published.body, creationId);
+  const result = await publishReel(accessToken, igUserId, effectiveVideoUrl, caption);
+  if (!result.ok) {
+    if (result.timeout) {
+      await resolveIntentRow(db, intent.id, {
+        status: "failed", container_id: result.containerId ?? null,
+        error_code: "media_processing_timeout",
+        error_message: "Instagram is still processing the media — retry the post shortly.",
+      });
+      summary.resolved_failed.push(vin ?? "");
+      return;
+    }
+    await failInPlace(result.body ?? {}, result.containerId ?? null);
     return;
   }
   await resolveIntentRow(db, intent.id, {
-    status: "published", media_id: mediaId, container_id: creationId,
+    status: "published", media_id: result.mediaId, container_id: result.containerId,
     stock_number: stockNumber, error_code: null, error_message: null,
   });
   summary.published.push(vin ?? "");
@@ -1312,7 +1560,7 @@ async function finishPending(db: Db, dryRun: boolean): Promise<FinishSummary> {
         continue;
       }
       const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
-      if (priorRows.some((r) => Date.parse(r.created_at as string) > dayAgo)) {
+      if (priorRows.some((r) => r.status !== "sold_reposted" && Date.parse(r.created_at as string) > dayAgo)) {
         summary.skipped++;
         continue;
       }
