@@ -107,6 +107,19 @@
 // preamble no longer claims the KB calls Instagram "coming
 // soon". No behavior code changes.
 //
+// PHASE 6 (2026-11-21, IG queue KB): the INSTAGRAM section's
+// queue text now matches the shipped queue (app commit
+// db27423a): a failed Instagram card hides itself once a
+// newer post for the same car publishes; failed cards carry
+// a Retry button beside Dismiss (permission-pending cards
+// keep Dismiss only) and Retry re-runs the post — already-
+// posted check first, then the ready reel, else the reel is
+// queued first; Dismiss is local-only and cancels nothing
+// server-side. DOC_CHUNKS verified against a fresh
+// regeneration from HEAD fa7d1028: guide:queue regenerates
+// byte-identical, so the chunks are carried over unchanged.
+// Text-only; no behavior code changes.
+//
 // verify_jwt=false at the platform level; the caller's JWT is verified
 // manually (same pattern as listing-copy / luca-draft). The snapshot
 // NEVER reads token/secret columns — user_settings is selected by an
@@ -967,6 +980,17 @@ INSTAGRAM (Automate tier and up):
 - Instagram jobs appear in the Post Queue as display-only rows
   so the rep can watch them publish; a finished Instagram post
   leaves the queue list (its record stays with the car).
+- A failed Instagram card in the queue has a Retry button
+  beside Dismiss (a card waiting on Meta's permission has
+  Dismiss only). Retry re-runs the post properly: if the car
+  already posted, it says so and clears the card; if the
+  car's reel is ready, it posts with that reel; if no reel
+  is ready, it queues the reel first and the post follows
+  when the render lands. Once a newer Instagram post for
+  the same car publishes, the old failed card hides itself
+  — no cleanup needed. Dismiss only hides a card on this
+  screen; it cancels nothing on the server, and the post's
+  record stays with the car either way.
 - Auto-posting to Instagram is its own toggle in Settings -> Instagram (off by
   default). A server finisher publishes queued Instagram posts
   every few minutes, so a locked PC does not stall them; if
