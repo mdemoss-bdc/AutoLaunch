@@ -28,7 +28,8 @@
 //   POST /disconnect  — delete the caller's connection row.
 //
 // OAuth is Facebook Login requesting the Facebook-Login permission
-// set: instagram_basic, instagram_content_publish, pages_show_list.
+// set: instagram_basic, instagram_content_publish,
+// instagram_manage_contents, pages_show_list.
 // Publishing runs through graph.facebook.com against the IG user id
 // resolved from the linked Page (Instagram Graph API).
 //
@@ -56,6 +57,7 @@ const DEFAULT_REDIRECT_URI =
 const REQUESTED_PERMISSIONS = [
   "instagram_basic",
   "instagram_content_publish",
+  "instagram_manage_contents",
   "pages_show_list",
 ];
 
