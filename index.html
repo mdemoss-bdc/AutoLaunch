@@ -4864,6 +4864,8 @@ document.addEventListener("click", function (e) {
     retryQueueItem(el.dataset.id);
   } else if (action === "ig-queue-dismiss") {
     dismissInstagramQueueItem(el.dataset.id);
+  } else if (action === "ig-queue-retry") {
+    retryInstagramQueueItem(el.dataset.id);
   } else if (action === "queue-select") {
     const qid = el.dataset.id;
     if (selectedQueueIds.has(qid)) selectedQueueIds.delete(qid);
@@ -15885,6 +15887,20 @@ const IG_QUEUE_PUBLISHED_WINDOW_MS = 24 * 60 * 60 * 1000;
 // Terminal IG states: the job is done, so the queue never shows it.
 const IG_QUEUE_FINISHED_STATUSES = ["published", "deleted", "sold_reposted", "sold_marked"];
 
+// [IG-RETRY-367] Superseded fails vanish + Retry (Matthew, 2026-11-21):
+// a failed intent whose car later published is history, not work —
+// the queue hides it (see igQueueRowSuperseded). The supersession
+// read reaches back 30 days: wide enough to cover any realistic gap
+// between a failure and its successful retry, narrow enough to stay
+// a vin/status/created_at-only read. A failed card that is still the
+// car's latest word keeps a Retry button (retryInstagramQueueItem).
+const IG_QUEUE_SUPERSEDE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+// Latest published created_at (ms) per VIN, rebuilt by every
+// loadPostingQueue from the supersession read; {} = nothing known.
+let igQueuePublishedAtByVin = {};
+// Ids with a retry currently in flight — double-tap safety.
+const igQueueRetryingIds = new Set();
+
 function igQueueDismissedKey() {
     return "igQueueDismissed:" + (currentUser ? currentUser.id : "anon");
 }
@@ -15925,6 +15941,25 @@ function igQueueRowInScope(row, nowMs) {
 // a post can never be pulled back mid-flight from this list.
 function igQueueDismissible(row) {
     return !!row && (row.status === "failed" || row.status === "permission_pending");
+}
+
+// Retry is offered on failed intents only: a permission_pending row
+// is waiting on Meta, not on us, so there is nothing to retry.
+function igQueueRetryable(row) {
+    return !!row && row.status === "failed";
+}
+
+// [IG-RETRY-367] A failed intent is superseded once the same car has
+// a published row NEWER than the failure — the success retires the
+// fail card (the Lexus case: interrupted at 1:56 PM, published at
+// 2:41 PM, fail card still showing). A failure newer than any
+// publish is still the car's latest word and keeps rendering.
+function igQueueRowSuperseded(row, publishedAtByVin) {
+    if (!row || row.status !== "failed" || !row.vin) return false;
+    const pubMs = publishedAtByVin ? publishedAtByVin[row.vin] : null;
+    if (pubMs == null) return false;
+    const failMs = new Date(row.created_at).getTime();
+    return isFinite(failMs) && pubMs > failMs;
 }
 
 // A failed IG row shows Meta's stored error the way failed FB rows
@@ -16006,6 +16041,15 @@ function renderInstagramQueueRow(item) {
 
                     <span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">${igQueueStatusLabel(item.status)}</span>
 
+                    ${igQueueRetryable(item) ? `<button
+                        data-action="ig-queue-retry" data-id="${escapeHtml(item.id)}"
+                        ${igQueueRetryingIds.has(String(item.id)) ? "disabled" : ""}
+                        class="text-xs text-blue-600 hover:text-blue-700 font-semibold px-3 py-2 -my-1">
+
+                        ${igQueueRetryingIds.has(String(item.id)) ? "Retrying…" : "Retry"}
+
+                    </button>` : ``}
+
                     ${igQueueDismissible(item) ? `<button
                         data-action="ig-queue-dismiss" data-id="${escapeHtml(item.id)}"
                         class="text-xs text-red-600 hover:text-red-700 font-semibold px-3 py-2 -my-1">
@@ -16033,6 +16077,97 @@ async function dismissInstagramQueueItem(id) {
         localStorage.setItem(igQueueDismissedKey(), JSON.stringify(Array.from(dismissed)));
     } catch (e) { /* storage unavailable: the reload below re-reads the set; if it could not be saved the row simply stays */ }
     await loadPostingQueue();
+}
+
+// The Retry button for one queue card (at most one per row id) —
+// matched by data-action + data-id, so no selector escaping is
+// needed for the id.
+function igQueueRetryButton(id) {
+    const btns = document.querySelectorAll('[data-action="ig-queue-retry"]');
+    for (let i = 0; i < btns.length; i++) {
+        if (btns[i].dataset && String(btns[i].dataset.id) === String(id)) return btns[i];
+    }
+    return null;
+}
+
+function igQueueSetRetryButtonState(id, inFlight) {
+    const btn = igQueueRetryButton(id);
+    if (!btn) return;
+    btn.disabled = !!inFlight;
+    btn.textContent = inFlight ? "Retrying…" : "Retry";
+}
+
+// [IG-RETRY-367] Retry a failed Instagram intent from its queue
+// card. Mirrors the car's Instagram tap semantics: already posted
+// is a done state; a ready reel (the tap's own ready check) or a
+// ready user video needs only a fresh intent; otherwise the render
+// is queued first and the intent parks at awaiting_reel for the
+// finisher/watcher. The failed row's media kind is preserved for
+// picture intents. On success the old failed card is hidden at once
+// through the same per-device dismissal store Dismiss uses — the
+// server record stays untouched, exactly as with Dismiss.
+async function retryInstagramQueueItem(id) {
+    if (!id || !currentUser) return;
+    const row = instagramQueueRows.find(r => String(r.id) === String(id));
+    if (!row || !igQueueRetryable(row)) return;
+    if (igQueueRetryingIds.has(String(id))) return;
+    const car = rawInventory.find(c => c.vin === row.vin) || null;
+    if (!car) {
+        showTikTokToast("That car isn't in your inventory anymore, so its Instagram post can't be retried.");
+        return;
+    }
+    igQueueRetryingIds.add(String(id));
+    igQueueSetRetryButtonState(id, true);
+    const hideRowAndReload = async () => {
+        try {
+            const dismissed = igQueueDismissedIds();
+            dismissed.add(String(id));
+            localStorage.setItem(igQueueDismissedKey(), JSON.stringify(Array.from(dismissed)));
+        } catch (e) { /* storage unavailable: the reload below re-reads the set; if it could not be saved the row simply stays */ }
+        await loadPostingQueue();
+    };
+    try {
+        await instagramLoadPendingIntents();
+        const publishedAt = igQueuePublishedAtByVin ? igQueuePublishedAtByVin[row.vin] : null;
+        if (instagramPostedByVin[car.vin] || publishedAt != null) {
+            showTikTokToast("This car is already posted to Instagram — one post per car, so it won't go twice.");
+            await hideRowAndReload();
+            return;
+        }
+        const kind = (row.kind === "photo" || row.kind === "carousel") ? row.kind : undefined;
+        const reel = vinReelFor(car);
+        const uv = userVideoFor(car);
+        const reelReady = !!(reel && reel.status === "ready" && reel.video_url);
+        const userVideoReady = !!(uv && uv.status === "ready");
+        let queuedRender = false;
+        if (!reelReady && !userVideoReady) {
+            const queued = await instagramQueueReel(car);
+            if (!queued) {
+                showTikTokToast("Couldn't queue this car's VIN Reel — try again in a moment.");
+                return;
+            }
+            queuedRender = true;
+        }
+        const recorded = await instagramRecordIntent(car, kind);
+        if (recorded === "already") {
+            showTikTokToast("This car is already posted to Instagram — one post per car, so it won't go twice.");
+            await hideRowAndReload();
+            return;
+        }
+        if (!recorded) {
+            showTikTokToast("Couldn't re-queue the Instagram post — check the connection in Settings and try again.");
+            return;
+        }
+        showTikTokToast(
+            queuedRender && !kind
+                ? "Retry queued — rendering this car's Reel; the Instagram post follows automatically when it's ready."
+                : "Retry queued — this car's Instagram post will go out on its own in the next few minutes."
+        );
+        await hideRowAndReload();
+    } finally {
+        igQueueRetryingIds.delete(String(id));
+        igQueueSetRetryButtonState(id, false);
+    }
 }
 
 function renderFacebookQueueRow(item) {
@@ -16192,7 +16327,7 @@ async function loadPostingQueue() {
         // break the Facebook queue; the list renders without IG rows.
         try {
             const igSinceIso = new Date(Date.now() - IG_QUEUE_PUBLISHED_WINDOW_MS).toISOString();
-            const igCols = "id, vin, stock_number, status, error_message, created_at";
+            const igCols = "id, vin, stock_number, status, kind, error_message, created_at";
             const igLiveResP = supabaseClient
                 .from("instagram_posts")
                 .select(igCols)
@@ -16208,14 +16343,39 @@ async function loadPostingQueue() {
                 .gte("created_at", igSinceIso)
                 .order("created_at", { ascending: false })
                 .limit(200);
+            const igSupersedeResP = supabaseClient
+                .from("instagram_posts")
+                .select("vin, status, created_at")
+                .eq("user_id", currentUser.id)
+                .eq("status", "published")
+                .gte("created_at", new Date(Date.now() - IG_QUEUE_SUPERSEDE_WINDOW_MS).toISOString())
+                .order("created_at", { ascending: false })
+                .limit(500);
             const igLiveRes = await igLiveResP;
             const igRecentRes = await igRecentResP;
+            const igSupersedeRes = await igSupersedeResP;
             const igDismissed = igQueueDismissedIds();
             const igFetched = []
                 .concat(igLiveRes && !igLiveRes.error ? (igLiveRes.data || []) : [])
                 .concat(igRecentRes && !igRecentRes.error ? (igRecentRes.data || []) : []);
+            // [IG-RETRY-367] Newest publish per VIN from the 30-day
+            // supersession read: a failed intent older than that
+            // publish was retired by the success and is filtered
+            // out below. A failed read leaves the map empty — the
+            // fails keep rendering, the safe direction.
+            const igPublishedAtByVin = {};
+            if (igSupersedeRes && !igSupersedeRes.error) {
+                (igSupersedeRes.data || []).forEach(r => {
+                    if (!r || !r.vin) return;
+                    const ms = new Date(r.created_at).getTime();
+                    if (isFinite(ms) && (igPublishedAtByVin[r.vin] == null || ms > igPublishedAtByVin[r.vin])) {
+                        igPublishedAtByVin[r.vin] = ms;
+                    }
+                });
+            }
+            igQueuePublishedAtByVin = igPublishedAtByVin;
             const igNowMs = Date.now();
-            instagramQueueRows = igFetched.filter(r => r && igQueueRowInScope(r, igNowMs) && !igDismissed.has(String(r.id)));
+            instagramQueueRows = igFetched.filter(r => r && igQueueRowInScope(r, igNowMs) && !igQueueRowSuperseded(r, igPublishedAtByVin) && !igDismissed.has(String(r.id)));
         } catch (igErr) {
             instagramQueueRows = [];
         }
