@@ -15899,12 +15899,17 @@ function queueFailReason(item) {
 // triple-post, 2026-11-20). loadPostingQueue now also fetches the
 // user's IG intents and merges them into the same rendered list —
 // display only: nothing is mirrored into auto_posting_queue, so the
-// helper can never see an IG row. Display scope: every non-published
-// intent (it stays until it resolves) plus published intents from the
-// last 24 hours (a just-finished post reads as done, then ages out).
+// helper can never see an IG row. Display scope: in-flight intents
+// only. Finished intents (published / deleted / sold_reposted /
+// sold_marked) never render — a done job leaves the queue, exactly
+// like a completed Facebook row. The instagram_posts record itself
+// is untouched: a published row is the sold sweep's memory of which
+// post to take down when the car sells.
 // =====================================================================
 let instagramQueueRows = [];
 const IG_QUEUE_PUBLISHED_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Terminal IG states: the job is done, so the queue never shows it.
+const IG_QUEUE_FINISHED_STATUSES = ["published", "deleted", "sold_reposted", "sold_marked"];
 
 function igQueueDismissedKey() {
     return "igQueueDismissed:" + (currentUser ? currentUser.id : "anon");
@@ -15938,9 +15943,7 @@ function igQueueStatusLabel(status) {
 
 function igQueueRowInScope(row, nowMs) {
     if (!row) return false;
-    if (row.status !== "published") return true;
-    const t = new Date(row.created_at).getTime();
-    return isFinite(t) && (nowMs - t) < IG_QUEUE_PUBLISHED_WINDOW_MS;
+    return IG_QUEUE_FINISHED_STATUSES.indexOf(row.status) === -1;
 }
 
 // Only terminal, unresolved intents may be dismissed — an in-flight
@@ -16209,9 +16212,9 @@ async function loadPostingQueue() {
         }
 
         // [IG-QUEUE-357] Fetch this user's Instagram intents in
-        // display scope (see the IG-QUEUE-357 block above): every
-        // non-published intent, plus published intents created in
-        // the last 24 hours. Fail-soft — an IG read error must never
+        // display scope (see the IG-QUEUE-357 block above):
+        // igQueueRowInScope keeps only in-flight intents — finished
+        // ones never render. Fail-soft — an IG read error must never
         // break the Facebook queue; the list renders without IG rows.
         try {
             const igSinceIso = new Date(Date.now() - IG_QUEUE_PUBLISHED_WINDOW_MS).toISOString();
