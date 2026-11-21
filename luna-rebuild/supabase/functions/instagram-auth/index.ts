@@ -50,7 +50,7 @@ const cors = {
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v21.0";
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
 const DEFAULT_REDIRECT_URI =
-  "https://autolaunch.org/luna-rebuild/instagram-callback.html";
+  "https://autolaunch.org/instagram-callback.html";
 // The Facebook-Login permissions the connect dialog requests. Stored
 // as the fallback scope when /me/permissions cannot be read.
 const REQUESTED_PERMISSIONS = [
