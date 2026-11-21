@@ -23361,7 +23361,7 @@ function syncRibbonMasterCheckbox() {
   const parts = ["chkRibbonArrivals", "chkRibbonRepost"]
     .map(id => document.getElementById(id));
   if (parts.every(el => el)) {
-    master.checked = parts.every(el => el.checked);
+    master.checked = parts.some(el => el.checked);
   }
 }
 
@@ -23944,8 +23944,10 @@ function renderRibbonStatuses() {
   const repostOn = !!(repostEl && repostEl.checked);
   const cropOn = !!(cropEl && cropEl.checked);
 
-  // Master card: its switch is the AND of the two below (see
-  // syncRibbonMasterCheckbox), so the words count what is really running.
+  // Master card: its switch is the OR of the two below (see
+  // syncRibbonMasterCheckbox) — on when at least one automation is
+  // on, off only when both are off — so the words count what is
+  // really running.
   const masterLbl = document.getElementById("ribbonMasterStatusLabel");
   if (masterLbl) {
     const onCount = [arrivalsOn, repostOn].filter(Boolean).length;
