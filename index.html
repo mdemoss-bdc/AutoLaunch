@@ -969,7 +969,7 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
             <p class="font-extrabold text-slate-900 text-sm">Automate — <span class="text-blue-600">$100/mo</span></p>
             <p class="hidden lg:block text-[13px] text-slate-600 leading-relaxed mt-1">Full automation: auto-post, delete listings + auto delete &amp; repost, Luca reply drafts, Facebook Page posting, trade appraisals + wishlist · inventory pulls every 6h.</p>
             <p class="lg:hidden text-[13px] text-slate-600 leading-relaxed mt-1">Auto-post, delete listings + auto delete &amp; repost, Luca drafts, Facebook Page, trade + wishlist · pulls every 6h.</p>
-            <p class="text-[13px] font-bold text-slate-700 leading-relaxed mt-1.5">TikTok &amp; Instagram — coming soon, Automate only.</p>
+            <p class="text-[13px] font-bold text-slate-700 leading-relaxed mt-1.5">Instagram posting included · TikTok coming soon, Automate only.</p>
           </div>
         </div>
         <p class="text-xs font-bold text-slate-500 mt-auto pt-5">Start free — 5 auto + 10 manual posts, up to 5 days.</p>
@@ -4733,7 +4733,7 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
       <button id="lunaSupportSendBtn" onclick="sendLunaSupport()" class="px-4 py-2 rounded-xl btn-gradient text-white text-xs font-bold cursor-pointer shadow-sm">Send</button>
     </div>
     <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-200">
-      <span class="text-[11px] text-slate-400">Luna can look at your account to diagnose problems.</span>
+      <span class="text-[11px] text-slate-400">Luna can look at your account, diagnose problems, and fix the common ones herself — she always tells you what she did.</span>
       <button onclick="sendLunaSupportTicket()" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer">Send to support</button>
     </div>
     </div>
@@ -5319,7 +5319,7 @@ const PLAN_DETAILS = {
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: true },
       { label: "Delete listings + auto delete & repost", included: true },
-      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true },
+      { label: "Facebook Page + Instagram posting · TikTok coming soon", included: true },
       { label: "Luca AI Assistant + Prospects", included: true },
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
@@ -5340,7 +5340,7 @@ const PLAN_DETAILS = {
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: false },
       { label: "Delete listings + auto delete & repost", included: false },
-      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: false },
+      { label: "Facebook Page + Instagram posting · TikTok coming soon", included: false },
       { label: "Luca AI Assistant + Prospects", included: false },
       { label: "Customer Wishlist", included: false },
       { label: "Trade Appraisals", included: false },
@@ -5361,7 +5361,7 @@ const PLAN_DETAILS = {
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: true },
       { label: "Delete listings + auto delete & repost", included: true },
-      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true },
+      { label: "Facebook Page + Instagram posting · TikTok coming soon", included: true },
       { label: "Luca AI Assistant + Prospects", included: true },
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
@@ -5382,7 +5382,7 @@ const PLAN_DETAILS = {
       { label: "AI listing copy", included: true },
       { label: "Auto-post new arrivals", included: true },
       { label: "Delete listings + auto delete & repost", included: true },
-      { label: "Facebook Page posting · TikTok & Instagram coming soon", included: true },
+      { label: "Facebook Page + Instagram posting · TikTok coming soon", included: true },
       { label: "Luca AI Assistant + Prospects", included: true },
       { label: "Customer Wishlist", included: true },
       { label: "Trade Appraisals", included: true },
@@ -23381,13 +23381,13 @@ const GUIDES = {
     modal: "settingsModal",
     what: "This is the master switch for the two automations next to it: auto-posting new arrivals and auto delete & repost. Flip it and both flip with it.",
     steps: [
-      "Flip the Automations switch on — the three cards beside it turn on with it.",
+      "Flip the Automations switch on — both automation cards beside it turn on with it.",
       "Set each one up on its own card (frequency, limits). The master switch never changes their settings.",
       "Turn a single card off anytime without touching the others.",
       "The same Auto Posting switch also lives in Settings, under the Automation tab."
     ],
     notes: [
-      "The master switch only shows on when all three cards are on. If just some are on, this card says so instead of pretending.",
+      "The master switch shows on whenever at least one automation is on — it is only off when both are off. The status line on this card always says exactly what is running.",
       "Automations work through the Post Queue and the Chrome extension, and every post counts against your daily posting limit."
     ]
   },
@@ -23397,12 +23397,12 @@ const GUIDES = {
     icon: "fa-solid fa-paper-plane",
     iconClasses: "bg-purple-50 text-purple-600 border-purple-200",
     modal: "autoPostModal",
-    what: "Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus your Facebook Page if you have switched that channel on. (TikTok and Instagram are coming soon — Automate-plan channels.)",
+    what: "Tell AutoLaunch which locations and conditions to work from, and it queues every matching car that has not been posted yet — brand-new arrivals and the cars already sitting on your lot — then works through them at your daily posting limit. Queued cars go to Facebook Marketplace, plus your Facebook Page if you have switched that channel on. (Instagram posting is live, and TikTok is on its way — Automate-plan channels.)",
     steps: [
       "Flip the switch on this card — or open the card and press Done, because saving turns it on.",
       "Tick the locations it should post from (a location group counts as one pick) and pick the conditions — or leave everything unticked to post all cars from everywhere.",
       "Pick the minimum photo count. Cars with fewer real photos wait until more photos land on your website.",
-      "Set how many it may post per day under Safe posting limits — the auto poster queues up to that many a day, newest cars first.",
+      "Set how many may post per day under Safe posting limits — that limit covers everything that goes out in a day, and the auto poster fills the room that is left, newest cars first.",
       "Want more than Marketplace? Open Settings, the Automation tab, then Syndication Channels."
     ],
     notes: [
@@ -23430,6 +23430,7 @@ const GUIDES = {
       "Confirm mode is the extension default: it fills the listing in and waits for you to click Publish, so nothing posts without you seeing it first.",
       "Reposts count against your daily posting limit.",
       "Cars that sell or leave your website are never reposted.",
+      "Selling is separate from reposting: when a car sells or leaves your site, its listing comes down on its own — even with this switch off. That removal runs on its own setting, not on this schedule.",
       "If Facebook asks you to log in or confirm your identity, the job stops and is marked failed — the extension never types into those screens."
     ]
   },
@@ -23465,7 +23466,7 @@ const GUIDES = {
       "Press Save. The counter on this card shows how much of today's limit you have used."
     ],
     notes: [
-      "The counter counts today's Marketplace queue items that did not fail, plus cars already marked posted today.",
+      "The counter counts cars already marked posted today plus everything currently waiting in your post queue — whenever it was queued. A backlog left over from yesterday counts against today, because those posts go out today. Deletes never count, and failed jobs don't count.",
       "The Chrome extension checks the same limit before it posts. Hit the cap and queueing stops with a message — nothing is queued past it.",
       "Unlimited means no cap at all. It is offered, but it is the fastest way to earn a Facebook restriction."
     ]
@@ -23524,7 +23525,8 @@ const GUIDES = {
       "Prices post at the advertised final price from your website. A car whose price can't be determined is never guessed — it's flagged instead, so a wrong price never reaches Marketplace.",
       "A vehicle with no photos on your website is never posted. No exceptions.",
       "Luca answers buyers ONLY from this inventory. If a car is missing or wrong here, fix it here — his answers follow within the next draft.",
-      "Cars that sell or leave your website drop off automatically on the next sync and are never reposted."
+      "Cars that sell or leave your website drop off automatically on the next sync and are never reposted.",
+      "When your website changes a car's price, the Marketplace listing follows only once the difference from the posted price reaches $500 — smaller wiggles are ignored so listings don't churn, and qualifying updates queue themselves from the sync."
     ]
   },
   locations: {
@@ -23559,8 +23561,10 @@ const GUIDES = {
       "Deleting a listing can be verified on Facebook itself — the listing disappearing from your Facebook selling page is the proof, not just the queue row."
     ],
     notes: [
-      "Every queue item counts against your daily posting limit, including reposts.",
+      "Every post counts against your daily posting limit, including reposts. Deletes don't count.",
       "Don't click inside the helper's tab while a job is running — it can knock the job off course.",
+      "Instagram posts appear here too, as display-only rows so you can watch them go out; once an Instagram post finishes it leaves this list (its record stays with the car).",
+      "A post held because its video wasn't ready releases itself once the video is: Luna sweeps nightly and lets go of any hold whose video is ready — including holds left by a failed attempt — so posts don't sit stuck waiting on you.",
       "If a job fails because Facebook wants a login or an identity check, the helper stops on purpose. Handle it in Facebook yourself, then retry."
     ]
   },
@@ -23590,7 +23594,7 @@ const GUIDES = {
     modal: null,
     what: "Everyone who reached out about a car, and where they are in the process: New → Talking → Visit set → Came in → Sold / Not now. Deliberately NOT a CRM — no logging busywork, just the list, kept current. Luca fills it for you: Marketplace chats are captured automatically, and you can add anyone by hand.",
     steps: [
-      "Marketplace chats appear on their own once the helper is running — opening a Marketplace conversation is enough; Luca saves the buyer and the thread.",
+      "Marketplace chats appear on their own once the helper is running — the helper walks your Marketplace inbox and captures new threads by itself, so you don't have to open anything; Luca saves the buyer and the thread.",
       "Chats that did NOT start on Marketplace are never added automatically. Add those yourself (Add Prospect), or use the 'Capture chat for Luca' button inside the Messenger thread.",
       "Open a card's conversation to read the whole thread, draft with Luca, or reply right from the card — the helper delivers your reply into Messenger for you.",
       "Move the stage as things progress. The ✕ Close chat buttons collapse an open conversation and take you back to the list."
@@ -23651,15 +23655,15 @@ const GUIDES = {
     icon: "fa-solid fa-share-nodes",
     iconClasses: "bg-cyan-50 text-cyan-600 border-cyan-200",
     modal: null,
-    what: "Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. TikTok and Instagram are coming soon: TikTok's app is in review with TikTok, and Instagram follows once business verification clears with Meta. Both are Automate-plan channels.",
+    what: "Marketplace is the home channel; the same cars can also go out as video and posts. Facebook Page posting is live and connects from Settings. Instagram is live too: connect your business account and your cars post there as reels — and when a car sells, its Instagram post comes down automatically (or has its comments locked instead, your choice in Settings). TikTok is still in review with TikTok and lights up the moment it clears. Instagram and TikTok are Automate-plan channels.",
     steps: [
       "Open Settings → Automation → Syndication Channels.",
       "Connect the account you actually sell from — posting runs in that account's name.",
-      "Turn on the Facebook Page channel there — TikTok and Instagram light up there when they launch.",
+      "Connect Instagram and turn on the Facebook Page channel there — TikTok lights up there when it launches.",
       "Keep posting preferences consistent — the same facts (price, miles, stock) feed every channel."
     ],
     notes: [
-      "Channel rules differ (video-first on TikTok, business accounts on Instagram when it lands). AutoLaunch formats per channel — you write nothing per platform.",
+      "Channel rules differ (video-first on TikTok, a business or creator account on Instagram). AutoLaunch formats per channel — you write nothing per platform.",
       "If a channel disconnects or a platform asks for verification, AutoLaunch keeps Marketplace running and flags the channel — one channel's problem never stops the others."
     ]
   },
@@ -23687,7 +23691,7 @@ const GUIDES = {
     icon: "fa-solid fa-clapperboard",
     iconClasses: "bg-violet-50 text-violet-600 border-violet-200",
     modal: null,
-    what: "A short narrated showcase video made automatically from each car's real photos and details — the year, make, model and stock number appear on screen. Reels render in the background; you never upload or edit anything.",
+    what: "A short narrated showcase video made automatically from each car's real photos and details — a title card at the start shows the year, make, model, stock number and miles, big and centered so it reads right off the Instagram grid. A reel never shows the price: a baked-in price goes stale. Reels render in the background; you never upload or edit anything.",
     steps: [
       "Make one on demand: use the reel button on any car (Dashboard grid or table row, or the car's menu → Create reel), or open the car and use the VIN Reel section in its details.",
       "Watch the state on the car's chip: Reel queued…, Rendering reel…, Reel ready, or Reel failed. A ready reel plays right in the car's details.",
@@ -23697,6 +23701,7 @@ const GUIDES = {
       "The gate never posts a car bare: with the setting on, a car whose video isn't ready stays held — it is not posted without its video.",
       "If a video can't be attached after the car posts, the bare listing is taken back down and the post is retried. After 3 failed attempts the car stops and is flagged for your attention — nothing is left live without its video.",
       "A failed render can be retried from the car's reel section. A reel is made from the car's real photos, so a car needs usable photos to get one.",
+      "Rather use your own video? Open the car and use 'Your Video' to record one, or attach a clip you already have — up to 90 seconds, 1080p and 100 MB. Once it's ready it posts instead of the rendered reel, on Marketplace and on Instagram.",
       "VIN Reels are part of the Automate plan — and the free trial runs the full Automate plan from day 1, so they're included in the trial too."
     ]
   },
