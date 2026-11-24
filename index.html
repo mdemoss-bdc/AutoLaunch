@@ -5833,8 +5833,36 @@ function ownerUsersMsg(text, isError) {
 // keeps the current pick selected when that user is still listed.
 let ownerUsersRows = [];
 
+// Account status for the dropdown (display only — nothing
+// here gates anything). Mirrors computeAccessState, the app's
+// own access rule, over the fields the users_list payload
+// already carries (billing_status, trial_ends_at,
+// current_period_end): owners are always Active; a trialing
+// account inside its window is Trial; an 'active' account is
+// Active unless it carries a current_period_end that has
+// passed (an expired prepaid term or owner comp — the
+// billing webhook flips a real subscription's row to
+// 'expired' when the subscription ends, and lifetime /
+// grandfathered rows carry no period end at all). Everything
+// else (expired, trial_blocked, a lapsed trial) is Inactive.
+function ownerUserStatusLabel(u) {
+  if (isOwnerUser(u.user_id)) return "Active";
+  const s = u.billing_status;
+  if (s === "trialing") {
+    const ends = u.trial_ends_at ? Date.parse(u.trial_ends_at) : NaN;
+    return isFinite(ends) && Date.now() < ends ? "Trial" : "Inactive";
+  }
+  if (s === "active") {
+    if (!u.current_period_end) return "Active";
+    const ends = Date.parse(u.current_period_end);
+    return !isFinite(ends) || Date.now() < ends ? "Active" : "Inactive";
+  }
+  if (s === null || s === undefined) return "Active";
+  return "Inactive";
+}
+
 function ownerUserOptionLabel(u) {
-  return (u.display_name || "") + " \u2014 " + (u.email || "");
+  return (u.display_name || "") + " \u2014 " + (u.email || "") + " \u00b7 " + ownerUserStatusLabel(u);
 }
 
 // Build the dropdown options from rows (the function returns them
