@@ -4499,7 +4499,10 @@ def mark_stale_inventory(uid: str, seen_vins: set, scope_keys=None) -> int:
 # for scrape_jobs rows inserted any other way. It applies ONLY to
 # user-requested jobs: a run serving a pending non-test job. Scheduled
 # runs carry no job row and are never guarded, and 'test' jobs (the
-# onboarding preview) are never blocked and never set the clock — the
+# onboarding preview) are never blocked and never set the clock.
+# 'anchor' jobs (2026-11-25, the preferred-sync-time daily anchor)
+# are system syncs, not user-requested ones: never blocked and never
+# on the clock either. The
 # initial scrape when opening a new account never counts. Owners are
 # exempt (mirrors OWNER_USER_IDS in the app). Fail-open throughout: a
 # missing settings row, an unreadable timestamp, or any lookup error
@@ -4632,7 +4635,7 @@ def _sync_cadence_block(uid, job, settings_row, covered, prior_jobs, now):
     priors = [
         j for j in (prior_jobs or [])
         if j.get("id") != job.get("id")
-        and j.get("sync_mode") not in ("test", "postpass")
+        and j.get("sync_mode") not in ("test", "postpass", "anchor")
     ]
     unlock = None
     if priors:
@@ -4650,10 +4653,15 @@ def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now)
     clock — the clock is the most recent prior NON-TEST job."""
     if not job:
         return None
-    if job.get("sync_mode") in ("test", "postpass"):
+    if job.get("sync_mode") in ("test", "postpass", "anchor"):
         # 'postpass' rows crawl nothing (they only ask the auto-post
         # pass to consider a helper sync's seen set) — exempt, and
         # excluded from the clock itself in the priors filter below.
+        # 'anchor' rows (2026-11-25) are the preferred-sync-time daily
+        # anchor: a system sync the box scheduler queues at the
+        # user's chosen time, guaranteed — the plan cadence must
+        # never defer it, and it never sets the clock for manual
+        # syncs (the app's cooldown read excludes it the same way).
         return None
     if job.get("force_override"):
         # Owner-panel force scrape with the cadence override set
@@ -4666,7 +4674,7 @@ def _sync_cadence_block_reason(uid, job, settings_row, covered, prior_jobs, now)
     priors = [
         j for j in (prior_jobs or [])
         if j.get("id") != job.get("id")
-        and j.get("sync_mode") not in ("test", "postpass")
+        and j.get("sync_mode") not in ("test", "postpass", "anchor")
     ]
     if not priors:
         return None  # first real sync — the initial scrape never counts
@@ -5386,6 +5394,31 @@ async def run_scraper():
             u for u in users_to_scrape
             if u.get("user_id") not in _auto_sync_skipped_set
         ]
+
+    # PREFERRED SYNC TIME ANCHOR (2026-11-25): an anchor job is an
+    # AUTO sync wearing a job row — the box scheduler queues it so
+    # the insert dispatches this run — so unlike a manual Sync job
+    # it DOES honor the auto-sync switch. The scheduler already
+    # refuses to queue anchors for off accounts; this is the
+    # backstop for a switch flipped between queue and run. The row
+    # is completed (0 cars), never left pending to be re-adopted
+    # by every later run. Fail-open like the switch itself: only an
+    # explicit False on a loaded settings row bites.
+    if active_job is not None and active_job.get("sync_mode") == "anchor":
+        if target_settings_row is not None and target_settings_row.get("auto_sync_enabled") is False:
+            print(
+                f"[*] Preferred sync anchor for user {(target_uid or '')[:8]} "
+                "skipped — auto-sync is OFF. Completing the anchor row."
+            )
+            try:
+                db.table("scrape_jobs").update({
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "cars_synced": 0,
+                }).eq("id", active_job["id"]).execute()
+            except Exception as e:
+                print(f"[!] Anchor completion stamp failed (non-fatal): {e}")
+            return
 
     # SYNC CADENCE GUARD (Matthew, 2026-10-26): refuse a user-requested
     # job that lands inside the account's sync window. active_job is

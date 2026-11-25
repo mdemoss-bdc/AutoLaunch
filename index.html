@@ -2245,6 +2245,40 @@ body.dark-shell #inventoryTableBody .text-blue-600 { color: var(--d-link-bright)
         </label>
       </span>
 
+      <span>&bull;</span>
+
+      <span class="flex items-center gap-1.5">
+        <span class="text-slate-500 font-medium">Sync time</span>
+        <select id="selPreferredSyncHour" onchange="changePreferredSyncTime(this)" title="Pick a time of day and your inventory syncs then every day — on top of the regular automatic syncs, and even when this app is closed" style="font-size:11px;padding:1px 2px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;max-width:92px">
+          <option value="">Off</option>
+          <option value="0">12 AM</option>
+          <option value="1">1 AM</option>
+          <option value="2">2 AM</option>
+          <option value="3">3 AM</option>
+          <option value="4">4 AM</option>
+          <option value="5">5 AM</option>
+          <option value="6">6 AM</option>
+          <option value="7">7 AM</option>
+          <option value="8">8 AM</option>
+          <option value="9">9 AM</option>
+          <option value="10">10 AM</option>
+          <option value="11">11 AM</option>
+          <option value="12">12 PM</option>
+          <option value="13">1 PM</option>
+          <option value="14">2 PM</option>
+          <option value="15">3 PM</option>
+          <option value="16">4 PM</option>
+          <option value="17">5 PM</option>
+          <option value="18">6 PM</option>
+          <option value="19">7 PM</option>
+          <option value="20">8 PM</option>
+          <option value="21">9 PM</option>
+          <option value="22">10 PM</option>
+          <option value="23">11 PM</option>
+        </select>
+        <span id="preferredSyncHint" class="text-slate-400" style="font-size:10px"></span>
+      </span>
+
     </div>
 
   </div>
@@ -5107,6 +5141,53 @@ let igSoldMode = "delete";
 // AUTO runs for users who turned it off; manual syncs (pending
 // scrape_jobs rows) are never affected.
 let autoSyncEnabled = true;
+// Preferred sync time (Matthew, 2026-11-25): user_settings
+// .preferred_sync_hour (0-23 in the user's own timezone; NULL = off)
+// + .preferred_sync_timezone (the IANA name captured from this
+// browser when the time is saved). ON TOP of the regular automatic
+// syncs, the box-side anchor scheduler (scripts/anchor_sync.py)
+// queues ONE scrape_jobs row a day at that local time — sync_mode
+// "anchor" — and the row's insert fires the same dispatch path as
+// the Sync Inventory button, so no app tab needs to be open. The
+// minute inside the chosen hour is spread per user — FNV-1a of the
+// user id, mod 60 — so a popular hour does not land on one minute;
+// the scheduler computes the identical value, and the hint beside
+// the picker shows the user's exact daily time. Anchor rows are
+// exempt from the plan sync cadence and never set its clock (the
+// scraper guard and getSyncCooldownState both skip them), and the
+// scheduler never queues one while Auto-sync is off.
+let preferredSyncHour = null;
+let preferredSyncTimezone = null;
+
+function preferredSyncMinute(userId) {
+  let h = 2166136261;
+  const s = String(userId || "");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i) & 0xff;
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h % 60;
+}
+
+function preferredSyncTimeLabel() {
+  if (preferredSyncHour === null || !currentUser) return "";
+  const minute = preferredSyncMinute(currentUser.id);
+  const h24 = preferredSyncHour;
+  const suffix = h24 < 12 ? "AM" : "PM";
+  let h12 = h24 % 12;
+  if (h12 === 0) h12 = 12;
+  return h12 + ":" + String(minute).padStart(2, "0") + " " + suffix;
+}
+
+function renderPreferredSyncControl() {
+  const sel = document.getElementById("selPreferredSyncHour");
+  if (sel) sel.value = preferredSyncHour === null ? "" : String(preferredSyncHour);
+  const hint = document.getElementById("preferredSyncHint");
+  if (hint) {
+    const label = preferredSyncTimeLabel();
+    hint.textContent = label ? "daily " + label : "";
+  }
+}
 // Share posts to my feed (helper v2.1.55): user_settings
 // .share_to_feed. DEFAULT OFF — the feature is opt-in, so an absent
 // column or an unreadable value means no sharing; only an explicit
@@ -11293,6 +11374,14 @@ updateLastSyncDisplay();
         const chkAutoSync = document.getElementById("chkAutoSync");
         if (chkAutoSync) chkAutoSync.checked = autoSyncEnabled;
       }
+      // Preferred sync time: an absent column or value leaves it off.
+      if (data.preferred_sync_hour !== undefined) {
+        let ph = data.preferred_sync_hour === null ? null : Number(data.preferred_sync_hour);
+        if (ph !== null && (isNaN(ph) || ph < 0 || ph > 23)) ph = null;
+        preferredSyncHour = ph;
+        preferredSyncTimezone = data.preferred_sync_timezone || null;
+        renderPreferredSyncControl();
+      }
       // Share to feed: absent column leaves the default (OFF — opt-in).
       if (data.share_to_feed !== undefined && data.share_to_feed !== null) {
         shareToFeedEnabled = !!data.share_to_feed;
@@ -16771,8 +16860,11 @@ async function enqueueMarketplaceCar(vin) {
 // (SYNC_COOLDOWN_HOURS; the pure decision is syncCooldownState in the
 // access block). Reads the account's recent scrape_jobs — 'test' rows
 // are the onboarding preview: they neither set the clock nor are ever
-// blocked, and the first non-test scrape on a new account is always
-// allowed. Fail-open throughout: a read error must never block a sync.
+// blocked, and 'anchor' rows (the preferred-sync-time daily anchor,
+// 2026-11-25) are system syncs, not user-requested ones: they never
+// set the clock either. The first non-test scrape on a new account
+// is always allowed. Fail-open throughout: a read error must never
+// block a sync.
 async function getSyncCooldownState() {
   const isOwner = !!(currentUser && isOwnerUser(currentUser.id));
   const previewing = isOwner && (!!ownerTestTier || !!ownerBillingPreview);
@@ -16791,7 +16883,7 @@ async function getSyncCooldownState() {
       .eq("user_id", currentUser.id)
       .order("started_at", { ascending: false })
       .limit(200);
-    const rows = (data || []).filter(function (r) { return r.sync_mode !== "test" && !r.sync_vin; });
+    const rows = (data || []).filter(function (r) { return r.sync_mode !== "test" && r.sync_mode !== "anchor" && !r.sync_vin; });
     priorCount = rows.length;
     if (rows.length) lastSyncAt = rows[0].started_at;
   } catch (e) {
@@ -23429,6 +23521,42 @@ async function toggleAutoSyncSetting(el) {
   } catch (err) {
     el.checked = !value;
     alert("Could not save the auto-sync setting: " + (err.message || "Unknown error"));
+  }
+}
+
+// Preferred sync time (Matthew, 2026-11-25): the picker beside the
+// Auto-sync switch writes user_settings.preferred_sync_hour
+// immediately, like the switch itself, and stamps the browser's
+// IANA timezone alongside — the anchor scheduler fires in THAT
+// timezone, so the hour means the user's own wall clock wherever
+// they are. "Off" clears both columns. The exact minute inside the
+// hour is the per-user spread (see preferredSyncMinute) and the
+// hint beside the picker shows it.
+async function changePreferredSyncTime(el) {
+  if (!currentUser) { renderPreferredSyncControl(); return; }
+  const hour = !el || el.value === "" ? null : Number(el.value);
+  let tz = null;
+  try {
+    tz = (window.Intl && Intl.DateTimeFormat)
+      ? (Intl.DateTimeFormat().resolvedOptions().timeZone || null)
+      : null;
+  } catch (e) { tz = null; }
+  try {
+    const { error } = await supabaseClient
+      .from("user_settings")
+      .upsert({
+        user_id: currentUser.id,
+        preferred_sync_hour: hour,
+        preferred_sync_timezone: hour === null ? null : tz,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+    if (error) throw error;
+    preferredSyncHour = hour;
+    preferredSyncTimezone = hour === null ? null : tz;
+    renderPreferredSyncControl();
+  } catch (err) {
+    renderPreferredSyncControl();
+    alert("Could not save the preferred sync time: " + (err.message || "Unknown error"));
   }
 }
 
